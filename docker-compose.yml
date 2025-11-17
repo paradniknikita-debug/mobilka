@@ -1,0 +1,92 @@
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    container_name: lepm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lepm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dragon167}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Пробрасываем порт для подключения извне (DBeaver, pgAdmin и т.д.)
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-lepm_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lepm_network
+
+  # Redis для кэширования
+  redis:
+    image: redis:7-alpine
+    container_name: lepm_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lepm_network
+
+  # Backend API сервер
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lepm_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # env_file опционально - раскомментируй если есть .env
+    # env_file:
+    #   - ./backend/.env
+    environment:
+      # Для Docker используем имена сервисов из docker-compose
+      DATABASE_URL: postgresql://postgres:dragon167@postgres:5432/lepm_db
+      REDIS_URL: redis://redis:6379
+      RELOAD: "false"
+      TZ: Europe/Minsk  # Часовой пояс
+    # Для разработки: монтируем код как volume (чтобы не пересобирать образ при каждом изменении)
+    # Раскомментируй следующие строки для разработки:
+    volumes:
+      - ./backend/app:/app/app:ro
+    # Тогда при изменении кода достаточно перезапустить контейнер: docker compose restart backend
+    # Не пробрасываем порт наружу, nginx будет проксировать
+    expose:
+      - "8000"
+    # Используем команду из Dockerfile (python run.py)
+    # или можно: command: python run.py
+    restart: unless-stopped
+    networks:
+      - lepm_network
+
+  # Nginx reverse proxy с HTTPS
+  nginx:
+    image: nginx:alpine
+    container_name: lepm_nginx
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    restart: unless-stopped
+    networks:
+      - lepm_network
+
+volumes:
+  pgdata:
+
+networks:
+  lepm_network:
+    driver: bridge
