@@ -15,7 +15,7 @@ class PowerLine {
   final String? description;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  final List<Tower>? towers;
+  final List<Pole>? poles;
 
   const PowerLine({
     required this.id,
@@ -29,7 +29,7 @@ class PowerLine {
     this.description,
     required this.createdAt,
     this.updatedAt,
-    this.towers,
+    this.poles,
   });
 
   factory PowerLine.fromJson(Map<String, dynamic> json) => _$PowerLineFromJson(json);
@@ -47,7 +47,7 @@ class PowerLine {
     String? description,
     DateTime? createdAt,
     DateTime? updatedAt,
-    List<Tower>? towers,
+    List<Pole>? poles,
   }) {
     return PowerLine(
       id: id ?? this.id,
@@ -61,7 +61,7 @@ class PowerLine {
       description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      towers: towers ?? this.towers,
+      poles: poles ?? this.poles,
     );
   }
 }
@@ -91,13 +91,13 @@ class PowerLineCreate {
 }
 
 @JsonSerializable()
-class Tower {
+class Pole {
   final int id;
   final int powerLineId;
-  final String towerNumber;
+  final String poleNumber;
   final double latitude;
   final double longitude;
-  final String towerType;
+  final String poleType;
   final double? height;
   final String? foundationType;
   final String? material;
@@ -109,13 +109,13 @@ class Tower {
   final DateTime? updatedAt;
   final List<Equipment>? equipment;
 
-  const Tower({
+  const Pole({
     required this.id,
     required this.powerLineId,
-    required this.towerNumber,
+    required this.poleNumber,
     required this.latitude,
     required this.longitude,
-    required this.towerType,
+    required this.poleType,
     this.height,
     this.foundationType,
     this.material,
@@ -128,16 +128,16 @@ class Tower {
     this.equipment,
   });
 
-  factory Tower.fromJson(Map<String, dynamic> json) => _$TowerFromJson(json);
-  Map<String, dynamic> toJson() => _$TowerToJson(this);
+  factory Pole.fromJson(Map<String, dynamic> json) => _$PoleFromJson(json);
+  Map<String, dynamic> toJson() => _$PoleToJson(this);
 
-  Tower copyWith({
+  Pole copyWith({
     int? id,
     int? powerLineId,
-    String? towerNumber,
+    String? poleNumber,
     double? latitude,
     double? longitude,
-    String? towerType,
+    String? poleType,
     double? height,
     String? foundationType,
     String? material,
@@ -149,13 +149,13 @@ class Tower {
     DateTime? updatedAt,
     List<Equipment>? equipment,
   }) {
-    return Tower(
+    return Pole(
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
-      towerNumber: towerNumber ?? this.towerNumber,
+      poleNumber: poleNumber ?? this.poleNumber,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
-      towerType: towerType ?? this.towerType,
+      poleType: poleType ?? this.poleType,
       height: height ?? this.height,
       foundationType: foundationType ?? this.foundationType,
       material: material ?? this.material,
@@ -171,11 +171,11 @@ class Tower {
 }
 
 @JsonSerializable()
-class TowerCreate {
-  final String towerNumber;
+class PoleCreate {
+  final String poleNumber;
   final double latitude;
   final double longitude;
-  final String towerType;
+  final String poleType;
   final double? height;
   final String? foundationType;
   final String? material;
@@ -183,11 +183,11 @@ class TowerCreate {
   final String condition;
   final String? notes;
 
-  const TowerCreate({
-    required this.towerNumber,
+  const PoleCreate({
+    required this.poleNumber,
     required this.latitude,
     required this.longitude,
-    required this.towerType,
+    required this.poleType,
     this.height,
     this.foundationType,
     this.material,
@@ -196,14 +196,14 @@ class TowerCreate {
     this.notes,
   });
 
-  factory TowerCreate.fromJson(Map<String, dynamic> json) => _$TowerCreateFromJson(json);
-  Map<String, dynamic> toJson() => _$TowerCreateToJson(this);
+  factory PoleCreate.fromJson(Map<String, dynamic> json) => _$PoleCreateFromJson(json);
+  Map<String, dynamic> toJson() => _$PoleCreateToJson(this);
 }
 
 @JsonSerializable()
 class Equipment {
   final int id;
-  final int towerId;
+  final int poleId;
   final String equipmentType;
   final String name;
   final String? manufacturer;
@@ -219,7 +219,7 @@ class Equipment {
 
   const Equipment({
     required this.id,
-    required this.towerId,
+    required this.poleId,
     required this.equipmentType,
     required this.name,
     this.manufacturer,
@@ -239,7 +239,7 @@ class Equipment {
 
   Equipment copyWith({
     int? id,
-    int? towerId,
+    int? poleId,
     String? equipmentType,
     String? name,
     String? manufacturer,
@@ -255,7 +255,7 @@ class Equipment {
   }) {
     return Equipment(
       id: id ?? this.id,
-      towerId: towerId ?? this.towerId,
+      poleId: poleId ?? this.poleId,
       equipmentType: equipmentType ?? this.equipmentType,
       name: name ?? this.name,
       manufacturer: manufacturer ?? this.manufacturer,

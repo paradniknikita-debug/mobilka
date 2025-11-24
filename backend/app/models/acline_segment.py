@@ -33,8 +33,8 @@ class AClineSegment(Base):
     conductor_material = Column(String(50), nullable=True)  # материал (алюминий, медь и т.д.)
     conductor_section = Column(String(20), nullable=True)  # сечение, мм²
     # Связь с опорами (начало и конец сегмента)
-    start_tower_id = Column(Integer, ForeignKey("towers.id"), nullable=True)
-    end_tower_id = Column(Integer, ForeignKey("towers.id"), nullable=True)
+    start_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=True)
+    end_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=True)
     # Дополнительные параметры
     r = Column(Float, nullable=True)  # активное сопротивление, Ом/км
     x = Column(Float, nullable=True)  # реактивное сопротивление, Ом/км
@@ -49,7 +49,7 @@ class AClineSegment(Base):
     # Many-to-many с линиями (сегмент может быть общим для нескольких линий)
     power_lines = relationship("PowerLine", secondary=line_segments, back_populates="segments")
     # Связь с опорами
-    start_tower = relationship("Tower", foreign_keys=[start_tower_id])
-    end_tower = relationship("Tower", foreign_keys=[end_tower_id])
+    start_pole = relationship("Pole", foreign_keys=[start_pole_id])
+    end_pole = relationship("Pole", foreign_keys=[end_pole_id])
     creator = relationship("User")
 

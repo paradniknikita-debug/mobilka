@@ -27,7 +27,7 @@ dependencies:
   # HTTP requests
   dio: ^5.4.0
   retrofit: ^4.0.3
-  json_annotation: ^4.8.1
+  json_annotation: ^4.9.0
   
   # Local database
   sqflite: ^2.3.0
@@ -36,14 +36,17 @@ dependencies:
   drift_flutter: ^0.1.0
   
   # Maps
-  flutter_map: ^6.1.0
+  flutter_map: ^6.2.1
   latlong2: ^0.9.1
   geolocator: ^10.1.0
   geocoding: ^2.1.1
   
   # Storage
   shared_preferences: ^2.2.2
-  flutter_secure_storage: ^8.0.0
+  flutter_secure_storage: ^9.0.0
+  
+  # State management utilities
+  freezed_annotation: ^2.0.3
   
   # Forms and validation
   reactive_forms: ^16.1.1
@@ -64,12 +67,14 @@ dev_dependencies:
     sdk: flutter
   
   flutter_lints: ^3.0.1
+  riverpod_generator: ^2.3.0
   
   # Code generation
   build_runner: ^2.4.7
   json_serializable: ^6.7.1
   retrofit_generator: ^8.0.6
   drift_dev: ^2.14.1
+  freezed: ^2.0.3+1
 
 flutter:
   uses-material-design: true

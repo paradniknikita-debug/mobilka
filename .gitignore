@@ -34,4 +34,11 @@ frontend/.flutter-plugins-dependencies
 # Vendored Flutter SDK (не коммитим огромный SDK)
 flutter/
 
+# Generated files
+*.freezed.dart
+*.g.dart
+
+# OS specific
+Thumbs.db
+.DS_Store
 

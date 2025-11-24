@@ -7,9 +7,9 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
-from app.models.power_line import PowerLine, Tower, Span, Tap, Equipment
+from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
 from app.schemas.power_line import (
-    PowerLineCreate, PowerLineResponse, TowerCreate, TowerResponse,
+    PowerLineCreate, PowerLineResponse, PoleCreate, PoleResponse,
     SpanCreate, SpanResponse, TapCreate, TapResponse, EquipmentCreate, EquipmentResponse
 )
 
@@ -41,7 +41,7 @@ async def get_power_lines(
     """Получение списка ЛЭП"""
     result = await db.execute(
         select(PowerLine)
-        .options(selectinload(PowerLine.towers))
+        .options(selectinload(PowerLine.poles))
         .offset(skip)
         .limit(limit)
     )
@@ -57,7 +57,7 @@ async def get_power_line(
     """Получение ЛЭП по ID"""
     result = await db.execute(
         select(PowerLine)
-        .options(selectinload(PowerLine.towers))
+        .options(selectinload(PowerLine.poles))
         .where(PowerLine.id == power_line_id)
     )
     power_line = result.scalar_one_or_none()
@@ -68,10 +68,10 @@ async def get_power_line(
         )
     return power_line
 
-@router.post("/{power_line_id}/towers", response_model=TowerResponse)
-async def create_tower(
+@router.post("/{power_line_id}/poles", response_model=PoleResponse)
+async def create_pole(
     power_line_id: int,
-    tower_data: TowerCreate,
+    pole_data: PoleCreate,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -85,28 +85,28 @@ async def create_tower(
             detail="Power line not found"
         )
     
-    db_tower = Tower(
-        **tower_data.dict(),
+    db_pole = Pole(
+        **pole_data.dict(),
         power_line_id=power_line_id,
         created_by=current_user.id
     )
-    db.add(db_tower)
+    db.add(db_pole)
     await db.commit()
-    await db.refresh(db_tower)
-    return db_tower
+    await db.refresh(db_pole)
+    return db_pole
 
-@router.get("/{power_line_id}/towers", response_model=List[TowerResponse])
-async def get_towers(
+@router.get("/{power_line_id}/poles", response_model=List[PoleResponse])
+async def get_poles(
     power_line_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Получение опор ЛЭП"""
     result = await db.execute(
-        select(Tower).where(Tower.power_line_id == power_line_id)
+        select(Pole).where(Pole.power_line_id == power_line_id)
     )
-    towers = result.scalars().all()
-    return towers
+    poles = result.scalars().all()
+    return poles
 
 @router.post("/{power_line_id}/spans", response_model=SpanResponse)
 async def create_span(

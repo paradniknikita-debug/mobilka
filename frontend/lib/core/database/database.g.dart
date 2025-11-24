@@ -627,11 +627,11 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
   }
 }
 
-class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
+class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $TowersTable(this.attachedDatabase, [this._alias]);
+  $PolesTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
@@ -643,11 +643,11 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
   late final GeneratedColumn<int> powerLineId = GeneratedColumn<int>(
       'power_line_id', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _towerNumberMeta =
-      const VerificationMeta('towerNumber');
+  static const VerificationMeta _poleNumberMeta =
+      const VerificationMeta('poleNumber');
   @override
-  late final GeneratedColumn<String> towerNumber = GeneratedColumn<String>(
-      'tower_number', aliasedName, false,
+  late final GeneratedColumn<String> poleNumber = GeneratedColumn<String>(
+      'pole_number', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _latitudeMeta =
       const VerificationMeta('latitude');
@@ -661,11 +661,11 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
   late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
       'longitude', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
-  static const VerificationMeta _towerTypeMeta =
-      const VerificationMeta('towerType');
+  static const VerificationMeta _poleTypeMeta =
+      const VerificationMeta('poleType');
   @override
-  late final GeneratedColumn<String> towerType = GeneratedColumn<String>(
-      'tower_type', aliasedName, false,
+  late final GeneratedColumn<String> poleType = GeneratedColumn<String>(
+      'pole_type', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _heightMeta = const VerificationMeta('height');
   @override
@@ -743,10 +743,10 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
   List<GeneratedColumn> get $columns => [
         id,
         powerLineId,
-        towerNumber,
+        poleNumber,
         latitude,
         longitude,
-        towerType,
+        poleType,
         height,
         foundationType,
         material,
@@ -763,9 +763,9 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'towers';
+  static const String $name = 'poles';
   @override
-  VerificationContext validateIntegrity(Insertable<Tower> instance,
+  VerificationContext validateIntegrity(Insertable<Pole> instance,
       {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
@@ -780,13 +780,13 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
     } else if (isInserting) {
       context.missing(_powerLineIdMeta);
     }
-    if (data.containsKey('tower_number')) {
+    if (data.containsKey('pole_number')) {
       context.handle(
-          _towerNumberMeta,
-          towerNumber.isAcceptableOrUnknown(
-              data['tower_number']!, _towerNumberMeta));
+          _poleNumberMeta,
+          poleNumber.isAcceptableOrUnknown(
+              data['pole_number']!, _poleNumberMeta));
     } else if (isInserting) {
-      context.missing(_towerNumberMeta);
+      context.missing(_poleNumberMeta);
     }
     if (data.containsKey('latitude')) {
       context.handle(_latitudeMeta,
@@ -800,11 +800,11 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
     } else if (isInserting) {
       context.missing(_longitudeMeta);
     }
-    if (data.containsKey('tower_type')) {
-      context.handle(_towerTypeMeta,
-          towerType.isAcceptableOrUnknown(data['tower_type']!, _towerTypeMeta));
+    if (data.containsKey('pole_type')) {
+      context.handle(_poleTypeMeta,
+          poleType.isAcceptableOrUnknown(data['pole_type']!, _poleTypeMeta));
     } else if (isInserting) {
-      context.missing(_towerTypeMeta);
+      context.missing(_poleTypeMeta);
     }
     if (data.containsKey('height')) {
       context.handle(_heightMeta,
@@ -866,21 +866,21 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Tower map(Map<String, dynamic> data, {String? tablePrefix}) {
+  Pole map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Tower(
+    return Pole(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
       powerLineId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}power_line_id'])!,
-      towerNumber: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}tower_number'])!,
+      poleNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}pole_number'])!,
       latitude: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}latitude'])!,
       longitude: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}longitude'])!,
-      towerType: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}tower_type'])!,
+      poleType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}pole_type'])!,
       height: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}height']),
       foundationType: attachedDatabase.typeMapping
@@ -907,18 +907,18 @@ class $TowersTable extends Towers with TableInfo<$TowersTable, Tower> {
   }
 
   @override
-  $TowersTable createAlias(String alias) {
-    return $TowersTable(attachedDatabase, alias);
+  $PolesTable createAlias(String alias) {
+    return $PolesTable(attachedDatabase, alias);
   }
 }
 
-class Tower extends DataClass implements Insertable<Tower> {
+class Pole extends DataClass implements Insertable<Pole> {
   final int id;
   final int powerLineId;
-  final String towerNumber;
+  final String poleNumber;
   final double latitude;
   final double longitude;
-  final String towerType;
+  final String poleType;
   final double? height;
   final String? foundationType;
   final String? material;
@@ -930,13 +930,13 @@ class Tower extends DataClass implements Insertable<Tower> {
   final DateTime? updatedAt;
   final bool isLocal;
   final bool needsSync;
-  const Tower(
+  const Pole(
       {required this.id,
       required this.powerLineId,
-      required this.towerNumber,
+      required this.poleNumber,
       required this.latitude,
       required this.longitude,
-      required this.towerType,
+      required this.poleType,
       this.height,
       this.foundationType,
       this.material,
@@ -953,10 +953,10 @@ class Tower extends DataClass implements Insertable<Tower> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['power_line_id'] = Variable<int>(powerLineId);
-    map['tower_number'] = Variable<String>(towerNumber);
+    map['pole_number'] = Variable<String>(poleNumber);
     map['latitude'] = Variable<double>(latitude);
     map['longitude'] = Variable<double>(longitude);
-    map['tower_type'] = Variable<String>(towerType);
+    map['pole_type'] = Variable<String>(poleType);
     if (!nullToAbsent || height != null) {
       map['height'] = Variable<double>(height);
     }
@@ -983,14 +983,14 @@ class Tower extends DataClass implements Insertable<Tower> {
     return map;
   }
 
-  TowersCompanion toCompanion(bool nullToAbsent) {
-    return TowersCompanion(
+  PolesCompanion toCompanion(bool nullToAbsent) {
+    return PolesCompanion(
       id: Value(id),
       powerLineId: Value(powerLineId),
-      towerNumber: Value(towerNumber),
+      poleNumber: Value(poleNumber),
       latitude: Value(latitude),
       longitude: Value(longitude),
-      towerType: Value(towerType),
+      poleType: Value(poleType),
       height:
           height == null && nullToAbsent ? const Value.absent() : Value(height),
       foundationType: foundationType == null && nullToAbsent
@@ -1015,16 +1015,16 @@ class Tower extends DataClass implements Insertable<Tower> {
     );
   }
 
-  factory Tower.fromJson(Map<String, dynamic> json,
+  factory Pole.fromJson(Map<String, dynamic> json,
       {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Tower(
+    return Pole(
       id: serializer.fromJson<int>(json['id']),
       powerLineId: serializer.fromJson<int>(json['powerLineId']),
-      towerNumber: serializer.fromJson<String>(json['towerNumber']),
+      poleNumber: serializer.fromJson<String>(json['poleNumber']),
       latitude: serializer.fromJson<double>(json['latitude']),
       longitude: serializer.fromJson<double>(json['longitude']),
-      towerType: serializer.fromJson<String>(json['towerType']),
+      poleType: serializer.fromJson<String>(json['poleType']),
       height: serializer.fromJson<double?>(json['height']),
       foundationType: serializer.fromJson<String?>(json['foundationType']),
       material: serializer.fromJson<String?>(json['material']),
@@ -1044,10 +1044,10 @@ class Tower extends DataClass implements Insertable<Tower> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'powerLineId': serializer.toJson<int>(powerLineId),
-      'towerNumber': serializer.toJson<String>(towerNumber),
+      'poleNumber': serializer.toJson<String>(poleNumber),
       'latitude': serializer.toJson<double>(latitude),
       'longitude': serializer.toJson<double>(longitude),
-      'towerType': serializer.toJson<String>(towerType),
+      'poleType': serializer.toJson<String>(poleType),
       'height': serializer.toJson<double?>(height),
       'foundationType': serializer.toJson<String?>(foundationType),
       'material': serializer.toJson<String?>(material),
@@ -1062,13 +1062,13 @@ class Tower extends DataClass implements Insertable<Tower> {
     };
   }
 
-  Tower copyWith(
+  Pole copyWith(
           {int? id,
           int? powerLineId,
-          String? towerNumber,
+          String? poleNumber,
           double? latitude,
           double? longitude,
-          String? towerType,
+          String? poleType,
           Value<double?> height = const Value.absent(),
           Value<String?> foundationType = const Value.absent(),
           Value<String?> material = const Value.absent(),
@@ -1080,13 +1080,13 @@ class Tower extends DataClass implements Insertable<Tower> {
           Value<DateTime?> updatedAt = const Value.absent(),
           bool? isLocal,
           bool? needsSync}) =>
-      Tower(
+      Pole(
         id: id ?? this.id,
         powerLineId: powerLineId ?? this.powerLineId,
-        towerNumber: towerNumber ?? this.towerNumber,
+        poleNumber: poleNumber ?? this.poleNumber,
         latitude: latitude ?? this.latitude,
         longitude: longitude ?? this.longitude,
-        towerType: towerType ?? this.towerType,
+        poleType: poleType ?? this.poleType,
         height: height.present ? height.value : this.height,
         foundationType:
             foundationType.present ? foundationType.value : this.foundationType,
@@ -1101,16 +1101,16 @@ class Tower extends DataClass implements Insertable<Tower> {
         isLocal: isLocal ?? this.isLocal,
         needsSync: needsSync ?? this.needsSync,
       );
-  Tower copyWithCompanion(TowersCompanion data) {
-    return Tower(
+  Pole copyWithCompanion(PolesCompanion data) {
+    return Pole(
       id: data.id.present ? data.id.value : this.id,
       powerLineId:
           data.powerLineId.present ? data.powerLineId.value : this.powerLineId,
-      towerNumber:
-          data.towerNumber.present ? data.towerNumber.value : this.towerNumber,
+      poleNumber:
+          data.poleNumber.present ? data.poleNumber.value : this.poleNumber,
       latitude: data.latitude.present ? data.latitude.value : this.latitude,
       longitude: data.longitude.present ? data.longitude.value : this.longitude,
-      towerType: data.towerType.present ? data.towerType.value : this.towerType,
+      poleType: data.poleType.present ? data.poleType.value : this.poleType,
       height: data.height.present ? data.height.value : this.height,
       foundationType: data.foundationType.present
           ? data.foundationType.value
@@ -1131,13 +1131,13 @@ class Tower extends DataClass implements Insertable<Tower> {
 
   @override
   String toString() {
-    return (StringBuffer('Tower(')
+    return (StringBuffer('Pole(')
           ..write('id: $id, ')
           ..write('powerLineId: $powerLineId, ')
-          ..write('towerNumber: $towerNumber, ')
+          ..write('poleNumber: $poleNumber, ')
           ..write('latitude: $latitude, ')
           ..write('longitude: $longitude, ')
-          ..write('towerType: $towerType, ')
+          ..write('poleType: $poleType, ')
           ..write('height: $height, ')
           ..write('foundationType: $foundationType, ')
           ..write('material: $material, ')
@@ -1157,10 +1157,10 @@ class Tower extends DataClass implements Insertable<Tower> {
   int get hashCode => Object.hash(
       id,
       powerLineId,
-      towerNumber,
+      poleNumber,
       latitude,
       longitude,
-      towerType,
+      poleType,
       height,
       foundationType,
       material,
@@ -1175,13 +1175,13 @@ class Tower extends DataClass implements Insertable<Tower> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Tower &&
+      (other is Pole &&
           other.id == this.id &&
           other.powerLineId == this.powerLineId &&
-          other.towerNumber == this.towerNumber &&
+          other.poleNumber == this.poleNumber &&
           other.latitude == this.latitude &&
           other.longitude == this.longitude &&
-          other.towerType == this.towerType &&
+          other.poleType == this.poleType &&
           other.height == this.height &&
           other.foundationType == this.foundationType &&
           other.material == this.material &&
@@ -1195,13 +1195,13 @@ class Tower extends DataClass implements Insertable<Tower> {
           other.needsSync == this.needsSync);
 }
 
-class TowersCompanion extends UpdateCompanion<Tower> {
+class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<int> id;
   final Value<int> powerLineId;
-  final Value<String> towerNumber;
+  final Value<String> poleNumber;
   final Value<double> latitude;
   final Value<double> longitude;
-  final Value<String> towerType;
+  final Value<String> poleType;
   final Value<double?> height;
   final Value<String?> foundationType;
   final Value<String?> material;
@@ -1213,13 +1213,13 @@ class TowersCompanion extends UpdateCompanion<Tower> {
   final Value<DateTime?> updatedAt;
   final Value<bool> isLocal;
   final Value<bool> needsSync;
-  const TowersCompanion({
+  const PolesCompanion({
     this.id = const Value.absent(),
     this.powerLineId = const Value.absent(),
-    this.towerNumber = const Value.absent(),
+    this.poleNumber = const Value.absent(),
     this.latitude = const Value.absent(),
     this.longitude = const Value.absent(),
-    this.towerType = const Value.absent(),
+    this.poleType = const Value.absent(),
     this.height = const Value.absent(),
     this.foundationType = const Value.absent(),
     this.material = const Value.absent(),
@@ -1232,13 +1232,13 @@ class TowersCompanion extends UpdateCompanion<Tower> {
     this.isLocal = const Value.absent(),
     this.needsSync = const Value.absent(),
   });
-  TowersCompanion.insert({
+  PolesCompanion.insert({
     this.id = const Value.absent(),
     required int powerLineId,
-    required String towerNumber,
+    required String poleNumber,
     required double latitude,
     required double longitude,
-    required String towerType,
+    required String poleType,
     this.height = const Value.absent(),
     this.foundationType = const Value.absent(),
     this.material = const Value.absent(),
@@ -1251,20 +1251,20 @@ class TowersCompanion extends UpdateCompanion<Tower> {
     this.isLocal = const Value.absent(),
     this.needsSync = const Value.absent(),
   })  : powerLineId = Value(powerLineId),
-        towerNumber = Value(towerNumber),
+        poleNumber = Value(poleNumber),
         latitude = Value(latitude),
         longitude = Value(longitude),
-        towerType = Value(towerType),
+        poleType = Value(poleType),
         condition = Value(condition),
         createdBy = Value(createdBy),
         createdAt = Value(createdAt);
-  static Insertable<Tower> custom({
+  static Insertable<Pole> custom({
     Expression<int>? id,
     Expression<int>? powerLineId,
-    Expression<String>? towerNumber,
+    Expression<String>? poleNumber,
     Expression<double>? latitude,
     Expression<double>? longitude,
-    Expression<String>? towerType,
+    Expression<String>? poleType,
     Expression<double>? height,
     Expression<String>? foundationType,
     Expression<String>? material,
@@ -1280,10 +1280,10 @@ class TowersCompanion extends UpdateCompanion<Tower> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (powerLineId != null) 'power_line_id': powerLineId,
-      if (towerNumber != null) 'tower_number': towerNumber,
+      if (poleNumber != null) 'pole_number': poleNumber,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
-      if (towerType != null) 'tower_type': towerType,
+      if (poleType != null) 'pole_type': poleType,
       if (height != null) 'height': height,
       if (foundationType != null) 'foundation_type': foundationType,
       if (material != null) 'material': material,
@@ -1298,13 +1298,13 @@ class TowersCompanion extends UpdateCompanion<Tower> {
     });
   }
 
-  TowersCompanion copyWith(
+  PolesCompanion copyWith(
       {Value<int>? id,
       Value<int>? powerLineId,
-      Value<String>? towerNumber,
+      Value<String>? poleNumber,
       Value<double>? latitude,
       Value<double>? longitude,
-      Value<String>? towerType,
+      Value<String>? poleType,
       Value<double?>? height,
       Value<String?>? foundationType,
       Value<String?>? material,
@@ -1316,13 +1316,13 @@ class TowersCompanion extends UpdateCompanion<Tower> {
       Value<DateTime?>? updatedAt,
       Value<bool>? isLocal,
       Value<bool>? needsSync}) {
-    return TowersCompanion(
+    return PolesCompanion(
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
-      towerNumber: towerNumber ?? this.towerNumber,
+      poleNumber: poleNumber ?? this.poleNumber,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
-      towerType: towerType ?? this.towerType,
+      poleType: poleType ?? this.poleType,
       height: height ?? this.height,
       foundationType: foundationType ?? this.foundationType,
       material: material ?? this.material,
@@ -1346,8 +1346,8 @@ class TowersCompanion extends UpdateCompanion<Tower> {
     if (powerLineId.present) {
       map['power_line_id'] = Variable<int>(powerLineId.value);
     }
-    if (towerNumber.present) {
-      map['tower_number'] = Variable<String>(towerNumber.value);
+    if (poleNumber.present) {
+      map['pole_number'] = Variable<String>(poleNumber.value);
     }
     if (latitude.present) {
       map['latitude'] = Variable<double>(latitude.value);
@@ -1355,8 +1355,8 @@ class TowersCompanion extends UpdateCompanion<Tower> {
     if (longitude.present) {
       map['longitude'] = Variable<double>(longitude.value);
     }
-    if (towerType.present) {
-      map['tower_type'] = Variable<String>(towerType.value);
+    if (poleType.present) {
+      map['pole_type'] = Variable<String>(poleType.value);
     }
     if (height.present) {
       map['height'] = Variable<double>(height.value);
@@ -1396,13 +1396,13 @@ class TowersCompanion extends UpdateCompanion<Tower> {
 
   @override
   String toString() {
-    return (StringBuffer('TowersCompanion(')
+    return (StringBuffer('PolesCompanion(')
           ..write('id: $id, ')
           ..write('powerLineId: $powerLineId, ')
-          ..write('towerNumber: $towerNumber, ')
+          ..write('poleNumber: $poleNumber, ')
           ..write('latitude: $latitude, ')
           ..write('longitude: $longitude, ')
-          ..write('towerType: $towerType, ')
+          ..write('poleType: $poleType, ')
           ..write('height: $height, ')
           ..write('foundationType: $foundationType, ')
           ..write('material: $material, ')
@@ -1430,11 +1430,10 @@ class $EquipmentTable extends Equipment
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
       'id', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _towerIdMeta =
-      const VerificationMeta('towerId');
+  static const VerificationMeta _poleIdMeta = const VerificationMeta('poleId');
   @override
-  late final GeneratedColumn<int> towerId = GeneratedColumn<int>(
-      'tower_id', aliasedName, false,
+  late final GeneratedColumn<int> poleId = GeneratedColumn<int>(
+      'pole_id', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
   static const VerificationMeta _equipmentTypeMeta =
       const VerificationMeta('equipmentType');
@@ -1528,7 +1527,7 @@ class $EquipmentTable extends Equipment
   @override
   List<GeneratedColumn> get $columns => [
         id,
-        towerId,
+        poleId,
         equipmentType,
         name,
         manufacturer,
@@ -1557,11 +1556,11 @@ class $EquipmentTable extends Equipment
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
-    if (data.containsKey('tower_id')) {
-      context.handle(_towerIdMeta,
-          towerId.isAcceptableOrUnknown(data['tower_id']!, _towerIdMeta));
+    if (data.containsKey('pole_id')) {
+      context.handle(_poleIdMeta,
+          poleId.isAcceptableOrUnknown(data['pole_id']!, _poleIdMeta));
     } else if (isInserting) {
-      context.missing(_towerIdMeta);
+      context.missing(_poleIdMeta);
     }
     if (data.containsKey('equipment_type')) {
       context.handle(
@@ -1650,8 +1649,8 @@ class $EquipmentTable extends Equipment
     return EquipmentData(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      towerId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}tower_id'])!,
+      poleId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}pole_id'])!,
       equipmentType: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}equipment_type'])!,
       name: attachedDatabase.typeMapping
@@ -1691,7 +1690,7 @@ class $EquipmentTable extends Equipment
 
 class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   final int id;
-  final int towerId;
+  final int poleId;
   final String equipmentType;
   final String name;
   final String? manufacturer;
@@ -1708,7 +1707,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   final bool needsSync;
   const EquipmentData(
       {required this.id,
-      required this.towerId,
+      required this.poleId,
       required this.equipmentType,
       required this.name,
       this.manufacturer,
@@ -1727,7 +1726,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
-    map['tower_id'] = Variable<int>(towerId);
+    map['pole_id'] = Variable<int>(poleId);
     map['equipment_type'] = Variable<String>(equipmentType);
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || manufacturer != null) {
@@ -1762,7 +1761,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   EquipmentCompanion toCompanion(bool nullToAbsent) {
     return EquipmentCompanion(
       id: Value(id),
-      towerId: Value(towerId),
+      poleId: Value(poleId),
       equipmentType: Value(equipmentType),
       name: Value(name),
       manufacturer: manufacturer == null && nullToAbsent
@@ -1797,7 +1796,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return EquipmentData(
       id: serializer.fromJson<int>(json['id']),
-      towerId: serializer.fromJson<int>(json['towerId']),
+      poleId: serializer.fromJson<int>(json['poleId']),
       equipmentType: serializer.fromJson<String>(json['equipmentType']),
       name: serializer.fromJson<String>(json['name']),
       manufacturer: serializer.fromJson<String?>(json['manufacturer']),
@@ -1820,7 +1819,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
-      'towerId': serializer.toJson<int>(towerId),
+      'poleId': serializer.toJson<int>(poleId),
       'equipmentType': serializer.toJson<String>(equipmentType),
       'name': serializer.toJson<String>(name),
       'manufacturer': serializer.toJson<String?>(manufacturer),
@@ -1840,7 +1839,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
 
   EquipmentData copyWith(
           {int? id,
-          int? towerId,
+          int? poleId,
           String? equipmentType,
           String? name,
           Value<String?> manufacturer = const Value.absent(),
@@ -1857,7 +1856,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           bool? needsSync}) =>
       EquipmentData(
         id: id ?? this.id,
-        towerId: towerId ?? this.towerId,
+        poleId: poleId ?? this.poleId,
         equipmentType: equipmentType ?? this.equipmentType,
         name: name ?? this.name,
         manufacturer:
@@ -1882,7 +1881,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   EquipmentData copyWithCompanion(EquipmentCompanion data) {
     return EquipmentData(
       id: data.id.present ? data.id.value : this.id,
-      towerId: data.towerId.present ? data.towerId.value : this.towerId,
+      poleId: data.poleId.present ? data.poleId.value : this.poleId,
       equipmentType: data.equipmentType.present
           ? data.equipmentType.value
           : this.equipmentType,
@@ -1914,7 +1913,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   String toString() {
     return (StringBuffer('EquipmentData(')
           ..write('id: $id, ')
-          ..write('towerId: $towerId, ')
+          ..write('poleId: $poleId, ')
           ..write('equipmentType: $equipmentType, ')
           ..write('name: $name, ')
           ..write('manufacturer: $manufacturer, ')
@@ -1936,7 +1935,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   @override
   int get hashCode => Object.hash(
       id,
-      towerId,
+      poleId,
       equipmentType,
       name,
       manufacturer,
@@ -1956,7 +1955,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       identical(this, other) ||
       (other is EquipmentData &&
           other.id == this.id &&
-          other.towerId == this.towerId &&
+          other.poleId == this.poleId &&
           other.equipmentType == this.equipmentType &&
           other.name == this.name &&
           other.manufacturer == this.manufacturer &&
@@ -1975,7 +1974,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
 
 class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   final Value<int> id;
-  final Value<int> towerId;
+  final Value<int> poleId;
   final Value<String> equipmentType;
   final Value<String> name;
   final Value<String?> manufacturer;
@@ -1992,7 +1991,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   final Value<bool> needsSync;
   const EquipmentCompanion({
     this.id = const Value.absent(),
-    this.towerId = const Value.absent(),
+    this.poleId = const Value.absent(),
     this.equipmentType = const Value.absent(),
     this.name = const Value.absent(),
     this.manufacturer = const Value.absent(),
@@ -2010,7 +2009,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   });
   EquipmentCompanion.insert({
     this.id = const Value.absent(),
-    required int towerId,
+    required int poleId,
     required String equipmentType,
     required String name,
     this.manufacturer = const Value.absent(),
@@ -2025,7 +2024,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.updatedAt = const Value.absent(),
     this.isLocal = const Value.absent(),
     this.needsSync = const Value.absent(),
-  })  : towerId = Value(towerId),
+  })  : poleId = Value(poleId),
         equipmentType = Value(equipmentType),
         name = Value(name),
         condition = Value(condition),
@@ -2033,7 +2032,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
         createdAt = Value(createdAt);
   static Insertable<EquipmentData> custom({
     Expression<int>? id,
-    Expression<int>? towerId,
+    Expression<int>? poleId,
     Expression<String>? equipmentType,
     Expression<String>? name,
     Expression<String>? manufacturer,
@@ -2051,7 +2050,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
-      if (towerId != null) 'tower_id': towerId,
+      if (poleId != null) 'pole_id': poleId,
       if (equipmentType != null) 'equipment_type': equipmentType,
       if (name != null) 'name': name,
       if (manufacturer != null) 'manufacturer': manufacturer,
@@ -2071,7 +2070,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
 
   EquipmentCompanion copyWith(
       {Value<int>? id,
-      Value<int>? towerId,
+      Value<int>? poleId,
       Value<String>? equipmentType,
       Value<String>? name,
       Value<String?>? manufacturer,
@@ -2088,7 +2087,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       Value<bool>? needsSync}) {
     return EquipmentCompanion(
       id: id ?? this.id,
-      towerId: towerId ?? this.towerId,
+      poleId: poleId ?? this.poleId,
       equipmentType: equipmentType ?? this.equipmentType,
       name: name ?? this.name,
       manufacturer: manufacturer ?? this.manufacturer,
@@ -2112,8 +2111,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
-    if (towerId.present) {
-      map['tower_id'] = Variable<int>(towerId.value);
+    if (poleId.present) {
+      map['pole_id'] = Variable<int>(poleId.value);
     }
     if (equipmentType.present) {
       map['equipment_type'] = Variable<String>(equipmentType.value);
@@ -2164,7 +2163,7 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   String toString() {
     return (StringBuffer('EquipmentCompanion(')
           ..write('id: $id, ')
-          ..write('towerId: $towerId, ')
+          ..write('poleId: $poleId, ')
           ..write('equipmentType: $equipmentType, ')
           ..write('name: $name, ')
           ..write('manufacturer: $manufacturer, ')
@@ -2661,7 +2660,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $PowerLinesTable powerLines = $PowerLinesTable(this);
-  late final $TowersTable towers = $TowersTable(this);
+  late final $PolesTable poles = $PolesTable(this);
   late final $EquipmentTable equipment = $EquipmentTable(this);
   late final $SyncRecordsTable syncRecords = $SyncRecordsTable(this);
   @override
@@ -2669,7 +2668,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [powerLines, towers, equipment, syncRecords];
+      [powerLines, poles, equipment, syncRecords];
 }
 
 typedef $$PowerLinesTableCreateCompanionBuilder = PowerLinesCompanion Function({
@@ -2952,13 +2951,13 @@ typedef $$PowerLinesTableProcessedTableManager = ProcessedTableManager<
     (PowerLine, BaseReferences<_$AppDatabase, $PowerLinesTable, PowerLine>),
     PowerLine,
     PrefetchHooks Function()>;
-typedef $$TowersTableCreateCompanionBuilder = TowersCompanion Function({
+typedef $$PolesTableCreateCompanionBuilder = PolesCompanion Function({
   Value<int> id,
   required int powerLineId,
-  required String towerNumber,
+  required String poleNumber,
   required double latitude,
   required double longitude,
-  required String towerType,
+  required String poleType,
   Value<double?> height,
   Value<String?> foundationType,
   Value<String?> material,
@@ -2971,13 +2970,13 @@ typedef $$TowersTableCreateCompanionBuilder = TowersCompanion Function({
   Value<bool> isLocal,
   Value<bool> needsSync,
 });
-typedef $$TowersTableUpdateCompanionBuilder = TowersCompanion Function({
+typedef $$PolesTableUpdateCompanionBuilder = PolesCompanion Function({
   Value<int> id,
   Value<int> powerLineId,
-  Value<String> towerNumber,
+  Value<String> poleNumber,
   Value<double> latitude,
   Value<double> longitude,
-  Value<String> towerType,
+  Value<String> poleType,
   Value<double?> height,
   Value<String?> foundationType,
   Value<String?> material,
@@ -2991,9 +2990,8 @@ typedef $$TowersTableUpdateCompanionBuilder = TowersCompanion Function({
   Value<bool> needsSync,
 });
 
-class $$TowersTableFilterComposer
-    extends Composer<_$AppDatabase, $TowersTable> {
-  $$TowersTableFilterComposer({
+class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
+  $$PolesTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -3006,8 +3004,8 @@ class $$TowersTableFilterComposer
   ColumnFilters<int> get powerLineId => $composableBuilder(
       column: $table.powerLineId, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<String> get towerNumber => $composableBuilder(
-      column: $table.towerNumber, builder: (column) => ColumnFilters(column));
+  ColumnFilters<String> get poleNumber => $composableBuilder(
+      column: $table.poleNumber, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get latitude => $composableBuilder(
       column: $table.latitude, builder: (column) => ColumnFilters(column));
@@ -3015,8 +3013,8 @@ class $$TowersTableFilterComposer
   ColumnFilters<double> get longitude => $composableBuilder(
       column: $table.longitude, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<String> get towerType => $composableBuilder(
-      column: $table.towerType, builder: (column) => ColumnFilters(column));
+  ColumnFilters<String> get poleType => $composableBuilder(
+      column: $table.poleType, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get height => $composableBuilder(
       column: $table.height, builder: (column) => ColumnFilters(column));
@@ -3053,9 +3051,9 @@ class $$TowersTableFilterComposer
       column: $table.needsSync, builder: (column) => ColumnFilters(column));
 }
 
-class $$TowersTableOrderingComposer
-    extends Composer<_$AppDatabase, $TowersTable> {
-  $$TowersTableOrderingComposer({
+class $$PolesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PolesTable> {
+  $$PolesTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -3068,8 +3066,8 @@ class $$TowersTableOrderingComposer
   ColumnOrderings<int> get powerLineId => $composableBuilder(
       column: $table.powerLineId, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get towerNumber => $composableBuilder(
-      column: $table.towerNumber, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<String> get poleNumber => $composableBuilder(
+      column: $table.poleNumber, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get latitude => $composableBuilder(
       column: $table.latitude, builder: (column) => ColumnOrderings(column));
@@ -3077,8 +3075,8 @@ class $$TowersTableOrderingComposer
   ColumnOrderings<double> get longitude => $composableBuilder(
       column: $table.longitude, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get towerType => $composableBuilder(
-      column: $table.towerType, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<String> get poleType => $composableBuilder(
+      column: $table.poleType, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get height => $composableBuilder(
       column: $table.height, builder: (column) => ColumnOrderings(column));
@@ -3116,9 +3114,9 @@ class $$TowersTableOrderingComposer
       column: $table.needsSync, builder: (column) => ColumnOrderings(column));
 }
 
-class $$TowersTableAnnotationComposer
-    extends Composer<_$AppDatabase, $TowersTable> {
-  $$TowersTableAnnotationComposer({
+class $$PolesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PolesTable> {
+  $$PolesTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -3131,8 +3129,8 @@ class $$TowersTableAnnotationComposer
   GeneratedColumn<int> get powerLineId => $composableBuilder(
       column: $table.powerLineId, builder: (column) => column);
 
-  GeneratedColumn<String> get towerNumber => $composableBuilder(
-      column: $table.towerNumber, builder: (column) => column);
+  GeneratedColumn<String> get poleNumber => $composableBuilder(
+      column: $table.poleNumber, builder: (column) => column);
 
   GeneratedColumn<double> get latitude =>
       $composableBuilder(column: $table.latitude, builder: (column) => column);
@@ -3140,8 +3138,8 @@ class $$TowersTableAnnotationComposer
   GeneratedColumn<double> get longitude =>
       $composableBuilder(column: $table.longitude, builder: (column) => column);
 
-  GeneratedColumn<String> get towerType =>
-      $composableBuilder(column: $table.towerType, builder: (column) => column);
+  GeneratedColumn<String> get poleType =>
+      $composableBuilder(column: $table.poleType, builder: (column) => column);
 
   GeneratedColumn<double> get height =>
       $composableBuilder(column: $table.height, builder: (column) => column);
@@ -3177,35 +3175,35 @@ class $$TowersTableAnnotationComposer
       $composableBuilder(column: $table.needsSync, builder: (column) => column);
 }
 
-class $$TowersTableTableManager extends RootTableManager<
+class $$PolesTableTableManager extends RootTableManager<
     _$AppDatabase,
-    $TowersTable,
-    Tower,
-    $$TowersTableFilterComposer,
-    $$TowersTableOrderingComposer,
-    $$TowersTableAnnotationComposer,
-    $$TowersTableCreateCompanionBuilder,
-    $$TowersTableUpdateCompanionBuilder,
-    (Tower, BaseReferences<_$AppDatabase, $TowersTable, Tower>),
-    Tower,
+    $PolesTable,
+    Pole,
+    $$PolesTableFilterComposer,
+    $$PolesTableOrderingComposer,
+    $$PolesTableAnnotationComposer,
+    $$PolesTableCreateCompanionBuilder,
+    $$PolesTableUpdateCompanionBuilder,
+    (Pole, BaseReferences<_$AppDatabase, $PolesTable, Pole>),
+    Pole,
     PrefetchHooks Function()> {
-  $$TowersTableTableManager(_$AppDatabase db, $TowersTable table)
+  $$PolesTableTableManager(_$AppDatabase db, $PolesTable table)
       : super(TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$TowersTableFilterComposer($db: db, $table: table),
+              $$PolesTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$TowersTableOrderingComposer($db: db, $table: table),
+              $$PolesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$TowersTableAnnotationComposer($db: db, $table: table),
+              $$PolesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<int> powerLineId = const Value.absent(),
-            Value<String> towerNumber = const Value.absent(),
+            Value<String> poleNumber = const Value.absent(),
             Value<double> latitude = const Value.absent(),
             Value<double> longitude = const Value.absent(),
-            Value<String> towerType = const Value.absent(),
+            Value<String> poleType = const Value.absent(),
             Value<double?> height = const Value.absent(),
             Value<String?> foundationType = const Value.absent(),
             Value<String?> material = const Value.absent(),
@@ -3218,13 +3216,13 @@ class $$TowersTableTableManager extends RootTableManager<
             Value<bool> isLocal = const Value.absent(),
             Value<bool> needsSync = const Value.absent(),
           }) =>
-              TowersCompanion(
+              PolesCompanion(
             id: id,
             powerLineId: powerLineId,
-            towerNumber: towerNumber,
+            poleNumber: poleNumber,
             latitude: latitude,
             longitude: longitude,
-            towerType: towerType,
+            poleType: poleType,
             height: height,
             foundationType: foundationType,
             material: material,
@@ -3240,10 +3238,10 @@ class $$TowersTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required int powerLineId,
-            required String towerNumber,
+            required String poleNumber,
             required double latitude,
             required double longitude,
-            required String towerType,
+            required String poleType,
             Value<double?> height = const Value.absent(),
             Value<String?> foundationType = const Value.absent(),
             Value<String?> material = const Value.absent(),
@@ -3256,13 +3254,13 @@ class $$TowersTableTableManager extends RootTableManager<
             Value<bool> isLocal = const Value.absent(),
             Value<bool> needsSync = const Value.absent(),
           }) =>
-              TowersCompanion.insert(
+              PolesCompanion.insert(
             id: id,
             powerLineId: powerLineId,
-            towerNumber: towerNumber,
+            poleNumber: poleNumber,
             latitude: latitude,
             longitude: longitude,
-            towerType: towerType,
+            poleType: poleType,
             height: height,
             foundationType: foundationType,
             material: material,
@@ -3282,21 +3280,21 @@ class $$TowersTableTableManager extends RootTableManager<
         ));
 }
 
-typedef $$TowersTableProcessedTableManager = ProcessedTableManager<
+typedef $$PolesTableProcessedTableManager = ProcessedTableManager<
     _$AppDatabase,
-    $TowersTable,
-    Tower,
-    $$TowersTableFilterComposer,
-    $$TowersTableOrderingComposer,
-    $$TowersTableAnnotationComposer,
-    $$TowersTableCreateCompanionBuilder,
-    $$TowersTableUpdateCompanionBuilder,
-    (Tower, BaseReferences<_$AppDatabase, $TowersTable, Tower>),
-    Tower,
+    $PolesTable,
+    Pole,
+    $$PolesTableFilterComposer,
+    $$PolesTableOrderingComposer,
+    $$PolesTableAnnotationComposer,
+    $$PolesTableCreateCompanionBuilder,
+    $$PolesTableUpdateCompanionBuilder,
+    (Pole, BaseReferences<_$AppDatabase, $PolesTable, Pole>),
+    Pole,
     PrefetchHooks Function()>;
 typedef $$EquipmentTableCreateCompanionBuilder = EquipmentCompanion Function({
   Value<int> id,
-  required int towerId,
+  required int poleId,
   required String equipmentType,
   required String name,
   Value<String?> manufacturer,
@@ -3314,7 +3312,7 @@ typedef $$EquipmentTableCreateCompanionBuilder = EquipmentCompanion Function({
 });
 typedef $$EquipmentTableUpdateCompanionBuilder = EquipmentCompanion Function({
   Value<int> id,
-  Value<int> towerId,
+  Value<int> poleId,
   Value<String> equipmentType,
   Value<String> name,
   Value<String?> manufacturer,
@@ -3343,8 +3341,8 @@ class $$EquipmentTableFilterComposer
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<int> get towerId => $composableBuilder(
-      column: $table.towerId, builder: (column) => ColumnFilters(column));
+  ColumnFilters<int> get poleId => $composableBuilder(
+      column: $table.poleId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get equipmentType => $composableBuilder(
       column: $table.equipmentType, builder: (column) => ColumnFilters(column));
@@ -3403,8 +3401,8 @@ class $$EquipmentTableOrderingComposer
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<int> get towerId => $composableBuilder(
-      column: $table.towerId, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<int> get poleId => $composableBuilder(
+      column: $table.poleId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get equipmentType => $composableBuilder(
       column: $table.equipmentType,
@@ -3466,8 +3464,8 @@ class $$EquipmentTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get towerId =>
-      $composableBuilder(column: $table.towerId, builder: (column) => column);
+  GeneratedColumn<int> get poleId =>
+      $composableBuilder(column: $table.poleId, builder: (column) => column);
 
   GeneratedColumn<String> get equipmentType => $composableBuilder(
       column: $table.equipmentType, builder: (column) => column);
@@ -3539,7 +3537,7 @@ class $$EquipmentTableTableManager extends RootTableManager<
               $$EquipmentTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
-            Value<int> towerId = const Value.absent(),
+            Value<int> poleId = const Value.absent(),
             Value<String> equipmentType = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<String?> manufacturer = const Value.absent(),
@@ -3557,7 +3555,7 @@ class $$EquipmentTableTableManager extends RootTableManager<
           }) =>
               EquipmentCompanion(
             id: id,
-            towerId: towerId,
+            poleId: poleId,
             equipmentType: equipmentType,
             name: name,
             manufacturer: manufacturer,
@@ -3575,7 +3573,7 @@ class $$EquipmentTableTableManager extends RootTableManager<
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
-            required int towerId,
+            required int poleId,
             required String equipmentType,
             required String name,
             Value<String?> manufacturer = const Value.absent(),
@@ -3593,7 +3591,7 @@ class $$EquipmentTableTableManager extends RootTableManager<
           }) =>
               EquipmentCompanion.insert(
             id: id,
-            towerId: towerId,
+            poleId: poleId,
             equipmentType: equipmentType,
             name: name,
             manufacturer: manufacturer,
@@ -3865,8 +3863,8 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$PowerLinesTableTableManager get powerLines =>
       $$PowerLinesTableTableManager(_db, _db.powerLines);
-  $$TowersTableTableManager get towers =>
-      $$TowersTableTableManager(_db, _db.towers);
+  $$PolesTableTableManager get poles =>
+      $$PolesTableTableManager(_db, _db.poles);
   $$EquipmentTableTableManager get equipment =>
       $$EquipmentTableTableManager(_db, _db.equipment);
   $$SyncRecordsTableTableManager get syncRecords =>

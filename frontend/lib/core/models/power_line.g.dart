@@ -20,8 +20,8 @@ PowerLine _$PowerLineFromJson(Map<String, dynamic> json) => PowerLine(
       updatedAt: json['updatedAt'] == null
           ? null
           : DateTime.parse(json['updatedAt'] as String),
-      towers: (json['towers'] as List<dynamic>?)
-          ?.map((e) => Tower.fromJson(e as Map<String, dynamic>))
+      poles: (json['poles'] as List<dynamic>?)
+          ?.map((e) => Pole.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
 
@@ -37,7 +37,7 @@ Map<String, dynamic> _$PowerLineToJson(PowerLine instance) => <String, dynamic>{
       'description': instance.description,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt?.toIso8601String(),
-      'towers': instance.towers,
+      'poles': instance.poles,
     };
 
 PowerLineCreate _$PowerLineCreateFromJson(Map<String, dynamic> json) =>
@@ -62,13 +62,13 @@ Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
       'description': instance.description,
     };
 
-Tower _$TowerFromJson(Map<String, dynamic> json) => Tower(
+Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
       id: (json['id'] as num).toInt(),
       powerLineId: (json['powerLineId'] as num).toInt(),
-      towerNumber: json['towerNumber'] as String,
+      poleNumber: json['poleNumber'] as String,
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
-      towerType: json['towerType'] as String,
+      poleType: json['poleType'] as String,
       height: (json['height'] as num?)?.toDouble(),
       foundationType: json['foundationType'] as String?,
       material: json['material'] as String?,
@@ -85,13 +85,13 @@ Tower _$TowerFromJson(Map<String, dynamic> json) => Tower(
           .toList(),
     );
 
-Map<String, dynamic> _$TowerToJson(Tower instance) => <String, dynamic>{
+Map<String, dynamic> _$PoleToJson(Pole instance) => <String, dynamic>{
       'id': instance.id,
       'powerLineId': instance.powerLineId,
-      'towerNumber': instance.towerNumber,
+      'poleNumber': instance.poleNumber,
       'latitude': instance.latitude,
       'longitude': instance.longitude,
-      'towerType': instance.towerType,
+      'poleType': instance.poleType,
       'height': instance.height,
       'foundationType': instance.foundationType,
       'material': instance.material,
@@ -104,11 +104,11 @@ Map<String, dynamic> _$TowerToJson(Tower instance) => <String, dynamic>{
       'equipment': instance.equipment,
     };
 
-TowerCreate _$TowerCreateFromJson(Map<String, dynamic> json) => TowerCreate(
-      towerNumber: json['towerNumber'] as String,
+PoleCreate _$PoleCreateFromJson(Map<String, dynamic> json) => PoleCreate(
+      poleNumber: json['poleNumber'] as String,
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
-      towerType: json['towerType'] as String,
+      poleType: json['poleType'] as String,
       height: (json['height'] as num?)?.toDouble(),
       foundationType: json['foundationType'] as String?,
       material: json['material'] as String?,
@@ -117,12 +117,12 @@ TowerCreate _$TowerCreateFromJson(Map<String, dynamic> json) => TowerCreate(
       notes: json['notes'] as String?,
     );
 
-Map<String, dynamic> _$TowerCreateToJson(TowerCreate instance) =>
+Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) =>
     <String, dynamic>{
-      'towerNumber': instance.towerNumber,
+      'poleNumber': instance.poleNumber,
       'latitude': instance.latitude,
       'longitude': instance.longitude,
-      'towerType': instance.towerType,
+      'poleType': instance.poleType,
       'height': instance.height,
       'foundationType': instance.foundationType,
       'material': instance.material,
@@ -133,7 +133,7 @@ Map<String, dynamic> _$TowerCreateToJson(TowerCreate instance) =>
 
 Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(
       id: (json['id'] as num).toInt(),
-      towerId: (json['towerId'] as num).toInt(),
+      poleId: (json['poleId'] as num).toInt(),
       equipmentType: json['equipmentType'] as String,
       name: json['name'] as String,
       manufacturer: json['manufacturer'] as String?,
@@ -154,7 +154,7 @@ Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(
 
 Map<String, dynamic> _$EquipmentToJson(Equipment instance) => <String, dynamic>{
       'id': instance.id,
-      'towerId': instance.towerId,
+      'poleId': instance.poleId,
       'equipmentType': instance.equipmentType,
       'name': instance.name,
       'manufacturer': instance.manufacturer,

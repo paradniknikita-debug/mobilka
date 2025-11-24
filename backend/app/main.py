@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, towers, equipment, map_tiles, sync, substations
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import
 from app.core.config import settings
 
 redis_client = redis.from_url("redis://localhost:6379", decode_responses=True)
@@ -71,11 +71,12 @@ async def test_endpoint(message: str = "Hello from backend!"):
 # для аутентификации (/login, /register, /refresh) можно держать в одном auth.router.
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 app.include_router(power_lines.router, prefix="/api/v1/power-lines", tags=["power-lines"])
-app.include_router(towers.router, prefix="/api/v1/towers", tags=["towers"])
+app.include_router(poles.router, prefix="/api/v1/poles", tags=["poles"])
 app.include_router(equipment.router, prefix="/api/v1/equipment", tags=["equipment"])
 app.include_router(map_tiles.router, prefix="/api/v1/map", tags=["map"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(substations.router, prefix="/api/v1/substations", tags=["substations"])
+app.include_router(excel_import.router, tags=["import"])
 
 @app.get("/",response_class=HTMLResponse)
 async def root():

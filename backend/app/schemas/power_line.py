@@ -2,11 +2,11 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-class TowerBase(BaseModel):
-    tower_number: str
+class PoleBase(BaseModel):
+    pole_number: str
     latitude: float
     longitude: float
-    tower_type: str
+    pole_type: str
     height: Optional[float] = None
     foundation_type: Optional[str] = None
     material: Optional[str] = None
@@ -14,10 +14,10 @@ class TowerBase(BaseModel):
     condition: str = "good"
     notes: Optional[str] = None
 
-class TowerCreate(TowerBase):
+class PoleCreate(PoleBase):
     pass
 
-class TowerResponse(TowerBase):
+class PoleResponse(PoleBase):
     id: int
     power_line_id: int
     created_by: int
@@ -44,7 +44,7 @@ class PowerLineResponse(PowerLineBase):
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]
-    towers: List[TowerResponse] = []
+    poles: List[PoleResponse] = []
 
     class Config:
         from_attributes = True
@@ -61,14 +61,14 @@ class SpanBase(BaseModel):
 
 class SpanCreate(SpanBase):
     power_line_id: int
-    from_tower_id: int
-    to_tower_id: int
+    from_pole_id: int
+    to_pole_id: int
 
 class SpanResponse(SpanBase):
     id: int
     power_line_id: int
-    from_tower_id: int
-    to_tower_id: int
+    from_pole_id: int
+    to_pole_id: int
     created_by: int
     created_at: datetime
 
@@ -86,12 +86,12 @@ class TapBase(BaseModel):
 
 class TapCreate(TapBase):
     power_line_id: int
-    tower_id: int
+    pole_id: int
 
 class TapResponse(TapBase):
     id: int
     power_line_id: int
-    tower_id: int
+    pole_id: int
     created_by: int
     created_at: datetime
 
@@ -110,11 +110,11 @@ class EquipmentBase(BaseModel):
     notes: Optional[str] = None
 
 class EquipmentCreate(EquipmentBase):
-    tower_id: int
+    pole_id: int
 
 class EquipmentResponse(EquipmentBase):
     id: int
-    tower_id: int
+    pole_id: int
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]

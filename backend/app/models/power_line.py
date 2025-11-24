@@ -28,15 +28,15 @@ class PowerLine(Base):
     region = relationship("GeographicRegion", back_populates="power_lines")
     branch = relationship("Branch", back_populates="power_lines")  # Для обратной совместимости
     creator = relationship("User", back_populates="created_power_lines")
-    towers = relationship("Tower", back_populates="power_line", cascade="all, delete-orphan")
+    poles = relationship("Pole", back_populates="power_line", cascade="all, delete-orphan")
     spans = relationship("Span", back_populates="power_line", cascade="all, delete-orphan")
     taps = relationship("Tap", back_populates="power_line", cascade="all, delete-orphan")
     connections = relationship("Connection", back_populates="power_line")
     # Many-to-many связь с сегментами
     segments = relationship("AClineSegment", secondary="line_segments", back_populates="power_lines")
 
-class Tower(Base):
-    __tablename__ = "towers"
+class Pole(Base):
+    __tablename__ = "poles"
 
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
@@ -44,10 +44,10 @@ class Tower(Base):
     power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
     # Опциональная связь с сегментом (для паспортизации)
     segment_id = Column(Integer, ForeignKey("acline_segments.id"), nullable=True)
-    tower_number = Column(String(20), nullable=False)
+    pole_number = Column(String(20), nullable=False)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
-    tower_type = Column(String(50), nullable=False)  # анкерная, промежуточная, угловая и т.д.
+    pole_type = Column(String(50), nullable=False)  # анкерная, промежуточная, угловая и т.д.
     height = Column(Float, nullable=True)  # м
     foundation_type = Column(String(50), nullable=True)
     material = Column(String(50), nullable=True)  # металл, железобетон, дерево
@@ -59,10 +59,10 @@ class Tower(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Связи
-    power_line = relationship("PowerLine", back_populates="towers")
+    power_line = relationship("PowerLine", back_populates="poles")
     segment = relationship("AClineSegment", foreign_keys=[segment_id])
     creator = relationship("User")
-    equipment = relationship("Equipment", back_populates="tower", cascade="all, delete-orphan")
+    equipment = relationship("Equipment", back_populates="pole", cascade="all, delete-orphan")
 
 class Span(Base):
     __tablename__ = "spans"
@@ -71,8 +71,8 @@ class Span(Base):
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
-    from_tower_id = Column(Integer, ForeignKey("towers.id"), nullable=False)
-    to_tower_id = Column(Integer, ForeignKey("towers.id"), nullable=False)
+    from_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
+    to_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
     span_number = Column(String(20), nullable=False)
     length = Column(Float, nullable=False)  # м
     conductor_type = Column(String(50), nullable=True)
@@ -86,8 +86,8 @@ class Span(Base):
 
     # Связи
     power_line = relationship("PowerLine", back_populates="spans")
-    from_tower = relationship("Tower", foreign_keys=[from_tower_id])
-    to_tower = relationship("Tower", foreign_keys=[to_tower_id])
+    from_pole = relationship("Pole", foreign_keys=[from_pole_id])
+    to_pole = relationship("Pole", foreign_keys=[to_pole_id])
     creator = relationship("User")
 
 class Tap(Base):
@@ -97,7 +97,7 @@ class Tap(Base):
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
-    tower_id = Column(Integer, ForeignKey("towers.id"), nullable=False)
+    pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
     tap_number = Column(String(20), nullable=False)
     tap_type = Column(String(50), nullable=False)  # трансформаторная подстанция, потребитель и т.д.
     voltage_level = Column(Float, nullable=False)  # кВ
@@ -110,7 +110,7 @@ class Tap(Base):
 
     # Связи
     power_line = relationship("PowerLine", back_populates="taps")
-    tower = relationship("Tower")
+    pole = relationship("Pole")
     creator = relationship("User")
 
 class Equipment(Base):
@@ -119,7 +119,7 @@ class Equipment(Base):
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    tower_id = Column(Integer, ForeignKey("towers.id"), nullable=False)
+    pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
     equipment_type = Column(String(50), nullable=False)  # изолятор, разрядник, грозозащитный трос и т.д.
     name = Column(String(100), nullable=False)
     manufacturer = Column(String(100), nullable=True)
@@ -134,5 +134,5 @@ class Equipment(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Связи
-    tower = relationship("Tower", back_populates="equipment")
+    pole = relationship("Pole", back_populates="equipment")
     creator = relationship("User")

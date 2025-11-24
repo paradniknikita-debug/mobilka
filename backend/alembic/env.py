@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.database import Base
 # Импортируем все модели, чтобы Alembic их видел
 from app.models import (
-    User, PowerLine, Tower, Span, Tap, Equipment,
+    User, PowerLine, Pole, Span, Tap, Equipment,
     Branch, Substation, Connection,
     GeographicRegion, AClineSegment
 )

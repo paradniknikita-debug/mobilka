@@ -225,23 +225,23 @@ class _ApiService implements ApiService {
   }
 
   @override
-  Future<Tower> createTower(
+  Future<Pole> createPole(
     int powerLineId,
-    TowerCreate towerData,
+    PoleCreate poleData,
   ) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
     final _data = <String, dynamic>{};
-    _data.addAll(towerData.toJson());
-    final _options = _setStreamType<Tower>(Options(
+    _data.addAll(poleData.toJson());
+    final _options = _setStreamType<Pole>(Options(
       method: 'POST',
       headers: _headers,
       extra: _extra,
     )
         .compose(
           _dio.options,
-          '/power-lines/${powerLineId}/towers',
+          '/power-lines/${powerLineId}/poles',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -251,9 +251,9 @@ class _ApiService implements ApiService {
           baseUrl,
         )));
     final _result = await _dio.fetch<Map<String, dynamic>>(_options);
-    late Tower _value;
+    late Pole _value;
     try {
-      _value = Tower.fromJson(_result.data!);
+      _value = Pole.fromJson(_result.data!);
     } on Object catch (e, s) {
       errorLogger?.logError(e, s, _options);
       rethrow;
@@ -262,19 +262,19 @@ class _ApiService implements ApiService {
   }
 
   @override
-  Future<List<Tower>> getTowers(int powerLineId) async {
+  Future<List<Pole>> getPoles(int powerLineId) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
     const Map<String, dynamic>? _data = null;
-    final _options = _setStreamType<List<Tower>>(Options(
+    final _options = _setStreamType<List<Pole>>(Options(
       method: 'GET',
       headers: _headers,
       extra: _extra,
     )
         .compose(
           _dio.options,
-          '/power-lines/${powerLineId}/towers',
+          '/power-lines/${powerLineId}/poles',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -284,10 +284,10 @@ class _ApiService implements ApiService {
           baseUrl,
         )));
     final _result = await _dio.fetch<List<dynamic>>(_options);
-    late List<Tower> _value;
+    late List<Pole> _value;
     try {
       _value = _result.data!
-          .map((dynamic i) => Tower.fromJson(i as Map<String, dynamic>))
+          .map((dynamic i) => Pole.fromJson(i as Map<String, dynamic>))
           .toList();
     } on Object catch (e, s) {
       errorLogger?.logError(e, s, _options);
@@ -297,19 +297,19 @@ class _ApiService implements ApiService {
   }
 
   @override
-  Future<List<Tower>> getAllTowers() async {
+  Future<List<Pole>> getAllPoles() async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
     const Map<String, dynamic>? _data = null;
-    final _options = _setStreamType<List<Tower>>(Options(
+    final _options = _setStreamType<List<Pole>>(Options(
       method: 'GET',
       headers: _headers,
       extra: _extra,
     )
         .compose(
           _dio.options,
-          '/towers',
+          '/poles',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -319,10 +319,10 @@ class _ApiService implements ApiService {
           baseUrl,
         )));
     final _result = await _dio.fetch<List<dynamic>>(_options);
-    late List<Tower> _value;
+    late List<Pole> _value;
     try {
       _value = _result.data!
-          .map((dynamic i) => Tower.fromJson(i as Map<String, dynamic>))
+          .map((dynamic i) => Pole.fromJson(i as Map<String, dynamic>))
           .toList();
     } on Object catch (e, s) {
       errorLogger?.logError(e, s, _options);
@@ -332,19 +332,19 @@ class _ApiService implements ApiService {
   }
 
   @override
-  Future<Tower> getTower(int id) async {
+  Future<Pole> getPole(int id) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
     const Map<String, dynamic>? _data = null;
-    final _options = _setStreamType<Tower>(Options(
+    final _options = _setStreamType<Pole>(Options(
       method: 'GET',
       headers: _headers,
       extra: _extra,
     )
         .compose(
           _dio.options,
-          '/towers/${id}',
+          '/poles/${id}',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -354,9 +354,9 @@ class _ApiService implements ApiService {
           baseUrl,
         )));
     final _result = await _dio.fetch<Map<String, dynamic>>(_options);
-    late Tower _value;
+    late Pole _value;
     try {
-      _value = Tower.fromJson(_result.data!);
+      _value = Pole.fromJson(_result.data!);
     } on Object catch (e, s) {
       errorLogger?.logError(e, s, _options);
       rethrow;
@@ -366,7 +366,7 @@ class _ApiService implements ApiService {
 
   @override
   Future<Equipment> createEquipment(
-    int towerId,
+    int poleId,
     EquipmentCreate equipmentData,
   ) async {
     final _extra = <String, dynamic>{};
@@ -381,7 +381,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          '/towers/${towerId}/equipment',
+          '/poles/${poleId}/equipment',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -402,7 +402,7 @@ class _ApiService implements ApiService {
   }
 
   @override
-  Future<List<Equipment>> getTowerEquipment(int towerId) async {
+  Future<List<Equipment>> getPoleEquipment(int poleId) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
@@ -414,7 +414,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          '/towers/${towerId}/equipment',
+          '/poles/${poleId}/equipment',
           queryParameters: queryParameters,
           data: _data,
         )

@@ -2,10 +2,14 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:drift/drift.dart' as drift;
 
 import '../config/app_config.dart';
 import '../database/database.dart';
 import 'api_service.dart';
+
+part 'sync_service.freezed.dart';
 
 class SyncService extends StateNotifier<SyncState> {
   final AppDatabase _database;
@@ -42,7 +46,7 @@ class SyncService extends StateNotifier<SyncState> {
   Future<void> _uploadLocalChanges() async {
     // Получаем все записи, которые нужно синхронизировать
     final powerLines = await _database.getPowerLinesNeedingSync();
-    final towers = await _database.getTowersNeedingSync();
+    final poles = await _database.getPolesNeedingSync();
     final equipment = await _database.getEquipmentNeedingSync();
 
     // Создаем пакет для отправки
@@ -55,13 +59,13 @@ class SyncService extends StateNotifier<SyncState> {
     }
 
     // Добавляем опоры
-    for (final tower in towers) {
-      records.add(_createSyncRecord('tower', 'create', tower.toJson(), batchId));
+    for (final pole in poles) {
+      records.add(_createSyncRecord('pole', 'create', pole.toJson(), batchId));
     }
 
     // Добавляем оборудование
     for (final equipmentItem in equipment) {
-      records.add(_createSyncRecord('equipment', 'create', equipmentItem.toJson(), batchId));
+      records.add(_createSyncRecord('equipment', 'create', _equipmentToJson(equipmentItem), batchId));
     }
 
     if (records.isNotEmpty) {
@@ -76,7 +80,7 @@ class SyncService extends StateNotifier<SyncState> {
       
       if (response['success'] == true) {
         // Помечаем записи как синхронизированные
-        await _markAsSynced(powerLines, towers, equipment);
+        await _markAsSynced(powerLines, poles, equipment);
       }
     }
   }
@@ -96,6 +100,25 @@ class SyncService extends StateNotifier<SyncState> {
 
     // Обновляем время последней синхронизации
     await _setLastSyncTime(DateTime.now());
+  }
+
+  Map<String, dynamic> _equipmentToJson(EquipmentData equipment) {
+    return {
+      'id': equipment.id,
+      'pole_id': equipment.poleId,
+      'equipment_type': equipment.equipmentType,
+      'name': equipment.name,
+      'manufacturer': equipment.manufacturer,
+      'model': equipment.model,
+      'serial_number': equipment.serialNumber,
+      'year_manufactured': equipment.yearManufactured,
+      'installation_date': equipment.installationDate?.toIso8601String(),
+      'condition': equipment.condition,
+      'notes': equipment.notes,
+      'created_by': equipment.createdBy,
+      'created_at': equipment.createdAt.toIso8601String(),
+      'updated_at': equipment.updatedAt?.toIso8601String(),
+    };
   }
 
   Map<String, dynamic> _createSyncRecord(
@@ -123,8 +146,8 @@ class SyncService extends StateNotifier<SyncState> {
       case 'power_line':
         await _processPowerLineRecord(action, data);
         break;
-      case 'tower':
-        await _processTowerRecord(action, data);
+      case 'pole':
+        await _processPoleRecord(action, data);
         break;
       case 'equipment':
         await _processEquipmentRecord(action, data);
@@ -138,17 +161,17 @@ class SyncService extends StateNotifier<SyncState> {
       case 'update':
         await _database.insertPowerLine(
           PowerLinesCompanion.insert(
-            id: Value(data['id']),
+            id: drift.Value(data['id']),
             name: data['name'],
             code: data['code'],
             voltageLevel: data['voltage_level'],
-            length: Value(data['length']),
+            length: drift.Value(data['length']),
             branchId: data['branch_id'],
             createdBy: data['created_by'],
             status: data['status'],
-            description: Value(data['description']),
+            description: drift.Value(data['description']),
             createdAt: DateTime.parse(data['created_at']),
-            updatedAt: Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
+            updatedAt: drift.Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
           ),
         );
         break;
@@ -158,32 +181,32 @@ class SyncService extends StateNotifier<SyncState> {
     }
   }
 
-  Future<void> _processTowerRecord(String action, Map<String, dynamic> data) async {
+  Future<void> _processPoleRecord(String action, Map<String, dynamic> data) async {
     switch (action) {
       case 'create':
       case 'update':
-        await _database.insertTower(
-          TowersCompanion.insert(
-            id: Value(data['id']),
+        await _database.insertPole(
+          PolesCompanion.insert(
+            id: drift.Value(data['id']),
             powerLineId: data['power_line_id'],
-            towerNumber: data['tower_number'],
+            poleNumber: data['pole_number'],
             latitude: data['latitude'],
             longitude: data['longitude'],
-            towerType: data['tower_type'],
-            height: Value(data['height']),
-            foundationType: Value(data['foundation_type']),
-            material: Value(data['material']),
-            yearInstalled: Value(data['year_installed']),
+            poleType: data['pole_type'],
+            height: drift.Value(data['height']),
+            foundationType: drift.Value(data['foundation_type']),
+            material: drift.Value(data['material']),
+            yearInstalled: drift.Value(data['year_installed']),
             condition: data['condition'],
-            notes: Value(data['notes']),
+            notes: drift.Value(data['notes']),
             createdBy: data['created_by'],
             createdAt: DateTime.parse(data['created_at']),
-            updatedAt: Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
+            updatedAt: drift.Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
           ),
         );
         break;
       case 'delete':
-        await _database.deleteTower(data['id']);
+        await _database.deletePole(data['id']);
         break;
     }
   }
@@ -194,20 +217,20 @@ class SyncService extends StateNotifier<SyncState> {
       case 'update':
         await _database.insertEquipment(
           EquipmentCompanion.insert(
-            id: Value(data['id']),
-            towerId: data['tower_id'],
+            id: drift.Value(data['id']),
+            poleId: data['pole_id'] ?? data['tower_id'], // Поддержка старого формата
             equipmentType: data['equipment_type'],
             name: data['name'],
-            manufacturer: Value(data['manufacturer']),
-            model: Value(data['model']),
-            serialNumber: Value(data['serial_number']),
-            yearManufactured: Value(data['year_manufactured']),
-            installationDate: Value(data['installation_date'] != null ? DateTime.parse(data['installation_date']) : null),
+            manufacturer: drift.Value(data['manufacturer']),
+            model: drift.Value(data['model']),
+            serialNumber: drift.Value(data['serial_number']),
+            yearManufactured: drift.Value(data['year_manufactured']),
+            installationDate: drift.Value(data['installation_date'] != null ? DateTime.parse(data['installation_date']) : null),
             condition: data['condition'],
-            notes: Value(data['notes']),
+            notes: drift.Value(data['notes']),
             createdBy: data['created_by'],
             createdAt: DateTime.parse(data['created_at']),
-            updatedAt: Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
+            updatedAt: drift.Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
           ),
         );
         break;
@@ -219,25 +242,25 @@ class SyncService extends StateNotifier<SyncState> {
 
   Future<void> _markAsSynced(
     List<PowerLine> powerLines,
-    List<Tower> towers,
-    List<Equipment> equipment,
+    List<Pole> poles,
+    List<EquipmentData> equipment,
   ) async {
     // Помечаем ЛЭП как синхронизированные
     for (final powerLine in powerLines) {
       await _database.updatePowerLine(
         PowerLinesCompanion(
-          id: Value(powerLine.id),
-          needsSync: const Value(false),
+          id: drift.Value(powerLine.id),
+          needsSync: drift.Value(false),
         ),
       );
     }
 
     // Помечаем опоры как синхронизированные
-    for (final tower in towers) {
-      await _database.updateTower(
-        TowersCompanion(
-          id: Value(tower.id),
-          needsSync: const Value(false),
+    for (final pole in poles) {
+      await _database.updatePole(
+        PolesCompanion(
+          id: drift.Value(pole.id),
+          needsSync: drift.Value(false),
         ),
       );
     }
@@ -246,8 +269,8 @@ class SyncService extends StateNotifier<SyncState> {
     for (final equipmentItem in equipment) {
       await _database.updateEquipment(
         EquipmentCompanion(
-          id: Value(equipmentItem.id),
-          needsSync: const Value(false),
+          id: drift.Value(equipmentItem.id),
+          needsSync: drift.Value(false),
         ),
       );
     }
@@ -264,19 +287,12 @@ class SyncService extends StateNotifier<SyncState> {
   }
 }
 
-enum SyncStatus { idle, syncing, completed, error }
-
-class SyncState {
-  final SyncStatus status;
-  final String? message;
-
-  const SyncState(this.status, {this.message});
-  const SyncState.idle() : status = SyncStatus.idle, message = null;
-  const SyncState.syncing() : status = SyncStatus.syncing, message = null;
-  const SyncState.completed() : status = SyncStatus.completed, message = null;
-  const SyncState.error(String message)
-      : status = SyncStatus.error,
-        message = message;
+@freezed
+class SyncState with _$SyncState {
+  const factory SyncState.idle() = _Idle;
+  const factory SyncState.syncing() = _Syncing;
+  const factory SyncState.completed() = _Completed;
+  const factory SyncState.error(String message) = _Error;
 }
 
 // Provider для SyncService

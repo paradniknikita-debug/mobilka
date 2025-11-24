@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:retrofit/retrofit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user.dart';
 import '../models/power_line.dart';
@@ -34,24 +35,24 @@ abstract class ApiService {
   @GET('/power-lines/{id}')
   Future<PowerLine> getPowerLine(@Path('id') int id);
 
-  @POST('/power-lines/{id}/towers')
-  Future<Tower> createTower(@Path('id') int powerLineId, @Body() TowerCreate towerData);
+  @POST('/power-lines/{id}/poles')
+  Future<Pole> createPole(@Path('id') int powerLineId, @Body() PoleCreate poleData);
 
-  @GET('/power-lines/{id}/towers')
-  Future<List<Tower>> getTowers(@Path('id') int powerLineId);
+  @GET('/power-lines/{id}/poles')
+  Future<List<Pole>> getPoles(@Path('id') int powerLineId);
 
-  // Towers
-  @GET('/towers')
-  Future<List<Tower>> getAllTowers();
+  // Poles
+  @GET('/poles')
+  Future<List<Pole>> getAllPoles();
 
-  @GET('/towers/{id}')
-  Future<Tower> getTower(@Path('id') int id);
+  @GET('/poles/{id}')
+  Future<Pole> getPole(@Path('id') int id);
 
-  @POST('/towers/{id}/equipment')
-  Future<Equipment> createEquipment(@Path('id') int towerId, @Body() EquipmentCreate equipmentData);
+  @POST('/poles/{id}/equipment')
+  Future<Equipment> createEquipment(@Path('id') int poleId, @Body() EquipmentCreate equipmentData);
 
-  @GET('/towers/{id}/equipment')
-  Future<List<Equipment>> getTowerEquipment(@Path('id') int towerId);
+  @GET('/poles/{id}/equipment')
+  Future<List<Equipment>> getPoleEquipment(@Path('id') int poleId);
 
   // Equipment
   @GET('/equipment')
@@ -64,7 +65,7 @@ abstract class ApiService {
   @GET('/map/power-lines/geojson')
   Future<dynamic> getPowerLinesGeoJSON();
 
-  @GET('/map/towers/geojson')
+  @GET('/map/poles/geojson')
   Future<dynamic> getTowersGeoJSON();
 
   @GET('/map/taps/geojson')
@@ -91,7 +92,7 @@ abstract class ApiService {
 }
 
 class ApiServiceProvider {
-  static ApiService create() {
+  static ApiService create({SharedPreferences? prefs}) {
     final dio = Dio();
     final urlManager = BaseUrlManager();
     dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
@@ -99,13 +100,13 @@ class ApiServiceProvider {
     // Настройка interceptors
     dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (options, handler) {
+        onRequest: (options, handler) async {
           // Обновляем baseUrl перед каждым запросом (на случай fallback)
           dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
           options.baseUrl = dio.options.baseUrl;
           
           // Добавление заголовков авторизации
-          final token = _getStoredToken();
+          final token = await _getStoredToken(prefs);
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -160,7 +161,7 @@ class ApiServiceProvider {
           // Обработка других ошибок
           if (error.response?.statusCode == 401) {
             // Токен истёк, нужно перелогиниться
-            _clearStoredToken();
+            await _clearStoredToken(prefs);
           }
           handler.next(error);
         },
@@ -170,18 +171,26 @@ class ApiServiceProvider {
     return ApiService(dio, baseUrl: dio.options.baseUrl);
   }
 
-  static String? _getStoredToken() {
-    // Здесь должна быть логика получения токена из secure storage
-    return null;
+  static Future<String?> _getStoredToken(SharedPreferences? prefs) async {
+    if (prefs == null) return null;
+    return prefs.getString(AppConfig.authTokenKey);
   }
 
-  static void _clearStoredToken() {
-    // Здесь должна быть логика очистки токена
+  static Future<void> _clearStoredToken(SharedPreferences? prefs) async {
+    if (prefs != null) {
+      await prefs.remove(AppConfig.authTokenKey);
+    }
   }
 }
 
 final apiServiceProvider = Provider<ApiService>((ref) {
-  return ApiServiceProvider.create();
+  try {
+    final prefs = ref.watch(prefsProvider);
+    return ApiServiceProvider.create(prefs: prefs);
+  } catch (e) {
+    // Если prefsProvider не переопределен, создаем без prefs
+    return ApiServiceProvider.create();
+  }
 });
 
 // Провайдер для прямого доступа к Dio (для тестовых запросов)

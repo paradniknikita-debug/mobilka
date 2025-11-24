@@ -4,20 +4,29 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
+import 'core/database/database.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/auth_service.dart';
+import 'core/services/api_service.dart';
+import 'core/services/sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Инициализация сервисов
   final prefs = await SharedPreferences.getInstance();
+  final database = AppDatabase();
+  final apiService = ApiServiceProvider.create(prefs: prefs);
+  final syncService = SyncService(database, apiService);
   
   runApp(
     ProviderScope(
       overrides: [
         prefsProvider.overrideWithValue(prefs),
+        databaseProvider.overrideWithValue(database),
+        apiServiceProvider.overrideWithValue(apiService),
+        syncServiceProvider.overrideWithValue(syncService),
       ],
       child: const LepmApp(),
     ),

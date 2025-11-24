@@ -16,7 +16,7 @@ class SyncStatus(str, Enum):
 class SyncRecord(BaseModel):
     """Универсальная запись для синхронизации"""
     id: str  # Уникальный ID записи
-    entity_type: str  # Тип сущности (power_line, tower, equipment, etc.)
+    entity_type: str  # Тип сущности (power_line, pole, equipment, etc.)
     action: SyncAction
     data: Dict[str, Any]
     timestamp: datetime
@@ -58,15 +58,15 @@ POWER_LINE_SCHEMA = {
     "required": ["name", "code", "voltage_level", "branch_id"]
 }
 
-TOWER_SCHEMA = {
+POLE_SCHEMA = {
     "type": "object",
     "properties": {
         "id": {"type": "string"},
         "power_line_id": {"type": "string"},
-        "tower_number": {"type": "string"},
+        "pole_number": {"type": "string"},
         "latitude": {"type": "number"},
         "longitude": {"type": "number"},
-        "tower_type": {"type": "string"},
+        "pole_type": {"type": "string"},
         "height": {"type": "number"},
         "foundation_type": {"type": "string"},
         "material": {"type": "string"},
@@ -75,14 +75,14 @@ TOWER_SCHEMA = {
         "notes": {"type": "string"},
         "created_at": {"type": "string", "format": "date-time"}
     },
-    "required": ["power_line_id", "tower_number", "latitude", "longitude", "tower_type"]
+    "required": ["power_line_id", "pole_number", "latitude", "longitude", "pole_type"]
 }
 
 EQUIPMENT_SCHEMA = {
     "type": "object",
     "properties": {
         "id": {"type": "string"},
-        "tower_id": {"type": "string"},
+        "pole_id": {"type": "string"},
         "equipment_type": {"type": "string"},
         "name": {"type": "string"},
         "manufacturer": {"type": "string"},
@@ -93,21 +93,21 @@ EQUIPMENT_SCHEMA = {
         "condition": {"type": "string"},
         "notes": {"type": "string"}
     },
-    "required": ["tower_id", "equipment_type", "name"]
+    "required": ["pole_id", "equipment_type", "name"]
 }
 
 # Схемы для всех типов сущностей
 ENTITY_SCHEMAS = {
     "power_line": POWER_LINE_SCHEMA,
-    "tower": TOWER_SCHEMA,
+    "pole": POLE_SCHEMA,
     "equipment": EQUIPMENT_SCHEMA,
     "span": {
         "type": "object",
         "properties": {
             "id": {"type": "string"},
             "power_line_id": {"type": "string"},
-            "from_tower_id": {"type": "string"},
-            "to_tower_id": {"type": "string"},
+            "from_pole_id": {"type": "string"},
+            "to_pole_id": {"type": "string"},
             "span_number": {"type": "string"},
             "length": {"type": "number"},
             "conductor_type": {"type": "string"},
@@ -117,14 +117,14 @@ ENTITY_SCHEMAS = {
             "sag": {"type": "number"},
             "notes": {"type": "string"}
         },
-        "required": ["power_line_id", "from_tower_id", "to_tower_id", "span_number", "length"]
+        "required": ["power_line_id", "from_pole_id", "to_pole_id", "span_number", "length"]
     },
     "tap": {
         "type": "object",
         "properties": {
             "id": {"type": "string"},
             "power_line_id": {"type": "string"},
-            "tower_id": {"type": "string"},
+            "pole_id": {"type": "string"},
             "tap_number": {"type": "string"},
             "tap_type": {"type": "string"},
             "voltage_level": {"type": "number"},
@@ -133,6 +133,6 @@ ENTITY_SCHEMAS = {
             "longitude": {"type": "number"},
             "description": {"type": "string"}
         },
-        "required": ["power_line_id", "tower_id", "tap_number", "tap_type", "voltage_level"]
+        "required": ["power_line_id", "pole_id", "tap_number", "tap_type", "voltage_level"]
     }
 }

@@ -7,13 +7,13 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
-from app.models.power_line import Tower, Equipment
-from app.schemas.power_line import EquipmentCreate, EquipmentResponse, TowerResponse
+from app.models.power_line import Pole, Equipment
+from app.schemas.power_line import EquipmentCreate, EquipmentResponse, PoleResponse
 
 router = APIRouter()
 
-@router.get("/", response_model=List[TowerResponse])
-async def get_all_towers(
+@router.get("/", response_model=List[PoleResponse])
+async def get_all_poles(
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_active_user),
@@ -21,37 +21,37 @@ async def get_all_towers(
 ):
     """Получение всех опор"""
     result = await db.execute(
-        select(Tower)
-        .options(selectinload(Tower.equipment))
+        select(Pole)
+        .options(selectinload(Pole.equipment))
         .offset(skip)
         .limit(limit)
     )
-    towers = result.scalars().all()
-    return towers
+    poles = result.scalars().all()
+    return poles
 
-@router.get("/{tower_id}", response_model=TowerResponse)
-async def get_tower(
-    tower_id: int,
+@router.get("/{pole_id}", response_model=PoleResponse)
+async def get_pole(
+    pole_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Получение опоры по ID"""
     result = await db.execute(
-        select(Tower)
-        .options(selectinload(Tower.equipment))
-        .where(Tower.id == tower_id)
+        select(Pole)
+        .options(selectinload(Pole.equipment))
+        .where(Pole.id == pole_id)
     )
-    tower = result.scalar_one_or_none()
-    if not tower:
+    pole = result.scalar_one_or_none()
+    if not pole:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tower not found"
+            detail="Pole not found"
         )
-    return tower
+    return pole
 
-@router.post("/{tower_id}/equipment", response_model=EquipmentResponse)
+@router.post("/{pole_id}/equipment", response_model=EquipmentResponse)
 async def create_equipment(
-    tower_id: int,
+    pole_id: int,
     equipment_data: EquipmentCreate,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
@@ -59,16 +59,16 @@ async def create_equipment(
     """Добавление оборудования к опоре"""
     
     # Проверка существования опоры
-    tower = await db.get(Tower, tower_id)
-    if not tower:
+    pole = await db.get(Pole, pole_id)
+    if not pole:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tower not found"
+            detail="Pole not found"
         )
     
     db_equipment = Equipment(
         **equipment_data.dict(),
-        tower_id=tower_id,
+        pole_id=pole_id,
         created_by=current_user.id
     )
     db.add(db_equipment)
@@ -76,15 +76,16 @@ async def create_equipment(
     await db.refresh(db_equipment)
     return db_equipment
 
-@router.get("/{tower_id}/equipment", response_model=List[EquipmentResponse])
-async def get_tower_equipment(
-    tower_id: int,
+@router.get("/{pole_id}/equipment", response_model=List[EquipmentResponse])
+async def get_pole_equipment(
+    pole_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Получение оборудования опоры"""
     result = await db.execute(
-        select(Equipment).where(Equipment.tower_id == tower_id)
+        select(Equipment).where(Equipment.pole_id == pole_id)
     )
     equipment = result.scalars().all()
     return equipment
+

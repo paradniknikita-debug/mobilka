@@ -91,7 +91,7 @@ async def process_sync_record(record: SyncRecord, user: User, db: AsyncSession):
             # Удаление ЛЭП
             pass
     
-    elif record.entity_type == "tower":
+    elif record.entity_type == "pole":
         if record.action == SyncAction.CREATE:
             # Создание новой опоры
             pass

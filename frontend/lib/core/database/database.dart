@@ -1,8 +1,10 @@
-import 'dart:io';
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// Условные импорты для разных платформ
+import 'database_stub.dart'
+    if (dart.library.io) 'database_io.dart'
+    if (dart.library.html) 'database_web.dart';
 
 import '../config/app_config.dart';
 
@@ -29,13 +31,13 @@ class PowerLines extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-class Towers extends Table {
+class Poles extends Table {
   IntColumn get id => integer()();
   IntColumn get powerLineId => integer()();
-  TextColumn get towerNumber => text()();
+  TextColumn get poleNumber => text()();
   RealColumn get latitude => real()();
   RealColumn get longitude => real()();
-  TextColumn get towerType => text()();
+  TextColumn get poleType => text()();
   RealColumn get height => real().nullable()();
   TextColumn get foundationType => text().nullable()();
   TextColumn get material => text().nullable()();
@@ -54,7 +56,7 @@ class Towers extends Table {
 
 class Equipment extends Table {
   IntColumn get id => integer()();
-  IntColumn get towerId => integer()();
+  IntColumn get poleId => integer()();
   TextColumn get equipmentType => text()();
   TextColumn get name => text()();
   TextColumn get manufacturer => text().nullable()();
@@ -89,7 +91,7 @@ class SyncRecords extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [PowerLines, Towers, Equipment, SyncRecords])
+@DriftDatabase(tables: [PowerLines, Poles, Equipment, SyncRecords])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -112,30 +114,30 @@ class AppDatabase extends _$AppDatabase {
       (delete(powerLines)..where((tbl) => tbl.id.equals(id))).go();
 
   // Методы для работы с опорами
-  Future<List<Tower>> getAllTowers() => select(towers).get();
+  Future<List<Pole>> getAllPoles() => select(poles).get();
   
-  Future<List<Tower>> getTowersByPowerLine(int powerLineId) => 
-      (select(towers)..where((tbl) => tbl.powerLineId.equals(powerLineId))).get();
+  Future<List<Pole>> getPolesByPowerLine(int powerLineId) => 
+      (select(poles)..where((tbl) => tbl.powerLineId.equals(powerLineId))).get();
   
-  Future<Tower?> getTower(int id) => 
-      (select(towers)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+  Future<Pole?> getPole(int id) => 
+      (select(poles)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   
-  Future<int> insertTower(TowersCompanion tower) => 
-      into(towers).insert(tower);
+  Future<int> insertPole(PolesCompanion pole) => 
+      into(poles).insert(pole);
   
-  Future<bool> updateTower(TowersCompanion tower) => 
-      update(towers).replace(tower);
+  Future<bool> updatePole(PolesCompanion pole) => 
+      update(poles).replace(pole);
   
-  Future<int> deleteTower(int id) => 
-      (delete(towers)..where((tbl) => tbl.id.equals(id))).go();
+  Future<int> deletePole(int id) => 
+      (delete(poles)..where((tbl) => tbl.id.equals(id))).go();
 
   // Методы для работы с оборудованием
-  Future<List<Equipment>> getAllEquipment() => select(equipment).get();
+  Future<List<EquipmentData>> getAllEquipment() => select(equipment).get();
   
-  Future<List<Equipment>> getEquipmentByTower(int towerId) => 
-      (select(equipment)..where((tbl) => tbl.towerId.equals(towerId))).get();
+  Future<List<EquipmentData>> getEquipmentByPole(int poleId) => 
+      (select(equipment)..where((tbl) => tbl.poleId.equals(poleId))).get();
   
-  Future<Equipment?> getEquipment(int id) => 
+  Future<EquipmentData?> getEquipment(int id) => 
       (select(equipment)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   
   Future<int> insertEquipment(EquipmentCompanion equipmentItem) => 
@@ -164,19 +166,15 @@ class AppDatabase extends _$AppDatabase {
   Future<List<PowerLine>> getPowerLinesNeedingSync() => 
       (select(powerLines)..where((tbl) => tbl.needsSync.equals(true))).get();
   
-  Future<List<Tower>> getTowersNeedingSync() => 
-      (select(towers)..where((tbl) => tbl.needsSync.equals(true))).get();
+  Future<List<Pole>> getPolesNeedingSync() => 
+      (select(poles)..where((tbl) => tbl.needsSync.equals(true))).get();
   
-  Future<List<Equipment>> getEquipmentNeedingSync() => 
+  Future<List<EquipmentData>> getEquipmentNeedingSync() => 
       (select(equipment)..where((tbl) => tbl.needsSync.equals(true))).get();
 }
 
 LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, AppConfig.databaseName));
-    return NativeDatabase.createInBackground(file);
-  });
+  return createDatabaseConnection();
 }
 
 // Provider для базы данных

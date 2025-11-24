@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
-from app.models.power_line import PowerLine, Tower, Tap
+from app.models.power_line import PowerLine, Pole, Tap
 from app.models.substation import Substation
 
 router = APIRouter()
@@ -32,15 +32,15 @@ async def get_power_lines_geojson(
 ):
     """Получение ЛЭП в формате GeoJSON"""
     result = await db.execute(
-        select(PowerLine).options(selectinload(PowerLine.towers))
+        select(PowerLine).options(selectinload(PowerLine.poles))
     )
     power_lines = result.scalars().all()
     
     features = []
     for power_line in power_lines:
         # Создаем LineString из координат опор
-        if len(power_line.towers) >= 2:
-            coordinates = [[tower.longitude, tower.latitude] for tower in sorted(power_line.towers, key=lambda t: t.tower_number)]
+        if len(power_line.poles) >= 2:
+            coordinates = [[pole.longitude, pole.latitude] for pole in sorted(power_line.poles, key=lambda t: t.pole_number)]
             
             feature = {
                 "type": "Feature",
@@ -50,7 +50,7 @@ async def get_power_lines_geojson(
                     "code": power_line.code,
                     "voltage_level": power_line.voltage_level,
                     "status": power_line.status,
-                    "tower_count": len(power_line.towers)
+                    "pole_count": len(power_line.poles)
                 },
                 "geometry": {
                     "type": "LineString",
@@ -64,32 +64,32 @@ async def get_power_lines_geojson(
         "features": features
     }
 
-@router.get("/towers/geojson")
-async def get_towers_geojson(
+@router.get("/poles/geojson")
+async def get_poles_geojson(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Получение опор в формате GeoJSON"""
-    result = await db.execute(select(Tower))
-    towers = result.scalars().all()
+    result = await db.execute(select(Pole))
+    poles = result.scalars().all()
     
     features = []
-    for tower in towers:
+    for pole in poles:
         feature = {
             "type": "Feature",
             "properties": {
-                "id": tower.id,
-                "tower_number": tower.tower_number,
-                "tower_type": tower.tower_type,
-                "height": tower.height,
-                "condition": tower.condition,
-                "power_line_id": tower.power_line_id,
-                "material": tower.material,
-                "year_installed": tower.year_installed
+                "id": pole.id,
+                "pole_number": pole.pole_number,
+                "pole_type": pole.pole_type,
+                "height": pole.height,
+                "condition": pole.condition,
+                "power_line_id": pole.power_line_id,
+                "material": pole.material,
+                "year_installed": pole.year_installed
             },
             "geometry": {
                 "type": "Point",
-                "coordinates": [tower.longitude, tower.latitude]
+                "coordinates": [pole.longitude, pole.latitude]
             }
         }
         features.append(feature)
@@ -120,7 +120,7 @@ async def get_taps_geojson(
                     "voltage_level": tap.voltage_level,
                     "power_rating": tap.power_rating,
                     "power_line_id": tap.power_line_id,
-                    "tower_id": tap.tower_id
+                    "pole_id": tap.pole_id
                 },
                 "geometry": {
                     "type": "Point",
@@ -177,10 +177,10 @@ async def get_data_bounds(
     # Получаем границы опор
     result = await db.execute(
         select(
-            func.min(Tower.latitude).label('min_lat'),
-            func.max(Tower.latitude).label('max_lat'),
-            func.min(Tower.longitude).label('min_lng'),
-            func.max(Tower.longitude).label('max_lng')
+            func.min(Pole.latitude).label('min_lat'),
+            func.max(Pole.latitude).label('max_lat'),
+            func.min(Pole.longitude).label('min_lng'),
+            func.max(Pole.longitude).label('max_lng')
         )
     )
     bounds = result.first()
