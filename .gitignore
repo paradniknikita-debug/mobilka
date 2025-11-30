@@ -42,3 +42,7 @@ flutter/
 Thumbs.db
 .DS_Store
 
+# Документация (только локально)
+backend/BACKEND_DEVELOPMENT.md
+backend/COURSEWORK_BACKEND.md
+
