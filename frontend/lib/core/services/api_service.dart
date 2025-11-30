@@ -8,6 +8,7 @@ import '../models/user.dart';
 import '../models/power_line.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
+import 'auth_service.dart'; // Для доступа к prefsProvider
 
 part 'api_service.g.dart';
 
@@ -17,7 +18,11 @@ abstract class ApiService {
 
   // Authentication
   @POST('/auth/login')
-  Future<AuthResponse> login(@Body() UserLogin loginData);
+  @FormUrlEncoded()
+  Future<AuthResponse> login(
+    @Field('username') String username,
+    @Field('password') String password,
+  );
 
   @POST('/auth/register')
   Future<User> register(@Body() UserCreate userData);
@@ -92,7 +97,10 @@ abstract class ApiService {
 }
 
 class ApiServiceProvider {
+  static SharedPreferences? _prefs;
+  
   static ApiService create({SharedPreferences? prefs}) {
+    _prefs = prefs; // Сохраняем prefs статически
     final dio = Dio();
     final urlManager = BaseUrlManager();
     dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
@@ -106,10 +114,24 @@ class ApiServiceProvider {
           options.baseUrl = dio.options.baseUrl;
           
           // Добавление заголовков авторизации
-          final token = await _getStoredToken(prefs);
-          if (token != null) {
+          final token = await _getStoredToken();
+          if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
+            if (kDebugMode) {
+              print('🔑 [${options.method} ${options.path}] Добавлен токен авторизации');
+            }
+          } else {
+            if (kDebugMode) {
+              print('⚠️ [${options.method} ${options.path}] Токен авторизации отсутствует!');
+              print('   Запрос будет выполнен без авторизации (может вернуть 403)');
+            }
           }
+          
+          if (kDebugMode) {
+            print('📤 [${options.method}] ${options.baseUrl}${options.path}');
+            print('   Headers: ${options.headers.keys.join(", ")}');
+          }
+          
           handler.next(options);
         },
         onError: (error, handler) async {
@@ -161,7 +183,24 @@ class ApiServiceProvider {
           // Обработка других ошибок
           if (error.response?.statusCode == 401) {
             // Токен истёк, нужно перелогиниться
-            await _clearStoredToken(prefs);
+            await _clearStoredToken();
+            if (kDebugMode) {
+              print('🔓 Токен истёк, требуется повторная авторизация');
+            }
+          } else if (error.response?.statusCode == 403) {
+            final token = await _getStoredToken();
+            if (kDebugMode) {
+              print('🚫 Доступ запрещен (403) для ${error.requestOptions.path}');
+              print('   Токен: ${token != null ? "есть (${token.substring(0, 10)}...)" : "отсутствует"}');
+              print('   Headers запроса: ${error.requestOptions.headers}');
+            }
+            
+            // Если токена нет, очищаем состояние авторизации
+            if (token == null || token.isEmpty) {
+              if (kDebugMode) {
+                print('   ⚠️ Токен отсутствует - требуется авторизация');
+              }
+            }
           }
           handler.next(error);
         },
@@ -171,15 +210,24 @@ class ApiServiceProvider {
     return ApiService(dio, baseUrl: dio.options.baseUrl);
   }
 
-  static Future<String?> _getStoredToken(SharedPreferences? prefs) async {
-    if (prefs == null) return null;
-    return prefs.getString(AppConfig.authTokenKey);
+  static Future<String?> _getStoredToken() async {
+    if (_prefs == null) {
+      if (kDebugMode) {
+        print('⚠️ SharedPreferences не инициализирован');
+      }
+      return null;
+    }
+    return _prefs!.getString(AppConfig.authTokenKey);
   }
 
-  static Future<void> _clearStoredToken(SharedPreferences? prefs) async {
-    if (prefs != null) {
-      await prefs.remove(AppConfig.authTokenKey);
+  static Future<void> _clearStoredToken() async {
+    if (_prefs != null) {
+      await _prefs!.remove(AppConfig.authTokenKey);
     }
+  }
+  
+  static void updatePrefs(SharedPreferences prefs) {
+    _prefs = prefs;
   }
 }
 

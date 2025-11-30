@@ -27,13 +27,14 @@ class _LoginFormState extends ConsumerState<LoginForm> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final isLoading = authState.maybeWhen(loading: () => true, orElse: () => false);
+    final isLoading = authState is AuthStateLoading;
 
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return AutofillGroup(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           // Поле имени пользователя
           TextFormField(
             controller: _usernameController,
@@ -42,6 +43,9 @@ class _LoginFormState extends ConsumerState<LoginForm> {
               prefixIcon: Icon(Icons.person),
               border: OutlineInputBorder(),
             ),
+            autofillHints: const [AutofillHints.username],
+            textInputAction: TextInputAction.next,
+            keyboardType: TextInputType.text,
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Введите имя пользователя';
@@ -71,6 +75,10 @@ class _LoginFormState extends ConsumerState<LoginForm> {
               ),
               border: const OutlineInputBorder(),
             ),
+            autofillHints: const [AutofillHints.password],
+            textInputAction: TextInputAction.done,
+            keyboardType: TextInputType.visiblePassword,
+            onFieldSubmitted: (_) => _handleLogin(),
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Введите пароль';
@@ -97,12 +105,13 @@ class _LoginFormState extends ConsumerState<LoginForm> {
           ),
         ],
       ),
+    ),
     );
   }
 
   void _handleLogin() {
     if (_formKey.currentState!.validate()) {
-      ref.read(authServiceProvider).login(
+      ref.read(authServiceProvider.notifier).login(
         _usernameController.text.trim(),
         _passwordController.text,
       );

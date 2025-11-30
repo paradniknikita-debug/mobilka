@@ -4,8 +4,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/auth_service.dart';
 import '../../../../core/config/app_config.dart';
 
 class MapPage extends ConsumerStatefulWidget {
@@ -19,37 +21,57 @@ class _MapPageState extends ConsumerState<MapPage> {
   late MapController _mapController;
   LatLng? _currentLocation;
   bool _isLoading = true;
-  bool _showObjectTree = false;
   Map<String, dynamic>? _powerLinesData;
-  Map<String, dynamic>? _towersData;
+  Map<String, dynamic>? _polesData;
   Map<String, dynamic>? _tapsData;
   Map<String, dynamic>? _substationsData;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
-    _initializeMap();
+    // Откладываем инициализацию до следующего кадра для быстрого отображения UI
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeMap();
+    });
   }
 
   Future<void> _initializeMap() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    
     try {
-      // Получаем текущее местоположение
-      await _getCurrentLocation();
+      // Загружаем местоположение и данные параллельно для ускорения
+      await Future.wait([
+        _getCurrentLocation(),
+        _loadMapData(),
+      ]);
       
-      // Загружаем данные с сервера
-      await _loadMapData();
-      
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
       if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Ошибка инициализации карты: $e';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки карты: $e')),
+          SnackBar(
+            content: Text(_errorMessage ?? 'Ошибка инициализации карты'),
+            backgroundColor: Colors.orange,
+            action: SnackBarAction(
+              label: 'Повторить',
+              onPressed: _initializeMap,
+            ),
+          ),
         );
       }
     }
@@ -57,46 +79,86 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   Future<void> _getCurrentLocation() async {
     try {
-      final permission = await Geolocator.checkPermission();
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() {
+          _currentLocation = const LatLng(53.9045, 27.5615); // Минск по умолчанию
+        });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        final requestResult = await Geolocator.requestPermission();
-        if (requestResult == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            _currentLocation = const LatLng(53.9045, 27.5615);
+          });
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
+        setState(() {
+          _currentLocation = const LatLng(53.9045, 27.5615);
+        });
         return;
       }
 
-      final position = await Geolocator.getCurrentPosition();
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
       setState(() {
         _currentLocation = LatLng(position.latitude, position.longitude);
       });
 
-      // Центрируем карту на текущем местоположении после построения виджета
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _currentLocation != null) {
-          _mapController.move(_currentLocation!, AppConfig.defaultZoom);
+          try {
+            _mapController.move(_currentLocation!, AppConfig.defaultZoom);
+          } catch (e) {
+            print('Ошибка центрирования карты: $e');
+          }
         }
       });
     } catch (e) {
-      // Используем координаты по умолчанию (Минск)
+      print('Ошибка получения местоположения: $e');
       setState(() {
-        // Минск: 53.9045, 27.5615
         _currentLocation = const LatLng(53.9045, 27.5615);
-      });
-      // Центрируем карту после построения виджета
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _currentLocation != null) {
-          _mapController.move(_currentLocation!, AppConfig.defaultZoom);
-        }
       });
     }
   }
 
   Future<void> _loadMapData() async {
+    if (!mounted) return;
+    
     try {
+      // Проверяем авторизацию перед загрузкой данных
+      final authState = ref.read(authStateProvider);
+      if (authState is! AuthStateAuthenticated) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Требуется авторизация. Пожалуйста, войдите в систему.';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Требуется авторизация. Пожалуйста, войдите в систему.'),
+              backgroundColor: Colors.orange,
+              action: SnackBarAction(
+                label: 'Войти',
+                onPressed: () {
+                  if (mounted) {
+                    context.go('/login');
+                  }
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      
       final apiService = ref.read(apiServiceProvider);
       
       // Загружаем данные параллельно
@@ -108,42 +170,53 @@ class _MapPageState extends ConsumerState<MapPage> {
       ]);
 
       final powerLinesData = futures[0] as Map<String, dynamic>;
-      final towersData = futures[1] as Map<String, dynamic>;
+      final polesData = futures[1] as Map<String, dynamic>;
       final tapsData = futures[2] as Map<String, dynamic>;
       final substationsData = futures[3] as Map<String, dynamic>;
 
-      // Отладочная информация
-      print('Загружено данных:');
-      print('  ЛЭП: ${(powerLinesData['features'] as List?)?.length ?? 0}');
-      print('  Опоры: ${(towersData['features'] as List?)?.length ?? 0}');
-      print('  Отпайки: ${(tapsData['features'] as List?)?.length ?? 0}');
-      print('  Подстанции: ${(substationsData['features'] as List?)?.length ?? 0}');
-
-      setState(() {
-        _powerLinesData = powerLinesData;
-        _towersData = towersData;
-        _tapsData = tapsData;
-        _substationsData = substationsData;
-      });
-
-      // Центрируем карту на объектах, если они есть
-      _centerOnObjects();
-    } catch (e) {
-      print('Ошибка загрузки данных карты: $e');
       if (mounted) {
+        print('✅ Загружено данных:');
+        print('  ЛЭП: ${(powerLinesData['features'] as List?)?.length ?? 0}');
+        print('  Опоры: ${(polesData['features'] as List?)?.length ?? 0}');
+        print('  Отпайки: ${(tapsData['features'] as List?)?.length ?? 0}');
+        print('  Подстанции: ${(substationsData['features'] as List?)?.length ?? 0}');
+
+        setState(() {
+          _powerLinesData = powerLinesData;
+          _polesData = polesData;
+          _tapsData = tapsData;
+          _substationsData = substationsData;
+          _errorMessage = null;
+        });
+
+        _centerOnObjects();
+      }
+    } catch (e) {
+      print('❌ Ошибка загрузки данных карты: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Ошибка загрузки данных: ${e.toString()}';
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки данных: $e')),
+          SnackBar(
+            content: Text('Ошибка загрузки данных: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Повторить',
+              onPressed: _loadMapData,
+            ),
+          ),
         );
       }
     }
   }
 
   void _centerOnObjects() {
-    // Пытаемся найти первую опору или подстанцию для центрирования
     LatLng? center;
     
-    if (_towersData != null) {
-      final features = _towersData!['features'] as List<dynamic>?;
+    if (_polesData != null) {
+      final features = _polesData!['features'] as List<dynamic>?;
       if (features != null && features.isNotEmpty) {
         final firstFeature = features[0];
         final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
@@ -186,15 +259,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         title: const Text('Карта'),
         actions: [
           IconButton(
-            icon: Icon(_showObjectTree ? Icons.close : Icons.list),
-            onPressed: () {
-              setState(() {
-                _showObjectTree = !_showObjectTree;
-              });
-            },
-            tooltip: _showObjectTree ? 'Скрыть дерево объектов' : 'Показать дерево объектов',
-          ),
-          IconButton(
             icon: const Icon(Icons.my_location),
             onPressed: _centerOnCurrentLocation,
             tooltip: 'Мое местоположение',
@@ -206,75 +270,77 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         ],
       ),
+      drawer: _buildDrawer(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                // Карта
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    // Минск: 53.9045, 27.5615 (по умолчанию, если нет текущего местоположения)
                     initialCenter: _currentLocation ?? const LatLng(53.9045, 27.5615),
                     initialZoom: AppConfig.defaultZoom,
                     minZoom: AppConfig.minZoom,
                     maxZoom: AppConfig.maxZoom,
                     onMapReady: () {
-                      // Карта готова, можно безопасно использовать контроллер
                       if (_currentLocation != null) {
-                        _mapController.move(_currentLocation!, AppConfig.defaultZoom);
+                        try {
+                          _mapController.move(_currentLocation!, AppConfig.defaultZoom);
+                        } catch (e) {
+                          print('Ошибка центрирования при готовности карты: $e');
+                        }
                       }
                     },
                   ),
                   children: [
-                    // Тайлы карты (CartoDB Positron - легкий стиль без POI)
                     TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.lepm.mobile',
-                      maxZoom: 19,
                     ),
                     
-                    // ЛЭП
                     if (_powerLinesData != null)
                       PolylineLayer(
                         polylines: _buildPowerLinePolylines(),
                       ),
                     
-                    // Опоры
-                    if (_towersData != null)
+                    if (_polesData != null)
                       MarkerLayer(
-                        markers: _buildTowerMarkers(),
+                        markers: _buildPoleMarkers(),
                       ),
                     
-                    // Отпайки
                     if (_tapsData != null)
                       MarkerLayer(
                         markers: _buildTapMarkers(),
                       ),
                     
-                    // Подстанции
                     if (_substationsData != null)
                       MarkerLayer(
                         markers: _buildSubstationMarkers(),
                       ),
+                    
+                    if (_currentLocation != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _currentLocation!,
+                            width: 40,
+                            height: 40,
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Colors.blue,
+                              size: 40,
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
                 
-                // Легенда
                 Positioned(
                   top: 16,
                   right: 16,
                   child: _buildLegend(),
                 ),
-                
-                // Дерево объектов
-                if (_showObjectTree)
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: _buildObjectTree(),
-                  ),
               ],
             ),
     );
@@ -285,29 +351,36 @@ class _MapPageState extends ConsumerState<MapPage> {
     final features = _powerLinesData?['features'] as List<dynamic>? ?? [];
 
     for (final feature in features) {
-      final geometry = feature['geometry'];
-      final properties = feature['properties'];
-      
-      if (geometry['type'] == 'LineString') {
-        final coordinates = geometry['coordinates'] as List<dynamic>;
-        final points = coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
-        
-        polylines.add(
-          Polyline(
-            points: points,
-            strokeWidth: 3.0,
-            color: Colors.red,
-          ),
-        );
+      try {
+        final geometry = feature['geometry'] as Map<String, dynamic>?;
+        if (geometry != null && geometry['type'] == 'LineString') {
+          final coordinates = geometry['coordinates'] as List<dynamic>?;
+          if (coordinates != null) {
+            final points = coordinates.map((coord) => LatLng(
+              (coord[1] as num).toDouble(),
+              (coord[0] as num).toDouble(),
+            )).toList();
+            
+            polylines.add(
+              Polyline(
+                points: points,
+                strokeWidth: 3.0,
+                color: Colors.red,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        print('Ошибка при построении полилинии ЛЭП: $e');
       }
     }
 
     return polylines;
   }
 
-  List<Marker> _buildTowerMarkers() {
+  List<Marker> _buildPoleMarkers() {
     final markers = <Marker>[];
-    final features = _towersData?['features'] as List<dynamic>? ?? [];
+    final features = _polesData?['features'] as List<dynamic>? ?? [];
 
     for (final feature in features) {
       try {
@@ -326,7 +399,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               Marker(
                 point: latLng,
                 child: GestureDetector(
-                  onTap: () => _showTowerInfo(properties ?? {}),
+                  onTap: () => _showPoleInfo(properties ?? {}),
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -358,34 +431,43 @@ class _MapPageState extends ConsumerState<MapPage> {
     final features = _tapsData?['features'] as List<dynamic>? ?? [];
 
     for (final feature in features) {
-      final geometry = feature['geometry'];
-      final properties = feature['properties'];
-      
-      if (geometry['type'] == 'Point') {
-        final coordinates = geometry['coordinates'];
-        final latLng = LatLng(coordinates[1], coordinates[0]);
+      try {
+        final geometry = feature['geometry'] as Map<String, dynamic>?;
+        final properties = feature['properties'] as Map<String, dynamic>?;
         
-        markers.add(
-          Marker(
-            point: latLng,
-            child: GestureDetector(
-              onTap: () => _showTapInfo(properties),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: const Icon(
-                  Icons.electrical_services,
-                  color: Colors.white,
-                  size: 20,
+        if (geometry != null && geometry['type'] == 'Point') {
+          final coordinates = geometry['coordinates'] as List<dynamic>?;
+          if (coordinates != null && coordinates.length >= 2) {
+            final latLng = LatLng(
+              (coordinates[1] as num).toDouble(),
+              (coordinates[0] as num).toDouble(),
+            );
+            
+            markers.add(
+              Marker(
+                point: latLng,
+                child: GestureDetector(
+                  onTap: () => _showTapInfo(properties ?? {}),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.electrical_services,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        );
+            );
+          }
+        }
+      } catch (e) {
+        print('Ошибка при построении маркера отпайки: $e');
       }
     }
 
@@ -397,34 +479,43 @@ class _MapPageState extends ConsumerState<MapPage> {
     final features = _substationsData?['features'] as List<dynamic>? ?? [];
 
     for (final feature in features) {
-      final geometry = feature['geometry'];
-      final properties = feature['properties'];
-      
-      if (geometry['type'] == 'Point') {
-        final coordinates = geometry['coordinates'];
-        final latLng = LatLng(coordinates[1], coordinates[0]);
+      try {
+        final geometry = feature['geometry'] as Map<String, dynamic>?;
+        final properties = feature['properties'] as Map<String, dynamic>?;
         
-        markers.add(
-          Marker(
-            point: latLng,
-            child: GestureDetector(
-              onTap: () => _showSubstationInfo(properties),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.purple,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: const Icon(
-                  Icons.power,
-                  color: Colors.white,
-                  size: 20,
+        if (geometry != null && geometry['type'] == 'Point') {
+          final coordinates = geometry['coordinates'] as List<dynamic>?;
+          if (coordinates != null && coordinates.length >= 2) {
+            final latLng = LatLng(
+              (coordinates[1] as num).toDouble(),
+              (coordinates[0] as num).toDouble(),
+            );
+            
+            markers.add(
+              Marker(
+                point: latLng,
+                child: GestureDetector(
+                  onTap: () => _showSubstationInfo(properties ?? {}),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.power,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        );
+            );
+          }
+        }
+      } catch (e) {
+        print('Ошибка при построении маркера подстанции: $e');
       }
     }
 
@@ -468,64 +559,72 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  Widget _buildObjectTree() {
-    return Card(
-      child: Container(
-        width: 280,
-        constraints: const BoxConstraints(maxHeight: 500),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  const Text(
-                    'Объекты',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () {
-                      setState(() {
-                        _showObjectTree = false;
-                      });
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          // Заголовок Drawer
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor,
             ),
-            const Divider(height: 1),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ЛЭП
-                    if (_powerLinesData != null)
-                      _buildPowerLinesTree(),
-                    
-                    // Подстанции
-                    if (_substationsData != null)
-                      _buildSubstationsTree(),
-                    
-                    // Опоры
-                    if (_towersData != null)
-                      _buildPolesTree(),
-                    
-                    // Отпайки
-                    if (_tapsData != null)
-                      _buildTapsTree(),
-                  ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.electrical_services,
+                  size: 48,
+                  color: Colors.white,
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  'Объекты',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Дерево объектов на карте',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          
+          // Содержимое Drawer
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                if (_powerLinesData != null)
+                  _buildPowerLinesTree(),
+                if (_substationsData != null)
+                  _buildSubstationsTree(),
+                if (_polesData != null)
+                  _buildPolesTree(),
+                if (_tapsData != null)
+                  _buildTapsTree(),
+              ],
+            ),
+          ),
+          
+          // Кнопка выхода
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Выйти'),
+            onTap: () async {
+              await ref.read(authServiceProvider.notifier).logout();
+              if (mounted) {
+                context.go('/login');
+              }
+            },
+          ),
+        ],
       ),
     );
   }
@@ -543,7 +642,10 @@ class _MapPageState extends ConsumerState<MapPage> {
           dense: true,
           title: Text(props['name'] ?? 'Без названия'),
           subtitle: Text('${props['voltage_level']} кВ • ${props['pole_count'] ?? 0} опор'),
-          onTap: () => _centerOnFeature(feature),
+          onTap: () {
+            Navigator.of(context).pop(); // Закрываем Drawer
+            _centerOnFeature(feature);
+          },
         );
       }).toList(),
     );
@@ -562,14 +664,17 @@ class _MapPageState extends ConsumerState<MapPage> {
           dense: true,
           title: Text(props['name'] ?? 'Без названия'),
           subtitle: Text('${props['voltage_level']} кВ'),
-          onTap: () => _centerOnFeature(feature),
+          onTap: () {
+            Navigator.of(context).pop(); // Закрываем Drawer
+            _centerOnFeature(feature);
+          },
         );
       }).toList(),
     );
   }
 
   Widget _buildPolesTree() {
-    final features = _towersData?['features'] as List<dynamic>? ?? [];
+    final features = _polesData?['features'] as List<dynamic>? ?? [];
     if (features.isEmpty) return const SizedBox.shrink();
 
     return ExpansionTile(
@@ -579,9 +684,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         final props = feature['properties'] as Map<String, dynamic>;
         return ListTile(
           dense: true,
-          title: Text(props['pole_number'] ?? props['tower_number'] ?? 'N/A'),
-          subtitle: Text('${props['pole_type'] ?? props['tower_type'] ?? 'N/A'} • ${props['condition'] ?? 'N/A'}'),
-          onTap: () => _centerOnFeature(feature),
+          title: Text(props['pole_number'] ?? 'N/A'),
+          subtitle: Text('${props['pole_type'] ?? 'N/A'} • ${props['condition'] ?? 'N/A'}'),
+          onTap: () {
+            Navigator.of(context).pop(); // Закрываем Drawer
+            _centerOnFeature(feature);
+          },
         );
       }).toList(),
     );
@@ -600,7 +708,10 @@ class _MapPageState extends ConsumerState<MapPage> {
           dense: true,
           title: Text(props['tap_number'] ?? 'N/A'),
           subtitle: Text('${props['tap_type'] ?? 'N/A'} • ${props['voltage_level'] ?? 'N/A'} кВ'),
-          onTap: () => _centerOnFeature(feature),
+          onTap: () {
+            Navigator.of(context).pop(); // Закрываем Drawer
+            _centerOnFeature(feature);
+          },
         );
       }).toList(),
     );
@@ -617,7 +728,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     } else if (geometry['type'] == 'LineString') {
       final coords = geometry['coordinates'] as List<dynamic>;
       if (coords.isNotEmpty) {
-        // Берем среднюю точку линии
         final midIndex = coords.length ~/ 2;
         final midCoord = coords[midIndex] as List<dynamic>;
         center = LatLng(midCoord[1] as double, midCoord[0] as double);
@@ -638,22 +748,28 @@ class _MapPageState extends ConsumerState<MapPage> {
       try {
         _mapController.move(_currentLocation!, AppConfig.defaultZoom);
       } catch (e) {
-        // Игнорируем ошибки, если контроллер еще не готов
         print('Ошибка центрирования карты: $e');
       }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Местоположение не определено'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
-  void _showTowerInfo(Map<String, dynamic> properties) {
+  void _showPoleInfo(Map<String, dynamic> properties) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Опора ${properties['pole_number'] ?? properties['tower_number'] ?? 'N/A'}'),
+        title: Text('Опора ${properties['pole_number'] ?? 'N/A'}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Тип: ${properties['pole_type'] ?? properties['tower_type'] ?? 'Не указан'}'),
+            Text('Тип: ${properties['pole_type'] ?? 'Не указан'}'),
             Text('Высота: ${properties['height'] ?? 'Не указана'} м'),
             Text('Состояние: ${properties['condition'] ?? 'Не указано'}'),
             Text('Материал: ${properties['material'] ?? 'Не указан'}'),
@@ -673,14 +789,14 @@ class _MapPageState extends ConsumerState<MapPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Отпайка ${properties['tap_number']}'),
+        title: Text('Отпайка ${properties['tap_number'] ?? 'N/A'}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Тип: ${properties['tap_type']}'),
-            Text('Напряжение: ${properties['voltage_level']} кВ'),
-            Text('Мощность: ${properties['power_rating'] ?? 'Не указана'} кВА'),
+            Text('Тип: ${properties['tap_type'] ?? 'Не указан'}'),
+            Text('Напряжение: ${properties['voltage_level'] ?? 'Не указано'} кВ'),
+            Text('Мощность: ${properties['power_rating'] ?? 'Не указана'} кВт'),
           ],
         ),
         actions: [
@@ -697,13 +813,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(properties['name']),
+        title: Text('Подстанция ${properties['name'] ?? 'N/A'}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Код: ${properties['code']}'),
-            Text('Напряжение: ${properties['voltage_level']} кВ'),
+            Text('Код: ${properties['code'] ?? 'Не указан'}'),
+            Text('Напряжение: ${properties['voltage_level'] ?? 'Не указано'} кВ'),
             Text('Адрес: ${properties['address'] ?? 'Не указан'}'),
           ],
         ),

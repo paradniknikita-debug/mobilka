@@ -5,10 +5,17 @@ class AppConfig {
   static const String appName = 'ЛЭП Management';
   static const String appVersion = '1.0.0';
   
+  // ============================================
+  // НАСТРОЙКА ПРОТОКОЛА ПОДКЛЮЧЕНИЯ
+  // ============================================
+  // Измените эту переменную для переключения между HTTP и HTTPS
+  // true = HTTPS, false = HTTP
+  static const bool useHttps = false; // Для разработки используем HTTP
+  // ============================================
+  
   static final BaseUrlManager _urlManager = BaseUrlManager();
   
   // API Configuration
-  // Использует автоматический fallback HTTPS -> HTTP при ошибках соединения
   static String get baseUrl => _urlManager.getBaseUrl();
   
   static String get apiVersion => 'v1';

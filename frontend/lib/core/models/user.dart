@@ -4,15 +4,25 @@ part 'user.g.dart';
 
 @JsonSerializable()
 class User {
+  @JsonKey(fromJson: _intFromJson)
   final int id;
+  @JsonKey(defaultValue: '')
   final String username;
+  @JsonKey(defaultValue: '')
   final String email;
+  @JsonKey(name: 'full_name', defaultValue: '')
   final String fullName;
+  @JsonKey(defaultValue: 'engineer')
   final String role;
+  @JsonKey(name: 'is_active', defaultValue: true)
   final bool isActive;
+  @JsonKey(name: 'is_superuser', defaultValue: false)
   final bool isSuperuser;
+  @JsonKey(name: 'branch_id')
   final int? branchId;
+  @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
   final DateTime createdAt;
+  @JsonKey(name: 'updated_at', fromJson: _dateTimeFromJsonNullable)
   final DateTime? updatedAt;
 
   const User({
@@ -30,6 +40,57 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
   Map<String, dynamic> toJson() => _$UserToJson(this);
+  
+  // Вспомогательные функции для парсинга
+  static int _intFromJson(dynamic value) {
+    if (value == null) {
+      return 0;
+    }
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value) ?? 0;
+    }
+    return 0;
+  }
+  
+  static DateTime _dateTimeFromJson(dynamic value) {
+    if (value == null) {
+      return DateTime.now();
+    }
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        return DateTime.now();
+      }
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
+  }
+  
+  static DateTime? _dateTimeFromJsonNullable(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    return null;
+  }
 
   User copyWith({
     int? id,
@@ -96,7 +157,9 @@ class UserLogin {
 
 @JsonSerializable()
 class AuthResponse {
+  @JsonKey(name: 'access_token', fromJson: _stringFromJson)
   final String accessToken;
+  @JsonKey(name: 'token_type', fromJson: _stringFromJsonWithDefault)
   final String tokenType;
 
   const AuthResponse({
@@ -106,4 +169,25 @@ class AuthResponse {
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) => _$AuthResponseFromJson(json);
   Map<String, dynamic> toJson() => _$AuthResponseToJson(this);
+  
+  // Вспомогательные функции для безопасного парсинга строк
+  static String _stringFromJson(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is String) {
+      return value;
+    }
+    return value.toString();
+  }
+  
+  static String _stringFromJsonWithDefault(dynamic value) {
+    if (value == null) {
+      return 'bearer';
+    }
+    if (value is String) {
+      return value;
+    }
+    return value.toString();
+  }
 }

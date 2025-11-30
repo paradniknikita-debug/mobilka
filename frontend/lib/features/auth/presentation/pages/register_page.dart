@@ -14,13 +14,16 @@ class RegisterPage extends ConsumerWidget {
 
     // Обработка состояния авторизации
     ref.listen<AuthState>(authStateProvider, (previous, next) {
-      next.maybeWhen(
-        authenticated: (_) => context.go('/home'),
-        error: (message) => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        ),
-        orElse: () {},
-      );
+      switch (next) {
+        case AuthStateAuthenticated():
+          context.go('/home');
+        case AuthStateError(message: final message):
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+        default:
+          break;
+      }
     });
 
     return Scaffold(

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../config/app_config.dart';
 
 /// Менеджер для управления базовым URL с автоматическим fallback HTTPS -> HTTP
 class BaseUrlManager {
@@ -17,7 +18,8 @@ class BaseUrlManager {
       return _getMobileBaseUrl();
     }
 
-    // Для web: пытаемся HTTPS, с fallback на HTTP
+    // Для web: используем настройку из AppConfig.useHttps
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
     return '$_protocol://localhost';
   }
 

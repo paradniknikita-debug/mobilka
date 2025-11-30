@@ -7,31 +7,29 @@ part of 'user.dart';
 // **************************************************************************
 
 User _$UserFromJson(Map<String, dynamic> json) => User(
-      id: (json['id'] as num).toInt(),
-      username: json['username'] as String,
-      email: json['email'] as String,
-      fullName: json['fullName'] as String,
-      role: json['role'] as String,
-      isActive: json['isActive'] as bool,
-      isSuperuser: json['isSuperuser'] as bool,
-      branchId: (json['branchId'] as num?)?.toInt(),
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'] as String),
+      id: User._intFromJson(json['id']),
+      username: json['username'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      fullName: json['full_name'] as String? ?? '',
+      role: json['role'] as String? ?? 'engineer',
+      isActive: json['is_active'] as bool? ?? true,
+      isSuperuser: json['is_superuser'] as bool? ?? false,
+      branchId: (json['branch_id'] as num?)?.toInt(),
+      createdAt: User._dateTimeFromJson(json['created_at']),
+      updatedAt: User._dateTimeFromJsonNullable(json['updated_at']),
     );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
       'id': instance.id,
       'username': instance.username,
       'email': instance.email,
-      'fullName': instance.fullName,
+      'full_name': instance.fullName,
       'role': instance.role,
-      'isActive': instance.isActive,
-      'isSuperuser': instance.isSuperuser,
-      'branchId': instance.branchId,
-      'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt?.toIso8601String(),
+      'is_active': instance.isActive,
+      'is_superuser': instance.isSuperuser,
+      'branch_id': instance.branchId,
+      'created_at': instance.createdAt.toIso8601String(),
+      'updated_at': instance.updatedAt?.toIso8601String(),
     };
 
 UserCreate _$UserCreateFromJson(Map<String, dynamic> json) => UserCreate(
@@ -64,12 +62,12 @@ Map<String, dynamic> _$UserLoginToJson(UserLogin instance) => <String, dynamic>{
     };
 
 AuthResponse _$AuthResponseFromJson(Map<String, dynamic> json) => AuthResponse(
-      accessToken: json['accessToken'] as String,
-      tokenType: json['tokenType'] as String,
+      accessToken: AuthResponse._stringFromJson(json['access_token']),
+      tokenType: AuthResponse._stringFromJsonWithDefault(json['token_type']),
     );
 
 Map<String, dynamic> _$AuthResponseToJson(AuthResponse instance) =>
     <String, dynamic>{
-      'accessToken': instance.accessToken,
-      'tokenType': instance.tokenType,
+      'access_token': instance.accessToken,
+      'token_type': instance.tokenType,
     };

@@ -36,7 +36,7 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final isLoading = authState.maybeWhen(loading: () => true, orElse: () => false);
+    final isLoading = authState is AuthStateLoading;
 
     return Form(
       key: _formKey,
@@ -214,7 +214,7 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
         role: _selectedRole,
       );
 
-      ref.read(authServiceProvider).register(userData);
+      ref.read(authServiceProvider.notifier).register(userData);
     }
   }
 }

@@ -21,19 +21,20 @@ class ProfilePage extends ConsumerWidget {
           ),
         ],
       ),
-      body: authState.when(
-        authenticated: (user) => _buildUserProfile(context, user),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (message) => Center(
+      body: switch (authState) {
+        AuthStateAuthenticated(user: final user) => _buildUserProfile(context, user),
+        AuthStateLoading() => const Center(child: CircularProgressIndicator()),
+        AuthStateError(message: final message) => Center(
           child: Text('Ошибка: $message'),
         ),
-        unauthenticated: () => Center(
+        AuthStateUnauthenticated() => Center(
           child: ElevatedButton(
             onPressed: () => context.go('/login'),
             child: const Text('Войти'),
           ),
         ),
-      ),
+        _ => const Center(child: Text('Неизвестное состояние')),
+      },
     );
   }
 
@@ -206,7 +207,7 @@ class ProfilePage extends ConsumerWidget {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              ref.read(authServiceProvider).logout();
+              ref.read(authServiceProvider.notifier).logout();
             },
             child: const Text('Выйти'),
           ),

@@ -14,10 +14,15 @@ import 'core/services/sync_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Инициализация сервисов
+  // Минимальная инициализация для быстрого старта
+  // Только SharedPreferences - остальное загрузится лениво
   final prefs = await SharedPreferences.getInstance();
-  final database = AppDatabase();
   final apiService = ApiServiceProvider.create(prefs: prefs);
+  ApiServiceProvider.updatePrefs(prefs);
+  
+  // База данных и SyncService инициализируются лениво (при первом использовании)
+  // Это ускоряет стартовую загрузку приложения
+  final database = AppDatabase();
   final syncService = SyncService(database, apiService);
   
   runApp(

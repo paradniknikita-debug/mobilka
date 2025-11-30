@@ -22,16 +22,22 @@ class _ApiService implements ApiService {
   final ParseErrorLogger? errorLogger;
 
   @override
-  Future<AuthResponse> login(UserLogin loginData) async {
+  Future<AuthResponse> login(
+    String username,
+    String password,
+  ) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};
-    final _data = <String, dynamic>{};
-    _data.addAll(loginData.toJson());
+    final _data = {
+      'username': username,
+      'password': password,
+    };
     final _options = _setStreamType<AuthResponse>(Options(
       method: 'POST',
       headers: _headers,
       extra: _extra,
+      contentType: 'application/x-www-form-urlencoded',
     )
         .compose(
           _dio.options,
@@ -544,7 +550,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          '/map/towers/geojson',
+          '/map/poles/geojson',
           queryParameters: queryParameters,
           data: _data,
         )
