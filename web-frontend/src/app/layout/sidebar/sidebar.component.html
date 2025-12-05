@@ -1,0 +1,89 @@
+<div class="sidebar-container">
+  <div class="sidebar-header">
+    <mat-icon class="header-icon">electrical_services</mat-icon>
+    <h2>Объекты</h2>
+    <p>Дерево объектов на карте</p>
+  </div>
+
+  <div class="sidebar-content" *ngIf="!isLoading">
+    <mat-expansion-panel *ngIf="powerLinesFeatures.length > 0" class="object-tree-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon class="panel-icon" style="color: red;">electrical_services</mat-icon>
+          ЛЭП ({{ powerLinesFeatures.length }})
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <mat-list>
+        <mat-list-item *ngFor="let feature of powerLinesFeatures" (click)="onFeatureClick(feature)">
+          <mat-icon matListIcon>flash_on</mat-icon>
+          <div matLine>{{ feature.properties['name'] || 'Без названия' }}</div>
+          <div matLine class="secondary-text">
+            {{ feature.properties['voltage_level'] }} кВ • 
+            {{ feature.properties['pole_count'] || 0 }} опор
+          </div>
+        </mat-list-item>
+      </mat-list>
+    </mat-expansion-panel>
+
+    <mat-expansion-panel *ngIf="substationsFeatures.length > 0" class="object-tree-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon class="panel-icon" style="color: purple;">power</mat-icon>
+          Подстанции ({{ substationsFeatures.length }})
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <mat-list>
+        <mat-list-item *ngFor="let feature of substationsFeatures" (click)="onFeatureClick(feature)">
+          <mat-icon matListIcon>power</mat-icon>
+          <div matLine>{{ feature.properties['name'] || 'Без названия' }}</div>
+          <div matLine class="secondary-text">
+            {{ feature.properties['voltage_level'] }} кВ
+          </div>
+        </mat-list-item>
+      </mat-list>
+    </mat-expansion-panel>
+
+    <mat-expansion-panel *ngIf="polesFeatures.length > 0" class="object-tree-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon class="panel-icon" style="color: blue;">account_tree</mat-icon>
+          Опоры ({{ polesFeatures.length }})
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <mat-list>
+        <mat-list-item *ngFor="let feature of polesFeatures" (click)="onFeatureClick(feature)">
+          <mat-icon matListIcon>account_tree</mat-icon>
+          <div matLine>{{ feature.properties['pole_number'] || 'N/A' }}</div>
+          <div matLine class="secondary-text">
+            {{ feature.properties['pole_type'] || 'N/A' }} • 
+            {{ feature.properties['condition'] || 'N/A' }}
+          </div>
+        </mat-list-item>
+      </mat-list>
+    </mat-expansion-panel>
+
+    <mat-expansion-panel *ngIf="tapsFeatures.length > 0" class="object-tree-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon class="panel-icon" style="color: orange;">cable</mat-icon>
+          Отпайки ({{ tapsFeatures.length }})
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <mat-list>
+        <mat-list-item *ngFor="let feature of tapsFeatures" (click)="onFeatureClick(feature)">
+          <mat-icon matListIcon>cable</mat-icon>
+          <div matLine>{{ feature.properties['tap_number'] || 'N/A' }}</div>
+          <div matLine class="secondary-text">
+            {{ feature.properties['tap_type'] || 'N/A' }} • 
+            {{ feature.properties['voltage_level'] || 'N/A' }} кВ
+          </div>
+        </mat-list-item>
+      </mat-list>
+    </mat-expansion-panel>
+  </div>
+
+  <div *ngIf="isLoading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+</div>
+

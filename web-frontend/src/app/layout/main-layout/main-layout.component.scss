@@ -1,0 +1,22 @@
+.sidenav-container {
+  height: 100vh;
+}
+
+.sidenav {
+  width: 300px;
+}
+
+.content {
+  padding: 16px;
+  height: calc(100vh - 64px);
+  overflow: auto;
+}
+
+.menu-button {
+  margin-right: 8px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+

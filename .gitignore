@@ -45,4 +45,7 @@ Thumbs.db
 # Документация (только локально)
 backend/BACKEND_DEVELOPMENT.md
 backend/COURSEWORK_BACKEND.md
+backend/JWT_TOKENIZATION.md
+backend/BACKEND_IMPROVEMENTS.md
+backend/FUNCTIONAL_EXTENSIONS.md
 

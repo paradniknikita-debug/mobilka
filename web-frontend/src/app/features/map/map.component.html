@@ -1,0 +1,35 @@
+<div class="map-container">
+  <div id="map" class="map"></div>
+  
+  <div class="map-controls">
+    <button mat-fab color="primary" (click)="refreshData()" matTooltip="Обновить данные">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
+
+  <div class="map-legend">
+    <h3>Легенда</h3>
+    <div class="map-legend-item">
+      <div class="map-legend-icon" style="background-color: #f44336;"></div>
+      <span>ЛЭП</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-icon" style="background-color: #2196F3;"></div>
+      <span>Опоры</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-icon" style="background-color: #FF9800;"></div>
+      <span>Отпайки</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-icon" style="background-color: #9C27B0;"></div>
+      <span>Подстанции</span>
+    </div>
+  </div>
+
+  <div *ngIf="isLoading" class="loading-overlay">
+    <mat-spinner></mat-spinner>
+    <p>Загрузка данных карты...</p>
+  </div>
+</div>
+

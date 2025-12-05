@@ -1,0 +1,84 @@
+/* Общие стили */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+/* Leaflet карта */
+#map {
+  height: 100%;
+  width: 100%;
+}
+
+/* Кастомные стили для Material */
+.mat-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.mat-sidenav-container {
+  height: calc(100vh - 64px);
+}
+
+.mat-sidenav {
+  width: 300px;
+}
+
+/* Легенда карты */
+.map-legend {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  background: white;
+  padding: 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.map-legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.map-legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.map-legend-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Дерево объектов в sidebar */
+.object-tree {
+  .mat-expansion-panel {
+    box-shadow: none;
+    border-bottom: 1px solid rgba(0,0,0,0.12);
+  }
+
+  .mat-expansion-panel-header {
+    padding: 12px 16px;
+  }
+
+  .mat-list-item {
+    height: auto;
+    padding: 8px 16px;
+  }
+}
+
