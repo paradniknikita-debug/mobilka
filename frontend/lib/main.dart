@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'core/config/app_config.dart';
 import 'core/database/database.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -23,7 +21,7 @@ void main() async {
   // База данных и SyncService инициализируются лениво (при первом использовании)
   // Это ускоряет стартовую загрузку приложения
   final database = AppDatabase();
-  final syncService = SyncService(database, apiService);
+  final syncService = SyncService();
   
   runApp(
     ProviderScope(
@@ -31,7 +29,7 @@ void main() async {
         prefsProvider.overrideWithValue(prefs),
         databaseProvider.overrideWithValue(database),
         apiServiceProvider.overrideWithValue(apiService),
-        syncServiceProvider.overrideWithValue(syncService),
+        // syncServiceProvider.overrideWithValue(syncService), ВАЖНО
       ],
       child: const LepmApp(),
     ),

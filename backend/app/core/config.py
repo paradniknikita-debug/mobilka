@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # Используйте .env или переменные окружения для задания реальной строки подключения
     # Для Docker: postgresql://postgres:postgres@postgres:5432/lepm_db
     # Для локального запуска: postgresql://postgres:password@localhost:5432/lepm_db
-    DATABASE_URL: str = "postgresql://postgres:dragon167@localhost:5432/lepm_db"
+    DATABASE_URL: str = "postgresql://postgres:dragon167@localhost:5433/lepm_db"
     
     # JWT настройки
     SECRET_KEY: str = "CHANGE_ME_SECRET_KEY"

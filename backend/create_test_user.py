@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Скрипт для создания тестового пользователя
 Использование: python create_test_user.py
@@ -41,7 +42,7 @@ async def create_test_user():
                 # Создаем нового пользователя
                 user = User(
                     username="admin",
-                    email="admin@lepm.local",
+                    email="admin@eexample.com",
                     full_name="Администратор",
                     hashed_password=get_password_hash("admin_123456"),
                     is_active=True,
@@ -53,7 +54,7 @@ async def create_test_user():
                 print("✅ Создан тестовый пользователь:")
                 print("   Логин: admin")
                 print("   Пароль: admin_123456")
-                print("   Email: admin@lepm.local")
+                print("   Email: admin@example.com")
                 print("   Роль: admin (суперпользователь)")
             
         except Exception as e:
@@ -66,4 +67,3 @@ if __name__ == "__main__":
     print("🔧 Создание тестового пользователя...")
     asyncio.run(create_test_user())
     print("\n✅ Готово!")
-

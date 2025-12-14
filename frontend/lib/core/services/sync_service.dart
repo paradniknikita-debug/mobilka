@@ -1,35 +1,57 @@
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:drift/drift.dart' as drift;
 
-import '../config/app_config.dart';
 import '../database/database.dart';
 import 'api_service.dart';
 
-part 'sync_service.freezed.dart';
+// Замена Freezed на ручной sealed class
+sealed class SyncState {
+  const SyncState();
+}
 
-class SyncService extends StateNotifier<SyncState> {
-  final AppDatabase _database;
-  final ApiService _apiService;
-  final Connectivity _connectivity;
-  final Uuid _uuid;
+class SyncStateIdle extends SyncState {
+  const SyncStateIdle();
+}
 
-  SyncService(this._database, this._apiService)
-      : _connectivity = Connectivity(),
-        _uuid = const Uuid(),
-        super(const SyncState.idle());
+class SyncStateSyncing extends SyncState {
+  const SyncStateSyncing();
+}
+
+class SyncStateCompleted extends SyncState {
+  const SyncStateCompleted();
+}
+
+class SyncStateError extends SyncState {
+  final String message;
+  const SyncStateError(this.message);
+}
+
+// Миграция с StateNotifier на Notifier (Riverpod 3.x)
+class SyncService extends Notifier<SyncState> {
+  // Зависимости получаем через ref, а не через конструктор
+  AppDatabase get _database => ref.read(databaseProvider);
+  ApiService get _apiService => ref.read(apiServiceProvider);
+  
+  final Connectivity _connectivity = Connectivity();
+  final Uuid _uuid = const Uuid();
+
+  // Метод build вместо конструктора с super
+  @override
+  SyncState build() {
+    // Начальное состояние - idle
+    return const SyncStateIdle();
+  }
 
   Future<void> syncData() async {
-    state = const SyncState.syncing();
+    state = const SyncStateSyncing();
 
     try {
       // Проверяем подключение к интернету
       final connectivityResult = await _connectivity.checkConnectivity();
       if (connectivityResult == ConnectivityResult.none) {
-        state = const SyncState.error('Нет подключения к интернету');
+        state = const SyncStateError('Нет подключения к интернету');
         return;
       }
 
@@ -37,9 +59,9 @@ class SyncService extends StateNotifier<SyncState> {
       await _uploadLocalChanges();
       await _downloadServerChanges();
 
-      state = const SyncState.completed();
+      state = const SyncStateCompleted();
     } catch (e) {
-      state = SyncState.error('Ошибка синхронизации: ${e.toString()}');
+      state = SyncStateError('Ошибка синхронизации: ${e.toString()}');
     }
   }
 
@@ -287,22 +309,10 @@ class SyncService extends StateNotifier<SyncState> {
   }
 }
 
-@freezed
-class SyncState with _$SyncState {
-  const factory SyncState.idle() = _Idle;
-  const factory SyncState.syncing() = _Syncing;
-  const factory SyncState.completed() = _Completed;
-  const factory SyncState.error(String message) = _Error;
-}
-
-// Provider для SyncService
-final syncServiceProvider = Provider<SyncService>((ref) {
-  final database = ref.watch(databaseProvider);
-  final apiService = ref.watch(apiServiceProvider);
-  return SyncService(database, apiService);
+// Provider для SyncService (Riverpod 3.x: NotifierProvider)
+final syncServiceProvider = NotifierProvider<SyncService, SyncState>(() {
+  return SyncService();
 });
 
-// Provider для состояния синхронизации
-final syncStateProvider = StateNotifierProvider<SyncService, SyncState>((ref) {
-  return ref.watch(syncServiceProvider);
-});
+// Provider для состояния синхронизации (алиас для syncServiceProvider)
+final syncStateProvider = syncServiceProvider;

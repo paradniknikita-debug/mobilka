@@ -185,14 +185,14 @@ async def create_test_data():
             poles = []
             for pole_data in poles_data:
                 result = await session.execute(
-                    select(Pole).where(  # Используем класс Pole (с большой буквы)
-            Pole.power_line_id == power_line.id,
-            Pole.pole_number == pole_data["pole_number"]
-                )
+                    select(pole).where(
+                        pole.power_line_id == power_line.id,
+                        pole.pole_number == pole_data["pole_number"]
+                    )
                 )
                 existing_pole = result.scalar_one_or_none()
                 if not existing_pole:
-                    new_pole = Pole(
+                    pole = pole(
                         power_line_id=power_line.id,
                         pole_number=pole_data["pole_number"],
                         latitude=pole_data["latitude"],
@@ -205,8 +205,8 @@ async def create_test_data():
                         condition="good",
                         created_by=user.id
                     )
-                    session.add(new_pole)
-                    poles.append(new_pole)
+                    session.add(pole)
+                    poles.append(pole)
             
             await session.flush()
             print(f"✅ Создано опор: {len(poles)}")

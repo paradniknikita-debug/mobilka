@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -40,13 +42,24 @@ class AuthStateError extends AuthState {
   const AuthStateError(this.message);
 }
 
-class AuthService extends StateNotifier<AuthState> {
-  final ApiService _apiService;
-  final SharedPreferences _prefs;
+class AuthService extends Notifier<AuthState> {
+  // Зависимости получаем через ref
+  ApiService get _apiService => ref.read(apiServiceProvider);
+  SharedPreferences get _prefs => ref.read(prefsProvider);
 
-  AuthService(this._apiService, this._prefs) : super(const AuthStateInitial()) {
-    // Проверяем статус авторизации асинхронно (не блокирует старт)
-    _checkAuthStatus();
+  @override
+  AuthState build() {
+    // Устанавливаем начальное состояние
+    final token = _prefs.getString(AppConfig.authTokenKey);
+    if (token != null) {
+      // Если есть токен, начинаем проверку асинхронно
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkAuthStatus();
+      });
+      return const AuthStateLoading();
+    } else {
+      return const AuthStateUnauthenticated();
+    }
   }
 
   Future<void> _checkAuthStatus() async {
@@ -258,13 +271,10 @@ class AuthService extends StateNotifier<AuthState> {
   }
 }
 
-// Provider для AuthService
-final authServiceProvider = StateNotifierProvider<AuthService, AuthState>((ref) {
-  final apiService = ref.watch(apiServiceProvider);
-  final prefs = ref.watch(prefsProvider);
-  return AuthService(apiService, prefs);
+// Provider для AuthService - теперь NotifierProvider
+final authServiceProvider = NotifierProvider<AuthService, AuthState>(() {
+  return AuthService();
 });
 
 // Provider для состояния авторизации (алиас для authServiceProvider)
-// Используем тот же провайдер, так как StateNotifierProvider уже возвращает состояние
 final authStateProvider = authServiceProvider;

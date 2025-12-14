@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../services/base_url_manager.dart';
 
 class AppConfig {

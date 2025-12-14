@@ -104,7 +104,7 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
 
             // Выбор роли
             DropdownButtonFormField<String>(
-              value: _selectedRole,
+              initialValue: _selectedRole,
               decoration: const InputDecoration(
                 labelText: 'Роль',
                 prefixIcon: Icon(Icons.work),
