@@ -1,0 +1,17 @@
+<h2 mat-dialog-title>Подтверждение удаления</h2>
+
+<mat-dialog-content>
+  <p>Вы уверены, что хотите удалить {{ getObjectTypeLabel() }} <strong>{{ data.objectName }}</strong>?</p>
+  <p class="warning-text">Это действие нельзя отменить.</p>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="isDeleting">Отмена</button>
+  <button mat-button color="warn" (click)="onConfirm()" [disabled]="isDeleting">
+    <span *ngIf="!isDeleting">Удалить</span>
+    <span *ngIf="isDeleting">
+      <mat-spinner diameter="20" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></mat-spinner>
+      Удаление...
+    </span>
+  </button>
+</mat-dialog-actions>

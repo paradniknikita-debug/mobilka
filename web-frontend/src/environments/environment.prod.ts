@@ -6,6 +6,7 @@ export const environment = {
   
   get apiUrl(): string {
     const protocol = this.useHttps ? 'https' : 'http';
+    // В продакшене через nginx (порт 80/443), в разработке напрямую к бэкенду (порт 8000)
     return `${protocol}://localhost/api/${this.apiVersion}`;
   },
   

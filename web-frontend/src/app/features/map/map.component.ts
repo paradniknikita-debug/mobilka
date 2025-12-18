@@ -1,11 +1,14 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { MapService, MapData } from '../../core/services/map.service';
+import { SidebarService } from '../../core/services/sidebar.service';
 import { GeoJSONFeature } from '../../core/models/geojson.model';
 import { environment } from '../../../environments/environment';
 import * as L from 'leaflet';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { CreateObjectDialogComponent } from './create-object-dialog/create-object-dialog.component';
 
 @Component({
   selector: 'app-map',
@@ -18,23 +21,110 @@ export class MapComponent implements OnInit, OnDestroy {
   isLoading = true;
   errorMessage: string | null = null;
   
+  // Окно свойств опоры
+  selectedPole: any = null;
+  showPoleProperties = false;
+  
+  // Текущий зум карты
+  currentZoom: number = 10;
+  
+  // Состояние sidebar
+  isSidebarOpen: boolean = true;
+  sidebarWidth: number = 350;
+  
+  // Инвертированный зум (1 = минимальный зум/большой масштаб, 28 = максимальный зум/маленький масштаб)
+  get invertedZoom(): number {
+    return 28 - this.currentZoom;
+  }
+  
+  // Расстояние в метрах для текущего зума
+  get zoomDistance(): string {
+    return this.getZoomDistance(this.currentZoom);
+  }
+  
+  // Расчет расстояния в метрах для уровня зума
+  private getZoomDistance(zoom: number): string {
+    if (!this.map) {
+      return '';
+    }
+    
+    // Получаем центр карты для более точного расчета
+    const center = this.map.getCenter();
+    const lat = center.lat;
+    
+    // Формула расчета разрешения в метрах на пиксель для Web Mercator
+    // resolution = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom)
+    const resolution = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+    const metersPerPixel = resolution;
+    
+    // Берем ширину карты для расчета видимого расстояния
+    const mapWidth = this.map.getSize().x || 1000;
+    const distanceMeters = metersPerPixel * mapWidth;
+    
+    // Форматируем вывод
+    if (distanceMeters >= 1000) {
+      return `${(distanceMeters / 1000).toFixed(1)} км`;
+    } else if (distanceMeters >= 100) {
+      return `${Math.round(distanceMeters)} м`;
+    } else if (distanceMeters >= 10) {
+      return `${distanceMeters.toFixed(1)} м`;
+    } else if (distanceMeters >= 1) {
+      return `${distanceMeters.toFixed(2)} м`;
+    } else {
+      return `${(distanceMeters * 100).toFixed(0)} см`;
+    }
+  }
+  
   private destroy$ = new Subject<void>();
   private layers: L.Layer[] = [];
 
   // Маркеры для разных типов объектов
   private powerLineLayers: L.Layer[] = [];
   private poleMarkers: L.Marker[] = [];
+  private poleLabels: L.Layer[] = []; // Подписи опор
   private tapMarkers: L.Marker[] = [];
   private substationMarkers: L.Marker[] = [];
 
   constructor(
     private mapService: MapService,
-    private snackBar: MatSnackBar
+    private sidebarService: SidebarService,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
     this.initMap();
     this.loadMapData();
+    
+    // Подписываемся на события центрирования из sidebar
+    this.mapService.centerOnFeature$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ coordinates, zoom, currentZoomForLogic }: {type: string, coordinates: [number, number], zoom?: number | null, currentZoomForLogic?: number}) => {
+        // Получаем актуальный зум из карты (самый надежный способ)
+        if (this.map) {
+          const actualZoom = this.map.getZoom();
+          // Обновляем зум в сервисе для следующего использования
+          this.mapService.setCurrentZoom(actualZoom);
+        }
+        this.centerOnPole(coordinates[0], coordinates[1], zoom);
+      });
+    
+    // Подписываемся на изменения состояния sidebar
+    this.sidebarService.getSidebarVisible()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(visible => {
+        this.isSidebarOpen = visible;
+      });
+    
+    this.sidebarService.getSidebarWidth()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(width => {
+        this.sidebarWidth = width;
+      });
+    
+    // Инициализируем состояние sidebar
+    this.isSidebarOpen = this.sidebarService.isSidebarOpen();
+    this.sidebarWidth = this.sidebarService.getCurrentSidebarWidth();
   }
 
   ngOnDestroy(): void {
@@ -60,6 +150,30 @@ export class MapComponent implements OnInit, OnDestroy {
       attribution: '',
       maxZoom: 19
     }).addTo(this.map);
+
+    // Подписываемся на изменение зума
+    this.map.on('zoomend', () => {
+      if (this.map) {
+        this.currentZoom = this.map.getZoom();
+        // Обновляем зум в сервисе для доступа из других компонентов
+        this.mapService.setCurrentZoom(this.currentZoom);
+        this.updatePoleLabels();
+      }
+    });
+    
+    // Также обновляем при изменении зума (zoom) - для более быстрой синхронизации
+    this.map.on('zoom', () => {
+      if (this.map) {
+        const newZoom = this.map.getZoom();
+        this.currentZoom = newZoom;
+        this.mapService.setCurrentZoom(newZoom);
+      }
+    });
+
+    // Инициализируем текущий зум
+    this.currentZoom = this.map.getZoom();
+    // Обновляем зум в сервисе
+    this.mapService.setCurrentZoom(this.currentZoom);
   }
 
   loadMapData(): void {
@@ -94,23 +208,37 @@ export class MapComponent implements OnInit, OnDestroy {
   renderMapData(data: MapData): void {
     if (!this.map) return;
 
+    // Сохраняем текущий зум и позицию карты перед обновлением
+    const currentZoom = this.map.getZoom();
+    const currentCenter = this.map.getCenter();
+
     // Очищаем предыдущие слои
     this.clearLayers();
 
     // Рендерим ЛЭП (линии)
-    this.renderPowerLines(data.powerLines);
+    if (data.powerLines?.features) {
+      this.renderPowerLines(data.powerLines);
+    }
     
     // Рендерим опоры (точки)
-    this.renderPoles(data.poles);
+    if (data.poles?.features) {
+      this.renderPoles(data.poles);
+    }
     
     // Рендерим отпайки (точки)
-    this.renderTaps(data.taps);
+    if (data.taps?.features) {
+      this.renderTaps(data.taps);
+    }
     
     // Рендерим подстанции (точки)
-    this.renderSubstations(data.substations);
+    if (data.substations?.features) {
+      this.renderSubstations(data.substations);
+    }
 
-    // Центрируем карту на объектах
-    this.centerOnObjects();
+    // Восстанавливаем зум и позицию карты после обновления данных
+    if (this.map && currentCenter) {
+      this.map.setView(currentCenter, currentZoom, { animate: false });
+    }
   }
 
   renderPowerLines(geoJson: any): void {
@@ -148,9 +276,9 @@ export class MapComponent implements OnInit, OnDestroy {
         const marker = L.marker(latlng, {
           icon: L.divIcon({
             className: 'pole-marker',
-            html: '<div style="background-color: #2196F3; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
+            html: '<div style="background-color: #2196F3; width: 6px; height: 6px; border-radius: 50%; border: 1px solid white; cursor: pointer;"></div>',
+            iconSize: [6, 6],
+            iconAnchor: [3, 3]
           })
         }).bindPopup(`
           <strong>Опора ${feature.properties['pole_number'] || 'N/A'}</strong><br>
@@ -159,8 +287,29 @@ export class MapComponent implements OnInit, OnDestroy {
           Состояние: ${feature.properties['condition'] || 'N/A'}
         `);
 
+        // Обработчик клика для показа свойств и центрирования
+        marker.on('click', () => {
+          this.showPoleProperties = true;
+          this.selectedPole = {
+            ...feature.properties,
+            latitude: coordinates[1],
+            longitude: coordinates[0],
+            segment_name: feature.properties['segment_name'] || 
+                         feature.properties['power_line_name'] || 
+                         `ЛЭП ID: ${feature.properties['power_line_id'] || 'N/A'}`
+          };
+          // Центрируем карту на опоре без изменения зума
+          this.centerOnPole(coordinates[1], coordinates[0]);
+        });
+
         marker.addTo(this.map!);
         this.poleMarkers.push(marker);
+
+        // Сохраняем информацию о маркере для подписей
+        (marker as any).poleData = {
+          coordinates: latlng,
+          poleNumber: feature.properties['pole_number'] || 'N/A'
+        };
       }
     });
   }
@@ -223,48 +372,188 @@ export class MapComponent implements OnInit, OnDestroy {
   clearLayers(): void {
     this.powerLineLayers.forEach(layer => this.map?.removeLayer(layer));
     this.poleMarkers.forEach(marker => this.map?.removeLayer(marker));
+    this.poleLabels.forEach(label => this.map?.removeLayer(label));
     this.tapMarkers.forEach(marker => this.map?.removeLayer(marker));
     this.substationMarkers.forEach(marker => this.map?.removeLayer(marker));
     
     this.powerLineLayers = [];
     this.poleMarkers = [];
+    this.poleLabels = [];
     this.tapMarkers = [];
     this.substationMarkers = [];
+  }
+
+  updatePoleLabels(): void {
+    if (!this.map) return;
+
+    // Удаляем старые подписи
+    this.poleLabels.forEach(label => this.map?.removeLayer(label));
+    this.poleLabels = [];
+
+    // Показываем подписи только при зуме от 15 до 20
+    if (this.currentZoom >= 15 && this.currentZoom <= 20) {
+      this.poleMarkers.forEach(marker => {
+        const poleData = (marker as any).poleData;
+        if (poleData) {
+          const label = L.marker(poleData.coordinates, {
+            icon: L.divIcon({
+              className: 'pole-label',
+              html: `<div class="pole-label-text">${poleData.poleNumber}</div>`,
+              iconSize: [100, 20],
+              iconAnchor: [50, 0]
+            }),
+            interactive: false,
+            zIndexOffset: -1000
+          });
+          label.addTo(this.map!);
+          this.poleLabels.push(label);
+        }
+      });
+    }
   }
 
   centerOnObjects(): void {
     if (!this.map || !this.mapData) return;
 
-    const bounds = L.latLngBounds([]);
-    let hasBounds = false;
+    try {
+      const bounds = L.latLngBounds([]);
+      let hasBounds = false;
 
-    // Добавляем все маркеры в bounds
-    [...this.poleMarkers, ...this.tapMarkers, ...this.substationMarkers].forEach(marker => {
-      bounds.extend(marker.getLatLng());
-      hasBounds = true;
-    });
-
-    // Добавляем точки из полилиний
-    this.powerLineLayers.forEach(layer => {
-      if (layer instanceof L.Polyline) {
-        layer.getLatLngs().forEach((latlng: any) => {
-          if (Array.isArray(latlng)) {
-            latlng.forEach((ll: L.LatLng) => bounds.extend(ll));
-          } else {
-            bounds.extend(latlng);
+      // Добавляем все маркеры в bounds
+      [...this.poleMarkers, ...this.tapMarkers, ...this.substationMarkers].forEach(marker => {
+        try {
+          if (marker && marker.getLatLng) {
+            bounds.extend(marker.getLatLng());
+            hasBounds = true;
           }
-          hasBounds = true;
-        });
-      }
-    });
+        } catch (e) {
+          // Игнорируем ошибки отдельных маркеров
+        }
+      });
 
-    if (hasBounds) {
-      this.map.fitBounds(bounds, { padding: [50, 50] });
+      // Добавляем точки из полилиний
+      this.powerLineLayers.forEach(layer => {
+        if (layer instanceof L.Polyline) {
+          try {
+            const latlngs = layer.getLatLngs();
+            if (Array.isArray(latlngs)) {
+              latlngs.forEach((latlng: any) => {
+                if (Array.isArray(latlng)) {
+                  latlng.forEach((ll: L.LatLng) => {
+                    try {
+                      bounds.extend(ll);
+                      hasBounds = true;
+                    } catch (e) {
+                      // Игнорируем ошибки
+                    }
+                  });
+                } else if (latlng && latlng.lat && latlng.lng) {
+                  bounds.extend(latlng);
+                  hasBounds = true;
+                }
+              });
+            }
+          } catch (e) {
+            // Игнорируем ошибки слоев
+          }
+        }
+      });
+
+      if (hasBounds && this.map) {
+        this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      }
+    } catch (error) {
+      console.error('Ошибка центрирования карты:', error);
     }
   }
 
   refreshData(): void {
     this.loadMapData();
+  }
+
+  openCreateDialog(): void {
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '700px',
+      maxWidth: '90vw',
+      maxHeight: '90vh',
+      disableClose: false
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        // Обновляем данные карты после создания объекта
+        // Используем setTimeout для небольшой задержки, чтобы сервер успел обработать запрос
+        setTimeout(() => {
+          this.loadMapData();
+          // Уведомляем сервис об обновлении для sidebar
+          this.mapService.refreshData();
+        }, 500);
+      }
+    });
+  }
+
+  closePoleProperties(): void {
+    this.showPoleProperties = false;
+    this.selectedPole = null;
+  }
+
+  centerOnPole(latitude: number, longitude: number, zoom?: number | null): void {
+    if (this.map) {
+      const currentZoom = this.map.getZoom();
+      let targetZoomValue: number;
+      
+      // Если zoom === null, не меняем зум (используем текущий)
+      // Если zoom === undefined, используем значение по умолчанию (16)
+      // Если zoom - число, используем его
+      if (zoom === null) {
+        // Не меняем зум, только центрируем
+        targetZoomValue = currentZoom;
+        this.map.setView([latitude, longitude], currentZoom, {
+          animate: true,
+          duration: 0.5
+        });
+      } else if (zoom === undefined) {
+        // Используем значение по умолчанию
+        targetZoomValue = 16;
+        this.map.setView([latitude, longitude], 16, {
+          animate: true,
+          duration: 0.5
+        });
+      } else {
+        // Используем указанный зум
+        targetZoomValue = zoom;
+        this.map.setView([latitude, longitude], zoom, {
+          animate: true,
+          duration: 0.5
+        });
+      }
+      
+      // Обновляем зум в сервисе сразу после установки (до завершения анимации)
+      // Это гарантирует, что следующий клик получит правильный зум
+      this.currentZoom = targetZoomValue;
+      this.mapService.setCurrentZoom(targetZoomValue);
+      
+      // Также обновляем после завершения анимации для точности
+      setTimeout(() => {
+        if (this.map) {
+          const finalZoom = this.map.getZoom();
+          this.currentZoom = finalZoom;
+          this.mapService.setCurrentZoom(finalZoom);
+        }
+      }, 600); // Немного больше чем duration анимации (500ms)
+    }
+  }
+
+  zoomIn(): void {
+    if (this.map) {
+      this.map.zoomIn();
+    }
+  }
+
+  zoomOut(): void {
+    if (this.map) {
+      this.map.zoomOut();
+    }
   }
 }
 

@@ -15,7 +15,7 @@ class PoleBase(BaseModel):
     notes: Optional[str] = None
 
 class PoleCreate(PoleBase):
-    pass
+    mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
 
 class PoleResponse(PoleBase):
     id: int
@@ -29,15 +29,15 @@ class PoleResponse(PoleBase):
 
 class PowerLineBase(BaseModel):
     name: str
-    code: str
-    voltage_level: float
+    voltage_level: Optional[float] = None
     length: Optional[float] = None
-    branch_id: int
+    branch_name: Optional[str] = None  # Административная принадлежность (текстовое поле)
+    region_name: Optional[str] = None  # Географический регион (текстовое поле)
     status: str = "active"
     description: Optional[str] = None
 
 class PowerLineCreate(PowerLineBase):
-    pass
+    mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
 
 class PowerLineResponse(PowerLineBase):
     id: int

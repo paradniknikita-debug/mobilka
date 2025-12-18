@@ -13,7 +13,13 @@ export const environment = {
   
   get apiUrl(): string {
     const protocol = this.useHttps ? 'https' : 'http';
-    return `${protocol}://localhost/api/${this.apiVersion}`;
+    // Если используется Docker с nginx, используем порт 80 (без указания порта)
+    // Если бэкенд запущен локально, используем порт 8000
+    // Для Docker: http://localhost/api/v1 (nginx проксирует на порт 80)
+    // Для локального запуска: http://localhost:8000/api/v1
+    // По умолчанию используем порт 8000 для локального запуска
+    // Если используете Docker, измените на: return `${protocol}://localhost/api/${this.apiVersion}`;
+    return `${protocol}://localhost:8000/api/${this.apiVersion}`;
   },
   
   // Настройки карты

@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -88,4 +88,30 @@ async def get_pole_equipment(
     )
     equipment = result.scalars().all()
     return equipment
+
+@router.delete("/{pole_id}", status_code=status.HTTP_200_OK)
+async def delete_pole(
+    pole_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Удаление опоры"""
+    # Проверяем существование опоры
+    result = await db.execute(
+        select(Pole).where(Pole.id == pole_id)
+    )
+    pole = result.scalar_one_or_none()
+    
+    if not pole:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pole not found"
+        )
+    
+    # Удаляем опору используя правильный синтаксис SQLAlchemy 2.0 async
+    stmt = delete(Pole).where(Pole.id == pole_id)
+    await db.execute(stmt)
+    await db.commit()
+    
+    return {"message": "Pole deleted successfully"}
 

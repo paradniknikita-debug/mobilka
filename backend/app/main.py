@@ -1,20 +1,25 @@
 import redis.asyncio as redis
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.security import HTTPBearer
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 import uvicorn
 from contextlib import asynccontextmanager
-import os
 from pathlib import Path
 
 from app.database import init_db
 from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import
 from app.core.config import settings
 
-redis_client = redis.from_url("redis://localhost:6379", decode_responses=True)
+# Импортируем модели, чтобы они зарегистрировались в Base.metadata
+# Это необходимо для создания таблиц через Base.metadata.create_all
+from app.models import (
+    User, PowerLine, Pole, Span, Tap, Equipment,
+    Branch, Substation, Connection, GeographicRegion, AClineSegment
+)
+
+# Redis клиент будет инициализирован в lifespan
+redis_client = None
 
 # Инициализация токена безопасности
 security = HTTPBearer()
@@ -22,9 +27,37 @@ security = HTTPBearer()
 @asynccontextmanager # lifespan - управление жизненным циклом приложения
 async def lifespan(app: FastAPI):
     # Инициализация базы данных при запуске. Всё что внутри этой функции будет выполнено при запуске приложения.
-    await init_db()
+    global redis_client
+    
+    # Инициализация Redis (опционально)
+    try:
+        # Пытаемся подключиться к Redis, но не блокируем запуск, если он недоступен
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5)
+        await redis_client.ping()
+        print("OK: Redis подключен")
+    except Exception as e:
+        print(f"WARNING: Redis недоступен: {e}. Продолжаем без Redis.")
+        redis_client = None
+    
+    # Инициализация базы данных (обязательно)
+    try:
+        await init_db()
+    except Exception as e:
+        print(f"ERROR: Критическая ошибка: не удалось инициализировать базу данных.")
+        print(f"Приложение не может быть запущено без подключения к БД.")
+        raise
+    
+    # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
+    
     yield
+    
+    # Закрытие соединений при остановке
+    if redis_client:
+        try:
+            await redis_client.close()
+        except Exception:
+            pass  # Игнорируем ошибки при закрытии Redis
 # Создание FastAPI приложения. Далее можно добавить @app.get, @app.post, @app.put, @app.delete методы.
 app = FastAPI(
     title="ЛЭП Management System",
@@ -163,6 +196,8 @@ async def status_page():
 
 @app.get("/cache")
 async def cache_example():
+    if not redis_client:
+        return {"error": "Redis недоступен"}
     await redis_client.set("hello", "world")
     value = await redis_client.get("hello")
     return {"cached_value": value}

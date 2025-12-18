@@ -70,7 +70,12 @@ async def get_poles_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение опор в формате GeoJSON"""
-    result = await db.execute(select(Pole))
+    result = await db.execute(
+        select(Pole).options(
+            selectinload(Pole.power_line),
+            selectinload(Pole.segment)
+        )
+    )
     poles = result.scalars().all()
     
     features = []
@@ -79,11 +84,15 @@ async def get_poles_geojson(
             "type": "Feature",
             "properties": {
                 "id": pole.id,
+                "mrid": pole.mrid,
                 "pole_number": pole.pole_number,
                 "pole_type": pole.pole_type,
                 "height": pole.height,
                 "condition": pole.condition,
                 "power_line_id": pole.power_line_id,
+                "power_line_name": pole.power_line.name if pole.power_line else None,
+                "segment_id": pole.segment_id,
+                "segment_name": pole.segment.name if pole.segment else None,
                 "material": pole.material,
                 "year_installed": pole.year_installed
             },

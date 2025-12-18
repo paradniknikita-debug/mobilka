@@ -6,80 +6,79 @@
   </div>
 
   <div class="sidebar-content" *ngIf="!isLoading">
-    <mat-expansion-panel *ngIf="powerLinesFeatures.length > 0" class="object-tree-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <mat-icon class="panel-icon" style="color: red;">electrical_services</mat-icon>
-          ЛЭП ({{ powerLinesFeatures.length }})
-        </mat-panel-title>
-      </mat-expansion-panel-header>
-      <mat-list>
-        <mat-list-item *ngFor="let feature of powerLinesFeatures" (click)="onFeatureClick(feature)">
-          <mat-icon matListIcon>flash_on</mat-icon>
-          <div matLine>{{ feature.properties['name'] || 'Без названия' }}</div>
-          <div matLine class="secondary-text">
-            {{ feature.properties['voltage_level'] }} кВ • 
-            {{ feature.properties['pole_count'] || 0 }} опор
+    <div *ngFor="let item of getPowerLinesWithSegmentsAndPoles()" class="tree-item">
+      <!-- ЛЭП -->
+      <div class="tree-node power-line-node" 
+           (click)="togglePowerLine(item.powerLine.properties['id'])"
+           [class.expanded]="isPowerLineExpanded(item.powerLine.properties['id'])">
+        <mat-icon class="expand-icon">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+        <mat-icon class="node-icon" style="color: red;">electrical_services</mat-icon>
+        <span class="node-label" (click)="onFeatureClick(item.powerLine, $event)" (contextmenu)="onFeatureRightClick(item.powerLine, $event)">{{ item.powerLine.properties['name'] || 'Без названия' }}</span>
+        <span class="node-description">{{ item.powerLine.properties['voltage_level'] }} кВ</span>
+      </div>
+      
+      <!-- Вложенные элементы ЛЭП -->
+      <div *ngIf="isPowerLineExpanded(item.powerLine.properties['id'])" class="tree-children">
+        <!-- Участки линии (AClineSegment) -->
+        <div *ngFor="let segment of item.segments" class="tree-node segment-node">
+          <div class="tree-node-header" 
+               (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId)"
+               [class.expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId)">
+            <mat-icon class="expand-icon">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <mat-icon class="node-icon" style="color: orange;">timeline</mat-icon>
+            <span class="node-label">{{ segment.segmentName || 'Участок ' + segment.segmentId }}</span>
+            <span class="node-description">{{ segment.poles.length }} опор</span>
           </div>
-        </mat-list-item>
-      </mat-list>
-    </mat-expansion-panel>
-
-    <mat-expansion-panel *ngIf="substationsFeatures.length > 0" class="object-tree-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <mat-icon class="panel-icon" style="color: purple;">power</mat-icon>
-          Подстанции ({{ substationsFeatures.length }})
-        </mat-panel-title>
-      </mat-expansion-panel-header>
-      <mat-list>
-        <mat-list-item *ngFor="let feature of substationsFeatures" (click)="onFeatureClick(feature)">
-          <mat-icon matListIcon>power</mat-icon>
-          <div matLine>{{ feature.properties['name'] || 'Без названия' }}</div>
-          <div matLine class="secondary-text">
-            {{ feature.properties['voltage_level'] }} кВ
+          
+          <!-- Вложенные элементы участка -->
+          <div *ngIf="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId)" class="tree-children">
+            <!-- Папка "Опоры" внутри участка -->
+            <div *ngIf="segment.poles.length > 0" class="poles-folder-wrapper">
+              <div class="tree-node-header poles-folder-header"
+                   (click)="togglePolesFolder(item.powerLine.properties['id'], 'segment-' + segment.segmentId)"
+                   [class.expanded]="isPolesFolderExpanded(item.powerLine.properties['id'], 'segment-' + segment.segmentId)">
+                <mat-icon class="expand-icon">{{ isPolesFolderExpanded(item.powerLine.properties['id'], 'segment-' + segment.segmentId) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <mat-icon class="node-icon" style="color: blue;">folder</mat-icon>
+                <span class="node-label">Опоры ({{ segment.poles.length }})</span>
+              </div>
+              
+              <!-- Список опор -->
+              <div *ngIf="isPolesFolderExpanded(item.powerLine.properties['id'], 'segment-' + segment.segmentId)" class="tree-children poles-list">
+                <div *ngFor="let pole of segment.poles" 
+                     class="tree-node pole-node"
+                     (click)="onFeatureClick(pole, $event)"
+                     (contextmenu)="onFeatureRightClick(pole, $event)">
+                  <mat-icon class="node-icon" style="color: blue;">account_tree</mat-icon>
+                  <span class="node-label">{{ pole.properties['pole_number'] || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
           </div>
-        </mat-list-item>
-      </mat-list>
-    </mat-expansion-panel>
-
-    <mat-expansion-panel *ngIf="polesFeatures.length > 0" class="object-tree-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <mat-icon class="panel-icon" style="color: blue;">account_tree</mat-icon>
-          Опоры ({{ polesFeatures.length }})
-        </mat-panel-title>
-      </mat-expansion-panel-header>
-      <mat-list>
-        <mat-list-item *ngFor="let feature of polesFeatures" (click)="onFeatureClick(feature)">
-          <mat-icon matListIcon>account_tree</mat-icon>
-          <div matLine>{{ feature.properties['pole_number'] || 'N/A' }}</div>
-          <div matLine class="secondary-text">
-            {{ feature.properties['pole_type'] || 'N/A' }} • 
-            {{ feature.properties['condition'] || 'N/A' }}
+        </div>
+        
+        <!-- Папка "Опоры" для опор без сегмента -->
+        <div *ngIf="item.polesWithoutSegment.length > 0" class="poles-folder-wrapper">
+          <div class="tree-node-header poles-folder-header"
+               (click)="togglePolesFolder(item.powerLine.properties['id'], 'no-segment')"
+               [class.expanded]="isPolesFolderExpanded(item.powerLine.properties['id'], 'no-segment')">
+            <mat-icon class="expand-icon">{{ isPolesFolderExpanded(item.powerLine.properties['id'], 'no-segment') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <mat-icon class="node-icon" style="color: blue;">folder</mat-icon>
+            <span class="node-label">Опоры ({{ item.polesWithoutSegment.length }})</span>
           </div>
-        </mat-list-item>
-      </mat-list>
-    </mat-expansion-panel>
-
-    <mat-expansion-panel *ngIf="tapsFeatures.length > 0" class="object-tree-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <mat-icon class="panel-icon" style="color: orange;">cable</mat-icon>
-          Отпайки ({{ tapsFeatures.length }})
-        </mat-panel-title>
-      </mat-expansion-panel-header>
-      <mat-list>
-        <mat-list-item *ngFor="let feature of tapsFeatures" (click)="onFeatureClick(feature)">
-          <mat-icon matListIcon>cable</mat-icon>
-          <div matLine>{{ feature.properties['tap_number'] || 'N/A' }}</div>
-          <div matLine class="secondary-text">
-            {{ feature.properties['tap_type'] || 'N/A' }} • 
-            {{ feature.properties['voltage_level'] || 'N/A' }} кВ
+          
+          <!-- Список опор -->
+          <div *ngIf="isPolesFolderExpanded(item.powerLine.properties['id'], 'no-segment')" class="tree-children poles-list">
+            <div *ngFor="let pole of item.polesWithoutSegment" 
+                 class="tree-node pole-node"
+                 (click)="onFeatureClick(pole, $event)"
+                 (contextmenu)="onFeatureRightClick(pole, $event)">
+              <mat-icon class="node-icon" style="color: blue;">account_tree</mat-icon>
+              <span class="node-label">{{ pole.properties['pole_number'] || 'N/A' }}</span>
+            </div>
           </div>
-        </mat-list-item>
-      </mat-list>
-    </mat-expansion-panel>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div *ngIf="isLoading" class="loading-container">

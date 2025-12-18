@@ -1,0 +1,260 @@
+<div class="create-object-dialog">
+  <h2 mat-dialog-title>Создание объекта</h2>
+
+  <mat-dialog-content>
+    <!-- Шаг 1: Выбор типа объекта -->
+    <div *ngIf="!selectedObjectType" class="step-container">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Тип объекта</mat-label>
+        <mat-select formControlName="objectType" (selectionChange)="onObjectTypeSelected($event)">
+          <mat-option value="powerline">ЛЭП</mat-option>
+          <mat-option value="substation">Подстанция</mat-option>
+          <mat-option value="pole">Опора</mat-option>
+          <mat-option value="equipment">Оборудование</mat-option>
+        </mat-select>
+        <mat-error *ngIf="objectTypeForm.get('objectType')?.hasError('required')">
+          Выберите тип объекта
+        </mat-error>
+      </mat-form-field>
+    </div>
+
+    <!-- Шаг 2: Форма создания опоры -->
+    <div *ngIf="selectedObjectType === 'pole'" class="step-container">
+      <form [formGroup]="poleForm" class="pole-form">
+        <!-- Обязательные поля -->
+        <div class="form-section">
+          <h3>Обязательные поля</h3>
+          
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Название (номер опоры)</mat-label>
+            <input matInput formControlName="pole_number" placeholder="Например: ОП-001">
+            <mat-error>{{ getFieldError('pole_number') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Родительский объект (ЛЭП)</mat-label>
+            <input 
+              type="text"
+              matInput
+              formControlName="power_line_id"
+              [matAutocomplete]="autoPowerLine"
+              placeholder="Выберите или введите название ЛЭП">
+            <mat-autocomplete #autoPowerLine="matAutocomplete" [displayWith]="displayPowerLine">
+              <mat-option *ngFor="let line of filteredPowerLines | async" [value]="line">
+                {{ line.name }} ({{ line.code }})
+              </mat-option>
+            </mat-autocomplete>
+            <mat-error>{{ getFieldError('power_line_id') }}</mat-error>
+          </mat-form-field>
+
+          <div class="coordinates-row">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Широта</mat-label>
+              <input matInput type="text" formControlName="latitude" placeholder="55.7558 или 55,7558">
+              <mat-hint>Используйте точку или запятую как разделитель</mat-hint>
+              <mat-error>{{ getFieldError('latitude') }}</mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Долгота</mat-label>
+              <input matInput type="text" formControlName="longitude" placeholder="37.6173 или 37,6173">
+              <mat-hint>Используйте точку или запятую как разделитель</mat-hint>
+              <mat-error>{{ getFieldError('longitude') }}</mat-error>
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Тип опоры</mat-label>
+            <mat-select formControlName="pole_type">
+              <mat-option *ngFor="let type of poleTypes" [value]="type">
+                {{ type }}
+              </mat-option>
+            </mat-select>
+            <mat-error>{{ getFieldError('pole_type') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Уникальный UID (MRID)</mat-label>
+            <input matInput formControlName="mrid" placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx">
+            <mat-hint>Генерируется автоматически. Можно изменить вручную (формат UUID).</mat-hint>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
+            <button mat-icon-button matSuffix (click)="generateMRID()" type="button" matTooltip="Сгенерировать новый UID">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </mat-form-field>
+        </div>
+
+        <!-- Дополнительные поля -->
+        <div class="form-section">
+          <h3>Дополнительные характеристики</h3>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Высота (м)</mat-label>
+            <input matInput type="number" formControlName="height" step="0.1" placeholder="Например: 12.5">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Тип фундамента</mat-label>
+            <input matInput formControlName="foundation_type" placeholder="Например: свайный">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Материал</mat-label>
+            <mat-select formControlName="material">
+              <mat-option value="">Не указано</mat-option>
+              <mat-option *ngFor="let material of materials" [value]="material">
+                {{ material }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Год установки</mat-label>
+            <input matInput type="number" formControlName="year_installed" placeholder="Например: 2020">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Состояние</mat-label>
+            <mat-select formControlName="condition">
+              <mat-option *ngFor="let cond of conditions" [value]="cond">
+                {{ cond === 'good' ? 'Хорошее' : cond === 'satisfactory' ? 'Удовлетворительное' : 'Плохое' }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Примечания</mat-label>
+            <textarea matInput formControlName="notes" rows="3" placeholder="Дополнительная информация"></textarea>
+          </mat-form-field>
+        </div>
+
+        <!-- Импорт через файл -->
+        <div class="form-section">
+          <mat-divider></mat-divider>
+          <div class="import-section">
+            <button mat-stroked-button type="button" (click)="onImportClick()" class="full-width">
+              <mat-icon>upload_file</mat-icon>
+              Создать через загрузочный шаблон
+            </button>
+            <p class="import-hint">Загрузите файл с данными опор для массового создания</p>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Форма создания ЛЭП -->
+    <div *ngIf="selectedObjectType === 'powerline'" class="step-container">
+      <form [formGroup]="powerLineForm" class="powerline-form">
+        <!-- Обязательные поля -->
+        <div class="form-section">
+          <h3>Обязательные поля</h3>
+          
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Название</mat-label>
+            <input matInput formControlName="name" placeholder="Например: Минск-Западная">
+            <mat-error>{{ getFieldError('name') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Уникальный UID (MRID)</mat-label>
+            <input matInput formControlName="mrid" placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx">
+            <mat-hint>Генерируется автоматически. Можно изменить вручную (формат UUID).</mat-hint>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
+            <button mat-icon-button matSuffix (click)="generatePowerLineMRID()" type="button" matTooltip="Сгенерировать новый UID">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </mat-form-field>
+        </div>
+
+        <!-- Дополнительные поля -->
+        <div class="form-section">
+          <h3>Дополнительные характеристики</h3>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Номинальное напряжение (кВ)</mat-label>
+            <input matInput type="number" formControlName="voltage_level" step="0.1" placeholder="0.4, 6, 10, 35, 110, 220, 330, 500, 750">
+            <mat-hint>Стандартные значения: 0.4, 6, 10, 35, 110, 220, 330, 500, 750 кВ</mat-hint>
+            <mat-error>{{ getFieldError('voltage_level') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Длина (км)</mat-label>
+            <input matInput type="number" formControlName="length" step="0.1" placeholder="Например: 25.5" min="0">
+            <mat-hint>Длина линии в километрах (не может быть отрицательной)</mat-hint>
+            <mat-error>{{ getFieldError('length') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Диспетчерское наименование</mat-label>
+            <input matInput formControlName="dispatcher_name" placeholder="Например: ЛЭП-110 Минск-Западная">
+            <mat-hint>Официальное диспетчерское наименование</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Административная принадлежность к филиалу</mat-label>
+            <input matInput formControlName="branch_name" placeholder="Например: РУП Минскэнерго">
+            <mat-hint>Название филиала или организации</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Балансовая принадлежность</mat-label>
+            <input matInput formControlName="balance_ownership" placeholder="Например: РУП Минскэнерго">
+            <mat-hint>Организация, на балансе которой находится ЛЭП</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Географический регион</mat-label>
+            <input matInput formControlName="region_name" placeholder="Например: Минская область">
+            <mat-hint>Название географического региона</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Статус</mat-label>
+            <mat-select formControlName="status">
+              <mat-option value="active">Активная</mat-option>
+              <mat-option value="inactive">Неактивная</mat-option>
+              <mat-option value="maintenance">На обслуживании</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Описание</mat-label>
+            <textarea matInput formControlName="description" rows="3" placeholder="Дополнительная информация"></textarea>
+          </mat-form-field>
+        </div>
+      </form>
+    </div>
+
+    <!-- Заглушки для других типов объектов -->
+    <div *ngIf="selectedObjectType === 'substation'" class="step-container">
+      <p>Форма создания подстанции будет реализована позже</p>
+    </div>
+
+    <div *ngIf="selectedObjectType === 'equipment'" class="step-container">
+      <p>Форма создания оборудования будет реализована позже</p>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="cancel()">Отмена</button>
+    <button 
+      *ngIf="selectedObjectType === 'pole'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="poleForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? 'Создание...' : 'Создать' }}
+    </button>
+    <button 
+      *ngIf="selectedObjectType === 'powerline'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="powerLineForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? 'Создание...' : 'Создать' }}
+    </button>
+  </mat-dialog-actions>
+</div>
+

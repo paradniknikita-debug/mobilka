@@ -22,6 +22,9 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSelectModule } from '@angular/material/select';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatDividerModule } from '@angular/material/divider';
 
 // Leaflet
 import { LeafletModule } from '@asymmetrik/ngx-leaflet';
@@ -40,6 +43,8 @@ import { SidebarComponent } from './layout/sidebar/sidebar.component';
 // Features
 import { LoginComponent } from './features/auth/login/login.component';
 import { MapComponent } from './features/map/map.component';
+import { CreateObjectDialogComponent } from './features/map/create-object-dialog/create-object-dialog.component';
+import { DeleteObjectDialogComponent } from './features/map/delete-object-dialog/delete-object-dialog.component';
 
 @NgModule({
   declarations: [
@@ -47,7 +52,9 @@ import { MapComponent } from './features/map/map.component';
     MainLayoutComponent,
     SidebarComponent,
     LoginComponent,
-    MapComponent
+    MapComponent,
+    CreateObjectDialogComponent,
+    DeleteObjectDialogComponent
   ],
   imports: [
     BrowserModule,
@@ -56,7 +63,7 @@ import { MapComponent } from './features/map/map.component';
     FormsModule,
     ReactiveFormsModule,
     AppRoutingModule,
-    
+
     // Material
     MatToolbarModule,
     MatButtonModule,
@@ -75,7 +82,10 @@ import { MapComponent } from './features/map/map.component';
     MatSortModule,
     MatMenuModule,
     MatTooltipModule,
-    
+    MatSelectModule,
+    MatAutocompleteModule,
+    MatDividerModule,
+
     // Leaflet
     LeafletModule
   ],

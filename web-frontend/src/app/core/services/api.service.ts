@@ -74,6 +74,10 @@ export class ApiService {
     return this.http.post<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles`, pole);
   }
 
+  deletePole(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/poles/${id}`);
+  }
+
   // ========== Equipment ==========
   getAllEquipment(): Observable<Equipment[]> {
     return this.http.get<Equipment[]>(`${this.apiUrl}/equipment`);

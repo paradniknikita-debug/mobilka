@@ -22,9 +22,12 @@ export interface PoleCreate {
   latitude: number;
   longitude: number;
   pole_type: string;
+  mrid?: string;  // Опциональный UID, если не указан - генерируется автоматически
   height?: number;
+  foundation_type?: string;
   material?: string;
+  year_installed?: number;
   condition?: string;
-  installation_date?: string;
+  notes?: string;
 }
 

@@ -21,3 +21,4 @@ class User(Base):
     # Связи
     branch = relationship("Branch", back_populates="users")
     created_power_lines = relationship("PowerLine", back_populates="creator")
+
