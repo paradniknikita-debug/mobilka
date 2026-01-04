@@ -16,7 +16,7 @@ class RegisterPage extends ConsumerWidget {
     ref.listen<AuthState>(authStateProvider, (previous, next) {
       switch (next) {
         case AuthStateAuthenticated():
-          context.go('/home');
+          context.go('/map');
         case AuthStateError(message: final message):
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(message)),

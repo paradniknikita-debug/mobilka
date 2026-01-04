@@ -81,9 +81,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "4200:4200"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./web-frontend/dist/lepm-web-frontend:/app/angular-web:ro
+      - ./frontend/build/web:/app/flutter-web:ro
     restart: unless-stopped
     networks:
       - lepm_network

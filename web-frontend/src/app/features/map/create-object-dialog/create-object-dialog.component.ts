@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatSelectChange } from '@angular/material/select';
 import { ApiService } from '../../../core/services/api.service';
+import { MapService } from '../../../core/services/map.service';
 import { PowerLine, PowerLineCreate } from '../../../core/models/power-line.model';
 import { PoleCreate } from '../../../core/models/pole.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -57,6 +58,7 @@ export class CreateObjectDialogComponent implements OnInit {
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<CreateObjectDialogComponent>,
     private apiService: ApiService,
+    private mapService: MapService,
     private snackBar: MatSnackBar,
     @Inject(MAT_DIALOG_DATA) public data: any
   ) {
@@ -151,14 +153,14 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   displayPowerLine(powerLine: PowerLine): string {
-    return powerLine ? `${powerLine.name} (${powerLine.code})` : '';
+    return powerLine ? `${powerLine.name}${powerLine.code ? ` (${powerLine.code})` : ''}` : '';
   }
 
   private _filterPowerLines(name: string): PowerLine[] {
     const filterValue = name.toLowerCase();
     return this.powerLines.filter(line => 
       line.name.toLowerCase().includes(filterValue) || 
-      line.code.toLowerCase().includes(filterValue)
+      (line.code && line.code.toLowerCase().includes(filterValue))
     );
   }
 
@@ -245,6 +247,8 @@ export class CreateObjectDialogComponent implements OnInit {
 
     this.apiService.createPole(powerLineId, poleData).subscribe({
       next: (createdPole) => {
+        // Обновляем данные карты и sidebar
+        this.mapService.refreshData();
         console.log('Опора успешно создана:', createdPole);
         this.snackBar.open('Опора успешно создана', 'Закрыть', {
           duration: 3000
@@ -327,6 +331,17 @@ export class CreateObjectDialogComponent implements OnInit {
     });
   }
 
+  getFormErrors(formGroup: FormGroup): any {
+    const errors: any = {};
+    Object.keys(formGroup.controls).forEach(key => {
+      const control = formGroup.get(key);
+      if (control && control.errors) {
+        errors[key] = control.errors;
+      }
+    });
+    return errors;
+  }
+
   cancel(): void {
     this.dialogRef.close();
   }
@@ -406,7 +421,12 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   createPowerLine(): void {
+    console.log('=== НАЧАЛО СОЗДАНИЯ ЛЭП ===');
+    console.log('Форма валидна:', this.powerLineForm.valid);
+    console.log('Ошибки формы:', this.getFormErrors(this.powerLineForm));
+    
     if (this.powerLineForm.invalid) {
+      console.warn('Форма невалидна, показываем ошибки');
       this.markFormGroupTouched(this.powerLineForm);
       return;
     }
@@ -468,7 +488,10 @@ export class CreateObjectDialogComponent implements OnInit {
       powerLineData.description = finalDescription;
     }
 
-    console.log('Отправка данных для создания ЛЭП:', powerLineData);
+    console.log('=== СОЗДАНИЕ ЛЭП ===');
+    console.log('1. Данные формы:', formValue);
+    console.log('2. Сформированные данные для отправки:', powerLineData);
+    console.log('3. API URL:', this.apiService['apiUrl']); // Временно для отладки
 
     this.apiService.createPowerLine(powerLineData).subscribe({
       next: (createdPowerLine) => {
@@ -477,13 +500,21 @@ export class CreateObjectDialogComponent implements OnInit {
         this.snackBar.open('ЛЭП успешно создана', 'Закрыть', {
           duration: 3000
         });
+        // Добавляем изменение в очередь синхронизации (на случай если нужно синхронизировать с Flutter)
+        // this.syncService.addChange('power_line', 'create', createdPowerLine);
+        // Обновляем данные карты и sidebar
+        this.mapService.refreshData();
         this.dialogRef.close(createdPowerLine);
       },
       error: (error) => {
-        console.error('Ошибка создания ЛЭП:', error);
-        console.error('Статус ошибки:', error.status);
-        console.error('Текст ошибки:', error.statusText);
-        console.error('Полный объект ошибки:', JSON.stringify(error, null, 2));
+        console.error('=== ОШИБКА СОЗДАНИЯ ЛЭП ===');
+        console.error('1. Полный объект ошибки:', error);
+        console.error('2. Статус ошибки:', error.status);
+        console.error('3. Текст ошибки:', error.statusText);
+        console.error('4. URL запроса:', error.url);
+        console.error('5. Тело ошибки:', error.error);
+        console.error('6. Заголовки ответа:', error.headers);
+        console.error('7. Полный объект ошибки (JSON):', JSON.stringify(error, null, 2));
         
         this.isSubmitting = false;
         

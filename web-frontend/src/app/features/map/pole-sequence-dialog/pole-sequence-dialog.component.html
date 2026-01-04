@@ -1,0 +1,67 @@
+<h2 mat-dialog-title>Управление последовательностью опор</h2>
+
+<mat-dialog-content>
+  <div class="info-section">
+    <p>Перетащите опоры для изменения их последовательности в линии.</p>
+    <p>Последовательность определяет порядок соединения опор при создании пролётов.</p>
+  </div>
+
+  <div class="actions-section">
+    <button mat-raised-button color="primary" (click)="autoSequence()" [disabled]="isLoading || poles.length === 0">
+      <mat-icon>auto_fix_high</mat-icon>
+      Автоматически определить
+    </button>
+    <button mat-button (click)="resetSequence()" [disabled]="isLoading || !getSequenceChanged()">
+      <mat-icon>refresh</mat-icon>
+      Сбросить
+    </button>
+  </div>
+
+  <div *ngIf="isLoading" class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Загрузка опор...</p>
+  </div>
+
+  <div *ngIf="!isLoading" class="poles-list" cdkDropList (cdkDropListDropped)="drop($event)">
+    <div
+      *ngFor="let pole of poles; let i = index"
+      class="pole-item"
+      cdkDrag
+      [class.dragging]="false"
+    >
+      <div class="drag-handle" cdkDragHandle>
+        <mat-icon>drag_indicator</mat-icon>
+      </div>
+      <div class="pole-info">
+        <div class="sequence-number">{{ pole.sequence_number || (i + 1) }}</div>
+        <div class="pole-details">
+          <strong>{{ pole.pole_number }}</strong>
+          <span class="coordinates">
+            {{ pole.latitude.toFixed(4) }}, {{ pole.longitude.toFixed(4) }}
+          </span>
+        </div>
+      </div>
+      <div class="pole-type">{{ pole.pole_type }}</div>
+    </div>
+
+    <div *ngIf="poles.length === 0" class="no-poles">
+      <mat-icon>info</mat-icon>
+      <p>Нет опор для отображения</p>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Отмена</button>
+  <button
+    mat-raised-button
+    color="primary"
+    (click)="saveSequence()"
+    [disabled]="isSaving || !getSequenceChanged() || poles.length === 0"
+  >
+    <mat-icon *ngIf="!isSaving">save</mat-icon>
+    <mat-spinner *ngIf="isSaving" diameter="20" style="display: inline-block;"></mat-spinner>
+    Сохранить
+  </button>
+</mat-dialog-actions>
+

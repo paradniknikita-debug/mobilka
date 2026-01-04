@@ -1,0 +1,48 @@
+<h2 mat-dialog-title>Управление узлом соединения</h2>
+
+<mat-dialog-content>
+  <div class="pole-info">
+    <h3>Опора: {{ pole.pole_number }}</h3>
+    <p><strong>Координаты:</strong> {{ pole.latitude.toFixed(6) }}, {{ pole.longitude.toFixed(6) }}</p>
+  </div>
+
+  <div class="connectivity-node-status" *ngIf="!isLoading">
+    <div *ngIf="connectivityNode" class="node-exists">
+      <mat-icon class="status-icon success">check_circle</mat-icon>
+      <div class="node-info">
+        <h4>Узел соединения существует</h4>
+        <p><strong>ID:</strong> {{ connectivityNode.id }}</p>
+        <p><strong>mRID:</strong> {{ connectivityNode.mrid }}</p>
+        <p><strong>Название:</strong> {{ connectivityNode.name }}</p>
+        <p *ngIf="connectivityNode.description"><strong>Описание:</strong> {{ connectivityNode.description }}</p>
+      </div>
+      <button mat-raised-button color="warn" (click)="deleteConnectivityNode()" [disabled]="isLoading">
+        <mat-icon>delete</mat-icon>
+        Удалить узел
+      </button>
+    </div>
+
+    <div *ngIf="!connectivityNode" class="node-missing">
+      <mat-icon class="status-icon warning">warning</mat-icon>
+      <div class="node-info">
+        <h4>Узел соединения отсутствует</h4>
+        <p>Для этой опоры не создан узел соединения (ConnectivityNode).</p>
+        <p>Узел необходим для создания сегментов линии и отпаек.</p>
+      </div>
+      <button mat-raised-button color="primary" (click)="createConnectivityNode()" [disabled]="isLoading">
+        <mat-icon>add_circle</mat-icon>
+        Создать узел
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="isLoading" class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Загрузка...</p>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Закрыть</button>
+</mat-dialog-actions>
+

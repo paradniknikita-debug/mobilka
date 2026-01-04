@@ -1,6 +1,10 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from .cim_line_structure import (
+    ConnectivityNodeResponse, TerminalResponse, LineSectionResponse,
+    AClineSegmentResponse, SpanResponse
+)
 
 class PoleBase(BaseModel):
     pole_number: str
@@ -19,10 +23,13 @@ class PoleCreate(PoleBase):
 
 class PoleResponse(PoleBase):
     id: int
+    mrid: str
     power_line_id: int
+    connectivity_node_id: Optional[int] = None
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]
+    connectivity_node: Optional[ConnectivityNodeResponse] = None
 
     class Config:
         from_attributes = True
@@ -41,10 +48,13 @@ class PowerLineCreate(PowerLineBase):
 
 class PowerLineResponse(PowerLineBase):
     id: int
+    mrid: str
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]
     poles: List[PoleResponse] = []
+    # CIM структура
+    acline_segments: List[AClineSegmentResponse] = []
 
     class Config:
         from_attributes = True

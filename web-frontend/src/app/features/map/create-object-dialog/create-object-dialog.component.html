@@ -4,9 +4,10 @@
   <mat-dialog-content>
     <!-- Шаг 1: Выбор типа объекта -->
     <div *ngIf="!selectedObjectType" class="step-container">
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Тип объекта</mat-label>
-        <mat-select formControlName="objectType" (selectionChange)="onObjectTypeSelected($event)">
+      <form [formGroup]="objectTypeForm">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Тип объекта</mat-label>
+          <mat-select formControlName="objectType" (selectionChange)="onObjectTypeSelected($event)">
           <mat-option value="powerline">ЛЭП</mat-option>
           <mat-option value="substation">Подстанция</mat-option>
           <mat-option value="pole">Опора</mat-option>
@@ -16,6 +17,7 @@
           Выберите тип объекта
         </mat-error>
       </mat-form-field>
+      </form>
     </div>
 
     <!-- Шаг 2: Форма создания опоры -->

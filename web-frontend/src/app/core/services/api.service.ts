@@ -8,6 +8,14 @@ import { Pole, PoleCreate } from '../models/pole.model';
 import { Equipment, EquipmentCreate } from '../models/equipment.model';
 import { Substation, SubstationCreate } from '../models/substation.model';
 import { GeoJSONCollection } from '../models/geojson.model';
+import {
+  ConnectivityNode, ConnectivityNodeCreate,
+  Terminal, TerminalCreate,
+  LineSection, LineSectionCreate,
+  AClineSegment, AClineSegmentCreate,
+  Span, SpanCreate,
+  PoleSequenceResponse
+} from '../models/cim.model';
 
 @Injectable({
   providedIn: 'root'
@@ -46,7 +54,10 @@ export class ApiService {
   }
 
   createPowerLine(powerLine: PowerLineCreate): Observable<PowerLine> {
-    return this.http.post<PowerLine>(`${this.apiUrl}/power-lines`, powerLine);
+    // Убираем слэш в конце, чтобы избежать редиректа, который может сбросить CORS заголовки
+    const url = `${this.apiUrl}/power-lines`.replace(/\/$/, '');
+    console.log('ApiService.createPowerLine:', { url, data: powerLine });
+    return this.http.post<PowerLine>(url, powerLine);
   }
 
   updatePowerLine(id: number, powerLine: Partial<PowerLineCreate>): Observable<PowerLine> {
@@ -74,8 +85,37 @@ export class ApiService {
     return this.http.post<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles`, pole);
   }
 
+  updatePole(id: number, pole: Partial<PoleCreate>): Observable<Pole> {
+    return this.http.put<Pole>(`${this.apiUrl}/poles/${id}`, pole);
+  }
+
   deletePole(id: number): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/poles/${id}`);
+  }
+
+  // ========== Spans ==========
+  getSpansByPowerLine(powerLineId: number): Observable<Span[]> {
+    return this.http.get<Span[]>(`${this.apiUrl}/power-lines/${powerLineId}/spans`);
+  }
+
+  getSpan(powerLineId: number, spanId: number): Observable<Span> {
+    return this.http.get<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`);
+  }
+
+  createSpan(powerLineId: number, span: any): Observable<Span> {
+    return this.http.post<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans`, span);
+  }
+
+  updateSpan(powerLineId: number, spanId: number, span: any): Observable<Span> {
+    return this.http.put<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`, span);
+  }
+
+  deleteSpan(powerLineId: number, spanId: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`);
+  }
+
+  autoCreateSpans(powerLineId: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/power-lines/${powerLineId}/spans/auto-create`, {});
   }
 
   // ========== Equipment ==========
@@ -125,8 +165,101 @@ export class ApiService {
     return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/substations/geojson`);
   }
 
+  getSpansGeoJSON(): Observable<GeoJSONCollection> {
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/spans/geojson`);
+  }
+
   getDataBounds(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/map/bounds`);
+  }
+
+  // ========== Sync ==========
+  uploadSyncBatch(batch: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/sync/upload`, batch);
+  }
+
+  downloadSyncData(lastSync: string): Observable<any> {
+    const params = new HttpParams().set('last_sync', lastSync);
+    return this.http.get<any>(`${this.apiUrl}/sync/download`, { params });
+  }
+
+  getAllSchemas(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/sync/schemas`);
+  }
+
+  getEntitySchema(entityType: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/sync/schema/${entityType}`);
+  }
+
+  // ========== CIM Structure ==========
+  
+  // ConnectivityNode
+  createConnectivityNode(node: ConnectivityNodeCreate): Observable<ConnectivityNode> {
+    return this.http.post<ConnectivityNode>(`${this.apiUrl}/cim/connectivity-nodes`, node);
+  }
+
+  getConnectivityNode(id: number): Observable<ConnectivityNode> {
+    return this.http.get<ConnectivityNode>(`${this.apiUrl}/cim/connectivity-nodes/${id}`);
+  }
+
+  updateConnectivityNode(id: number, node: ConnectivityNodeCreate): Observable<ConnectivityNode> {
+    return this.http.put<ConnectivityNode>(`${this.apiUrl}/cim/connectivity-nodes/${id}`, node);
+  }
+
+  deleteConnectivityNode(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/cim/connectivity-nodes/${id}`);
+  }
+
+  createConnectivityNodeForPole(poleId: number): Observable<ConnectivityNode> {
+    return this.http.post<ConnectivityNode>(`${this.apiUrl}/cim/poles/${poleId}/connectivity-node`, {});
+  }
+
+  deleteConnectivityNodeFromPole(poleId: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/cim/poles/${poleId}/connectivity-node`);
+  }
+
+  // AClineSegment
+  createAClineSegment(segment: AClineSegmentCreate): Observable<AClineSegment> {
+    return this.http.post<AClineSegment>(`${this.apiUrl}/cim/acline-segments`, segment);
+  }
+
+  getAClineSegment(id: number): Observable<AClineSegment> {
+    return this.http.get<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`);
+  }
+
+  // LineSection
+  createLineSection(section: LineSectionCreate): Observable<LineSection> {
+    return this.http.post<LineSection>(`${this.apiUrl}/cim/line-sections`, section);
+  }
+
+  getLineSection(id: number): Observable<LineSection> {
+    return this.http.get<LineSection>(`${this.apiUrl}/cim/line-sections/${id}`);
+  }
+
+  // Span (CIM version)
+  createSpanCIM(span: SpanCreate): Observable<Span> {
+    return this.http.post<Span>(`${this.apiUrl}/cim/spans`, span);
+  }
+
+  // Pole Sequence
+  autoSequencePoles(powerLineId: number, startPoleId?: number): Observable<PoleSequenceResponse> {
+    const params = startPoleId ? new HttpParams().set('start_pole_id', startPoleId.toString()) : undefined;
+    return this.http.post<PoleSequenceResponse>(
+      `${this.apiUrl}/power-lines/${powerLineId}/poles/auto-sequence`,
+      {},
+      { params }
+    );
+  }
+
+  updatePoleSequence(powerLineId: number, poleIds: number[]): Observable<PoleSequenceResponse> {
+    return this.http.put<PoleSequenceResponse>(
+      `${this.apiUrl}/power-lines/${powerLineId}/poles/sequence`,
+      poleIds
+    );
+  }
+
+  getPolesSequence(powerLineId: number): Observable<Pole[]> {
+    return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${powerLineId}/poles/sequence`);
   }
 }
 

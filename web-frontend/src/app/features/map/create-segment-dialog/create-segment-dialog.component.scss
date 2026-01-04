@@ -1,0 +1,52 @@
+.create-segment-dialog {
+  min-width: 500px;
+  max-width: 600px;
+}
+
+.full-width {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.half-width {
+  width: calc(50% - 8px);
+  margin-bottom: 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.info-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+  
+  &.warning {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+  
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+mat-dialog-actions {
+  padding: 16px 24px;
+}
+

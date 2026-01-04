@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, remote
 from app.database import Base
 from app.models.base import generate_mrid
 
@@ -28,23 +28,42 @@ class PowerLine(Base):
     region = relationship("GeographicRegion", back_populates="power_lines")
     branch = relationship("Branch", back_populates="power_lines")  # Для обратной совместимости
     creator = relationship("User", back_populates="created_power_lines")
+    
+    # CIM-структура: Line содержит множество AClineSegment
+    acline_segments = relationship("AClineSegment", foreign_keys="[AClineSegment.power_line_id]", back_populates="power_line", cascade="all, delete-orphan")
+    # Many-to-many связь с сегментами (для обратной совместимости)
+    segments = relationship("AClineSegment", secondary="line_segments", back_populates="power_lines")
+    
+    # Для обратной совместимости (можно будет удалить после миграции)
     poles = relationship("Pole", back_populates="power_line", cascade="all, delete-orphan")
     spans = relationship("Span", back_populates="power_line", cascade="all, delete-orphan")
     taps = relationship("Tap", back_populates="power_line", cascade="all, delete-orphan")
     connections = relationship("Connection", back_populates="power_line")
-    # Many-to-many связь с сегментами
-    segments = relationship("AClineSegment", secondary="line_segments", back_populates="power_lines")
 
 class Pole(Base):
+    """
+    Опора - физическое представление ConnectivityNode (узла соединения)
+    Соответствует CIM концепции: опора = ConnectivityNode
+    
+    В CIM опора является узлом соединения (ConnectivityNode), к которому
+    могут подключаться несколько сегментов (основная линия + отпайки).
+    """
     __tablename__ = "poles"
 
     id = Column(Integer, primary_key=True, index=True)
-    # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
+    
+    # Связь с линией (для обратной совместимости)
     power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
-    # Опциональная связь с сегментом (для паспортизации)
-    segment_id = Column(Integer, ForeignKey("acline_segments.id"), nullable=True)
+    
+    # Связь с ConnectivityNode (один к одному)
+    # ConnectivityNode создаётся автоматически при создании опоры
+    # Примечание: foreign key находится в ConnectivityNode.pole_id, а не здесь
+    # connectivity_node_id оставлен для обратной совместимости, но не используется в relationship
+    connectivity_node_id = Column(Integer, ForeignKey("connectivity_nodes.id"), nullable=True, unique=True)
+    
     pole_number = Column(String(20), nullable=False)
+    sequence_number = Column(Integer, nullable=True)  # Порядковый номер опоры в линии (для контроля последовательности)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     pole_type = Column(String(50), nullable=False)  # анкерная, промежуточная, угловая и т.д.
@@ -60,31 +79,72 @@ class Pole(Base):
 
     # Связи
     power_line = relationship("PowerLine", back_populates="poles")
-    segment = relationship("AClineSegment", foreign_keys=[segment_id])
+    # Изменили на one-to-many: одна опора может иметь несколько ConnectivityNode (для совместного подвеса)
+    connectivity_nodes = relationship("ConnectivityNode", primaryjoin="Pole.id == remote(ConnectivityNode.pole_id)", back_populates="pole", uselist=True)
     creator = relationship("User")
     equipment = relationship("Equipment", back_populates="pole", cascade="all, delete-orphan")
+    
+    def get_connectivity_node_for_line(self, power_line_id: int):
+        """Получить ConnectivityNode для конкретной линии"""
+        if not self.connectivity_nodes:
+            return None
+        for cn in self.connectivity_nodes:
+            if cn.power_line_id == power_line_id:
+                return cn
+        return None
 
 class Span(Base):
+    """
+    Пролёт - физическое соединение между двумя опорами
+    Соответствует концепции CIM: пролёт между двумя ConnectivityNode
+    
+    Пролёт принадлежит LineSection (секции линии с одинаковыми параметрами провода).
+    Параметры провода наследуются от LineSection.
+    """
     __tablename__ = "spans"
 
     id = Column(Integer, primary_key=True, index=True)
-    # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
-    from_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
-    to_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
-    span_number = Column(String(20), nullable=False)
+    
+    # Связь с секцией линии (LineSection)
+    # Пролёт наследует параметры провода от секции
+    line_section_id = Column(Integer, ForeignKey("line_sections.id"), nullable=False)
+    
+    # Связь с узлами соединения (ConnectivityNode = опоры)
+    from_connectivity_node_id = Column(Integer, ForeignKey("connectivity_nodes.id"), nullable=False)
+    to_connectivity_node_id = Column(Integer, ForeignKey("connectivity_nodes.id"), nullable=False)
+    
+    # Для обратной совместимости (можно будет удалить после миграции)
+    power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=True)
+    from_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=True)
+    to_pole_id = Column(Integer, ForeignKey("poles.id"), nullable=True)
+    
+    span_number = Column(String(100), nullable=False)  # Увеличено с 20 до 100 для поддержки полных наименований
     length = Column(Float, nullable=False)  # м
-    conductor_type = Column(String(50), nullable=True)
-    conductor_material = Column(String(50), nullable=True)
-    conductor_section = Column(String(20), nullable=True)  # мм²
-    tension = Column(Float, nullable=True)  # Н
-    sag = Column(Float, nullable=True)  # м
+    
+    # Параметры пролёта (могут переопределять параметры секции)
+    # Если не указаны, используются параметры из LineSection
+    conductor_type = Column(String(50), nullable=True)  # наследуется от LineSection
+    conductor_material = Column(String(50), nullable=True)  # наследуется от LineSection
+    conductor_section = Column(String(20), nullable=True)  # наследуется от LineSection
+    
+    # Механические параметры пролёта
+    tension = Column(Float, nullable=True)  # Н - натяжение провода
+    sag = Column(Float, nullable=True)  # м - провис провода
+    
+    # Порядок пролёта в секции
+    sequence_number = Column(Integer, nullable=False, default=1)
+    
     notes = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Связи
+    line_section = relationship("LineSection", back_populates="spans")
+    from_connectivity_node = relationship("ConnectivityNode", foreign_keys=[from_connectivity_node_id], back_populates="from_spans")
+    to_connectivity_node = relationship("ConnectivityNode", foreign_keys=[to_connectivity_node_id], back_populates="to_spans")
+    
+    # Для обратной совместимости
     power_line = relationship("PowerLine", back_populates="spans")
     from_pole = relationship("Pole", foreign_keys=[from_pole_id])
     to_pole = relationship("Pole", foreign_keys=[to_pole_id])

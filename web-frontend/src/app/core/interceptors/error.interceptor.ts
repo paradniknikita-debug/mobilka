@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -8,7 +8,7 @@ import { AuthService } from '../services/auth.service';
 @Injectable()
 export class ErrorInterceptor implements HttpInterceptor {
   constructor(
-    private authService: AuthService,
+    private injector: Injector,
     private router: Router
   ) {}
 
@@ -18,7 +18,9 @@ export class ErrorInterceptor implements HttpInterceptor {
         if (error.status === 401) {
           // Токен истек или невалидный
           console.log('🔓 Токен истек, требуется повторная авторизация');
-          this.authService.logout();
+          // Ленивая инжекция AuthService для избежания циклической зависимости
+          const authService = this.injector.get(AuthService);
+          authService.logout();
         } else if (error.status === 403) {
           // Доступ запрещен
           console.log('🚫 Доступ запрещен (403)');

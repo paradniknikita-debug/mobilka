@@ -1,15 +1,17 @@
-import { Component, HostListener, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { AuthService } from '../../core/services/auth.service';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { SidebarService } from '../../core/services/sidebar.service';
+import { SyncService } from '../../core/services/sync.service';
 
 @Component({
   selector: 'app-main-layout',
   templateUrl: './main-layout.component.html',
   styleUrls: ['./main-layout.component.scss']
 })
-export class MainLayoutComponent implements OnDestroy {
+export class MainLayoutComponent implements OnInit, OnDestroy {
   sidebarWidth = 350;
   sidebarVisible = true;
   private destroy$ = new Subject<void>();
@@ -20,11 +22,22 @@ export class MainLayoutComponent implements OnDestroy {
   constructor(
     private authService: AuthService,
     private router: Router,
-    private sidebarService: SidebarService
+    private sidebarService: SidebarService,
+    private syncService: SyncService
   ) {
     // Инициализируем состояние sidebar в сервисе
     this.sidebarService.setSidebarVisible(this.sidebarVisible);
     this.sidebarService.setSidebarWidth(this.sidebarWidth);
+  }
+
+  ngOnInit(): void {
+    // Включаем автоматическую синхронизацию каждые 30 секунд
+    this.syncService.enableAutoSync(30000);
+    
+    // Выполняем первую синхронизацию при загрузке
+    this.syncService.sync().pipe(
+      takeUntil(this.destroy$)
+    ).subscribe();
   }
 
   startResize(event: MouseEvent): void {

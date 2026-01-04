@@ -124,13 +124,10 @@ class ProfilePage extends ConsumerWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.settings),
-                  title: const Text('Настройки'),
-                  subtitle: const Text('Настройки приложения'),
+                  title: const Text('Настройки сервера'),
+                  subtitle: const Text('Настройка IP адреса сервера'),
                   onTap: () {
-                    // TODO: Открыть настройки
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Настройки')),
-                    );
+                    context.push('/settings/server');
                   },
                 ),
                 ListTile(

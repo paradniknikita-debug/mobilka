@@ -94,7 +94,7 @@
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 320px;
+  width: 380px;
   max-width: 100%;
   background: white;
   border-radius: 8px 0 0 0;
@@ -159,6 +159,40 @@
     color: rgba(0, 0, 0, 0.87);
     text-align: right;
     word-break: break-word;
+  }
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+
+  &.success {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &.warning {
+    background-color: #fff3e0;
+    color: #e65100;
+  }
+}
+
+.pole-properties-actions {
+  padding: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .action-button {
+    width: 100%;
+    
+    mat-icon {
+      margin-right: 8px;
+    }
   }
 }
 

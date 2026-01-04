@@ -8,14 +8,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence
 from app.core.config import settings
 
 # Импортируем модели, чтобы они зарегистрировались в Base.metadata
 # Это необходимо для создания таблиц через Base.metadata.create_all
 from app.models import (
     User, PowerLine, Pole, Span, Tap, Equipment,
-    Branch, Substation, Connection, GeographicRegion, AClineSegment
+    Branch, Substation, Connection, GeographicRegion, AClineSegment,
+    ConnectivityNode, Terminal, LineSection
 )
 
 # Redis клиент будет инициализирован в lifespan
@@ -64,6 +65,10 @@ app = FastAPI(
     description="Система управления линиями электропередач",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    redirect_slashes=False,  # Отключаем автоматический редирект со слэшами
 )
 # app.mount("/static", StaticFiles(directory="static"), name="static")
 # Настройка CORS для Flutter приложения
@@ -73,6 +78,8 @@ app.add_middleware(
     allow_credentials=True, # разрешает cookies и jwt токены
     allow_methods=["*"], # Разрешает все методы get, post, put, delete
     allow_headers=["*"], # Разрешает все заголовки
+    expose_headers=["*"], # Разрешаем доступ ко всем заголовкам ответа
+    max_age=3600,  # Кэширование preflight запросов на 1 час
 )
 
 
@@ -110,6 +117,8 @@ app.include_router(map_tiles.router, prefix="/api/v1/map", tags=["map"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(substations.router, prefix="/api/v1/substations", tags=["substations"])
 app.include_router(excel_import.router, tags=["import"])
+app.include_router(cim_line_structure.router, prefix="/api/v1/cim", tags=["cim"])
+app.include_router(pole_sequence.router, prefix="/api/v1", tags=["pole-sequence"])
 
 @app.get("/",response_class=HTMLResponse)
 async def root():
@@ -136,8 +145,8 @@ async def root():
                     <p>Система управления линиями электропередач для инженеров и диспетчеров</p>
                 </div>
                 <div class="links">
-                    <a href="/api/docs" class="link">📚 Документация API (Swagger)</a>
-                    <a href="/api/redoc" class="link">📖 Документация API (ReDoc)</a>
+                    <a href="/docs" class="link">📚 Документация API (Swagger)</a>
+                    <a href="/redoc" class="link">📖 Документация API (ReDoc)</a>
                     <a href="/health" class="link">❤️ Проверка здоровья системы</a>
                     <a href="/status" class="link">📊 Статус системы</a>
                 </div>

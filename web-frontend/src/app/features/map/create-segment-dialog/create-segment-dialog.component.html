@@ -1,0 +1,75 @@
+<div class="create-segment-dialog">
+  <h2 mat-dialog-title>Создание участка линии</h2>
+
+  <mat-dialog-content>
+    <form [formGroup]="segmentForm">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Наименование участка *</mat-label>
+        <input matInput formControlName="name" required>
+        <mat-error *ngIf="segmentForm.get('name')?.hasError('required')">Наименование обязательно</mat-error>
+      </mat-form-field>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Начальная опора *</mat-label>
+          <mat-select formControlName="from_pole_id" required>
+            <mat-option *ngFor="let pole of poles" [value]="pole.id">
+              {{ displayPole(pole) }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="segmentForm.get('from_pole_id')?.hasError('required')">Выберите начальную опору</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Конечная опора *</mat-label>
+          <mat-select formControlName="to_pole_id" required>
+            <mat-option *ngFor="let pole of poles" [value]="pole.id">
+              {{ displayPole(pole) }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="segmentForm.get('to_pole_id')?.hasError('required')">Выберите конечную опору</mat-error>
+        </mat-form-field>
+      </div>
+
+      <div *ngIf="isLoading" class="loading-spinner">
+        <mat-spinner diameter="24"></mat-spinner>
+        <span>Загрузка опор...</span>
+      </div>
+
+      <div *ngIf="!isLoading && poles.length === 0" class="info-box warning">
+        <mat-icon>warning</mat-icon>
+        <span>Нет доступных опор для создания участка в этой линии.</span>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Уровень напряжения, кВ</mat-label>
+        <input matInput type="number" formControlName="voltage_level" min="0">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Длина, м</mat-label>
+        <input matInput type="number" formControlName="length" min="0">
+      </mat-form-field>
+
+      <mat-checkbox formControlName="is_tap">Отпайка</mat-checkbox>
+
+      <mat-form-field appearance="outline" class="full-width" *ngIf="segmentForm.get('is_tap')?.value">
+        <mat-label>Номер отпайки</mat-label>
+        <input matInput formControlName="tap_number">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Описание</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+      </mat-form-field>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()">Отмена</button>
+    <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="isSubmitting || segmentForm.invalid || isLoading || poles.length === 0">
+      Создать
+    </button>
+  </mat-dialog-actions>
+</div>
+

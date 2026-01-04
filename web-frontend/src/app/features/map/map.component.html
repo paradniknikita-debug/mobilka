@@ -54,6 +54,53 @@
           {{ selectedPole.latitude?.toFixed(6) || 'N/A' }}, {{ selectedPole.longitude?.toFixed(6) || 'N/A' }}
         </span>
       </div>
+      <div class="property-item" *ngIf="selectedPole.sequence_number">
+        <span class="property-label">Порядок в линии:</span>
+        <span class="property-value">{{ selectedPole.sequence_number }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Узел соединения:</span>
+        <span class="property-value">
+          <span *ngIf="selectedPole.connectivity_node_id" class="status-badge success">Есть</span>
+          <span *ngIf="!selectedPole.connectivity_node_id" class="status-badge warning">Нет</span>
+        </span>
+      </div>
+    </div>
+    <div class="pole-properties-actions">
+      <button mat-raised-button color="primary" (click)="openConnectivityNodeDialog()" class="action-button">
+        <mat-icon>settings_ethernet</mat-icon>
+        Управление узлом соединения
+      </button>
+      <button 
+        mat-raised-button 
+        color="accent" 
+        (click)="openPoleSequenceDialog()" 
+        class="action-button"
+        *ngIf="selectedPole.power_line_id"
+      >
+        <mat-icon>sort</mat-icon>
+        Последовательность опор
+      </button>
+      <button 
+        mat-raised-button 
+        color="primary" 
+        (click)="openCreateSpanDialog()" 
+        class="action-button"
+        *ngIf="selectedPole.power_line_id && selectedPole.connectivity_node_id"
+      >
+        <mat-icon>timeline</mat-icon>
+        Создать пролёт
+      </button>
+      <button 
+        mat-raised-button 
+        color="accent" 
+        (click)="autoCreateSpans()" 
+        class="action-button"
+        *ngIf="selectedPole.power_line_id"
+      >
+        <mat-icon>auto_fix_high</mat-icon>
+        Создать пролёты автоматически
+      </button>
     </div>
   </div>
 </div>

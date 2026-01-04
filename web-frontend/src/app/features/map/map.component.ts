@@ -9,6 +9,11 @@ import { takeUntil } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { CreateObjectDialogComponent } from './create-object-dialog/create-object-dialog.component';
+import { PoleConnectivityDialogComponent } from './pole-connectivity-dialog/pole-connectivity-dialog.component';
+import { PoleSequenceDialogComponent } from './pole-sequence-dialog/pole-sequence-dialog.component';
+import { CreateSpanDialogComponent } from './create-span-dialog/create-span-dialog.component';
+import { ApiService } from '../../core/services/api.service';
+import { Pole } from '../../core/models/pole.model';
 
 @Component({
   selector: 'app-map',
@@ -84,12 +89,14 @@ export class MapComponent implements OnInit, OnDestroy {
   private poleLabels: L.Layer[] = []; // Подписи опор
   private tapMarkers: L.Marker[] = [];
   private substationMarkers: L.Marker[] = [];
+  private poleSequenceLines: L.Polyline[] = []; // Линии последовательности опор
 
   constructor(
     private mapService: MapService,
     private sidebarService: SidebarService,
     private snackBar: MatSnackBar,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private apiService: ApiService
   ) {}
 
   ngOnInit(): void {
@@ -223,6 +230,8 @@ export class MapComponent implements OnInit, OnDestroy {
     // Рендерим опоры (точки)
     if (data.poles?.features) {
       this.renderPoles(data.poles);
+      // Рендерим линии последовательности опор
+      this.renderPoleSequence(data.poles);
     }
     
     // Рендерим отпайки (точки)
@@ -273,18 +282,42 @@ export class MapComponent implements OnInit, OnDestroy {
         const coordinates = feature.geometry.coordinates as number[];
         const latlng: L.LatLngExpression = [coordinates[1], coordinates[0]];
         
+        // Определяем цвет маркера в зависимости от наличия узла соединения
+        const hasConnectivityNode = feature.properties['connectivity_node_id'];
+        const sequenceNumber = feature.properties['sequence_number'];
+        const markerColor = hasConnectivityNode ? '#2196F3' : '#FF9800';
+        
+        // Создаём HTML для маркера с номером последовательности
+        let markerHtml = `<div style="background-color: ${markerColor}; width: 8px; height: 8px; border-radius: 50%; border: 2px solid white; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`;
+        
+        if (sequenceNumber) {
+          markerHtml = `
+            <div style="position: relative;">
+              ${markerHtml}
+              <div style="position: absolute; top: -20px; left: 50%; transform: translateX(-50%); 
+                          background: rgba(33, 150, 243, 0.9); color: white; 
+                          padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: bold;
+                          white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
+                ${sequenceNumber}
+              </div>
+            </div>
+          `;
+        }
+        
         const marker = L.marker(latlng, {
           icon: L.divIcon({
             className: 'pole-marker',
-            html: '<div style="background-color: #2196F3; width: 6px; height: 6px; border-radius: 50%; border: 1px solid white; cursor: pointer;"></div>',
-            iconSize: [6, 6],
-            iconAnchor: [3, 3]
+            html: markerHtml,
+            iconSize: sequenceNumber ? [20, 30] : [8, 8],
+            iconAnchor: sequenceNumber ? [10, 30] : [4, 4]
           })
         }).bindPopup(`
           <strong>Опора ${feature.properties['pole_number'] || 'N/A'}</strong><br>
+          ${sequenceNumber ? `Порядок: ${sequenceNumber}<br>` : ''}
           Тип: ${feature.properties['pole_type'] || 'N/A'}<br>
           Высота: ${feature.properties['height'] || 'N/A'} м<br>
-          Состояние: ${feature.properties['condition'] || 'N/A'}
+          Состояние: ${feature.properties['condition'] || 'N/A'}<br>
+          ${hasConnectivityNode ? '<span style="color: green;">✓ Узел соединения</span>' : '<span style="color: orange;">⚠ Нет узла соединения</span>'}
         `);
 
         // Обработчик клика для показа свойств и центрирования
@@ -310,6 +343,61 @@ export class MapComponent implements OnInit, OnDestroy {
           coordinates: latlng,
           poleNumber: feature.properties['pole_number'] || 'N/A'
         };
+      }
+    });
+  }
+
+  renderPoleSequence(geoJson: any): void {
+    if (!this.map || !geoJson.features) return;
+
+    // Группируем опоры по линиям
+    const polesByLine: { [key: number]: any[] } = {};
+    
+    geoJson.features.forEach((feature: GeoJSONFeature) => {
+      const powerLineId = feature.properties['power_line_id'];
+      if (powerLineId && feature.properties['sequence_number']) {
+        if (!polesByLine[powerLineId]) {
+          polesByLine[powerLineId] = [];
+        }
+        polesByLine[powerLineId].push(feature);
+      }
+    });
+
+    // Для каждой линии рисуем линию последовательности
+    Object.keys(polesByLine).forEach(lineId => {
+      const poles = polesByLine[parseInt(lineId)];
+      
+      // Сортируем опоры по sequence_number
+      poles.sort((a, b) => {
+        const seqA = a.properties['sequence_number'] || 0;
+        const seqB = b.properties['sequence_number'] || 0;
+        return seqA - seqB;
+      });
+
+      // Создаём массив координат
+      const coordinates: L.LatLngExpression[] = poles
+        .filter(pole => pole.geometry.type === 'Point')
+        .map(pole => {
+          const coords = pole.geometry.coordinates as number[];
+          return [coords[1], coords[0]] as L.LatLngExpression;
+        });
+
+      if (coordinates.length > 1) {
+        if (!this.map) return;
+        
+        // Рисуем пунктирную линию последовательности
+        const sequenceLine = L.polyline(coordinates, {
+          color: '#4CAF50',
+          weight: 2,
+          opacity: 0.6,
+          dashArray: '5, 10'
+        }).bindTooltip(`Последовательность опор (${poles.length} опор)`, {
+          permanent: false,
+          direction: 'top'
+        });
+
+        sequenceLine.addTo(this.map);
+        this.poleSequenceLines.push(sequenceLine);
       }
     });
   }
@@ -375,12 +463,14 @@ export class MapComponent implements OnInit, OnDestroy {
     this.poleLabels.forEach(label => this.map?.removeLayer(label));
     this.tapMarkers.forEach(marker => this.map?.removeLayer(marker));
     this.substationMarkers.forEach(marker => this.map?.removeLayer(marker));
+    this.poleSequenceLines.forEach(line => this.map?.removeLayer(line));
     
     this.powerLineLayers = [];
     this.poleMarkers = [];
     this.poleLabels = [];
     this.tapMarkers = [];
     this.substationMarkers = [];
+    this.poleSequenceLines = [];
   }
 
   updatePoleLabels(): void {
@@ -472,11 +562,18 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   openCreateDialog(): void {
+    // Снимаем фокус с активного элемента перед открытием диалога
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    
     const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
       width: '700px',
       maxWidth: '90vw',
       maxHeight: '90vh',
-      disableClose: false
+      disableClose: false,
+      autoFocus: false,
+      restoreFocus: false
     });
 
     dialogRef.afterClosed().subscribe(result => {
@@ -495,6 +592,125 @@ export class MapComponent implements OnInit, OnDestroy {
   closePoleProperties(): void {
     this.showPoleProperties = false;
     this.selectedPole = null;
+  }
+
+  openConnectivityNodeDialog(): void {
+    if (!this.selectedPole || !this.selectedPole.id) {
+      this.snackBar.open('Выберите опору', 'Закрыть', { duration: 2000 });
+      return;
+    }
+
+    // Загружаем полную информацию об опоре
+    this.apiService.getPole(this.selectedPole.id).subscribe({
+      next: (pole: Pole) => {
+        const dialogRef = this.dialog.open(PoleConnectivityDialogComponent, {
+          width: '500px',
+          data: { pole },
+          autoFocus: false,
+          restoreFocus: false
+        });
+
+        dialogRef.afterClosed().subscribe((result) => {
+          if (result?.success) {
+            // Обновляем данные на карте
+            this.loadMapData();
+            // Обновляем выбранную опору
+            if (result.connectivityNode) {
+              this.selectedPole.connectivity_node_id = result.connectivityNode.id;
+            } else {
+              this.selectedPole.connectivity_node_id = undefined;
+            }
+          }
+        });
+      },
+      error: (error) => {
+        console.error('Ошибка загрузки опоры:', error);
+        this.snackBar.open('Ошибка загрузки опоры', 'Закрыть', { duration: 3000 });
+      }
+    });
+  }
+
+  openPoleSequenceDialog(): void {
+    if (!this.selectedPole || !this.selectedPole.power_line_id) {
+      this.snackBar.open('Выберите опору, принадлежащую линии', 'Закрыть', { duration: 2000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(PoleSequenceDialogComponent, {
+      width: '600px',
+      maxHeight: '80vh',
+      data: { powerLineId: this.selectedPole.power_line_id },
+      autoFocus: false,
+      restoreFocus: false
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        // Обновляем данные на карте
+        this.loadMapData();
+        this.snackBar.open('Последовательность опор обновлена', 'Закрыть', { duration: 3000 });
+      }
+    });
+  }
+
+  openCreateSpanDialog(): void {
+    if (!this.selectedPole || !this.selectedPole.power_line_id) {
+      this.snackBar.open('Выберите опору, принадлежащую линии', 'Закрыть', { duration: 2000 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(CreateSpanDialogComponent, {
+      width: '600px',
+      maxHeight: '90vh',
+      data: { 
+        powerLineId: this.selectedPole.power_line_id,
+        fromPoleId: this.selectedPole.id
+      },
+      autoFocus: false,
+      restoreFocus: false
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        // Обновляем данные на карте
+        this.loadMapData();
+        this.snackBar.open('Пролёт успешно создан', 'Закрыть', { duration: 3000 });
+      }
+    });
+  }
+
+  autoCreateSpans(): void {
+    if (!this.selectedPole || !this.selectedPole.power_line_id) {
+      this.snackBar.open('Выберите опору, принадлежащую линии', 'Закрыть', { duration: 2000 });
+      return;
+    }
+
+    if (!confirm('Создать пролёты автоматически между всеми опорами в порядке их последовательности?')) {
+      return;
+    }
+
+    this.apiService.autoCreateSpans(this.selectedPole.power_line_id).subscribe({
+      next: (response) => {
+        this.snackBar.open(
+          `Создано пролётов: ${response.created_count || response.spans?.length || 0}`,
+          'Закрыть',
+          { duration: 3000 }
+        );
+        this.loadMapData();
+      },
+      error: (error) => {
+        console.error('Ошибка автоматического создания пролётов:', error);
+        let errorMessage = 'Ошибка создания пролётов';
+        
+        if (error.error?.detail) {
+          errorMessage = typeof error.error.detail === 'string' 
+            ? error.error.detail 
+            : JSON.stringify(error.error.detail);
+        }
+        
+        this.snackBar.open(errorMessage, 'Закрыть', { duration: 5000 });
+      }
+    });
   }
 
   centerOnPole(latitude: number, longitude: number, zoom?: number | null): void {

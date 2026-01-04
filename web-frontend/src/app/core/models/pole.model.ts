@@ -3,7 +3,9 @@ export interface Pole {
   mrid: string;
   power_line_id: number;
   segment_id?: number;
+  connectivity_node_id?: number;
   pole_number: string;
+  sequence_number?: number;  // Порядковый номер опоры в линии
   latitude: number;
   longitude: number;
   pole_type: string;
@@ -13,6 +15,7 @@ export interface Pole {
   installation_date?: string;
   created_at: string;
   updated_at?: string;
+  connectivity_node?: any;  // ConnectivityNode если есть
 }
 
 export interface PoleCreate {

@@ -10,6 +10,7 @@ import 'core/theme/app_theme.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/api_service.dart';
 import 'core/services/sync_service.dart';
+import 'core/services/base_url_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,10 @@ void main() async {
   // Минимальная инициализация для быстрого старта
   // Только SharedPreferences - остальное загрузится лениво
   final prefs = await SharedPreferences.getInstance();
+  
+  // Инициализируем BaseUrlManager с SharedPreferences
+  await BaseUrlManager().init(prefs);
+  
   final apiService = ApiServiceProvider.create(prefs: prefs);
   ApiServiceProvider.updatePrefs(prefs);
   

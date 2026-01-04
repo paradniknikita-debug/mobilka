@@ -5,9 +5,10 @@ import { MapService } from '../../../core/services/map.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 export interface DeleteObjectData {
-  objectType: 'pole' | 'powerLine' | 'substation' | 'tap';
+  objectType: 'pole' | 'powerLine' | 'substation' | 'tap' | 'span';
   objectId: number;
   objectName: string;
+  powerLineId?: number; // Для пролётов нужен powerLineId
 }
 
 @Component({
@@ -36,6 +37,8 @@ export class DeleteObjectDialogComponent {
         return 'подстанцию';
       case 'tap':
         return 'отпайку';
+      case 'span':
+        return 'пролёт';
       default:
         return 'объект';
     }
@@ -51,6 +54,8 @@ export class DeleteObjectDialogComponent {
         return 'подстанция';
       case 'tap':
         return 'отпайка';
+      case 'span':
+        return 'пролёт';
       default:
         return 'объект';
     }
@@ -68,6 +73,17 @@ export class DeleteObjectDialogComponent {
         break;
       case 'pole':
         deleteObservable = this.apiService.deletePole(this.data.objectId);
+        break;
+      case 'span':
+        if (this.data.powerLineId) {
+          deleteObservable = this.apiService.deleteSpan(this.data.powerLineId, this.data.objectId);
+        } else {
+          this.snackBar.open('Ошибка: не указана ЛЭП для удаления пролёта', 'Закрыть', {
+            duration: 3000
+          });
+          this.isDeleting = false;
+          return;
+        }
         break;
       case 'substation':
       case 'tap':

@@ -4,7 +4,8 @@
   "description": "Веб-фронтенд для системы управления ЛЭП",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "ng serve --host 0.0.0.0",
+    "start:local": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
