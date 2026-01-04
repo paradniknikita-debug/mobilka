@@ -42,9 +42,10 @@ flutter/
 Thumbs.db
 .DS_Store
 
-# Документация (игнорируем все .md файлы кроме README.md)
+# Документация (игнорируем все .md файлы кроме README.md и DEVELOPMENT_GUIDE.md)
 *.md
 !README.md
+!DEVELOPMENT_GUIDE.md
 !**/README.md
 
 # Временные скрипты миграций
