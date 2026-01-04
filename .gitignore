@@ -42,10 +42,21 @@ flutter/
 Thumbs.db
 .DS_Store
 
-# Документация (только локально)
-backend/BACKEND_DEVELOPMENT.md
-backend/COURSEWORK_BACKEND.md
-backend/JWT_TOKENIZATION.md
-backend/BACKEND_IMPROVEMENTS.md
-backend/FUNCTIONAL_EXTENSIONS.md
+# Документация (игнорируем все .md файлы кроме README.md)
+*.md
+!README.md
+!**/README.md
+
+# Временные скрипты миграций
+apply_connectivity_migration.py
+backend/apply_migration_manually.py
+backend/migration.sql
+backend/create_segment.py
+backend/create_user.py
+
+# Build файлы
+frontend/android/build/
+frontend/build/
+web-frontend/dist/
+backend/static/
 
