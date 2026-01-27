@@ -2,34 +2,99 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'power_line.g.dart';
 
-@JsonSerializable()
+// Вспомогательные функции для безопасной обработки null значений при JSON десериализации
+String _stringFromJson(dynamic value) {
+  if (value == null) return '';
+  if (value is String) return value;
+  return value.toString();
+}
+
+double? _doubleFromJsonNullable(dynamic value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
+}
+
+int? _intFromJsonNullable(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+DateTime _dateTimeFromJson(dynamic value) {
+  if (value == null) return DateTime.now();
+  if (value is String) {
+    try {
+      return DateTime.parse(value);
+    } catch (e) {
+      return DateTime.now();
+    }
+  }
+  if (value is DateTime) return value;
+  return DateTime.now();
+}
+
+DateTime? _dateTimeFromJsonNullable(dynamic value) {
+  if (value == null) return null;
+  if (value is String) {
+    try {
+      return DateTime.parse(value);
+    } catch (e) {
+      return null;
+    }
+  }
+  if (value is DateTime) return value;
+  return null;
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false, // Не включать null значения в JSON
+)
 class PowerLine {
   final int id;
+  @JsonKey(fromJson: _stringFromJson)
   final String name;
+  @JsonKey(fromJson: _stringFromJson)
   final String code;
-  final double voltageLevel;
+  @JsonKey(name: 'voltage_level', fromJson: _doubleFromJsonNullable)
+  final double? voltageLevel; // Может быть null на backend
+  @JsonKey(fromJson: _doubleFromJsonNullable)
   final double? length;
-  final int branchId;
+  @JsonKey(name: 'branch_id', fromJson: _intFromJsonNullable)
+  final int? branchId; // Может быть null на backend
+  @JsonKey(name: 'created_by')
   final int createdBy;
+  @JsonKey(fromJson: _stringFromJson, defaultValue: 'active')
   final String status;
   final String? description;
+  @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
   final DateTime createdAt;
+  @JsonKey(name: 'updated_at', fromJson: _dateTimeFromJsonNullable)
   final DateTime? updatedAt;
   final List<Pole>? poles;
+  @JsonKey(name: 'acline_segments')
+  final List<dynamic>? aclineSegments; // AClineSegmentResponse из backend
 
   const PowerLine({
     required this.id,
     required this.name,
     required this.code,
-    required this.voltageLevel,
+    this.voltageLevel,
     this.length,
-    required this.branchId,
+    this.branchId,
     required this.createdBy,
     required this.status,
     this.description,
     required this.createdAt,
     this.updatedAt,
     this.poles,
+    this.aclineSegments,
   });
 
   factory PowerLine.fromJson(Map<String, dynamic> json) => _$PowerLineFromJson(json);
@@ -48,6 +113,7 @@ class PowerLine {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<Pole>? poles,
+    List<dynamic>? aclineSegments,
   }) {
     return PowerLine(
       id: id ?? this.id,
@@ -62,6 +128,7 @@ class PowerLine {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       poles: poles ?? this.poles,
+      aclineSegments: aclineSegments ?? this.aclineSegments,
     );
   }
 }
@@ -90,22 +157,35 @@ class PowerLineCreate {
   Map<String, dynamic> toJson() => _$PowerLineCreateToJson(this);
 }
 
-@JsonSerializable()
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+)
 class Pole {
   final int id;
+  @JsonKey(name: 'power_line_id')
   final int powerLineId;
+  @JsonKey(name: 'pole_number', fromJson: _stringFromJson)
   final String poleNumber;
   final double latitude;
   final double longitude;
+  @JsonKey(name: 'pole_type', fromJson: _stringFromJson)
   final String poleType;
+  @JsonKey(fromJson: _doubleFromJsonNullable)
   final double? height;
+  @JsonKey(name: 'foundation_type')
   final String? foundationType;
   final String? material;
+  @JsonKey(name: 'year_installed', fromJson: _intFromJsonNullable)
   final int? yearInstalled;
+  @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
+  @JsonKey(name: 'created_by')
   final int createdBy;
+  @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
   final DateTime createdAt;
+  @JsonKey(name: 'updated_at', fromJson: _dateTimeFromJsonNullable)
   final DateTime? updatedAt;
   final List<Equipment>? equipment;
 
@@ -170,18 +250,34 @@ class Pole {
   }
 }
 
-@JsonSerializable()
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+)
 class PoleCreate {
+  @JsonKey(name: 'pole_number')
   final String poleNumber;
   final double latitude;
   final double longitude;
+  @JsonKey(name: 'pole_type')
   final String poleType;
   final double? height;
+  @JsonKey(name: 'foundation_type')
   final String? foundationType;
   final String? material;
+  @JsonKey(name: 'year_installed')
   final int? yearInstalled;
   final String condition;
   final String? notes;
+  @JsonKey(name: 'is_tap')
+  final bool isTap; // Является ли опора отпаечной (точкой отпайки)
+  // Параметры кабеля для автоматического создания пролёта
+  @JsonKey(name: 'conductor_type') // Марка провода (AC-70, AC-95 и т.д.)
+  final String? conductorType;
+  @JsonKey(name: 'conductor_material') // Материал (алюминий, медь)
+  final String? conductorMaterial;
+  @JsonKey(name: 'conductor_section') // Сечение, мм²
+  final String? conductorSection;
 
   const PoleCreate({
     required this.poleNumber,
@@ -194,6 +290,10 @@ class PoleCreate {
     this.yearInstalled,
     this.condition = 'good',
     this.notes,
+    this.isTap = false,
+    this.conductorType,
+    this.conductorMaterial,
+    this.conductorSection,
   });
 
   factory PoleCreate.fromJson(Map<String, dynamic> json) => _$PoleCreateFromJson(json);

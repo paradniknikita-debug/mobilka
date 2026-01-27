@@ -1,29 +1,133 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-class TowersPage extends ConsumerWidget {
+import '../../../../core/services/api_service.dart';
+import '../widgets/create_pole_dialog.dart';
+
+class TowersPage extends ConsumerStatefulWidget {
   const TowersPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TowersPage> createState() => _TowersPageState();
+}
+
+class _TowersPageState extends ConsumerState<TowersPage> {
+  List<int> _powerLineIds = [];
+  bool _isLoading = false;
+  int? _selectedPowerLineId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPowerLines();
+  }
+
+  Future<void> _loadPowerLines() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final powerLines = await apiService.getPowerLines();
+
+      setState(() {
+        _powerLineIds = powerLines.map((pl) => pl.id).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка загрузки ЛЭП: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showCreatePoleDialog() async {
+    // Если ЛЭП не выбрана, показываем диалог выбора
+    if (_selectedPowerLineId == null && _powerLineIds.isNotEmpty) {
+      _selectedPowerLineId = _powerLineIds.first;
+    }
+
+    if (_selectedPowerLineId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Сначала нужно создать или выбрать ЛЭП'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => CreatePoleDialog(
+        powerLineId: _selectedPowerLineId!,
+      ),
+    );
+
+    if (result == true && mounted) {
+      // Опора создана, можно обновить список или показать уведомление
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Опора успешно создана'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Опоры'),
         actions: [
+          if (_powerLineIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: DropdownButton<int>(
+                value: _selectedPowerLineId,
+                hint: const Text('ЛЭП'),
+                items: _powerLineIds.map((id) {
+                  return DropdownMenuItem(
+                    value: id,
+                    child: Text('ЛЭП $id'),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedPowerLineId = value;
+                  });
+                },
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () {
-              // TODO: Добавить создание новой опоры
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Создание новой опоры')),
-              );
-            },
+            onPressed: _isLoading ? null : _showCreatePoleDialog,
+            tooltip: 'Создать опору',
           ),
         ],
       ),
-      body: const Center(
-        child: Text('Список опор будет здесь'),
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _powerLineIds.isEmpty
+              ? const Center(
+                  child: Text('Нет доступных ЛЭП. Создайте ЛЭП сначала.'),
+                )
+              : const Center(
+                  child: Text('Список опор будет здесь'),
+                ),
     );
   }
 }
