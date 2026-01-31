@@ -88,6 +88,47 @@ class AuthService extends StateNotifier<AuthState> {
       final urlManager = BaseUrlManager();
       dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
       
+      // Добавляем обработчик ошибок для автоматического fallback на HTTP при проблемах с SSL
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onError: (error, handler) async {
+            // Автоматический fallback HTTPS -> HTTP при ошибках SSL
+            final isSslError = error.message?.contains('CERT_AUTHORITY_INVALID') == true ||
+                              error.message?.contains('ERR_CERT') == true ||
+                              error.message?.contains('certificate') == true ||
+                              error.type == DioExceptionType.connectionError;
+            
+            if (kIsWeb && 
+                !urlManager.isUsingHttp && 
+                isSslError &&
+                error.response == null) {
+              
+              if (kDebugMode) {
+                print('⚠️ [AuthService] Проблема с HTTPS, переключение на HTTP');
+              }
+              
+              urlManager.fallbackToHttp();
+              final newBaseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
+              dio.options.baseUrl = newBaseUrl;
+              
+              try {
+                final newRequestOptions = error.requestOptions.copyWith(
+                  baseUrl: newBaseUrl,
+                );
+                final response = await dio.fetch(newRequestOptions);
+                return handler.resolve(response);
+              } catch (retryError) {
+                if (kDebugMode) {
+                  print('❌ [AuthService] Fallback на HTTP не помог');
+                }
+                urlManager.resetFallback();
+              }
+            }
+            handler.next(error);
+          },
+        ),
+      );
+      
       // Для OAuth2PasswordRequestForm нужен application/x-www-form-urlencoded
       final formData = {
         'username': username,
@@ -102,45 +143,24 @@ class AuthService extends StateNotifier<AuthState> {
         ),
       );
       
-      print('📦 Ответ от /auth/login: ${response.data}');
-      print('   Тип данных: ${response.data.runtimeType}');
-      if (response.data is Map) {
-        final data = response.data as Map;
-        print('   Поля в ответе: ${data.keys.toList()}');
-        for (var entry in data.entries) {
-          print('     ${entry.key}: ${entry.value} (${entry.value.runtimeType})');
-        }
-      }
-      
       final authResponse = AuthResponse.fromJson(response.data);
       
       // Сохраняем токен
       await _prefs.setString(AppConfig.authTokenKey, authResponse.accessToken);
-      print('✅ Токен сохранен: ${authResponse.accessToken.substring(0, 20)}...');
+      if (kDebugMode) {
+        print('✅ Авторизация успешна: токен сохранен');
+      }
       
       // Обновляем prefs в ApiServiceProvider для немедленного использования
       ApiServiceProvider.updatePrefs(_prefs);
       
       // Получаем информацию о пользователе
-      print('📞 Запрос информации о пользователе через API...');
-      
-      // Используем Dio напрямую для получения детальной информации об ответе
       final userDio = Dio();
       final userUrlManager = BaseUrlManager();
       userDio.options.baseUrl = '${userUrlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
       userDio.options.headers['Authorization'] = 'Bearer ${authResponse.accessToken}';
       
       final userResponse = await userDio.get('/auth/me');
-      print('📦 Ответ API /auth/me: ${userResponse.data}');
-      print('   Тип данных: ${userResponse.data.runtimeType}');
-      
-      if (userResponse.data is Map) {
-        final userData = userResponse.data as Map<String, dynamic>;
-        print('   Поля в ответе: ${userData.keys.toList()}');
-        for (var entry in userData.entries) {
-          print('     ${entry.key}: ${entry.value} (${entry.value.runtimeType})');
-        }
-      }
       
       // Парсим данные пользователя напрямую из ответа
       if (userResponse.data is! Map<String, dynamic>) {
@@ -148,23 +168,19 @@ class AuthService extends StateNotifier<AuthState> {
       }
       
       final user = User.fromJson(userResponse.data as Map<String, dynamic>);
-      print('📋 Данные пользователя получены: id=${user.id}, username=${user.username}, email=${user.email}');
-      print('   fullName: ${user.fullName}, role: ${user.role}');
-      print('   isActive: ${user.isActive}, isSuperuser: ${user.isSuperuser}');
       
       if (user.id > 0) {
         await _prefs.setInt(AppConfig.userIdKey, user.id);
       }
       
-      print('✅ Пользователь авторизован: ${user.username}');
-      print('🔄 Обновление состояния на AuthStateAuthenticated...');
+      if (kDebugMode) {
+        print('✅ Пользователь авторизован: ${user.username}');
+      }
+      
       state = AuthStateAuthenticated(user);
-      print('✅ Состояние авторизации обновлено: AuthStateAuthenticated');
-      print('   Текущее состояние: ${state.runtimeType}');
       
       // Небольшая задержка для обновления UI
       await Future.delayed(const Duration(milliseconds: 100));
-      print('⏱️ Задержка завершена, состояние должно быть обновлено');
     } catch (e, stackTrace) {
       print('❌ [AuthService] Ошибка при логине: $e');
       print('   Тип ошибки: ${e.runtimeType}');
@@ -188,20 +204,31 @@ class AuthService extends StateNotifier<AuthState> {
             state = AuthStateError('Ошибка авторизации: ${e.response?.statusCode ?? 'неизвестная ошибка'}');
           }
         } else {
-          state = AuthStateError('Ошибка соединения с сервером');
+          // Проверяем, является ли это ошибкой SSL
+          final isSslError = e.message?.contains('CERT_AUTHORITY_INVALID') == true ||
+                            e.message?.contains('ERR_CERT') == true ||
+                            e.message?.contains('certificate') == true ||
+                            e.error?.toString().contains('CERT_AUTHORITY_INVALID') == true ||
+                            e.error?.toString().contains('ERR_CERT') == true;
+          
+          if (isSslError) {
+            state = AuthStateError('Ошибка SSL сертификата. Пожалуйста:\n\n'
+                '1. Откройте https://localhost в новой вкладке браузера\n'
+                '2. Нажмите "Дополнительно" → "Перейти на localhost (небезопасно)"\n'
+                '3. Или переключите приложение на HTTP в настройках');
+          } else {
+            state = AuthStateError('Ошибка соединения с сервером');
+          }
         }
       } else {
         // Детальная информация об ошибке парсинга
-        print('   ⚠️ Ошибка не связана с DioException');
-        print('   Сообщение: ${e.toString()}');
+        if (kDebugMode) {
+          print('   ⚠️ Ошибка не связана с DioException: ${e.toString()}');
+        }
         
         if (e.toString().contains('null') || e.toString().contains('Null')) {
-          print('   ⚠️ Обнаружена ошибка null - возможно проблема с парсингом JSON');
-          print('   Попробуйте проверить ответ сервера в Network tab браузера');
           state = AuthStateError('Ошибка обработки данных пользователя. Проверьте формат ответа сервера.');
         } else if (e.toString().contains('type') && e.toString().contains('is not a subtype')) {
-          print('   ⚠️ Ошибка приведения типа - возможно несоответствие типов данных');
-          print('   Попробуйте проверить ответ сервера в Network tab браузера');
           state = AuthStateError('Ошибка обработки данных пользователя. Проверьте формат ответа сервера.');
         } else {
           state = AuthStateError('Ошибка: ${e.toString()}');

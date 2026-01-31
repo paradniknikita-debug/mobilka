@@ -178,6 +178,8 @@ class Pole {
   final String? material;
   @JsonKey(name: 'year_installed', fromJson: _intFromJsonNullable)
   final int? yearInstalled;
+  @JsonKey(name: 'sequence_number', fromJson: _intFromJsonNullable)
+  final int? sequenceNumber;
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
@@ -200,6 +202,7 @@ class Pole {
     this.foundationType,
     this.material,
     this.yearInstalled,
+    this.sequenceNumber,
     required this.condition,
     this.notes,
     required this.createdBy,

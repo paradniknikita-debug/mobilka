@@ -10,7 +10,7 @@ class AppConfig {
   // ============================================
   // Измените эту переменную для переключения между HTTP и HTTPS
   // true = HTTPS, false = HTTP
-  static const bool useHttps = false; // Для разработки используем HTTP
+  static const bool useHttps = true; // Для разработки используем HTTP
   // ============================================
   
   static final BaseUrlManager _urlManager = BaseUrlManager();
@@ -25,7 +25,12 @@ class AppConfig {
   static void resetUrlFallback() {
     _urlManager.resetFallback();
   }
-  
+
+  /// Принудительно обновить протокол из конфига (вызвать после изменения useHttps)
+  static void updateProtocolFromConfig() {
+    _urlManager.updateProtocolFromConfig();
+  }
+
   /// Проверить, используется ли HTTP (после fallback)
   static bool get isUsingHttp => _urlManager.isUsingHttp;
   

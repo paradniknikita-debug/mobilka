@@ -333,6 +333,16 @@ export class MapComponent implements OnInit, OnDestroy {
           };
           // Центрируем карту на опоре без изменения зума
           this.centerOnPole(coordinates[1], coordinates[0]);
+          // Раскрываем опору в дереве объектов в сайдбаре
+          const powerLineId = feature.properties['power_line_id'];
+          const poleId = feature.properties['id'];
+          if (powerLineId != null && poleId != null) {
+            this.mapService.requestSelectPoleInTree(
+              powerLineId,
+              poleId,
+              feature.properties['segment_id'] ?? undefined
+            );
+          }
         });
 
         marker.addTo(this.map!);

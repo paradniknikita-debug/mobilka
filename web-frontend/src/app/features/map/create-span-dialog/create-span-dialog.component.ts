@@ -310,7 +310,7 @@ export class CreateSpanDialogComponent implements OnInit {
     // Используем API для создания или обновления пролёта
     const spanObservable = this.isEditMode && this.spanId
       ? this.apiService.updateSpan(this.powerLineId, this.spanId, spanData)
-      : this.apiService.createSpan(this.powerLineId, spanData);
+      : this.apiService.createSpan(this.powerLineId, spanData, this.data.segmentId);
     
     spanObservable.subscribe({
       next: (span) => {

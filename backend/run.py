@@ -32,7 +32,8 @@ if __name__ == "__main__":
         print(f"  Linux/Mac: lsof -i :{port}")
         sys.exit(1)
     
-    # В Docker не используем reload (он не работает там)
+    # Hot reload работает в Docker, если volume mount настроен без :ro (read-only)
+    # и переменная окружения RELOAD="true" установлена в docker-compose.yml
     uvicorn.run(
         "app.main:app",
         host=host,

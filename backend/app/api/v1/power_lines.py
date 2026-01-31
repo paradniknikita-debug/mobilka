@@ -1,8 +1,8 @@
 from typing import List, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -112,6 +112,8 @@ async def create_power_line(
     power_line_dict.pop('branch_id', None)
     power_line_dict.pop('region_id', None)
     power_line_dict.pop('code', None)  # code генерируется автоматически
+    # ВАЖНО: description удаляем в последний момент перед созданием объекта
+    # чтобы избежать конфликта с явно передаваемым description=final_description
     
     # Логируем данные перед созданием
     print(f"DEBUG: Создание ЛЭП с данными:")
@@ -123,15 +125,20 @@ async def create_power_line(
     print(f"  status: {power_line_dict.get('status')}")
     print(f"  description: {final_description}")
     print(f"  created_by: {current_user.id}")
-    print(f"  Все поля power_line_dict: {power_line_dict}")
+    print(f"  Все поля power_line_dict (до удаления description): {power_line_dict}")
+    
+    # Создаем новый словарь без description, чтобы избежать дублирования
+    # Это безопаснее, чем pop(), так как гарантирует отсутствие description
+    power_line_dict_clean = {k: v for k, v in power_line_dict.items() if k != 'description'}
+    print(f"  Все поля power_line_dict (после удаления description): {power_line_dict_clean}")
     
     try:
         db_power_line = PowerLine(
             mrid=mrid,
             code=code,
             description=final_description,
-            **power_line_dict,
-            created_by=current_user.id
+            created_by=current_user.id,
+            **power_line_dict_clean
         )
         db.add(db_power_line)
         await db.commit()
@@ -171,7 +178,7 @@ async def get_power_lines(
         select(PowerLine)
         .options(
             selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
             selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals)
         )
         .offset(skip)
@@ -191,7 +198,7 @@ async def get_power_line(
         select(PowerLine)
         .options(
             selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
             selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals)
         )
         .where(PowerLine.id == power_line_id)
@@ -232,8 +239,9 @@ async def create_pole(
                 detail=f"Pole with mrid '{pole_data.mrid}' already exists"
             )
     
-    # Создаем словарь данных, исключая mrid если он None
-    pole_dict = pole_data.dict(exclude={'mrid'})
+    # Создаем словарь данных, исключая mrid и is_tap (они обрабатываются отдельно)
+    # Параметры кабеля теперь сохраняются в опоре
+    pole_dict = pole_data.dict(exclude={'mrid', 'is_tap'})
     if pole_data.mrid:
         pole_dict['mrid'] = pole_data.mrid
     
@@ -265,6 +273,30 @@ async def create_pole(
     
     # Связываем опору с узлом (для обратной совместимости)
     db_pole.connectivity_node_id = connectivity_node.id
+    
+    # Автоматическое создание пролёта от предыдущей опоры к новой опоре
+    # Это создаёт Span, группирует в LineSection по марке кабеля,
+    # и добавляет в AClineSegment от подстанции/ветвления до следующего ветвления/подстанции
+    try:
+        from app.core.line_auto_assembly import auto_create_span
+        
+        await auto_create_span(
+            db=db,
+            power_line_id=power_line_id,
+            new_pole=db_pole,
+            new_connectivity_node=connectivity_node,
+            conductor_type=pole_data.conductor_type,
+            conductor_material=pole_data.conductor_material,
+            conductor_section=pole_data.conductor_section,
+            is_tap=pole_data.is_tap,
+            current_user_id=current_user.id
+        )
+    except Exception as e:
+        # Логируем ошибку, но не прерываем создание опоры
+        import traceback
+        print(f"Ошибка автоматического создания пролёта: {e}")
+        print(traceback.format_exc())
+    
     await db.commit()
     
     # Загружаем опору с relationships для корректной сериализации ответа
@@ -295,10 +327,100 @@ async def get_poles(
     poles = result.scalars().all()
     return poles
 
+@router.get("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
+async def get_pole(
+    power_line_id: int,
+    pole_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Получение опоры по ID"""
+    result = await db.execute(
+        select(Pole)
+        .options(selectinload(Pole.connectivity_nodes))
+        .where(Pole.id == pole_id, Pole.power_line_id == power_line_id)
+    )
+    pole = result.scalar_one_or_none()
+    if not pole:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pole not found"
+        )
+    # Для обратной совместимости добавляем connectivity_node
+    cn = pole.get_connectivity_node_for_line(power_line_id)
+    setattr(pole, 'connectivity_node', cn)
+    setattr(pole, 'connectivity_node_id', cn.id if cn else None)
+    return pole
+
+@router.put("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
+async def update_pole(
+    power_line_id: int,
+    pole_id: int,
+    pole_data: PoleCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Обновление опоры"""
+    # Проверяем существование ЛЭП
+    power_line = await db.get(PowerLine, power_line_id)
+    if not power_line:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Power line not found"
+        )
+    
+    # Получаем существующую опору
+    result = await db.execute(
+        select(Pole)
+        .options(selectinload(Pole.connectivity_nodes))
+        .where(Pole.id == pole_id, Pole.power_line_id == power_line_id)
+    )
+    pole = result.scalar_one_or_none()
+    if not pole:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pole not found"
+        )
+    
+    # Обновляем поля опоры (исключаем mrid, power_line_id, created_by)
+    pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid'})
+    
+    for key, value in pole_dict.items():
+        if hasattr(pole, key) and value is not None:
+            setattr(pole, key, value)
+    
+    # Обновляем координаты в ConnectivityNode если они изменились
+    if 'latitude' in pole_dict or 'longitude' in pole_dict:
+        cn = pole.get_connectivity_node_for_line(power_line_id)
+        if cn:
+            if 'latitude' in pole_dict:
+                cn.latitude = pole_dict['latitude']
+            if 'longitude' in pole_dict:
+                cn.longitude = pole_dict['longitude']
+    
+    await db.commit()
+    await db.refresh(pole)
+    
+    # Загружаем опору с relationships для корректной сериализации ответа
+    result = await db.execute(
+        select(Pole)
+        .options(selectinload(Pole.connectivity_nodes))
+        .where(Pole.id == pole_id)
+    )
+    pole = result.scalar_one()
+    
+    # Для обратной совместимости добавляем connectivity_node
+    cn = pole.get_connectivity_node_for_line(power_line_id)
+    setattr(pole, 'connectivity_node', cn)
+    setattr(pole, 'connectivity_node_id', cn.id if cn else None)
+    
+    return pole
+
 @router.post("/{power_line_id}/spans", response_model=SpanResponse)
 async def create_span(
     power_line_id: int,
     span_data: SpanCreate,
+    segment_id: Optional[int] = Query(None, description="ID участка (AClineSegment) для создания пролёта"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -386,40 +508,56 @@ async def create_span(
     from app.models.cim_line_structure import LineSection
     from app.models.acline_segment import AClineSegment
     
-    # Ищем существующий AClineSegment для этой линии
-    result_segment = await db.execute(
-        select(AClineSegment).where(AClineSegment.power_line_id == power_line_id).limit(1)
-    )
-    existing_segment = result_segment.scalar_one_or_none()
-    
-    if not existing_segment:
-        # Создаём временный AClineSegment
-        from app.models.base import generate_mrid
-        # Генерируем короткий код (максимум 20 символов)
-        # Формат: SEG-{короткий UUID} (например: SEG-A1B2C3D4)
-        short_uuid = str(uuid.uuid4()).replace('-', '')[:8].upper()
-        segment_code = f"SEG-{short_uuid}"  # Максимум 12 символов
-        temp_segment = AClineSegment(
-            mrid=generate_mrid(),
-            name=f"Сегмент {power_line.name}",
-            code=segment_code,
-            voltage_level=power_line.voltage_level or 0.0,
-            length=0.0,
-            power_line_id=power_line_id,
-            from_connectivity_node_id=from_connectivity_node.id,
-            to_connectivity_node_id=to_connectivity_node.id,
-            sequence_number=1,
-            created_by=current_user.id
-        )
-        db.add(temp_segment)
-        await db.flush()
-        segment_id = temp_segment.id
+    # Если segment_id передан, используем его; иначе ищем существующий AClineSegment
+    if segment_id:
+        # Проверяем существование и принадлежность сегмента
+        target_segment = await db.get(AClineSegment, segment_id)
+        if not target_segment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Segment not found"
+            )
+        if target_segment.power_line_id != power_line_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Segment belongs to different power line"
+            )
+        use_segment_id = segment_id
     else:
-        segment_id = existing_segment.id
+        # Ищем существующий AClineSegment для этой линии
+        result_segment = await db.execute(
+            select(AClineSegment).where(AClineSegment.power_line_id == power_line_id).limit(1)
+        )
+        existing_segment = result_segment.scalar_one_or_none()
+        
+        if not existing_segment:
+            # Создаём временный AClineSegment
+            from app.models.base import generate_mrid
+            # Генерируем короткий код (максимум 20 символов)
+            # Формат: SEG-{короткий UUID} (например: SEG-A1B2C3D4)
+            short_uuid = str(uuid.uuid4()).replace('-', '')[:8].upper()
+            segment_code = f"SEG-{short_uuid}"  # Максимум 12 символов
+            temp_segment = AClineSegment(
+                mrid=generate_mrid(),
+                name=f"Сегмент {power_line.name}",
+                code=segment_code,
+                voltage_level=power_line.voltage_level or 0.0,
+                length=0.0,
+                power_line_id=power_line_id,
+                from_connectivity_node_id=from_connectivity_node.id,
+                to_connectivity_node_id=to_connectivity_node.id,
+                sequence_number=1,
+                created_by=current_user.id
+            )
+            db.add(temp_segment)
+            await db.flush()
+            use_segment_id = temp_segment.id
+        else:
+            use_segment_id = existing_segment.id
     
-    # Ищем существующую LineSection
+    # Ищем существующую LineSection для этого сегмента
     result_section = await db.execute(
-        select(LineSection).where(LineSection.acline_segment_id == segment_id).limit(1)
+        select(LineSection).where(LineSection.acline_segment_id == use_segment_id).limit(1)
     )
     existing_section = result_section.scalar_one_or_none()
     
@@ -429,7 +567,7 @@ async def create_span(
         temp_line_section = LineSection(
             mrid=generate_mrid(),
             name=f"Секция линии {power_line.name}",
-            acline_segment_id=segment_id,
+            acline_segment_id=use_segment_id,
             sequence_number=1,
             conductor_type=span_data.conductor_type or "AC-70",
             conductor_section=span_data.conductor_section or "70",
@@ -933,20 +1071,132 @@ async def delete_power_line(
     db: AsyncSession = Depends(get_db)
 ):
     """Удаление ЛЭП"""
-    # Проверяем существование ЛЭП
-    result = await db.execute(
-        select(PowerLine).where(PowerLine.id == power_line_id)
-    )
-    power_line = result.scalar_one_or_none()
+    import traceback
     
-    if not power_line:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Power line not found"
+    try:
+        print(f"DEBUG: Попытка удаления ЛЭП {power_line_id} пользователем {current_user.id}")
+        
+        # Проверяем существование ЛЭП
+        result = await db.execute(
+            select(PowerLine).where(PowerLine.id == power_line_id)
         )
-    
-    # Удаляем ЛЭП (каскадное удаление опор, пролётов, отпаек и сегментов настроено в модели)
-    await db.execute(delete(PowerLine).where(PowerLine.id == power_line_id))
-    await db.commit()
-    
-    return {"message": "Power line deleted successfully"}
+        power_line = result.scalar_one_or_none()
+        
+        if not power_line:
+            print(f"DEBUG: ЛЭП {power_line_id} не найдена")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Power line not found"
+            )
+        
+        print(f"DEBUG: ЛЭП {power_line_id} найдена: {power_line.name}")
+        
+        # Проверяем связанные объекты перед удалением
+        # Загружаем связанные данные для проверки
+        from sqlalchemy import func
+        from app.models.power_line import Pole, Span, Tap
+        from app.models.acline_segment import AClineSegment
+        from app.models.cim_line_structure import ConnectivityNode, LineSection
+        
+        # Подсчитываем связанные объекты
+        poles_count = await db.execute(
+            select(func.count(Pole.id)).where(Pole.power_line_id == power_line_id)
+        )
+        spans_count = await db.execute(
+            select(func.count(Span.id)).where(Span.power_line_id == power_line_id)
+        )
+        segments_count = await db.execute(
+            select(func.count(AClineSegment.id)).where(AClineSegment.power_line_id == power_line_id)
+        )
+        
+        print(f"DEBUG: Связанные объекты - Опоры: {poles_count.scalar()}, Пролёты: {spans_count.scalar()}, Сегменты: {segments_count.scalar()}")
+        
+        # Удаляем связанные Connection вручную (если они есть)
+        from app.models.substation import Connection
+        connections_result = await db.execute(
+            select(Connection).where(Connection.power_line_id == power_line_id)
+        )
+        connections = connections_result.scalars().all()
+        for conn in connections:
+            await db.delete(conn)
+            print(f"DEBUG: Удалено соединение {conn.id}")
+        
+        # Удаляем ConnectivityNode, связанные с опорами этой ЛЭП
+        # Это нужно сделать перед удалением опор, чтобы избежать ошибки NOT NULL constraint
+        connectivity_nodes_result = await db.execute(
+            select(ConnectivityNode).where(ConnectivityNode.power_line_id == power_line_id)
+        )
+        connectivity_nodes = connectivity_nodes_result.scalars().all()
+        
+        # Для каждого ConnectivityNode нужно удалить связанные объекты
+        for cn in connectivity_nodes:
+            connectivity_node_id = cn.id
+            
+            # Удаляем Span, связанные с этим ConnectivityNode
+            span_from_stmt = delete(Span).where(Span.from_connectivity_node_id == connectivity_node_id)
+            span_to_stmt = delete(Span).where(Span.to_connectivity_node_id == connectivity_node_id)
+            await db.execute(span_from_stmt)
+            await db.execute(span_to_stmt)
+            
+            # Получаем AClineSegment, которые начинаются с этого ConnectivityNode
+            acline_segments_from = await db.execute(
+                select(AClineSegment).where(AClineSegment.from_connectivity_node_id == connectivity_node_id)
+            )
+            acline_segments_to_delete = list(acline_segments_from.scalars().all())
+            
+            # Удаляем LineSection для AClineSegment
+            for acline_seg in acline_segments_to_delete:
+                line_sections_stmt = delete(LineSection).where(LineSection.acline_segment_id == acline_seg.id)
+                await db.execute(line_sections_stmt)
+            
+            # Удаляем AClineSegment, которые начинаются с этого ConnectivityNode
+            acline_from_stmt = delete(AClineSegment).where(AClineSegment.from_connectivity_node_id == connectivity_node_id)
+            await db.execute(acline_from_stmt)
+            
+            # Обнуляем to_connectivity_node_id в AClineSegment
+            acline_to_update = update(AClineSegment).where(AClineSegment.to_connectivity_node_id == connectivity_node_id).values(to_connectivity_node_id=None)
+            await db.execute(acline_to_update)
+        
+        # Обнуляем connectivity_node_id в опорах перед удалением ConnectivityNode
+        for cn in connectivity_nodes:
+            connectivity_node_id = cn.id
+            pole_update_stmt = update(Pole).where(Pole.connectivity_node_id == connectivity_node_id).values(connectivity_node_id=None)
+            await db.execute(pole_update_stmt)
+        
+        # Удаляем ConnectivityNode
+        connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.power_line_id == power_line_id)
+        await db.execute(connectivity_node_stmt)
+        print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
+        
+        # Удаляем ЛЭП (каскадное удаление опор, пролётов, отпаек и сегментов настроено в модели)
+        # Используем delete через сессию для правильной работы каскадов
+        await db.delete(power_line)
+        await db.commit()
+        
+        print(f"DEBUG: ЛЭП {power_line_id} успешно удалена")
+        return {"message": "Power line deleted successfully"}
+        
+    except HTTPException:
+        # Пробрасываем HTTP исключения как есть
+        raise
+    except Exception as e:
+        # Логируем полную ошибку для отладки
+        error_trace = traceback.format_exc()
+        print(f"ERROR: Ошибка при удалении ЛЭП {power_line_id}: {e}")
+        print(f"ERROR: Traceback:\n{error_trace}")
+        
+        # Откатываем транзакцию
+        await db.rollback()
+        
+        # Возвращаем понятное сообщение об ошибке
+        error_message = str(e)
+        if "foreign key constraint" in error_message.lower() or "violates foreign key" in error_message.lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Не удалось удалить ЛЭП: существуют связанные объекты, которые не могут быть удалены автоматически"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при удалении ЛЭП: {error_message}"
+            )

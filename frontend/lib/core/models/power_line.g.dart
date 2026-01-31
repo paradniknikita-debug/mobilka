@@ -84,6 +84,7 @@ Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
       foundationType: json['foundation_type'] as String?,
       material: json['material'] as String?,
       yearInstalled: _intFromJsonNullable(json['year_installed']),
+      sequenceNumber: _intFromJsonNullable(json['sequence_number']),
       condition: json['condition'] == null
           ? 'good'
           : _stringFromJson(json['condition']),
@@ -116,6 +117,7 @@ Map<String, dynamic> _$PoleToJson(Pole instance) {
   writeNotNull('foundation_type', instance.foundationType);
   writeNotNull('material', instance.material);
   writeNotNull('year_installed', instance.yearInstalled);
+  writeNotNull('sequence_number', instance.sequenceNumber);
   val['condition'] = instance.condition;
   writeNotNull('notes', instance.notes);
   val['created_by'] = instance.createdBy;

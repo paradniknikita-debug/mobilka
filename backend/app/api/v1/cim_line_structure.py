@@ -337,6 +337,72 @@ async def get_acline_segment(
     return segment
 
 
+@router.put("/acline-segments/{segment_id}", response_model=AClineSegmentResponse)
+async def update_acline_segment(
+    segment_id: int,
+    segment_data: AClineSegmentCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Обновление сегмента линии"""
+    # Получаем существующий сегмент
+    result = await db.execute(
+        select(AClineSegment)
+        .options(selectinload(AClineSegment.line_sections))
+        .where(AClineSegment.id == segment_id)
+    )
+    segment = result.scalar_one_or_none()
+    if not segment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Сегмент линии не найден"
+        )
+    
+    # Проверяем принадлежность к той же линии
+    if segment_data.power_line_id != segment.power_line_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя изменить принадлежность сегмента к линии"
+        )
+    
+    # Проверяем существование узлов соединения если они изменились
+    if segment_data.from_connectivity_node_id != segment.from_connectivity_node_id:
+        from_node = await db.get(ConnectivityNode, segment_data.from_connectivity_node_id)
+        if not from_node:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Начальный узел соединения не найден"
+            )
+    
+    if segment_data.to_connectivity_node_id and segment_data.to_connectivity_node_id != segment.to_connectivity_node_id:
+        to_node = await db.get(ConnectivityNode, segment_data.to_connectivity_node_id)
+        if not to_node:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Конечный узел соединения не найден"
+            )
+    
+    # Обновляем поля сегмента (исключаем mrid, power_line_id, created_by)
+    segment_dict = segment_data.dict(exclude_unset=True, exclude={'mrid', 'power_line_id'})
+    
+    for key, value in segment_dict.items():
+        if hasattr(segment, key):
+            setattr(segment, key, value)
+    
+    await db.commit()
+    await db.refresh(segment)
+    
+    # Загружаем сегмент с relationships для корректной сериализации ответа
+    result = await db.execute(
+        select(AClineSegment)
+        .options(selectinload(AClineSegment.line_sections))
+        .where(AClineSegment.id == segment_id)
+    )
+    segment = result.scalar_one()
+    
+    return segment
+
+
 # ==================== LineSection ====================
 
 @router.post("/line-sections", response_model=LineSectionResponse)

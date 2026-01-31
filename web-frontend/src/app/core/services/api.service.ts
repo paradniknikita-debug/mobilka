@@ -85,12 +85,16 @@ export class ApiService {
     return this.http.post<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles`, pole);
   }
 
-  updatePole(id: number, pole: Partial<PoleCreate>): Observable<Pole> {
-    return this.http.put<Pole>(`${this.apiUrl}/poles/${id}`, pole);
+  getPoleByPowerLine(powerLineId: number, poleId: number): Observable<Pole> {
+    return this.http.get<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles/${poleId}`);
   }
 
-  deletePole(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/poles/${id}`);
+  updatePole(powerLineId: number, poleId: number, pole: Partial<PoleCreate>): Observable<Pole> {
+    return this.http.put<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles/${poleId}`, pole);
+  }
+
+  deletePole(id: number): Observable<{message: string, details?: string}> {
+    return this.http.delete<{message: string, details?: string}>(`${this.apiUrl}/poles/${id}`);
   }
 
   // ========== Spans ==========
@@ -102,8 +106,12 @@ export class ApiService {
     return this.http.get<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`);
   }
 
-  createSpan(powerLineId: number, span: any): Observable<Span> {
-    return this.http.post<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans`, span);
+  createSpan(powerLineId: number, span: any, segmentId?: number): Observable<Span> {
+    let url = `${this.apiUrl}/power-lines/${powerLineId}/spans`;
+    if (segmentId) {
+      url += `?segment_id=${segmentId}`;
+    }
+    return this.http.post<Span>(url, span);
   }
 
   updateSpan(powerLineId: number, spanId: number, span: any): Observable<Span> {
@@ -146,6 +154,10 @@ export class ApiService {
 
   createSubstation(substation: SubstationCreate): Observable<Substation> {
     return this.http.post<Substation>(`${this.apiUrl}/substations`, substation);
+  }
+
+  deleteSubstation(id: number): Observable<{message: string}> {
+    return this.http.delete<{message: string}>(`${this.apiUrl}/substations/${id}`);
   }
 
   // ========== Map ==========
@@ -225,6 +237,10 @@ export class ApiService {
 
   getAClineSegment(id: number): Observable<AClineSegment> {
     return this.http.get<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`);
+  }
+
+  updateAClineSegment(id: number, segment: AClineSegmentCreate): Observable<AClineSegment> {
+    return this.http.put<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`, segment);
   }
 
   // LineSection

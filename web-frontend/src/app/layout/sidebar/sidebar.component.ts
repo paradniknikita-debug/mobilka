@@ -55,6 +55,21 @@ export class SidebarComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         this.loadMapData();
       });
+
+    // При клике на опору на карте — раскрываем дерево до этой опоры
+    this.mapService.requestSelectPoleInTree$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ powerLineId, segmentId, poleId }) => {
+        this.expandedPowerLines.add(powerLineId);
+        if (segmentId != null) {
+          this.expandedSegments.add(`${powerLineId}-${segmentId}`);
+          this.expandedPolesFolders.add(`${powerLineId}-segment-${segmentId}`);
+        } else {
+          this.expandedPolesFolders.add(`${powerLineId}-no-segment`);
+        }
+        this.selectedPoleIdFromMap = poleId;
+        this.cdr.detectChanges();
+      });
   }
 
   ngOnDestroy(): void {
@@ -218,6 +233,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
   expandedPowerLines = new Set<number>();
   expandedSegments = new Set<string>();
   expandedPolesFolders = new Set<string>();
+  /** ID опоры, выбранной по клику на карте (для подсветки в дереве) */
+  selectedPoleIdFromMap: number | null = null;
 
   togglePowerLine(powerLineId: number): void {
     if (this.expandedPowerLines.has(powerLineId)) {
@@ -294,8 +311,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
         
         // Центрируем карту на опоре с учетом логики зума
         this.mapService.requestCenterOnFeature('pole', [lat, lng], targetZoom, currentZoom);
+      } else if (feature.properties['dispatcher_name']) {
+        // Для подстанций используем зум 18
+        this.mapService.requestCenterOnFeature('substation', [lat, lng], 18);
       } else {
-        // Для других объектов (отпайки, подстанции) используем текущий зум
+        // Для других объектов (отпайки) используем текущий зум
         this.mapService.requestCenterOnFeature('pole', [lat, lng]);
       }
     } else if (feature.geometry.type === 'LineString') {
@@ -311,7 +331,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   contextMenuPosition = { x: '0px', y: '0px' };
   contextMenuFeature: GeoJSONFeature | null = null;
-  contextMenuType: 'powerLine' | 'segment' | 'span' | 'pole' | 'folder' | 'root' | null = null;
+  contextMenuType: 'powerLine' | 'segment' | 'span' | 'pole' | 'substation' | 'folder' | 'root' | null = null;
   contextMenuPowerLineId: number | null = null;
   contextMenuSegmentId: number | null = null;
 
@@ -333,6 +353,10 @@ export class SidebarComponent implements OnInit, OnDestroy {
       // Опора
       this.contextMenuType = 'pole';
       this.contextMenuPowerLineId = feature.properties['power_line_id'];
+    } else if (feature.properties['name'] && feature.properties['dispatcher_name'] && !feature.properties['code']) {
+      // Подстанция
+      this.contextMenuType = 'substation';
+      this.contextMenuPowerLineId = null;
     } else if (feature.properties['name'] && feature.properties['code'] && !feature.properties['pole_number'] && !feature.properties['tap_number']) {
       // ЛЭП
       this.contextMenuType = 'powerLine';
@@ -462,6 +486,19 @@ export class SidebarComponent implements OnInit, OnDestroy {
     }, 0);
   }
 
+  onCreateSubstation(): void {
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '600px',
+      data: { defaultObjectType: 'substation' }
+    });
+    
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.mapService.refreshData();
+      }
+    });
+  }
+
   onCreateObject(): void {
     if (this.contextMenuType === 'root') {
       // В корне - создаём только линию
@@ -477,6 +514,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       });
     } else if (this.contextMenuType === 'powerLine' && this.contextMenuPowerLineId) {
       // В линии - создаём опору
+      console.log('Открытие диалога создания опоры для линии ID:', this.contextMenuPowerLineId);
       const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
         width: '600px',
         data: { 
@@ -484,6 +522,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
           powerLineId: this.contextMenuPowerLineId
         }
       });
+      console.log('Диалог открыт с данными:', { defaultObjectType: 'pole', powerLineId: this.contextMenuPowerLineId });
       
       dialogRef.afterClosed().subscribe(result => {
         if (result && result.success) {
@@ -542,7 +581,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
   onEditObject(): void {
-    if (!this.contextMenuFeature) return;
+    // Для участков contextMenuFeature может быть null, проверяем contextMenuSegmentId
+    if (!this.contextMenuFeature && !(this.contextMenuType === 'segment' && this.contextMenuSegmentId)) return;
     
     if (this.contextMenuType === 'powerLine' && this.contextMenuPowerLineId) {
       // Редактирование ЛЭП
@@ -558,9 +598,28 @@ export class SidebarComponent implements OnInit, OnDestroy {
           this.mapService.refreshData();
         }
       });
-    } else if (this.contextMenuType === 'pole') {
-      // Редактирование опоры - пока не реализовано
-      console.log('Редактирование опоры пока не реализовано');
+    } else if (this.contextMenuType === 'pole' && this.contextMenuFeature) {
+      // Редактирование опоры
+      const poleId = this.contextMenuFeature.properties['id'];
+      const powerLineId = this.contextMenuFeature.properties['power_line_id'] || this.contextMenuPowerLineId;
+      
+      if (poleId && powerLineId) {
+        const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+          width: '600px',
+          data: { 
+            objectType: 'pole',
+            poleId: poleId,
+            powerLineId: powerLineId,
+            isEdit: true
+          }
+        });
+        
+        dialogRef.afterClosed().subscribe(result => {
+          if (result && result.success) {
+            this.mapService.refreshData();
+          }
+        });
+      }
     } else if (this.contextMenuType === 'span' && this.contextMenuFeature) {
       // Редактирование пролёта
       const spanId = this.contextMenuFeature.properties['id'];
@@ -603,6 +662,10 @@ export class SidebarComponent implements OnInit, OnDestroy {
       objectType = 'pole';
       objectId = this.contextMenuFeature.properties['id'];
       objectName = this.contextMenuFeature.properties['pole_number'] || 'N/A';
+    } else if (this.contextMenuFeature.properties['name'] && this.contextMenuFeature.properties['dispatcher_name']) {
+      objectType = 'substation';
+      objectId = this.contextMenuFeature.properties['id'];
+      objectName = this.contextMenuFeature.properties['name'] || 'N/A';
     } else if (this.contextMenuFeature.properties['name'] && this.contextMenuFeature.properties['code']) {
       objectType = 'powerLine';
       objectId = this.contextMenuFeature.properties['id'];

@@ -187,7 +187,9 @@ async def get_substations_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение подстанций в формате GeoJSON"""
-    result = await db.execute(select(Substation))
+    result = await db.execute(
+        select(Substation).where(Substation.is_active == True)
+    )
     substations = result.scalars().all()
     
     features = []
@@ -197,7 +199,7 @@ async def get_substations_geojson(
             "properties": {
                 "id": substation.id,
                 "name": substation.name,
-                "code": substation.code,
+                "dispatcher_name": substation.dispatcher_name,
                 "voltage_level": substation.voltage_level,
                 "branch_id": substation.branch_id,
                 "address": substation.address

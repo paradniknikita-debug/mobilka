@@ -9,14 +9,22 @@ class BaseUrlManager {
   BaseUrlManager._internal();
 
   // Текущий протокол (https или http)
-  String _protocol = 'https';
+  String? _protocol; // Инициализируем из конфига при первом вызове
   bool _fallbackOccurred = false;
   SharedPreferences? _prefs;
   static const String _serverUrlKey = 'server_url';
+  static const String _fallbackKey = 'url_fallback_occurred';
 
   /// Инициализировать с SharedPreferences
   Future<void> init(SharedPreferences prefs) async {
     _prefs = prefs;
+    // При инициализации всегда сбрасываем fallback и устанавливаем протокол из конфига
+    _fallbackOccurred = false;
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
+    // Логируем только при первой инициализации
+    // if (kDebugMode) {
+    //   print('🔄 BaseUrlManager инициализирован с протоколом: $_protocol');
+    // }
   }
 
   /// Получить базовый URL (с учетом протокола)
@@ -26,18 +34,51 @@ class BaseUrlManager {
       return _getMobileBaseUrl();
     }
 
-    // Для web: определяем хост динамически
-    _protocol = AppConfig.useHttps ? 'https' : 'http';
+    // Для web: инициализируем протокол из конфига, если еще не установлен
+    if (_protocol == null) {
+      _protocol = AppConfig.useHttps ? 'https' : 'http';
+      _fallbackOccurred = false;
+      // Логируем только при необходимости
+      // if (kDebugMode) {
+      //   print('🔄 Протокол инициализирован из конфига: $_protocol');
+      // }
+    }
     
-    // Используем тот же хост, что и у веб-приложения, но порт 8000 для бэкенда
+    // Если не было fallback, всегда используем протокол из конфига
+    if (!_fallbackOccurred) {
+      final configProtocol = AppConfig.useHttps ? 'https' : 'http';
+      if (_protocol != configProtocol) {
+        _protocol = configProtocol;
+        // Логируем только при необходимости
+        // if (kDebugMode) {
+        //   print('🔄 Протокол обновлен из конфига: $_protocol');
+        // }
+      }
+    }
+    // Если был fallback, используем сохраненный протокол (HTTP)
+    
+    // Определяем порт в зависимости от протокола:
+    // - HTTPS: используем порт 443 (через Nginx)
+    // - HTTP: используем порт 8000 (напрямую к backend)
+    final port = _protocol == 'https' ? 443 : 8000;
+    
+    // ВАЖНО: Используем протокол из конфига, а НЕ протокол самого Flutter приложения
+    // Flutter dev server может быть на HTTP, но backend должен быть на HTTPS
+    // Используем тот же хост, что и у веб-приложения
     // Если запущено на localhost, используем localhost
     // Если доступно с других устройств, используем IP адрес
     final hostname = Uri.base.host;
-    if (hostname == 'localhost' || hostname == '127.0.0.1' || hostname.isEmpty) {
-      return '$_protocol://localhost:8000';
-    } else {
-      return '$_protocol://$hostname:8000';
+    final baseUrl = (hostname == 'localhost' || hostname == '127.0.0.1' || hostname.isEmpty)
+        ? '$_protocol://localhost:$port'
+        : '$_protocol://$hostname:$port';
+    
+    // Логируем только при изменении протокола или при инициализации
+    if (kDebugMode && (_protocol == null || _fallbackOccurred)) {
+      final flutterProtocol = Uri.base.scheme;
+      print('🌐 BaseUrl: $baseUrl (протокол: $_protocol, fallback: $_fallbackOccurred)');
     }
+    
+    return baseUrl;
   }
 
   /// Выполнить fallback на HTTP
@@ -47,14 +88,52 @@ class BaseUrlManager {
       _fallbackOccurred = true;
       if (kDebugMode) {
         print('⚠️ HTTPS недоступен, переключение на HTTP');
+        print('   Для возврата к HTTPS измените useHttps в конфиге и перезапустите приложение');
+      }
+      // Сохраняем флаг fallback в SharedPreferences (если доступен)
+      if (_prefs != null) {
+        _prefs!.setBool(_fallbackKey, true).catchError((e) {
+          if (kDebugMode) {
+            print('⚠️ Не удалось сохранить флаг fallback: $e');
+          }
+        });
       }
     }
   }
 
   /// Сбросить fallback (для повторной попытки HTTPS)
   void resetFallback() {
-    _protocol = 'https';
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
     _fallbackOccurred = false;
+    // Удаляем флаг fallback из SharedPreferences
+    if (_prefs != null) {
+      _prefs!.remove(_fallbackKey).catchError((e) {
+        if (kDebugMode) {
+          print('⚠️ Не удалось удалить флаг fallback: $e');
+        }
+      });
+    }
+    if (kDebugMode) {
+      print('🔄 Fallback сброшен, протокол: $_protocol');
+    }
+  }
+
+  /// Принудительно обновить протокол из конфига (при изменении useHttps)
+  void updateProtocolFromConfig() {
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
+    _fallbackOccurred = false;
+    // Удаляем флаг fallback из SharedPreferences
+    if (_prefs != null) {
+      _prefs!.remove(_fallbackKey).catchError((e) {
+        if (kDebugMode) {
+          print('⚠️ Не удалось удалить флаг fallback: $e');
+        }
+      });
+    }
+    // Логируем только при необходимости
+    // if (kDebugMode) {
+    //   print('🔄 Протокол обновлен из конфига: $_protocol');
+    // }
   }
 
   /// Проверить, используется ли HTTP (после fallback)
@@ -77,12 +156,10 @@ class BaseUrlManager {
     // Доменное имя работает независимо от изменения IP адреса
     // Для эмулятора Android используем специальный адрес
     final defaultUrl = 'http://lepm.local:8000';
-    if (kDebugMode) {
-      print('📡 Используется URL по умолчанию: $defaultUrl');
-      print('   Для эмулятора Android используйте: http://10.0.2.2:8000');
-      print('   Для изменения URL используйте настройки приложения');
-      print('   Настройки доступны в профиле → Настройки');
-    }
+    // Логируем только при первой загрузке
+    // if (kDebugMode) {
+    //   print('📡 Используется URL по умолчанию: $defaultUrl');
+    // }
     return defaultUrl;
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -7,11 +8,15 @@ import 'package:geolocator/geolocator.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dio/dio.dart';
+
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/models/power_line.dart';
+import '../../../../core/models/substation.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
+import '../widgets/object_properties_panel.dart' show ObjectPropertiesPanel, ObjectType;
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -31,6 +36,11 @@ class _MapPageState extends ConsumerState<MapPage> {
   List<PowerLine>? _powerLinesList; // Полный список ЛЭП для дерева
   String? _errorMessage;
   
+  // Окно свойств объекта
+  Map<String, dynamic>? _selectedObjectProperties;
+  ObjectType? _selectedObjectType;
+  bool _showObjectProperties = false;
+  
   // Режим навигатора для формирования линии
   bool _isNavigatorMode = false;
   int? _startingPoleId; // ID опоры, от которой начинаем формирование линии
@@ -45,6 +55,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   String _quickConductorSection = '70';
   bool _isEndPole = false; // Конечная опора (завершает AClineSegment)
   bool _isTapPole = false; // Отпаечная опора
+
+  /// ID ЛЭП, раскрытых в дереве объектов (при клике на опору на карте)
+  final Set<int> _expandedPowerLineIds = {};
 
   @override
   void initState() {
@@ -202,11 +215,13 @@ class _MapPageState extends ConsumerState<MapPage> {
       final powerLinesList = futures[4] as List<PowerLine>;
 
       if (mounted) {
-        print('✅ Загружено данных:');
-        print('  ЛЭП: ${(powerLinesData['features'] as List?)?.length ?? 0}');
-        print('  Опоры: ${(polesData['features'] as List?)?.length ?? 0}');
-        print('  Отпайки: ${(tapsData['features'] as List?)?.length ?? 0}');
-        print('  Подстанции: ${(substationsData['features'] as List?)?.length ?? 0}');
+        // Уменьшаем логирование
+        if (kDebugMode) {
+          print('✅ Загружено: ЛЭП: ${(powerLinesData['features'] as List?)?.length ?? 0}, '
+              'Опоры: ${(polesData['features'] as List?)?.length ?? 0}, '
+              'Отпайки: ${(tapsData['features'] as List?)?.length ?? 0}, '
+              'Подстанции: ${(substationsData['features'] as List?)?.length ?? 0}');
+        }
 
         setState(() {
           _powerLinesData = powerLinesData;
@@ -221,6 +236,26 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     } catch (e) {
       print('❌ Ошибка загрузки данных карты: $e');
+      
+      // Проверяем, не ошибка ли авторизации
+      if (e is DioException && e.response?.statusCode == 401) {
+        // Токен истёк или невалидный
+        if (mounted) {
+          // Обновляем состояние авторизации (вызовет logout)
+          await ref.read(authServiceProvider.notifier).logout();
+          
+          // Роутер автоматически перенаправит на /login
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Сессия истекла. Пожалуйста, войдите снова.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      
       if (mounted) {
         setState(() {
           _errorMessage = 'Ошибка загрузки данных: ${e.toString()}';
@@ -296,6 +331,16 @@ class _MapPageState extends ConsumerState<MapPage> {
             onPressed: _loadMapData,
             tooltip: 'Обновить данные',
           ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await ref.read(authServiceProvider.notifier).logout();
+              if (mounted) {
+                context.go('/login');
+              }
+            },
+            tooltip: 'Выйти',
+          ),
         ],
       ),
       drawer: _buildDrawer(),
@@ -323,6 +368,21 @@ class _MapPageState extends ConsumerState<MapPage> {
                   children: [
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      // Игнорируем ошибки отмененных запросов тайлов (это нормально при быстром перемещении карты)
+                      errorTileCallback: (tile, error, stackTrace) {
+                        // Не логируем ошибки отмененных запросов (RequestAbortedException)
+                        if (error.toString().contains('abortTrigger') || 
+                            error.toString().contains('RequestAbortedException')) {
+                          return; // Игнорируем отмененные запросы
+                        }
+                        // Логируем только реальные ошибки
+                        if (kDebugMode) {
+                          print('⚠️ Ошибка загрузки тайла: $error');
+                        }
+                      },
+                      // Увеличиваем таймаут для загрузки тайлов
+                      maxNativeZoom: 19,
+                      maxZoom: 18,
                       userAgentPackageName: 'com.lepm.mobile',
                     ),
                     
@@ -364,23 +424,28 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ],
                 ),
                 
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: _buildLegend(),
-                ),
-                
-                // Быстрое меню настроек в режиме навигатора
+                // Быстрое меню настроек в режиме навигатора (не блокирует экран)
                 if (_isNavigatorMode)
                   Positioned(
                     top: 16,
                     left: 16,
-                    child: _buildQuickSettingsMenu(),
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.white,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 250, maxHeight: 400),
+                        child: SingleChildScrollView(
+                          child: _buildQuickSettingsMenu(),
+                        ),
+                      ),
+                    ),
                   ),
                 
                 // Кнопка создания опоры / остановки навигатора
+                // Позиционируем выше, если открыта панель свойств
                 Positioned(
-                  bottom: 16,
+                  bottom: _showObjectProperties ? 300 : 16,
                   right: 16,
                   child: _isNavigatorMode
                       ? Column(
@@ -397,9 +462,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                             const SizedBox(height: 8),
                             FloatingActionButton(
                               onPressed: _stopLineFormation,
-                              icon: const Icon(Icons.stop),
                               tooltip: 'Остановить формирование линии',
                               backgroundColor: Colors.red,
+                              child: const Icon(Icons.stop),
                             ),
                           ],
                         )
@@ -410,6 +475,30 @@ class _MapPageState extends ConsumerState<MapPage> {
                           tooltip: 'Создать опору с текущими GPS координатами',
                         ),
                 ),
+                
+                // Окно свойств объекта
+                if (_showObjectProperties && _selectedObjectProperties != null && _selectedObjectType != null)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    left: 0,
+                    child: ObjectPropertiesPanel(
+                      objectProperties: _selectedObjectProperties!,
+                      objectType: _selectedObjectType!,
+                      onClose: _closeObjectProperties,
+                      onStartLineFormation: _selectedObjectType == ObjectType.pole
+                          ? () {
+                              final poleId = _selectedObjectProperties!['id'] as int?;
+                              final powerLineId = _selectedObjectProperties!['power_line_id'] as int?;
+                              if (poleId != null && powerLineId != null) {
+                                _closeObjectProperties();
+                                _startLineFormation(poleId, powerLineId);
+                              }
+                            }
+                          : null,
+                      onDelete: _handleDeleteObject,
+                    ),
+                  ),
               ],
             ),
       floatingActionButton: null, // Отключаем стандартный FAB, используем Positioned
@@ -465,11 +554,16 @@ class _MapPageState extends ConsumerState<MapPage> {
               (coordinates[0] as num).toDouble(),
             );
             
+            // Добавляем координаты в properties для использования в _showPoleInfo
+            final poleProperties = Map<String, dynamic>.from(properties ?? {});
+            poleProperties['latitude'] = latLng.latitude;
+            poleProperties['longitude'] = latLng.longitude;
+            
             markers.add(
               Marker(
                 point: latLng,
                 child: GestureDetector(
-                  onTap: () => _showPoleInfo(properties ?? {}),
+                  onTap: () => _showPoleInfo(poleProperties),
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -633,122 +727,78 @@ class _MapPageState extends ConsumerState<MapPage> {
     return Drawer(
       child: Column(
         children: [
-          // Заголовок Drawer
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.electrical_services,
-                  size: 48,
-                  color: Colors.white,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Объекты',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Дерево объектов на карте',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Содержимое Drawer
+          // Содержимое Drawer - Линии и подстанции на одном уровне
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                if (_powerLinesList != null && _powerLinesList!.isNotEmpty)
-                  _buildPowerLinesTreeHierarchical(),
-                if (_substationsData != null)
-                  _buildSubstationsTree(),
-                if (_tapsData != null)
-                  _buildTapsTree(),
-              ],
+            child: GestureDetector(
+              onLongPress: () => _showRootContextMenu(context),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  // Линии напрямую (без обобщения)
+                  if (_powerLinesList != null && _powerLinesList!.isNotEmpty)
+                    ..._powerLinesList!.map<Widget>((powerLine) => 
+                      _buildPowerLineTreeItem(powerLine)
+                    ),
+                  // Подстанции напрямую (без обобщения)
+                  if (_substationsData != null)
+                    ..._buildSubstationsList(),
+                ],
+              ),
             ),
           ),
           
-          // Кнопка выхода
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Выйти'),
-            onTap: () async {
-              await ref.read(authServiceProvider.notifier).logout();
-              if (mounted) {
-                context.go('/login');
-              }
-            },
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildPowerLinesTreeHierarchical() {
-    if (_powerLinesList == null || _powerLinesList!.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return ExpansionTile(
-      leading: const Icon(Icons.electrical_services, color: Colors.red),
-      title: Text('ЛЭП (${_powerLinesList!.length})'),
-      children: _powerLinesList!.map<Widget>((powerLine) {
-        // Получаем AClineSegments и poles из данных (если они загружены)
-        // Пока используем динамические данные из JSON
-        return _buildPowerLineTreeItem(powerLine);
-      }).toList(),
-    );
-  }
-
   Widget _buildPowerLineTreeItem(PowerLine powerLine) {
     // Загружаем детали линии при разворачивании (lazy loading)
-    // Пока используем данные из GeoJSON для отображения на карте
     final geoFeature = _findPowerLineInGeoJSON(powerLine.id);
-    
-    return ExpansionTile(
-      leading: const Icon(Icons.electrical_services, size: 20),
-      title: Text(powerLine.name),
-      subtitle: Text('${powerLine.voltageLevel ?? 0} кВ • ${powerLine.poles?.length ?? 0} опор'),
-      children: [
-        // АЦЛС
-        ExpansionTile(
-          leading: const Icon(Icons.polyline, size: 18, color: Colors.orange),
-          title: Text('Участки линии (АЦЛС) (${(powerLine.aclineSegments as List?)?.length ?? 0})'),
-          children: _buildAClineSegmentsTree(powerLine.aclineSegments ?? []),
+    final initiallyExpanded = _expandedPowerLineIds.contains(powerLine.id);
+
+    return GestureDetector(
+      onLongPress: () => _showPowerLineContextMenu(powerLine),
+      child: ExpansionTile(
+        initiallyExpanded: initiallyExpanded,
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        leading: const Icon(Icons.electrical_services, size: 14, color: Colors.red),
+        title: Text(
+          powerLine.name,
+          style: const TextStyle(fontSize: 13),
         ),
-        // Опоры
-        ExpansionTile(
-          leading: Icon(MdiIcons.transmissionTower, size: 18, color: Colors.blue),
-          title: Text('Опоры (${powerLine.poles?.length ?? 0})'),
-          children: (powerLine.poles ?? []).map<Widget>((pole) {
-            final geoPole = _findPoleInGeoJSON(pole.id);
-            return ListTile(
-              dense: true,
-              leading: Icon(MdiIcons.transmissionTower, size: 16),
-              title: Text(pole.poleNumber),
-              subtitle: Text('${pole.poleType} • ${pole.condition}'),
-              onTap: () {
-                Navigator.of(context).pop();
-                if (geoPole != null) {
-                  _centerOnFeature(geoPole);
-                }
-              },
-            );
-          }).toList(),
+        subtitle: Text(
+          '${powerLine.voltageLevel ?? 0} кВ',
+          style: const TextStyle(fontSize: 11),
         ),
+        children: [
+        // Список AClineSegments напрямую (без обобщения)
+        ..._buildAClineSegmentsTree(powerLine.aclineSegments ?? []),
+        // Опоры напрямую (без папки обобщения)
+        ...(powerLine.poles ?? []).map<Widget>((pole) {
+          final geoPole = _findPoleInGeoJSON(pole.id);
+          return ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(left: 32, right: 8),
+            leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
+            title: Text(
+              pole.poleNumber,
+              style: const TextStyle(fontSize: 12),
+            ),
+            subtitle: Text(
+              '${pole.poleType}',
+              style: const TextStyle(fontSize: 10),
+            ),
+            onTap: () {
+              Navigator.of(context).pop();
+              if (geoPole != null) {
+                _centerOnFeature(geoPole);
+                _showPoleInfo(geoPole['properties'] ?? {});
+              }
+            },
+          );
+        }),
       ],
       onExpansionChanged: (expanded) async {
         if (expanded && (powerLine.poles == null || powerLine.aclineSegments == null)) {
@@ -760,6 +810,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           _centerOnFeature(geoFeature);
         }
       },
+      ),
     );
   }
 
@@ -806,9 +857,13 @@ class _MapPageState extends ConsumerState<MapPage> {
   List<Widget> _buildAClineSegmentsTree(List<dynamic> aclineSegments) {
     if (aclineSegments.isEmpty) {
       return [
-        const ListTile(
+        ListTile(
           dense: true,
-          title: Text('Участки не найдены', style: TextStyle(fontStyle: FontStyle.italic)),
+          contentPadding: const EdgeInsets.only(left: 32, right: 8),
+          title: Text(
+            'Участки не найдены',
+            style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+          ),
         ),
       ];
     }
@@ -820,13 +875,21 @@ class _MapPageState extends ConsumerState<MapPage> {
       final lineSections = segmentData['line_sections'] as List<dynamic>? ?? [];
       
       return ExpansionTile(
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
         leading: Icon(
           segmentData['is_tap'] == true ? Icons.call_split : Icons.polyline,
-          size: 16,
+          size: 12,
           color: segmentData['is_tap'] == true ? Colors.orange : Colors.green,
         ),
-        title: Text(segmentName),
-        subtitle: Text('${lineSections.length} секций • ${segmentData['length'] ?? 0} км'),
+        title: Text(
+          segmentName,
+          style: const TextStyle(fontSize: 12),
+        ),
+        subtitle: Text(
+          '${lineSections.length} секций',
+          style: const TextStyle(fontSize: 10),
+        ),
         children: _buildLineSectionsTree(lineSections),
       );
     }).toList();
@@ -835,9 +898,13 @@ class _MapPageState extends ConsumerState<MapPage> {
   List<Widget> _buildLineSectionsTree(List<dynamic> lineSections) {
     if (lineSections.isEmpty) {
       return [
-        const ListTile(
+        ListTile(
           dense: true,
-          title: Text('Секции не найдены', style: TextStyle(fontStyle: FontStyle.italic)),
+          contentPadding: const EdgeInsets.only(left: 48, right: 8),
+          title: Text(
+            'Секции не найдены',
+            style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+          ),
         ),
       ];
     }
@@ -849,9 +916,17 @@ class _MapPageState extends ConsumerState<MapPage> {
       final spans = sectionData['spans'] as List<dynamic>? ?? [];
       
       return ExpansionTile(
-        leading: const Icon(Icons.segment, size: 16, color: Colors.blue),
-        title: Text(sectionName),
-        subtitle: Text('${spans.length} пролётов • ${sectionData['conductor_type'] ?? 'N/A'}'),
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        leading: const Icon(Icons.segment, size: 12, color: Colors.blue),
+        title: Text(
+          sectionName,
+          style: const TextStyle(fontSize: 12),
+        ),
+        subtitle: Text(
+          '${spans.length} пролётов • ${sectionData['conductor_type'] ?? 'N/A'}',
+          style: const TextStyle(fontSize: 10),
+        ),
         children: _buildSpansTree(spans),
       );
     }).toList();
@@ -860,9 +935,13 @@ class _MapPageState extends ConsumerState<MapPage> {
   List<Widget> _buildSpansTree(List<dynamic> spans) {
     if (spans.isEmpty) {
       return [
-        const ListTile(
+        ListTile(
           dense: true,
-          title: Text('Пролёты не найдены', style: TextStyle(fontStyle: FontStyle.italic)),
+          contentPadding: const EdgeInsets.only(left: 64, right: 8),
+          title: Text(
+            'Пролёты не найдены',
+            style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+          ),
         ),
       ];
     }
@@ -874,9 +953,16 @@ class _MapPageState extends ConsumerState<MapPage> {
       
       return ListTile(
         dense: true,
-        leading: const Icon(Icons.arrow_forward, size: 14),
-        title: Text(spanNumber),
-        subtitle: Text('${(spanLength / 1000).toStringAsFixed(2)} км • ${spanData['conductor_type'] ?? 'N/A'}'),
+        contentPadding: const EdgeInsets.only(left: 48, right: 8),
+        leading: const Icon(Icons.arrow_forward, size: 10),
+        title: Text(
+          spanNumber,
+          style: const TextStyle(fontSize: 11),
+        ),
+        subtitle: Text(
+          '${(spanLength / 1000).toStringAsFixed(2)} км',
+          style: const TextStyle(fontSize: 10),
+        ),
         onTap: () {
           Navigator.of(context).pop();
           // TODO: Центрировать карту на пролёте
@@ -885,26 +971,30 @@ class _MapPageState extends ConsumerState<MapPage> {
     }).toList();
   }
 
-  Widget _buildSubstationsTree() {
+  List<Widget> _buildSubstationsList() {
     final features = _substationsData?['features'] as List<dynamic>? ?? [];
-    if (features.isEmpty) return const SizedBox.shrink();
+    if (features.isEmpty) return [];
 
-    return ExpansionTile(
-      leading: const Icon(Icons.power, color: Colors.purple),
-      title: Text('Подстанции (${features.length})'),
-      children: features.map<Widget>((feature) {
-        final props = feature['properties'] as Map<String, dynamic>;
-        return ListTile(
-          dense: true,
-          title: Text(props['name'] ?? 'Без названия'),
-          subtitle: Text('${props['voltage_level']} кВ'),
-          onTap: () {
-            Navigator.of(context).pop(); // Закрываем Drawer
-            _centerOnFeature(feature);
-          },
-        );
-      }).toList(),
-    );
+    return features.map<Widget>((feature) {
+      final props = feature['properties'] as Map<String, dynamic>;
+      return ListTile(
+        dense: true,
+        leading: const Icon(Icons.power, size: 14, color: Colors.purple),
+        title: Text(
+          props['name'] ?? 'Без названия',
+          style: const TextStyle(fontSize: 13),
+        ),
+        subtitle: Text(
+          '${props['voltage_level']} кВ',
+          style: const TextStyle(fontSize: 11),
+        ),
+        onTap: () {
+          Navigator.of(context).pop();
+          _centerOnFeature(feature);
+          _showObjectInfo(props, ObjectType.substation);
+        },
+      );
+    }).toList();
   }
 
   Widget _buildPolesTree() {
@@ -912,6 +1002,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (features.isEmpty) return const SizedBox.shrink();
 
     return ExpansionTile(
+      controlAffinity: ListTileControlAffinity.leading,
       leading: Icon(MdiIcons.transmissionTower, color: Colors.blue),
       title: Text('Опоры (${features.length})'),
       children: features.map<Widget>((feature) {
@@ -934,6 +1025,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (features.isEmpty) return const SizedBox.shrink();
 
     return ExpansionTile(
+      controlAffinity: ListTileControlAffinity.leading,
       leading: const Icon(Icons.electrical_services, color: Colors.orange),
       title: Text('Отпайки (${features.length})'),
       children: features.map<Widget>((feature) {
@@ -1097,251 +1189,595 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  void _showPoleInfo(Map<String, dynamic> properties) {
-    final poleId = properties['id'] as int?;
-    final powerLineId = properties['power_line_id'] as int?;
+  void _showObjectInfo(Map<String, dynamic> properties, ObjectType objectType) {
+    // Получаем координаты из properties или geometry
+    final geometry = properties['geometry'] as Map<String, dynamic>?;
+    double? lat;
+    double? lng;
     
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Опора ${properties['pole_number'] ?? 'N/A'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Тип: ${properties['pole_type'] ?? 'Не указан'}'),
-            Text('Высота: ${properties['height'] ?? 'Не указана'} м'),
-            Text('Состояние: ${properties['condition'] ?? 'Не указано'}'),
-            Text('Материал: ${properties['material'] ?? 'Не указан'}'),
-            const SizedBox(height: 16),
-            if (poleId != null && powerLineId != null)
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _startLineFormation(poleId, powerLineId);
-                },
-                icon: const Icon(Icons.navigation),
-                label: const Text('Начать формирование линии'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Закрыть'),
-          ),
-        ],
+    if (geometry != null && geometry['type'] == 'Point') {
+      final coordinates = geometry['coordinates'] as List<dynamic>?;
+      if (coordinates != null && coordinates.length >= 2) {
+        lat = (coordinates[1] as num).toDouble();
+        lng = (coordinates[0] as num).toDouble();
+        properties['latitude'] = lat;
+        properties['longitude'] = lng;
+      }
+    } else if (properties['latitude'] != null && properties['longitude'] != null) {
+      lat = (properties['latitude'] as num).toDouble();
+      lng = (properties['longitude'] as num).toDouble();
+    }
+    
+    setState(() {
+      _selectedObjectProperties = properties;
+      _selectedObjectType = objectType;
+      _showObjectProperties = true;
+      // При клике на опору — раскрываем её ЛЭП в дереве объектов
+      if (objectType == ObjectType.pole) {
+        final powerLineId = properties['power_line_id'] as int?;
+        if (powerLineId != null) {
+          _expandedPowerLineIds.add(powerLineId);
+        }
+      }
+    });
+    
+    // Центрируем и приближаем карту на выбранном объекте
+    if (lat != null && lng != null) {
+      try {
+        final targetLocation = LatLng(lat, lng);
+        // Для опор используем зум 18, для других объектов - 16
+        final zoom = objectType == ObjectType.pole ? 18.0 : 16.0;
+        _mapController.move(targetLocation, zoom);
+      } catch (e) {
+        if (kDebugMode) {
+          print('Ошибка центрирования на объекте: $e');
+        }
+      }
+    }
+  }
+  
+  void _closeObjectProperties() {
+    setState(() {
+      _showObjectProperties = false;
+      _selectedObjectProperties = null;
+      _selectedObjectType = null;
+    });
+  }
+  
+  void _showPoleInfo(Map<String, dynamic> properties) {
+    _showObjectInfo(properties, ObjectType.pole);
+  }
+  
+  void _handleConnectivityNode() {
+    // TODO: Реализовать управление узлом соединения
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Функция управления узлом соединения будет реализована'),
+        backgroundColor: Colors.orange,
       ),
     );
   }
   
-  void _startLineFormation(int poleId, int powerLineId) {
+  void _handlePoleSequence() {
+    // TODO: Реализовать последовательность опор
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Функция последовательности опор будет реализована'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+  
+  void _handleCreateSpan() {
+    // TODO: Реализовать создание пролёта
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Функция создания пролёта будет реализована'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+  
+  void _handleAutoCreateSpans() {
+    // TODO: Реализовать автоматическое создание пролётов
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Функция автоматического создания пролётов будет реализована'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  Future<void> _handleDeleteObject() async {
+    if (_selectedObjectProperties == null || _selectedObjectType == null) {
+      return;
+    }
+
+    final objectId = _selectedObjectProperties!['id'] as int?;
+    if (objectId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось определить ID объекта'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Определяем тип объекта и название для диалога
+    String objectTypeLabel;
+    String objectName;
+    
+    switch (_selectedObjectType!) {
+      case ObjectType.pole:
+        objectTypeLabel = 'опору';
+        objectName = _selectedObjectProperties!['pole_number']?.toString() ?? 'N/A';
+        break;
+      case ObjectType.substation:
+        objectTypeLabel = 'подстанцию';
+        objectName = _selectedObjectProperties!['name']?.toString() ?? 'N/A';
+        break;
+      case ObjectType.tap:
+        objectTypeLabel = 'отпайку';
+        objectName = _selectedObjectProperties!['tap_number']?.toString() ?? 'N/A';
+        break;
+    }
+
+    // Показываем диалог подтверждения
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Удалить $objectTypeLabel?'),
+        content: Text('Вы уверены, что хотите удалить $objectTypeLabel "$objectName"? Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    // Выполняем удаление
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      
+      switch (_selectedObjectType!) {
+        case ObjectType.pole:
+          await apiService.deletePole(objectId);
+          break;
+        case ObjectType.substation:
+          await apiService.deleteSubstation(objectId);
+          break;
+        case ObjectType.tap:
+          // TODO: Добавить методы удаления для отпаек
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Удаление этого типа объектов пока не реализовано'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+      }
+
+      // Закрываем панель свойств
+      _closeObjectProperties();
+
+      // Обновляем данные на карте
+      await _loadMapData();
+
+      if (mounted) {
+        String successMessage;
+        if (_selectedObjectType == ObjectType.pole) {
+          successMessage = '$objectTypeLabel "$objectName" успешно удалена.\nПролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.';
+        } else if (_selectedObjectType == ObjectType.substation) {
+          successMessage = 'Подстанция "$objectName" успешно удалена.';
+        } else {
+          successMessage = '$objectTypeLabel "$objectName" успешно удалена.';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(successMessage),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      // Обработка ошибок Dio
+      String errorMessage = 'Ошибка удаления объекта';
+      
+      if (e.response != null) {
+        final statusCode = e.response!.statusCode;
+        final responseData = e.response!.data;
+        
+        if (statusCode == 409) {
+          // 409 больше не должно возникать, так как связанные объекты удаляются автоматически
+          // Но на всякий случай оставляем обработку
+          if (responseData is Map && responseData['detail'] != null) {
+            errorMessage = responseData['detail'] as String;
+          } else {
+            errorMessage = 'Не удалось удалить $objectTypeLabel "$objectName": существуют связанные объекты';
+          }
+        } else if (statusCode == 404) {
+          errorMessage = 'Объект не найден';
+        } else if (statusCode == 403) {
+          errorMessage = 'Доступ запрещен. У вас нет прав для удаления этого объекта.';
+        } else if (statusCode == 401) {
+          errorMessage = 'Требуется авторизация. Войдите в систему заново.';
+        } else if (responseData is Map && responseData['detail'] != null) {
+          errorMessage = responseData['detail'] as String;
+        } else {
+          errorMessage = 'Ошибка сервера (${statusCode})';
+        }
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = 'Ошибка соединения с сервером. Проверьте подключение к интернету.';
+      } else {
+        errorMessage = 'Ошибка удаления: ${e.message ?? e.toString()}';
+      }
+      
+      if (kDebugMode) {
+        print('Ошибка удаления объекта: $e');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 7),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      // Обработка других ошибок
+      if (kDebugMode) {
+        print('Ошибка удаления объекта: $e');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка удаления объекта: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+  
+  void _startLineFormation(int poleId, int powerLineId) async {
+    // Закрываем панель свойств перед стартом режима навигатора
+    if (_showObjectProperties) {
+      _closeObjectProperties();
+    }
+    
+    if (!mounted) return;
+    
     setState(() {
       _isNavigatorMode = true;
       _startingPoleId = poleId;
       _currentPowerLineId = powerLineId;
       // Инициализируем номер опоры
       _quickPoleNumber = '';
+      _isEndPole = false;
+      _isTapPole = false;
     });
+    
+    // Получаем текущее местоположение перед началом отслеживания
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final location = LatLng(position.latitude, position.longitude);
+      
+      if (mounted) {
+        setState(() {
+          _currentLocation = location;
+        });
+        
+        // Центрируем карту на текущем местоположении с зумом 18
+        try {
+          _mapController.move(location, 18.0);
+        } catch (e) {
+          print('Ошибка центрирования при старте навигатора: $e');
+        }
+      }
+    } catch (e) {
+      print('Ошибка получения местоположения: $e');
+      // Продолжаем работу даже если не удалось получить местоположение
+    }
     
     // Начинаем отслеживание GPS в реальном времени
     _startLocationTracking();
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Режим навигатора включен. Карта будет следовать за вашим местоположением.'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 3),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Режим навигатора включен. Карта будет следовать за вашим местоположением.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
   
   void _startLocationTracking() {
     // Отменяем предыдущую подписку, если есть
     _positionSubscription?.cancel();
     
-    // Создаём поток обновлений GPS
+    // Создаём поток обновлений GPS с оптимизацией
+    DateTime? lastUpdate;
+    DateTime? lastMapUpdate;
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Обновлять каждые 10 метров
+        distanceFilter: 15, // Обновлять каждые 15 метров (увеличено для стабильности)
       ),
     ).listen((Position position) {
-      if (mounted && _isNavigatorMode) {
-        setState(() {
-          _currentLocation = LatLng(position.latitude, position.longitude);
-        });
-        
-        // Центрируем карту на текущем местоположении
-        try {
-          _mapController.move(_currentLocation!, AppConfig.defaultZoom);
-        } catch (e) {
-          print('Ошибка центрирования карты в режиме навигатора: $e');
+      if (!mounted || !_isNavigatorMode) return;
+      
+      final now = DateTime.now();
+      // Ограничиваем частоту обновлений состояния (не чаще чем раз в 1 секунду)
+      if (lastUpdate != null && now.difference(lastUpdate!).inMilliseconds < 1000) {
+        return;
+      }
+      lastUpdate = now;
+      
+      final newLocation = LatLng(position.latitude, position.longitude);
+      
+      // Обновляем состояние только если координаты изменились значительно
+      final distanceChanged = _currentLocation == null ||
+          Geolocator.distanceBetween(
+            _currentLocation!.latitude,
+            _currentLocation!.longitude,
+            newLocation.latitude,
+            newLocation.longitude,
+          ) > 10; // Увеличено до 10 метров для уменьшения частоты обновлений
+      
+      if (distanceChanged) {
+        // Обновляем состояние синхронно, без addPostFrameCallback
+        if (mounted && _isNavigatorMode) {
+          setState(() {
+            _currentLocation = newLocation;
+          });
+          
+          // Обновляем карту не чаще чем раз в 2 секунды
+          if (lastMapUpdate == null || now.difference(lastMapUpdate!).inSeconds >= 2) {
+            lastMapUpdate = now;
+            
+            // Центрируем карту на текущем местоположении с задержкой
+            // Используем более длительную задержку для стабильности
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (!mounted || !_isNavigatorMode) return;
+              
+              try {
+                final currentZoom = _mapController.camera.zoom;
+                // В режиме навигатора используем зум 18 для детального просмотра
+                final targetZoom = currentZoom < 18 ? 18.0 : currentZoom;
+                _mapController.move(newLocation, targetZoom);
+              } catch (e) {
+                // Игнорируем ошибки центрирования, но логируем их
+                print('Ошибка центрирования карты: $e');
+              }
+            });
+          }
         }
+      }
+    }, onError: (error) {
+      print('Ошибка GPS: $error');
+      if (mounted && _isNavigatorMode) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка GPS: $error'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     });
   }
   
   void _stopLineFormation() {
+    // Отменяем подписку на GPS
     _positionSubscription?.cancel();
     _positionSubscription = null;
     
-    setState(() {
-      _isNavigatorMode = false;
-      _startingPoleId = null;
-      _currentPowerLineId = null;
-      _isEndPole = false;
-      _isTapPole = false;
-    });
+    // Закрываем панель свойств, если открыта
+    if (_showObjectProperties) {
+      _closeObjectProperties();
+    }
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Режим навигатора выключен.'),
-        backgroundColor: Colors.orange,
-      ),
-    );
+    // Обновляем состояние
+    if (mounted) {
+      setState(() {
+        _isNavigatorMode = false;
+        _startingPoleId = null;
+        _currentPowerLineId = null;
+        _isEndPole = false;
+        _isTapPole = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Режим навигатора выключен.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
   
   Widget _buildQuickSettingsMenu() {
-    return Card(
-      elevation: 8,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Быстрые настройки',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  iconSize: 20,
-                  onPressed: () {
-                    // Меню можно скрывать/показывать при необходимости
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: 200,
-              child: TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Номер опоры',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                controller: TextEditingController(text: _quickPoleNumber)..selection = TextSelection.fromPosition(TextPosition(offset: _quickPoleNumber.length)),
-                onChanged: (value) {
-                  setState(() => _quickPoleNumber = value);
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Настройки',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  // Меню можно скрывать/показывать при необходимости
                 },
               ),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _quickPoleType,
+            ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 200,
+            child: TextField(
+              style: const TextStyle(fontSize: 12),
               decoration: const InputDecoration(
-                labelText: 'Тип опоры',
+                labelText: 'Номер опоры',
+                labelStyle: TextStyle(fontSize: 12),
                 isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 border: OutlineInputBorder(),
               ),
-              items: const [
-                DropdownMenuItem(value: 'промежуточная', child: Text('Промежуточная')),
-                DropdownMenuItem(value: 'анкерная', child: Text('Анкерная')),
-                DropdownMenuItem(value: 'угловая', child: Text('Угловая')),
-              ],
+              controller: TextEditingController(text: _quickPoleNumber)..selection = TextSelection.fromPosition(TextPosition(offset: _quickPoleNumber.length)),
               onChanged: (value) {
-                if (value != null) {
-                  setState(() => _quickPoleType = value);
-                }
+                setState(() => _quickPoleNumber = value);
               },
             ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _quickConductorType,
-              decoration: const InputDecoration(
-                labelText: 'Марка провода',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'AC-70', child: Text('AC-70')),
-                DropdownMenuItem(value: 'AC-95', child: Text('AC-95')),
-                DropdownMenuItem(value: 'AC-120', child: Text('AC-120')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _quickConductorType = value);
-                }
-              },
+          ),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            value: _quickPoleType,
+            style: const TextStyle(fontSize: 12),
+            decoration: const InputDecoration(
+              labelText: 'Тип опоры',
+              labelStyle: TextStyle(fontSize: 12),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              title: const Text('Конечная опора'),
-              subtitle: const Text('Завершит текущий сегмент'),
-              value: _isEndPole,
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              onChanged: (value) {
-                setState(() {
-                  _isEndPole = value ?? false;
-                  if (_isEndPole) _isTapPole = false; // Взаимоисключающие
-                });
-              },
+            items: const [
+              DropdownMenuItem(value: 'промежуточная', child: Text('Промежуточная', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(value: 'анкерная', child: Text('Анкерная', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(value: 'угловая', child: Text('Угловая', style: TextStyle(fontSize: 12))),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _quickPoleType = value);
+              }
+            },
+          ),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            value: _quickConductorType,
+            style: const TextStyle(fontSize: 12),
+            decoration: const InputDecoration(
+              labelText: 'Марка провода',
+              labelStyle: TextStyle(fontSize: 12),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(),
             ),
-            CheckboxListTile(
-              title: const Text('Отпаечная опора'),
-              subtitle: const Text('Создаст отпайку'),
-              value: _isTapPole,
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              onChanged: (value) {
-                setState(() {
-                  _isTapPole = value ?? false;
-                  if (_isTapPole) _isEndPole = false; // Взаимоисключающие
-                });
-              },
-            ),
-          ],
-        ),
+            items: const [
+              DropdownMenuItem(value: 'AC-70', child: Text('AC-70', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(value: 'AC-95', child: Text('AC-95', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(value: 'AC-120', child: Text('AC-120', style: TextStyle(fontSize: 12))),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _quickConductorType = value);
+              }
+            },
+          ),
+          const SizedBox(height: 6),
+          CheckboxListTile(
+            dense: true,
+            title: const Text('Конечная опора', style: TextStyle(fontSize: 12)),
+            subtitle: const Text('Завершит сегмент', style: TextStyle(fontSize: 10)),
+            value: _isEndPole,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) {
+              setState(() {
+                _isEndPole = value ?? false;
+                if (_isEndPole) _isTapPole = false;
+              });
+            },
+          ),
+          CheckboxListTile(
+            dense: true,
+            title: const Text('Отпаечная опора', style: TextStyle(fontSize: 12)),
+            subtitle: const Text('Создаст отпайку', style: TextStyle(fontSize: 10)),
+            value: _isTapPole,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) {
+              setState(() {
+                _isTapPole = value ?? false;
+                if (_isTapPole) _isEndPole = false;
+              });
+            },
+          ),
+        ],
       ),
     );
   }
   
   Future<void> _createPoleInNavigatorMode() async {
     if (_currentLocation == null || _currentPowerLineId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Не удалось определить местоположение или ЛЭП'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось определить местоположение или ЛЭП'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       return;
     }
     
     if (_quickPoleNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите номер опоры в меню настроек'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Введите номер опоры в меню настроек'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       return;
     }
     
-    setState(() {
-      _isLoading = true;
-    });
-    
+    // Выполняем создание асинхронно, не блокируя UI
     try {
       final apiService = ref.read(apiServiceProvider);
       
@@ -1357,25 +1793,164 @@ class _MapPageState extends ConsumerState<MapPage> {
         conductorSection: _quickConductorSection,
       );
       
-      await apiService.createPole(_currentPowerLineId!, poleData);
+      // Создаём опору асинхронно
+      final createdPole = await apiService.createPole(_currentPowerLineId!, poleData);
       
-      // Обновляем данные на карте
-      await _loadMapData();
+      // Обновляем опоры на карте в фоне (не блокируя UI)
+      _refreshPolesData().catchError((e) {
+        print('Ошибка обновления опор: $e');
+      });
       
       // Сбрасываем номер опоры для следующей опоры
-      setState(() {
-        _quickPoleNumber = '';
-        _isEndPole = false;
-        if (_isTapPole) {
-          _isTapPole = false;
-          // После создания отпаечной опоры можно завершить режим навигатора
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _quickPoleNumber = '';
+          _isEndPole = false;
+          if (_isTapPole) {
+            _isTapPole = false;
+            // После создания отпаечной опоры можно завершить режим навигатора
+          }
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Опора создана и пролёт сформирован'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Ошибка создания опоры: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка создания опоры: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+  
+  // Оптимизированное обновление только опор (без перезагрузки всех данных)
+  Future<void> _refreshPolesData() async {
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final polesData = await apiService.getTowersGeoJSON();
+      
+      if (mounted) {
+        setState(() {
+          _polesData = polesData as Map<String, dynamic>?;
+        });
+      }
+    } catch (e) {
+      print('Ошибка обновления опор: $e');
+      // В случае ошибки обновляем все данные
+      if (mounted) {
+        await _loadMapData();
+      }
+    }
+  }
+
+  void _showTapInfo(Map<String, dynamic> properties) {
+    _showObjectInfo(properties, ObjectType.tap);
+  }
+
+  void _showSubstationInfo(Map<String, dynamic> properties) {
+    _showObjectInfo(properties, ObjectType.substation);
+  }
+
+  void _showRootContextMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: const Text('Создать линию'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showCreatePowerLineDialog();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.power),
+              title: const Text('Создать подстанцию'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showCreateSubstationDialog();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPowerLineContextMenu(PowerLine powerLine) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Удалить линию'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _deletePowerLine(powerLine);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deletePowerLine(PowerLine powerLine) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить линию?'),
+        content: Text('Вы уверены, что хотите удалить линию "${powerLine.name}"? Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      await apiService.deletePowerLine(powerLine.id);
+      
+      await _loadMapData();
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Опора создана и пролёт сформирован'),
+            content: Text('Линия успешно удалена'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1384,62 +1959,306 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка создания опоры: $e'),
+            content: Text('Ошибка удаления линии: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 
-  void _showTapInfo(Map<String, dynamic> properties) {
+  void _showCreatePowerLineDialog() {
+    final nameController = TextEditingController();
+    final voltageController = TextEditingController();
+    final lengthController = TextEditingController();
+    final descriptionController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Отпайка ${properties['tap_number'] ?? 'N/A'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Тип: ${properties['tap_type'] ?? 'Не указан'}'),
-            Text('Напряжение: ${properties['voltage_level'] ?? 'Не указано'} кВ'),
-            Text('Мощность: ${properties['power_rating'] ?? 'Не указана'} кВт'),
-          ],
+        title: const Text('Создать линию'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Название *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: voltageController,
+                decoration: const InputDecoration(
+                  labelText: 'Напряжение (кВ)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: lengthController,
+                decoration: const InputDecoration(
+                  labelText: 'Длина (км)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Описание',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Закрыть'),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Название обязательно для заполнения'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              try {
+                final apiService = ref.read(apiServiceProvider);
+                final powerLineData = PowerLineCreate(
+                  name: nameController.text.trim(),
+                  code: nameController.text.trim(), // Используем название как код
+                  voltageLevel: double.tryParse(voltageController.text) ?? 0.0,
+                  length: double.tryParse(lengthController.text),
+                  branchId: 1, // TODO: Получить реальный branchId
+                  status: 'active',
+                  description: descriptionController.text.trim().isEmpty 
+                      ? null 
+                      : descriptionController.text.trim(),
+                );
+
+                await apiService.createPowerLine(powerLineData);
+                
+                Navigator.of(context).pop();
+                
+                await _loadMapData();
+                
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Линия успешно создана'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка создания линии: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Создать'),
           ),
         ],
       ),
     );
   }
 
-  void _showSubstationInfo(Map<String, dynamic> properties) {
+  void _showCreateSubstationDialog() async {
+    final nameController = TextEditingController();
+    final codeController = TextEditingController();
+    final voltageController = TextEditingController();
+    final addressController = TextEditingController();
+    final descriptionController = TextEditingController();
+
+    // Получаем текущие координаты, если доступны
+    double? latitude;
+    double? longitude;
+    try {
+      if (_currentLocation != null) {
+        latitude = _currentLocation!.latitude;
+        longitude = _currentLocation!.longitude;
+      } else {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Не удалось получить GPS координаты: $e');
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Подстанция ${properties['name'] ?? 'N/A'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Код: ${properties['code'] ?? 'Не указан'}'),
-            Text('Напряжение: ${properties['voltage_level'] ?? 'Не указано'} кВ'),
-            Text('Адрес: ${properties['address'] ?? 'Не указан'}'),
-          ],
+        title: const Text('Создать подстанцию'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Название *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                decoration: const InputDecoration(
+                  labelText: 'Диспетчерское наименование *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: voltageController,
+                decoration: const InputDecoration(
+                  labelText: 'Напряжение (кВ) *',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              if (latitude != null && longitude != null)
+                Text(
+                  'Координаты: ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(
+                  labelText: 'Адрес',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Описание',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Закрыть'),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Название обязательно для заполнения'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (codeController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Диспетчерское наименование обязательно для заполнения'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (voltageController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Напряжение обязательно для заполнения'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (latitude == null || longitude == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Не удалось получить координаты. Включите GPS.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              try {
+                final apiService = ref.read(apiServiceProvider);
+                final substationData = SubstationCreate(
+                  name: nameController.text.trim(),
+                  dispatcherName: codeController.text.trim(),
+                  voltageLevel: double.tryParse(voltageController.text) ?? 0.0,
+                  latitude: latitude!,
+                  longitude: longitude!,
+                  address: addressController.text.trim().isEmpty 
+                      ? null 
+                      : addressController.text.trim(),
+                  branchId: null, // Опциональное поле
+                  description: descriptionController.text.trim().isEmpty 
+                      ? null 
+                      : descriptionController.text.trim(),
+                );
+
+                await apiService.createSubstation(substationData);
+                
+                Navigator.of(context).pop();
+                
+                await _loadMapData();
+                
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Подстанция успешно создана'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка создания подстанции: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Создать'),
           ),
         ],
       ),

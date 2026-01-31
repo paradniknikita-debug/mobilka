@@ -4,12 +4,12 @@ from datetime import datetime
 
 class SubstationBase(BaseModel):
     name: str
-    code: str
+    dispatcher_name: str  # Диспетчерское наименование (заменяет code)
     voltage_level: float
     latitude: float
     longitude: float
     address: Optional[str] = None
-    branch_id: int
+    branch_id: Optional[int] = None
     description: Optional[str] = None
 
 class SubstationCreate(SubstationBase):

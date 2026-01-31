@@ -20,7 +20,10 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   
   // Инициализируем BaseUrlManager с SharedPreferences
-  await BaseUrlManager().init(prefs);
+  final urlManager = BaseUrlManager();
+  await urlManager.init(prefs);
+  // Принудительно обновляем протокол из конфига при старте
+  urlManager.updateProtocolFromConfig();
   
   final apiService = ApiServiceProvider.create(prefs: prefs);
   ApiServiceProvider.updatePrefs(prefs);

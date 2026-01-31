@@ -73,5 +73,24 @@ export class MapService {
   get centerOnFeature$(): Observable<{type: string, coordinates: [number, number], zoom?: number | null, currentZoomForLogic?: number}> {
     return this.centerOnFeatureSubject$.asObservable();
   }
+
+  // Запрос выделения опоры в дереве объектов (при клике на опору на карте)
+  private requestSelectPoleInTreeSubject$ = new Subject<{
+    powerLineId: number;
+    segmentId?: number | null;
+    poleId: number;
+  }>();
+
+  requestSelectPoleInTree(powerLineId: number, poleId: number, segmentId?: number | null): void {
+    this.requestSelectPoleInTreeSubject$.next({ powerLineId, segmentId, poleId });
+  }
+
+  get requestSelectPoleInTree$(): Observable<{
+    powerLineId: number;
+    segmentId?: number | null;
+    poleId: number;
+  }> {
+    return this.requestSelectPoleInTreeSubject$.asObservable();
+  }
 }
 

@@ -70,6 +70,7 @@
               <div *ngIf="isPolesFolderExpanded(item.powerLine.properties['id'], 'segment-' + segment.segmentId)" class="tree-children poles-list">
                 <div *ngFor="let pole of segment.poles" 
                      class="tree-node pole-node"
+                     [class.selected-pole]="selectedPoleIdFromMap === pole.properties['id']"
                      (click)="onFeatureClick(pole, $event)"
                      (contextmenu)="onFeatureRightClick(pole, $event)">
                   <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">account_tree</mat-icon>
@@ -95,6 +96,7 @@
           <div *ngIf="isPolesFolderExpanded(item.powerLine.properties['id'], 'no-segment')" class="tree-children poles-list">
             <div *ngFor="let pole of item.polesWithoutSegment" 
                  class="tree-node pole-node"
+                 [class.selected-pole]="selectedPoleIdFromMap === pole.properties['id']"
                  (click)="onFeatureClick(pole, $event)"
                  (contextmenu)="onFeatureRightClick(pole, $event)">
               <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">account_tree</mat-icon>
@@ -102,6 +104,17 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Подстанции -->
+    <div *ngFor="let substation of substationsFeatures" class="tree-item">
+      <div class="tree-node substation-node" 
+           (click)="onFeatureClick(substation, $event)"
+           (contextmenu)="onFeatureRightClick(substation, $event)">
+        <mat-icon class="node-icon" style="color: rgba(156, 39, 176, 0.87);">power</mat-icon>
+        <span class="node-label">{{ substation.properties['name'] || 'Без названия' }}</span>
+        <span class="node-description">{{ substation.properties['voltage_level'] }} кВ</span>
       </div>
     </div>
   </div>
@@ -125,6 +138,10 @@
     <button mat-menu-item (click)="onCreateObject()">
       <mat-icon>add</mat-icon>
       <span>Создать линию</span>
+    </button>
+    <button mat-menu-item (click)="onCreateSubstation()">
+      <mat-icon>power</mat-icon>
+      <span>Создать подстанцию</span>
     </button>
   </ng-container>
   
@@ -152,6 +169,14 @@
       <mat-icon>add</mat-icon>
       <span>Создать пролёт</span>
     </button>
+    <button mat-menu-item (click)="onEditObject()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteObject()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить</span>
+    </button>
   </ng-container>
   
   <ng-container *ngIf="contextMenuType === 'folder'">
@@ -162,6 +187,17 @@
   </ng-container>
   
   <ng-container *ngIf="contextMenuType === 'pole' || contextMenuType === 'span'">
+    <button mat-menu-item (click)="onEditObject()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteObject()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить</span>
+    </button>
+  </ng-container>
+  
+  <ng-container *ngIf="contextMenuType === 'substation'">
     <button mat-menu-item (click)="onEditObject()">
       <mat-icon>edit</mat-icon>
       <span>Редактировать</span>

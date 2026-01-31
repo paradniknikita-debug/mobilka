@@ -1,4 +1,4 @@
-import { Component, OnInit, Inject } from '@angular/core';
+import { Component, OnInit, Inject, ChangeDetectorRef } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatSelectChange } from '@angular/material/select';
@@ -6,6 +6,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { MapService } from '../../../core/services/map.service';
 import { PowerLine, PowerLineCreate } from '../../../core/models/power-line.model';
 import { PoleCreate } from '../../../core/models/pole.model';
+import { SubstationCreate } from '../../../core/models/substation.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable } from 'rxjs';
 import { map, startWith } from 'rxjs/operators';
@@ -21,6 +22,7 @@ export class CreateObjectDialogComponent implements OnInit {
   objectTypeForm: FormGroup;
   poleForm: FormGroup;
   powerLineForm: FormGroup;
+  substationForm: FormGroup;
   
   selectedObjectType: ObjectType | null = null;
   powerLines: PowerLine[] = [];
@@ -28,6 +30,12 @@ export class CreateObjectDialogComponent implements OnInit {
   
   isSubmitting = false;
   showImportOption = false;
+  
+  // Режим редактирования для опор
+  isEditMode = false;
+  poleId?: number;
+  powerLineId?: number;
+  isLoading = false;
 
   // Типы опор для выпадающего списка
   poleTypes = [
@@ -54,16 +62,45 @@ export class CreateObjectDialogComponent implements OnInit {
     'poor'
   ];
 
+  // Стандартные значения напряжения для подстанций (кВ)
+  voltageLevels = [
+    0.4,
+    6,
+    10,
+    35,
+    110,
+    220,
+    330,
+    500,
+    750
+  ];
+
   constructor(
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<CreateObjectDialogComponent>,
     private apiService: ApiService,
     private mapService: MapService,
     private snackBar: MatSnackBar,
+    private cdr: ChangeDetectorRef,
     @Inject(MAT_DIALOG_DATA) public data: any
   ) {
+    console.log('CreateObjectDialogComponent constructor, data:', JSON.stringify(data, null, 2));
+    
+    // Устанавливаем selectedObjectType сразу в конструкторе, если передан defaultObjectType
+    if (data?.defaultObjectType) {
+      this.selectedObjectType = data.defaultObjectType as ObjectType;
+      console.log('✓ Установлен selectedObjectType в конструкторе:', this.selectedObjectType);
+      
+      if (data.defaultObjectType === 'pole' && data.powerLineId) {
+        this.powerLineId = data.powerLineId;
+        console.log('✓ Установлен powerLineId в конструкторе:', this.powerLineId);
+      }
+    } else {
+      console.log('⚠ defaultObjectType не передан, selectedObjectType останется null');
+    }
+    
     this.objectTypeForm = this.fb.group({
-      objectType: ['', Validators.required]
+      objectType: [data?.defaultObjectType || '', Validators.required]
     });
 
     this.poleForm = this.fb.group({
@@ -81,8 +118,13 @@ export class CreateObjectDialogComponent implements OnInit {
       notes: ['']
     });
 
-    // Автогенерация UID при инициализации
-    this.generateMRID();
+    // Автогенерация UID при инициализации (только если не передан defaultObjectType для опоры)
+    if (!data?.defaultObjectType || data.defaultObjectType !== 'pole') {
+      this.generateMRID();
+    } else if (data.defaultObjectType === 'pole') {
+      // Генерируем MRID для опоры сразу в конструкторе
+      this.generateMRID();
+    }
 
     this.powerLineForm = this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(100)]],
@@ -99,9 +141,56 @@ export class CreateObjectDialogComponent implements OnInit {
 
     // Автогенерация UID для ЛЭП
     this.generatePowerLineMRID();
+
+    this.substationForm = this.fb.group({
+      name: ['', [Validators.required, Validators.maxLength(100)]],
+      code: ['', [Validators.required, Validators.maxLength(20)]],
+      voltage_level: [null, [Validators.required, this.voltageValidator.bind(this)]],
+      latitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
+      longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
+      address: [''],
+      branch_id: [1, Validators.required], // TODO: Получить реальный branch_id
+      description: ['']
+    });
   }
 
   ngOnInit(): void {
+    console.log('CreateObjectDialogComponent ngOnInit, data:', this.data);
+    console.log('selectedObjectType в ngOnInit:', this.selectedObjectType);
+    
+    // Проверяем режим редактирования опоры
+    if (this.data?.isEdit && this.data?.objectType === 'pole' && this.data?.poleId && this.data?.powerLineId) {
+      this.isEditMode = true;
+      this.poleId = this.data.poleId;
+      this.powerLineId = this.data.powerLineId;
+      this.selectedObjectType = 'pole';
+      this.objectTypeForm.patchValue({ objectType: 'pole' });
+      console.log('Режим редактирования опоры, poleId:', this.poleId, 'powerLineId:', this.powerLineId);
+      this.cdr.detectChanges();
+    } else if (this.data?.defaultObjectType) {
+      // Автоматически выбираем тип объекта, если передан defaultObjectType
+      // Это происходит когда пользователь ПКМ на линии и выбирает "Создать опору"
+      // selectedObjectType уже установлен в конструкторе, но убеждаемся что он установлен
+      if (!this.selectedObjectType) {
+        this.selectedObjectType = this.data.defaultObjectType as ObjectType;
+      }
+      this.objectTypeForm.patchValue({ objectType: this.data.defaultObjectType });
+      console.log('Установлен defaultObjectType:', this.data.defaultObjectType, 'selectedObjectType:', this.selectedObjectType);
+      
+      // Если это опора и передан powerLineId, сохраняем его для установки после загрузки списка
+      if (this.data.defaultObjectType === 'pole' && this.data.powerLineId) {
+        if (!this.powerLineId) {
+          this.powerLineId = this.data.powerLineId;
+        }
+        console.log('Установлен powerLineId для опоры:', this.powerLineId);
+        // Генерируем MRID сразу, так как тип объекта уже выбран
+        this.generateMRID();
+      }
+      
+      // Принудительно обновляем шаблон, чтобы форма опоры отобразилась сразу
+      this.cdr.detectChanges();
+    }
+    
     this.loadPowerLines();
 
     // Фильтрация ЛЭП для автокомплита
@@ -118,16 +207,80 @@ export class CreateObjectDialogComponent implements OnInit {
     this.apiService.getPowerLines().subscribe({
       next: (lines) => {
         this.powerLines = lines;
+        console.log('Загружены ЛЭП, количество:', lines.length, 'powerLineId для установки:', this.powerLineId);
+        console.log('Все ЛЭП:', lines.map(l => ({ id: l.id, name: l.name, code: l.code })));
+        
+        // Если передан powerLineId (при создании опоры из контекстного меню линии), устанавливаем его в форму
+        if (this.powerLineId && !this.isEditMode) {
+          const selectedLine = this.powerLines.find(line => line.id === this.powerLineId);
+          console.log('Поиск линии с ID', this.powerLineId, 'найден:', selectedLine);
+          if (selectedLine) {
+            // Используем setTimeout для гарантии, что форма готова
+            setTimeout(() => {
+              this.poleForm.patchValue({ power_line_id: selectedLine });
+              console.log('Линия установлена в форму:', selectedLine);
+              this.cdr.detectChanges();
+            }, 0);
+          } else {
+            console.warn('Линия с ID', this.powerLineId, 'не найдена в списке');
+            console.warn('Доступные ID линий:', lines.map(l => l.id));
+          }
+        }
+        
+        // Если режим редактирования, загружаем данные опоры после загрузки ЛЭП
+        if (this.isEditMode && this.poleId && this.powerLineId) {
+          setTimeout(() => {
+            this.loadPole();
+          }, 100);
+        }
       },
       error: (error) => {
         console.error('Ошибка загрузки ЛЭП:', error);
-        // Не показываем ошибку, если это просто проблема с загрузкой списка
-        // Пользователь может продолжить работу
+        // Показываем ошибку только если это не сетевая проблема
         if (error.status !== 0) {
-          this.snackBar.open('Ошибка загрузки списка ЛЭП', 'Закрыть', {
-            duration: 3000
+          this.snackBar.open('Ошибка загрузки списка ЛЭП: ' + (error.error?.detail || error.message || 'Неизвестная ошибка'), 'Закрыть', {
+            duration: 5000
+          });
+        } else {
+          // Сетевая ошибка - показываем предупреждение
+          this.snackBar.open('Не удалось загрузить список ЛЭП. Проверьте подключение к серверу.', 'Закрыть', {
+            duration: 5000
           });
         }
+      }
+    });
+  }
+  
+  loadPole(): void {
+    if (!this.poleId || !this.powerLineId) return;
+    
+    this.isLoading = true;
+    this.apiService.getPoleByPowerLine(this.powerLineId, this.poleId).subscribe({
+      next: (pole) => {
+        // Находим ЛЭП для установки в форму
+        const powerLine = this.powerLines.find(p => p.id === this.powerLineId);
+        
+        // Заполняем форму данными опоры
+        this.poleForm.patchValue({
+          pole_number: pole.pole_number || '',
+          power_line_id: powerLine || this.powerLineId,
+          latitude: pole.latitude || '',
+          longitude: pole.longitude || '',
+          pole_type: pole.pole_type || '',
+          mrid: pole.mrid || '',
+          height: pole.height || null,
+          foundation_type: (pole as any).foundation_type || '',
+          material: pole.material || '',
+          year_installed: pole.installation_date ? new Date(pole.installation_date).getFullYear() : null,
+          condition: pole.condition || 'good',
+          notes: (pole as any).notes || ''
+        });
+        this.isLoading = false;
+      },
+      error: (error) => {
+        console.error('Ошибка загрузки опоры:', error);
+        this.snackBar.open('Ошибка загрузки данных опоры: ' + (error.error?.detail || error.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.isLoading = false;
       }
     });
   }
@@ -167,7 +320,7 @@ export class CreateObjectDialogComponent implements OnInit {
   onObjectTypeSelected(event: MatSelectChange): void {
     const selectedType = event.value as ObjectType;
     this.selectedObjectType = selectedType;
-    if (selectedType === 'pole') {
+    if (selectedType === 'pole' && !this.isEditMode) {
       this.generateMRID();
     } else if (selectedType === 'powerline') {
       this.generatePowerLineMRID();
@@ -179,6 +332,8 @@ export class CreateObjectDialogComponent implements OnInit {
       this.createPole();
     } else if (this.selectedObjectType === 'powerline' && this.powerLineForm.valid) {
       this.createPowerLine();
+    } else if (this.selectedObjectType === 'substation' && this.substationForm.valid) {
+      this.createSubstation();
     }
   }
 
@@ -243,20 +398,27 @@ export class CreateObjectDialogComponent implements OnInit {
       notes: formValue.notes?.trim() || undefined
     };
 
-    console.log('Отправка данных для создания опоры:', poleData);
+    console.log('Отправка данных для ' + (this.isEditMode ? 'обновления' : 'создания') + ' опоры:', poleData);
 
-    this.apiService.createPole(powerLineId, poleData).subscribe({
-      next: (createdPole) => {
+    // Используем API для создания или обновления опоры
+    const poleObservable = this.isEditMode && this.poleId && this.powerLineId
+      ? this.apiService.updatePole(this.powerLineId, this.poleId, poleData)
+      : this.apiService.createPole(powerLineId, poleData);
+    
+    poleObservable.subscribe({
+      next: (pole) => {
         // Обновляем данные карты и sidebar
         this.mapService.refreshData();
-        console.log('Опора успешно создана:', createdPole);
-        this.snackBar.open('Опора успешно создана', 'Закрыть', {
+        const message = this.isEditMode ? 'Опора успешно обновлена' : 'Опора успешно создана';
+        console.log(message + ':', pole);
+        this.snackBar.open(message, 'Закрыть', {
           duration: 3000
         });
-        this.dialogRef.close(createdPole);
+        this.dialogRef.close({ success: true, pole });
       },
       error: (error) => {
-        console.error('Ошибка создания опоры:', error);
+        const action = this.isEditMode ? 'обновления' : 'создания';
+        console.error(`Ошибка ${action} опоры:`, error);
         console.error('Детали ошибки:', {
           status: error.status,
           statusText: error.statusText,
@@ -264,7 +426,7 @@ export class CreateObjectDialogComponent implements OnInit {
           message: error.message
         });
         
-        let errorMessage = 'Ошибка создания опоры';
+        let errorMessage = `Ошибка ${action} опоры`;
         
         // Обработка ошибок валидации FastAPI (может быть массивом)
         if (error.error?.detail) {
@@ -400,7 +562,7 @@ export class CreateObjectDialogComponent implements OnInit {
   // Валидатор для стандартных значений напряжения
   voltageValidator(control: any): { [key: string]: any } | null {
     if (!control.value && control.value !== 0) {
-      return null; // Пустое значение допустимо
+      return null; // Если значение пустое, валидация пройдёт (required проверит отдельно)
     }
     const str = String(control.value).replace(',', '.');
     const num = parseFloat(str);
@@ -410,10 +572,9 @@ export class CreateObjectDialogComponent implements OnInit {
     if (num < 0) {
       return { negativeNumber: true };
     }
-    const standardVoltages = [0.4, 6, 10, 35, 110, 220, 330, 500, 750];
-    // Проверяем с учетом возможных погрешностей float (округляем до 1 знака)
+    // Проверяем, что значение находится в списке стандартных значений (с учетом погрешностей float)
     const numRounded = Math.round(num * 10) / 10;
-    const isStandard = standardVoltages.some(v => Math.abs(v - numRounded) < 0.01);
+    const isStandard = this.voltageLevels.some(v => Math.abs(v - numRounded) < 0.01);
     if (!isStandard) {
       return { invalidVoltage: true };
     }
@@ -591,7 +752,18 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   getFieldError(fieldName: string): string {
-    const form = this.selectedObjectType === 'powerline' ? this.powerLineForm : this.poleForm;
+    let form: FormGroup | undefined;
+    if (this.selectedObjectType === 'powerline') {
+      form = this.powerLineForm;
+    } else if (this.selectedObjectType === 'substation') {
+      form = this.substationForm;
+    } else {
+      form = this.poleForm;
+    }
+    
+    if (!form) {
+      return '';
+    }
     const field = form.get(fieldName);
     if (field?.hasError('required')) {
       return 'Это поле обязательно для заполнения';
@@ -630,10 +802,58 @@ export class CreateObjectDialogComponent implements OnInit {
       return 'Некорректное числовое значение';
     }
     if (field?.hasError('invalidVoltage')) {
-      const standardVoltages = [0.4, 6, 10, 35, 110, 220, 330, 500, 750];
-      return `Напряжение должно быть одним из стандартных значений: ${standardVoltages.join(', ')} кВ`;
+      return `Напряжение должно быть одним из стандартных значений: ${this.voltageLevels.join(', ')} кВ`;
+    }
+    if (field?.hasError('invalidVoltageLevel')) {
+      return `Напряжение должно быть одним из стандартных значений: ${this.voltageLevels.join(', ')} кВ`;
     }
     return '';
+  }
+
+  createSubstation(): void {
+    if (this.substationForm.invalid) {
+      this.markFormGroupTouched(this.substationForm);
+      return;
+    }
+
+    this.isSubmitting = true;
+    const formValue = this.substationForm.value;
+
+    const substationData: SubstationCreate = {
+      name: formValue.name.trim(),
+      code: formValue.code.trim(),
+      voltage_level: parseFloat(formValue.voltage_level) || 0,
+      latitude: parseFloat(formValue.latitude) || 0,
+      longitude: parseFloat(formValue.longitude) || 0,
+      address: formValue.address?.trim() || undefined,
+      branch_id: formValue.branch_id || 1,
+      description: formValue.description?.trim() || undefined
+    };
+
+    this.apiService.createSubstation(substationData).subscribe({
+      next: (createdSubstation) => {
+        console.log('Подстанция успешно создана:', createdSubstation);
+        this.isSubmitting = false;
+        this.snackBar.open('Подстанция успешно создана', 'Закрыть', {
+          duration: 3000
+        });
+        this.mapService.refreshData();
+        this.dialogRef.close({ success: true, data: createdSubstation });
+      },
+      error: (error) => {
+        console.error('Ошибка создания подстанции:', error);
+        this.isSubmitting = false;
+        let errorMessage = 'Ошибка создания подстанции';
+        if (error.error?.detail) {
+          errorMessage = error.error.detail;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        this.snackBar.open(errorMessage, 'Закрыть', {
+          duration: 5000
+        });
+      }
+    });
   }
 }
 

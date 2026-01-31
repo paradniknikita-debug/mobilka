@@ -1,8 +1,10 @@
 import redis.asyncio as redis
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -119,6 +121,31 @@ app.include_router(substations.router, prefix="/api/v1/substations", tags=["subs
 app.include_router(excel_import.router, tags=["import"])
 app.include_router(cim_line_structure.router, prefix="/api/v1/cim", tags=["cim"])
 app.include_router(pole_sequence.router, prefix="/api/v1", tags=["pole-sequence"])
+
+# Обработчик исключений для обеспечения CORS заголовков даже при ошибках
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Глобальный обработчик исключений с CORS заголовками"""
+    import traceback
+    
+    # Логируем ошибку
+    print(f"ERROR: Необработанное исключение: {exc}")
+    print(f"ERROR: Traceback:\n{traceback.format_exc()}")
+    
+    # Возвращаем ответ с CORS заголовками
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Внутренняя ошибка сервера: {str(exc)}"
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 @app.get("/",response_class=HTMLResponse)
 async def root():

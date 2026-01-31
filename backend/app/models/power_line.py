@@ -38,7 +38,7 @@ class PowerLine(Base):
     poles = relationship("Pole", back_populates="power_line", cascade="all, delete-orphan")
     spans = relationship("Span", back_populates="power_line", cascade="all, delete-orphan")
     taps = relationship("Tap", back_populates="power_line", cascade="all, delete-orphan")
-    connections = relationship("Connection", back_populates="power_line")
+    connections = relationship("Connection", back_populates="power_line", cascade="all, delete-orphan")
 
 class Pole(Base):
     """
@@ -73,6 +73,10 @@ class Pole(Base):
     year_installed = Column(Integer, nullable=True)
     condition = Column(String(20), default="good")  # good, satisfactory, poor
     notes = Column(Text, nullable=True)
+    # Марка провода для этой опоры (используется для определения марки провода пролёта от этой опоры)
+    conductor_type = Column(String(50), nullable=True)  # AC-70, AC-95 и т.д.
+    conductor_material = Column(String(50), nullable=True)  # алюминий, медь
+    conductor_section = Column(String(20), nullable=True)  # 70, 95 и т.д. (сечение в мм²)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

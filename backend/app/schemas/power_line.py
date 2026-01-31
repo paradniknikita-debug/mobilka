@@ -17,15 +17,28 @@ class PoleBase(BaseModel):
     year_installed: Optional[int] = None
     condition: str = "good"
     notes: Optional[str] = None
+    sequence_number: Optional[int] = None
+    conductor_type: Optional[str] = None
+    conductor_material: Optional[str] = None
+    conductor_section: Optional[str] = None
 
 class PoleCreate(PoleBase):
     mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
+    is_tap: bool = False  # Является ли опора отпаечной (точкой отпайки)
+    # Параметры кабеля для автоматического создания пролёта
+    conductor_type: Optional[str] = None  # Марка провода (AC-70, AC-95 и т.д.)
+    conductor_material: Optional[str] = None  # Материал (алюминий, медь)
+    conductor_section: Optional[str] = None  # Сечение, мм²
 
 class PoleResponse(PoleBase):
     id: int
     mrid: str
     power_line_id: int
     connectivity_node_id: Optional[int] = None
+    sequence_number: Optional[int] = None
+    conductor_type: Optional[str] = None
+    conductor_material: Optional[str] = None
+    conductor_section: Optional[str] = None
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]

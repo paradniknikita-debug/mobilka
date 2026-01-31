@@ -65,7 +65,7 @@ export class DeleteObjectDialogComponent {
     this.isDeleting = true;
 
     // В зависимости от типа объекта вызываем соответствующий метод API
-    let deleteObservable;
+    let deleteObservable: any;
     
     switch (this.data.objectType) {
       case 'powerLine':
@@ -86,8 +86,10 @@ export class DeleteObjectDialogComponent {
         }
         break;
       case 'substation':
+        deleteObservable = this.apiService.deleteSubstation(this.data.objectId);
+        break;
       case 'tap':
-        // TODO: Добавить методы удаления для этих типов
+        // TODO: Добавить методы удаления для отпаек
         this.snackBar.open('Удаление этого типа объектов пока не реализовано', 'Закрыть', {
           duration: 3000
         });
@@ -101,21 +103,61 @@ export class DeleteObjectDialogComponent {
 
     if (deleteObservable) {
       deleteObservable.subscribe({
-        next: () => {
+        next: (response?: {message?: string, details?: string}) => {
           const label = this.getObjectTypeLabelNominative();
           const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
-          this.snackBar.open(`${capitalizedLabel} успешно удалена`, 'Закрыть', {
-            duration: 3000
+          let message: string;
+          
+          if (this.data.objectType === 'substation') {
+            message = `${capitalizedLabel} успешно удалена.`;
+          } else if (this.data.objectType === 'pole') {
+            message = response?.details 
+              ? `${capitalizedLabel} успешно удалена. ${response.details}`
+              : `${capitalizedLabel} успешно удалена. Пролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.`;
+          } else {
+            message = response?.details 
+              ? `${capitalizedLabel} успешно удалена. ${response.details}`
+              : `${capitalizedLabel} успешно удалена.`;
+          }
+          
+          this.snackBar.open(message, 'Закрыть', {
+            duration: 4000
           });
           // Уведомляем сервис карты об обновлении данных
           this.mapService.refreshData();
           this.dialogRef.close(true);
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('Ошибка удаления объекта:', error);
+          console.error('Полная информация об ошибке:', {
+            status: error.status,
+            statusText: error.statusText,
+            message: error.message,
+            error: error.error,
+            url: error.url,
+            name: error.name
+          });
+          
           let errorMessage = 'Ошибка удаления объекта';
           
-          if (error.error?.detail) {
+          // Обработка различных типов ошибок
+          if (error.status === 0) {
+            // Ошибка сети или CORS
+            errorMessage = 'Ошибка соединения с сервером. Проверьте подключение к интернету и настройки CORS.';
+            console.error('Ошибка сети (status 0). Возможные причины:');
+            console.error('  - Сервер недоступен');
+            console.error('  - Проблема с CORS');
+            console.error('  - Блокировка запроса браузером');
+          } else if (error.status === 404) {
+            errorMessage = 'Объект не найден';
+          } else if (error.status === 403) {
+            errorMessage = 'Доступ запрещен. Проверьте права доступа.';
+          } else if (error.status === 401) {
+            errorMessage = 'Требуется авторизация. Войдите в систему заново.';
+          } else if (error.status === 409) {
+            // 409 больше не должно возникать, так как связанные объекты удаляются автоматически
+            errorMessage = error.error?.detail || 'Не удалось удалить объект: существуют связанные данные';
+          } else if (error.error?.detail) {
             if (typeof error.error.detail === 'string') {
               errorMessage = error.error.detail;
             } else {

@@ -285,7 +285,7 @@ async def import_substations(
             try:
                 # Проверяем уникальность кода
                 existing = await db.execute(
-                    select(Substation).where(Substation.code == str(row['code']))
+                    select(Substation).where(Substation.dispatcher_name == str(row['dispatcher_name']))
                 )
                 if existing.scalar_one_or_none():
                     errors.append(f"Строка {idx + 2}: Подстанция с кодом '{row['code']}' уже существует")

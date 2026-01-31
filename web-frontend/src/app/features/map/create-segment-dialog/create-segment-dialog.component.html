@@ -1,5 +1,5 @@
 <div class="create-segment-dialog">
-  <h2 mat-dialog-title>Создание участка линии</h2>
+  <h2 mat-dialog-title>{{ isEditMode ? 'Редактирование участка линии' : 'Создание участка линии' }}</h2>
 
   <mat-dialog-content>
     <form [formGroup]="segmentForm">
@@ -68,7 +68,7 @@
   <mat-dialog-actions align="end">
     <button mat-button (click)="onCancel()">Отмена</button>
     <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="isSubmitting || segmentForm.invalid || isLoading || poles.length === 0">
-      Создать
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
     </button>
   </mat-dialog-actions>
 </div>

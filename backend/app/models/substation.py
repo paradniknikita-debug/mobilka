@@ -12,7 +12,7 @@ class Substation(Base):
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
-    code = Column(String(20), unique=True, index=True, nullable=False)
+    dispatcher_name = Column(String(100), nullable=False)  # Диспетчерское наименование (заменяет code)
     voltage_level = Column(Float, nullable=False)  # кВ
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)

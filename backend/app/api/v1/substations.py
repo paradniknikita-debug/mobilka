@@ -39,7 +39,7 @@ router = APIRouter()
 
 # ===== ENDPOINTS ДЛЯ ПОДСТАНЦИЙ =====
 
-@router.post("/", response_model=SubstationResponse)
+@router.post("", response_model=SubstationResponse)
 async def create_substation(
     substation_data: SubstationCreate,
     current_user: User = Depends(get_current_active_user),
@@ -47,14 +47,14 @@ async def create_substation(
 ):
     """Создание новой подстанции"""
     
-    # Проверяем уникальность кода подстанции
-    existing_code = await db.execute(
-        select(Substation).where(Substation.code == substation_data.code)
+    # Проверяем уникальность диспетчерского наименования подстанции
+    existing_dispatcher_name = await db.execute(
+        select(Substation).where(Substation.dispatcher_name == substation_data.dispatcher_name)
     )
-    if existing_code.scalar_one_or_none():
+    if existing_dispatcher_name.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Substation code already exists"
+            detail="Substation dispatcher name already exists"
         )
     
     # Создаем новую подстанцию
@@ -77,9 +77,11 @@ async def get_substations(
     
     query = select(Substation)
     
-    # Добавляем фильтр по активности если указан
+    # По умолчанию показываем только активные подстанции
     if is_active is not None:
         query = query.where(Substation.is_active == is_active)
+    else:
+        query = query.where(Substation.is_active == True)
     
     # Добавляем пагинацию
     query = query.offset(skip).limit(limit)
@@ -134,14 +136,14 @@ async def update_substation(
         )
     
     # Проверяем уникальность кода (если изменился)
-    if substation.code != substation_data.code:
-        existing_code = await db.execute(
-            select(Substation).where(Substation.code == substation_data.code)
+    if substation.dispatcher_name != substation_data.dispatcher_name:
+        existing_dispatcher_name = await db.execute(
+            select(Substation).where(Substation.dispatcher_name == substation_data.dispatcher_name)
         )
-        if existing_code.scalar_one_or_none():
+        if existing_dispatcher_name.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Substation code already exists"
+                detail="Substation dispatcher name already exists"
             )
     
     # Обновляем данные

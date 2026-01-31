@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user.dart';
 import '../models/power_line.dart';
+import '../models/substation.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
@@ -40,11 +41,17 @@ abstract class ApiService {
   @GET('/power-lines/{id}')
   Future<PowerLine> getPowerLine(@Path('id') int id);
 
+  @DELETE('/power-lines/{id}')
+  Future<void> deletePowerLine(@Path('id') int id);
+
   @POST('/power-lines/{id}/poles')
   Future<Pole> createPole(@Path('id') int powerLineId, @Body() PoleCreate poleData);
 
   @GET('/power-lines/{id}/poles')
   Future<List<Pole>> getPoles(@Path('id') int powerLineId);
+
+  @DELETE('/power-lines/{powerLineId}/spans/{spanId}')
+  Future<void> deleteSpan(@Path('powerLineId') int powerLineId, @Path('spanId') int spanId);
 
   // Poles
   @GET('/poles')
@@ -52,6 +59,9 @@ abstract class ApiService {
 
   @GET('/poles/{id}')
   Future<Pole> getPole(@Path('id') int id);
+
+  @DELETE('/poles/{id}')
+  Future<void> deletePole(@Path('id') int id);
 
   @POST('/poles/{id}/equipment')
   Future<Equipment> createEquipment(@Path('id') int poleId, @Body() EquipmentCreate equipmentData);
@@ -79,6 +89,13 @@ abstract class ApiService {
   @GET('/map/substations/geojson')
   Future<dynamic> getSubstationsGeoJSON();
 
+  // Substations
+  @POST('/substations')
+  Future<Substation> createSubstation(@Body() SubstationCreate substationData);
+
+  @DELETE('/substations/{id}')
+  Future<void> deleteSubstation(@Path('id') int id);
+
   @GET('/map/bounds')
   Future<dynamic> getDataBounds();
 
@@ -103,6 +120,8 @@ class ApiServiceProvider {
     _prefs = prefs; // Сохраняем prefs статически
     final dio = Dio();
     final urlManager = BaseUrlManager();
+    // Обновляем протокол из конфига при создании сервиса
+    urlManager.updateProtocolFromConfig();
     dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
     
     // Настройка interceptors
@@ -127,25 +146,29 @@ class ApiServiceProvider {
             }
           }
           
-          if (kDebugMode) {
-            print('📤 [${options.method}] ${options.baseUrl}${options.path}');
-            print('   Headers: ${options.headers.keys.join(", ")}');
+          // Уменьшаем логирование - только для важных запросов
+          if (kDebugMode && (options.path.contains('/auth/') || options.path.contains('/sync/'))) {
+            print('📤 [${options.method}] ${options.path}');
           }
           
           handler.next(options);
         },
         onError: (error, handler) async {
-          // Автоматический fallback HTTPS -> HTTP при ошибках соединения
-          // НО: только если это реальная ошибка соединения, не 404 после редиректа
+          // Автоматический fallback HTTPS -> HTTP при ошибках соединения или SSL
+          // Проверяем различные типы ошибок, которые могут возникнуть при проблемах с SSL
+          final isSslError = error.message?.contains('CERT_AUTHORITY_INVALID') == true ||
+                            error.message?.contains('ERR_CERT') == true ||
+                            error.message?.contains('certificate') == true ||
+                            error.type == DioExceptionType.connectionError;
+          
           if (kIsWeb && 
               !urlManager.isUsingHttp && 
-              error.type == DioExceptionType.connectionError &&
+              isSslError &&
               error.response == null) { // Только если нет ответа (браузер блокирует)
             
             if (kDebugMode) {
-              print('🔄 Попытка fallback на HTTP из-за ошибки: ${error.type}');
-              print('   Примечание: Если Nginx редиректит HTTP→HTTPS, fallback не поможет');
-              print('   Решение: Прими SSL сертификат в браузере на https://localhost');
+              print('⚠️ Проблема с HTTPS (SSL сертификат): ${error.message}');
+              print('   Переключение на HTTP...');
             }
             
             // Выполняем fallback на HTTP
@@ -163,16 +186,17 @@ class ApiServiceProvider {
               
               final response = await dio.fetch(newRequestOptions);
               
+              if (kDebugMode) {
+                print('✅ Запрос успешно выполнен через HTTP после fallback');
+              }
+              
               return handler.resolve(response);
             } catch (retryError) {
               // Если и HTTP не работает (404 после редиректа), это значит:
               // Nginx редиректит HTTP → HTTPS, но HTTPS всё ещё блокируется
               if (kDebugMode) {
-                print('❌ Fallback на HTTP не помог');
-                print('   Вероятная причина: Nginx редиректит HTTP → HTTPS');
-                print('   Решение: Прими SSL сертификат в браузере');
-                print('   1. Открой https://localhost в новой вкладке');
-                print('   2. Нажми "Дополнительно" → "Перейти на localhost (небезопасно)"');
+                print('❌ Fallback на HTTP не помог. Проверьте SSL сертификат.');
+                print('   Решение: Откройте https://localhost в браузере и примите сертификат');
               }
               
               // Сбрасываем fallback, чтобы вернуться к HTTPS после принятия сертификата
@@ -185,8 +209,11 @@ class ApiServiceProvider {
             // Токен истёк, нужно перелогиниться
             await _clearStoredToken();
             if (kDebugMode) {
-              print('🔓 Токен истёк, требуется повторная авторизация');
+              print('🔓 Токен истёк (401), требуется повторная авторизация');
+              print('   Очищен токен из хранилища');
             }
+            // Ошибка 401 будет проброшена дальше, чтобы UI мог обработать её
+            // (например, перенаправить на страницу логина)
           } else if (error.response?.statusCode == 403) {
             final token = await _getStoredToken();
             if (kDebugMode) {

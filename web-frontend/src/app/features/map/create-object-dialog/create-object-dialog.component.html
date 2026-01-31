@@ -1,5 +1,5 @@
 <div class="create-object-dialog">
-  <h2 mat-dialog-title>Создание объекта</h2>
+  <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
 
   <mat-dialog-content>
     <!-- Шаг 1: Выбор типа объекта -->
@@ -227,9 +227,69 @@
       </form>
     </div>
 
-    <!-- Заглушки для других типов объектов -->
+    <!-- Форма создания подстанции -->
     <div *ngIf="selectedObjectType === 'substation'" class="step-container">
-      <p>Форма создания подстанции будет реализована позже</p>
+      <form [formGroup]="substationForm">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Название *</mat-label>
+          <input matInput formControlName="name" maxlength="100">
+          <mat-error *ngIf="substationForm.get('name')?.hasError('required')">
+            Название обязательно
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Код *</mat-label>
+          <input matInput formControlName="code" maxlength="20">
+          <mat-error *ngIf="substationForm.get('code')?.hasError('required')">
+            Код обязателен
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Напряжение (кВ) *</mat-label>
+          <mat-select formControlName="voltage_level">
+            <mat-option *ngFor="let voltage of voltageLevels" [value]="voltage">
+              {{ voltage }} кВ
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="substationForm.get('voltage_level')?.hasError('required')">
+            Напряжение обязательно
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('voltage_level')?.hasError('invalidVoltage')">
+            Выберите стандартное значение напряжения
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('voltage_level')?.hasError('negativeNumber')">
+            Напряжение не может быть отрицательным
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Широта *</mat-label>
+          <input matInput type="number" formControlName="latitude" step="any">
+          <mat-error *ngIf="substationForm.get('latitude')?.hasError('required')">
+            Широта обязательна
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Долгота *</mat-label>
+          <input matInput type="number" formControlName="longitude" step="any">
+          <mat-error *ngIf="substationForm.get('longitude')?.hasError('required')">
+            Долгота обязательна
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Адрес</mat-label>
+          <textarea matInput formControlName="address" rows="2"></textarea>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Описание</mat-label>
+          <textarea matInput formControlName="description" rows="3"></textarea>
+        </mat-form-field>
+      </form>
     </div>
 
     <div *ngIf="selectedObjectType === 'equipment'" class="step-container">
@@ -246,7 +306,7 @@
       (click)="onSubmit()"
       [disabled]="poleForm.invalid || isSubmitting">
       <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
-      {{ isSubmitting ? 'Создание...' : 'Создать' }}
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
     </button>
     <button 
       *ngIf="selectedObjectType === 'powerline'"
@@ -254,6 +314,15 @@
       color="primary" 
       (click)="onSubmit()"
       [disabled]="powerLineForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
+    </button>
+    <button 
+      *ngIf="selectedObjectType === 'substation'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="substationForm.invalid || isSubmitting">
       <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
       {{ isSubmitting ? 'Создание...' : 'Создать' }}
     </button>
