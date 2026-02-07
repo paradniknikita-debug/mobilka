@@ -136,12 +136,15 @@ class LineSection(Base):
     # Связь с сегментом линии
     acline_segment_id = Column(Integer, ForeignKey("acline_segments.id"), nullable=False)
     
-    # Параметры провода (одинаковые для всех пролётов в секции)
-    conductor_type = Column(String(50), nullable=False)  # марка провода (AC-70, AC-95 и т.д.)
-    conductor_material = Column(String(50), nullable=True)  # материал (алюминий, медь)
-    conductor_section = Column(String(20), nullable=False)  # сечение, мм²
+    # Связь с WireInfo (CIM стандарт) - временно закомментировано до применения миграции
+    # wire_info_id = Column(Integer, ForeignKey("wire_infos.id"), nullable=True)
     
-    # Электрические параметры (на единицу длины)
+    # Параметры провода (дублируются из WireInfo для обратной совместимости)
+    conductor_type = Column(String(50), nullable=True)  # марка провода (AC-70, AC-95 и т.д.)
+    conductor_material = Column(String(50), nullable=True)  # материал (алюминий, медь)
+    conductor_section = Column(String(20), nullable=True)  # сечение, мм²
+    
+    # Электрические параметры (на единицу длины) - дублируются из WireInfo
     r = Column(Float, nullable=True)  # активное сопротивление, Ом/км
     x = Column(Float, nullable=True)  # реактивное сопротивление, Ом/км
     b = Column(Float, nullable=True)  # проводимость, См/км
@@ -160,6 +163,7 @@ class LineSection(Base):
     
     # Связи
     acline_segment = relationship("AClineSegment", back_populates="line_sections")
+    # wire_info = relationship("WireInfo", back_populates="line_sections")
     spans = relationship("Span", back_populates="line_section", cascade="all, delete-orphan", order_by="Span.sequence_number")
     creator = relationship("User")
 

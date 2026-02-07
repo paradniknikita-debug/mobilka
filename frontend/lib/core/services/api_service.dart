@@ -111,6 +111,14 @@ abstract class ApiService {
 
   @GET('/sync/schema/{entity_type}')
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
+
+  // CIM Export - реализован вручную через Dio (Retrofit не поддерживает бинарные ответы)
+  // Метод реализован в ApiServiceProvider
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  );
 }
 
 class ApiServiceProvider {
@@ -234,7 +242,11 @@ class ApiServiceProvider {
       ),
     );
 
-    return ApiService(dio, baseUrl: dio.options.baseUrl);
+    final apiService = ApiService(dio, baseUrl: dio.options.baseUrl);
+    
+    // Создаём обёртку для добавления метода exportCimXml
+    // (Retrofit не поддерживает бинарные ответы через аннотации)
+    return _ApiServiceWrapper(apiService, dio);
   }
 
   static Future<String?> _getStoredToken() async {
@@ -336,3 +348,120 @@ final dioProvider = Provider<Dio>((ref) {
   
   return dio;
 });
+
+/// Обёртка для ApiService, добавляющая метод exportCimXml
+/// (Retrofit не поддерживает бинарные ответы через аннотации)
+class _ApiServiceWrapper implements ApiService {
+  final ApiService _delegate;
+  final Dio _dio;
+
+  _ApiServiceWrapper(this._delegate, this._dio);
+
+  @override
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  ) async {
+    final queryParameters = <String, dynamic>{
+      'use_cimpy': useCimpy,
+      'include_substations': includeSubstations,
+      'include_power_lines': includePowerLines,
+    };
+    
+    final response = await _dio.get<List<int>>(
+      '/cim/export/xml',
+      queryParameters: queryParameters,
+      options: Options(
+        responseType: ResponseType.bytes,
+      ),
+    );
+    
+    return response;
+  }
+
+  // Делегируем все остальные методы к базовому сервису
+  @override
+  Future<AuthResponse> login(String username, String password) => _delegate.login(username, password);
+
+  @override
+  Future<User> register(UserCreate userData) => _delegate.register(userData);
+
+  @override
+  Future<User> getCurrentUser() => _delegate.getCurrentUser();
+
+  @override
+  Future<List<PowerLine>> getPowerLines() => _delegate.getPowerLines();
+
+  @override
+  Future<PowerLine> createPowerLine(PowerLineCreate powerLineData) => _delegate.createPowerLine(powerLineData);
+
+  @override
+  Future<PowerLine> getPowerLine(int id) => _delegate.getPowerLine(id);
+
+  @override
+  Future<void> deletePowerLine(int id) => _delegate.deletePowerLine(id);
+
+  @override
+  Future<Pole> createPole(int powerLineId, PoleCreate poleData) => _delegate.createPole(powerLineId, poleData);
+
+  @override
+  Future<List<Pole>> getPoles(int powerLineId) => _delegate.getPoles(powerLineId);
+
+  @override
+  Future<void> deleteSpan(int powerLineId, int spanId) => _delegate.deleteSpan(powerLineId, spanId);
+
+  @override
+  Future<List<Pole>> getAllPoles() => _delegate.getAllPoles();
+
+  @override
+  Future<Pole> getPole(int id) => _delegate.getPole(id);
+
+  @override
+  Future<void> deletePole(int id) => _delegate.deletePole(id);
+
+  @override
+  Future<Equipment> createEquipment(int poleId, EquipmentCreate equipmentData) => _delegate.createEquipment(poleId, equipmentData);
+
+  @override
+  Future<List<Equipment>> getPoleEquipment(int poleId) => _delegate.getPoleEquipment(poleId);
+
+  @override
+  Future<List<Equipment>> getAllEquipment() => _delegate.getAllEquipment();
+
+  @override
+  Future<Equipment> getEquipment(int id) => _delegate.getEquipment(id);
+
+  @override
+  Future<dynamic> getPowerLinesGeoJSON() => _delegate.getPowerLinesGeoJSON();
+
+  @override
+  Future<dynamic> getTowersGeoJSON() => _delegate.getTowersGeoJSON();
+
+  @override
+  Future<dynamic> getTapsGeoJSON() => _delegate.getTapsGeoJSON();
+
+  @override
+  Future<dynamic> getSubstationsGeoJSON() => _delegate.getSubstationsGeoJSON();
+
+  @override
+  Future<Substation> createSubstation(SubstationCreate substationData) => _delegate.createSubstation(substationData);
+
+  @override
+  Future<void> deleteSubstation(int id) => _delegate.deleteSubstation(id);
+
+  @override
+  Future<dynamic> getDataBounds() => _delegate.getDataBounds();
+
+  @override
+  Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) => _delegate.uploadSyncBatch(batch);
+
+  @override
+  Future<dynamic> downloadSyncData(String lastSync) => _delegate.downloadSyncData(lastSync);
+
+  @override
+  Future<dynamic> getAllSchemas() => _delegate.getAllSchemas();
+
+  @override
+  Future<dynamic> getEntitySchema(String entityType) => _delegate.getEntitySchema(entityType);
+}

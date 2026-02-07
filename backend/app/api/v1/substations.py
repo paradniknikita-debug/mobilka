@@ -16,6 +16,7 @@ from app.models.substation import (
     ConductingEquipment, 
     ProtectionEquipment
 )
+from app.models.location import Location, PositionPoint, LocationType
 from app.schemas.substation import (
     SubstationCreate, 
     SubstationResponse, 
@@ -57,8 +58,38 @@ async def create_substation(
             detail="Substation dispatcher name already exists"
         )
     
+    # Создаем Location и PositionPoint если указаны координаты
+    location_id = None
+    if substation_data.latitude is not None and substation_data.longitude is not None:
+        # Создаем Location
+        db_location = Location(
+            mrid=generate_mrid(),
+            location_type=LocationType.POINT,
+            address=substation_data.address,
+            description=f"Location for substation {substation_data.name}"
+        )
+        db.add(db_location)
+        await db.flush()  # Получаем ID location
+        
+        # Создаем PositionPoint
+        db_position_point = PositionPoint(
+            mrid=generate_mrid(),
+            location_id=db_location.id,
+            x_position=substation_data.longitude,
+            y_position=substation_data.latitude,
+            z_position=None
+        )
+        db.add(db_position_point)
+        location_id = db_location.id
+    
     # Создаем новую подстанцию
-    db_substation = Substation(**substation_data.dict())
+    substation_dict = substation_data.dict()
+    substation_dict['location_id'] = location_id
+    # Удаляем координаты из словаря, так как они теперь в Location
+    substation_dict.pop('latitude', None)
+    substation_dict.pop('longitude', None)
+    
+    db_substation = Substation(**substation_dict)
     db.add(db_substation)
     await db.commit()
     await db.refresh(db_substation)

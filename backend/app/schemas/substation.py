@@ -6,8 +6,9 @@ class SubstationBase(BaseModel):
     name: str
     dispatcher_name: str  # Диспетчерское наименование (заменяет code)
     voltage_level: float
-    latitude: float
-    longitude: float
+    # Координаты (для обратной совместимости и удобства)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     address: Optional[str] = None
     branch_id: Optional[int] = None
     description: Optional[str] = None
@@ -46,7 +47,8 @@ class ConnectionResponse(ConnectionBase):
 class VoltageLevelBase(BaseModel):
     name: str
     code: str
-    nominal_voltage: float  # кВ
+    base_voltage_id: Optional[int] = None  # Связь с BaseVoltage (CIM)
+    nominal_voltage: float  # кВ (дублируется из BaseVoltage для обратной совместимости)
     high_voltage_limit: Optional[float] = None  # кВ
     low_voltage_limit: Optional[float] = None  # кВ
     description: Optional[str] = None

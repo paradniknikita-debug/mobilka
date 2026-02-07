@@ -21,7 +21,10 @@ from app.models import (
     Branch, Substation, Connection,
     VoltageLevel, Bay, BusbarSection, ConductingEquipment, ProtectionEquipment,
     GeographicRegion, AClineSegment,
-    ConnectivityNode, Terminal, LineSection
+    ConnectivityNode, Terminal, LineSection,
+    Location, PositionPoint, LocationType
+    # Временно закомментировано до применения миграции
+    # BaseVoltage, WireInfo
 )
 
 # this is the Alembic Config object, which provides

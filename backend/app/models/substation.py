@@ -14,9 +14,15 @@ class Substation(Base):
     name = Column(String(100), nullable=False)
     dispatcher_name = Column(String(100), nullable=False)  # Диспетчерское наименование (заменяет code)
     voltage_level = Column(Float, nullable=False)  # кВ
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    address = Column(Text, nullable=True)
+    
+    # CIM Location - связь с Location для координат
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    
+    # Старые поля для обратной совместимости (будут удалены после миграции)
+    latitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
+    longitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
+    
+    address = Column(Text, nullable=True)  # Адрес теперь хранится в Location, но оставляем для обратной совместимости
     # Заменяем branch_id на region_id для географической иерархии
     region_id = Column(Integer, ForeignKey("geographic_regions.id"), nullable=True)
     # Оставляем branch_id для обратной совместимости
@@ -31,6 +37,19 @@ class Substation(Base):
     branch = relationship("Branch", back_populates="substations")  # Для обратной совместимости
     connections = relationship("Connection", back_populates="substation")
     voltage_levels = relationship("VoltageLevel", back_populates="substation", cascade="all, delete-orphan")
+    location = relationship("Location", foreign_keys=[location_id])
+    
+    def get_latitude(self) -> float:
+        """Получить широту из Location/PositionPoint или из старого поля"""
+        if self.location and self.location.position_points:
+            return self.location.position_points[0].y_position
+        return self.__dict__.get('latitude')
+    
+    def get_longitude(self) -> float:
+        """Получить долготу из Location/PositionPoint или из старого поля"""
+        if self.location and self.location.position_points:
+            return self.location.position_points[0].x_position
+        return self.__dict__.get('longitude')
 
 class Connection(Base):
     __tablename__ = "connections"
@@ -62,7 +81,13 @@ class VoltageLevel(Base):
     substation_id = Column(Integer, ForeignKey("substations.id"), nullable=False)
     name = Column(String(100), nullable=False)
     code = Column(String(20), nullable=False)
+    
+    # Связь с BaseVoltage (CIM стандарт) - временно закомментировано до применения миграции
+    # base_voltage_id = Column(Integer, ForeignKey("base_voltages.id"), nullable=True)
+    
+    # Номинальное напряжение (дублируется из BaseVoltage для обратной совместимости)
     nominal_voltage = Column(Float, nullable=False)  # кВ - соответствует CIM BaseVoltage
+    
     high_voltage_limit = Column(Float, nullable=True)  # кВ - верхний предел
     low_voltage_limit = Column(Float, nullable=True)  # кВ - нижний предел
     description = Column(Text, nullable=True)
@@ -71,6 +96,7 @@ class VoltageLevel(Base):
     
     # Связи
     substation = relationship("Substation", back_populates="voltage_levels")
+    # base_voltage = relationship("BaseVoltage", back_populates="voltage_levels")
     bays = relationship("Bay", back_populates="voltage_level", cascade="all, delete-orphan")
 
 

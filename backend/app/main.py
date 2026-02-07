@@ -10,7 +10,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export
+# Временно закомментировано до применения миграции
+# from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
 
 # Импортируем модели, чтобы они зарегистрировались в Base.metadata
@@ -76,7 +78,13 @@ app = FastAPI(
 # Настройка CORS для Flutter приложения
 app.add_middleware(
     CORSMiddleware, # Перехватывает все запросы и добавляет заголовки CORS
-    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_origins=[
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "*"  # В продакшене указать конкретные домены
+    ],  # Разрешаем localhost с любым портом
     allow_credentials=True, # разрешает cookies и jwt токены
     allow_methods=["*"], # Разрешает все методы get, post, put, delete
     allow_headers=["*"], # Разрешает все заголовки
@@ -121,6 +129,10 @@ app.include_router(substations.router, prefix="/api/v1/substations", tags=["subs
 app.include_router(excel_import.router, tags=["import"])
 app.include_router(cim_line_structure.router, prefix="/api/v1/cim", tags=["cim"])
 app.include_router(pole_sequence.router, prefix="/api/v1", tags=["pole-sequence"])
+app.include_router(cim_export.router, prefix="/api/v1/cim", tags=["cim-export"])
+# Временно закомментировано до применения миграции
+# app.include_router(base_voltage.router, prefix="/api/v1/base-voltages", tags=["base-voltages"])
+# app.include_router(wire_info.router, prefix="/api/v1/wire-infos", tags=["wire-infos"])
 
 # Обработчик исключений для обеспечения CORS заголовков даже при ошибках
 @app.exception_handler(Exception)

@@ -12,6 +12,11 @@ class PowerLine(Base):
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
     code = Column(String(20), unique=True, index=True, nullable=False)
+    
+    # Связь с BaseVoltage (CIM стандарт) - временно закомментировано до применения миграции
+    # base_voltage_id = Column(Integer, ForeignKey("base_voltages.id"), nullable=True)
+    
+    # Номинальное напряжение (дублируется из BaseVoltage для обратной совместимости)
     voltage_level = Column(Float, nullable=False)  # кВ
     length = Column(Float, nullable=True)  # км
     # Заменяем branch_id на region_id для географической иерархии
@@ -28,6 +33,7 @@ class PowerLine(Base):
     region = relationship("GeographicRegion", back_populates="power_lines")
     branch = relationship("Branch", back_populates="power_lines")  # Для обратной совместимости
     creator = relationship("User", back_populates="created_power_lines")
+    # base_voltage = relationship("BaseVoltage", back_populates="power_lines")
     
     # CIM-структура: Line содержит множество AClineSegment
     acline_segments = relationship("AClineSegment", foreign_keys="[AClineSegment.power_line_id]", back_populates="power_line", cascade="all, delete-orphan")
@@ -64,8 +70,14 @@ class Pole(Base):
     
     pole_number = Column(String(20), nullable=False)
     sequence_number = Column(Integer, nullable=True)  # Порядковый номер опоры в линии (для контроля последовательности)
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
+    
+    # CIM Location - связь с Location для координат
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    
+    # Старые поля для обратной совместимости (будут удалены после миграции)
+    latitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
+    longitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
+    
     pole_type = Column(String(50), nullable=False)  # анкерная, промежуточная, угловая и т.д.
     height = Column(Float, nullable=True)  # м
     foundation_type = Column(String(50), nullable=True)
@@ -87,6 +99,7 @@ class Pole(Base):
     connectivity_nodes = relationship("ConnectivityNode", primaryjoin="Pole.id == remote(ConnectivityNode.pole_id)", back_populates="pole", uselist=True)
     creator = relationship("User")
     equipment = relationship("Equipment", back_populates="pole", cascade="all, delete-orphan")
+    location = relationship("Location", foreign_keys=[location_id])
     
     def get_connectivity_node_for_line(self, power_line_id: int):
         """Получить ConnectivityNode для конкретной линии"""
@@ -96,6 +109,24 @@ class Pole(Base):
             if cn.power_line_id == power_line_id:
                 return cn
         return None
+    
+    def get_latitude(self) -> float:
+        """Получить широту из Location/PositionPoint или из старого поля"""
+        if self.location and self.location.position_points:
+            # Берем первую точку (для точечных объектов обычно одна)
+            return self.location.position_points[0].y_position
+        # Fallback на старое поле для обратной совместимости
+        # Используем прямое обращение к колонке через __dict__
+        return self.__dict__.get('latitude')
+    
+    def get_longitude(self) -> float:
+        """Получить долготу из Location/PositionPoint или из старого поля"""
+        if self.location and self.location.position_points:
+            # Берем первую точку (для точечных объектов обычно одна)
+            return self.location.position_points[0].x_position
+        # Fallback на старое поле для обратной совместимости
+        # Используем прямое обращение к колонке через __dict__
+        return self.__dict__.get('longitude')
 
 class Span(Base):
     """
@@ -166,8 +197,14 @@ class Tap(Base):
     tap_type = Column(String(50), nullable=False)  # трансформаторная подстанция, потребитель и т.д.
     voltage_level = Column(Float, nullable=False)  # кВ
     power_rating = Column(Float, nullable=True)  # кВА
+    
+    # CIM Location - связь с Location для координат
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    
+    # Старые поля для обратной совместимости (будут удалены после миграции)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    
     description = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -176,6 +213,19 @@ class Tap(Base):
     power_line = relationship("PowerLine", back_populates="taps")
     pole = relationship("Pole")
     creator = relationship("User")
+    location = relationship("Location", foreign_keys=[location_id])
+    
+    def get_latitude(self) -> float:
+        """Получить широту из Location/PositionPoint или из старого поля"""
+        if self.location and self.location.position_points:
+            return self.location.position_points[0].y_position
+        return self.__dict__.get('latitude')
+    
+    def get_longitude(self) -> float:
+        """Получить долготу из Location/PositionPoint или из старого поля"""
+        if self.location and self.location.position_points:
+            return self.location.position_points[0].x_position
+        return self.__dict__.get('longitude')
 
 class Equipment(Base):
     __tablename__ = "equipment"

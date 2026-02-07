@@ -8,8 +8,9 @@ from .cim_line_structure import (
 
 class PoleBase(BaseModel):
     pole_number: str
-    latitude: float
-    longitude: float
+    # Координаты (для обратной совместимости и удобства)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     pole_type: str
     height: Optional[float] = None
     foundation_type: Optional[str] = None
@@ -49,7 +50,8 @@ class PoleResponse(PoleBase):
 
 class PowerLineBase(BaseModel):
     name: str
-    voltage_level: Optional[float] = None
+    base_voltage_id: Optional[int] = None  # Связь с BaseVoltage (CIM)
+    voltage_level: Optional[float] = None  # кВ (дублируется из BaseVoltage для обратной совместимости)
     length: Optional[float] = None
     branch_name: Optional[str] = None  # Административная принадлежность (текстовое поле)
     region_name: Optional[str] = None  # Географический регион (текстовое поле)

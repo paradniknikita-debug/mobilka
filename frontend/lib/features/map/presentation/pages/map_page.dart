@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,8 +9,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 
 import 'package:dio/dio.dart';
+
+// Импорт для веб-платформы (доступен только на веб)
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html show Blob, Url, AnchorElement;
 
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
@@ -322,6 +330,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         title: const Text('Карта'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _exportCimXml,
+            tooltip: 'Экспорт в CIM XML',
+          ),
+          IconButton(
             icon: const Icon(Icons.my_location),
             onPressed: _centerOnCurrentLocation,
             tooltip: 'Мое местоположение',
@@ -370,12 +383,15 @@ class _MapPageState extends ConsumerState<MapPage> {
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       // Игнорируем ошибки отмененных запросов тайлов (это нормально при быстром перемещении карты)
                       errorTileCallback: (tile, error, stackTrace) {
-                        // Не логируем ошибки отмененных запросов (RequestAbortedException)
-                        if (error.toString().contains('abortTrigger') || 
-                            error.toString().contains('RequestAbortedException')) {
-                          return; // Игнорируем отмененные запросы
+                        // Полностью подавляем ошибки отмененных запросов (это нормальное поведение)
+                        // FlutterMap автоматически отменяет запросы тайлов при быстром перемещении карты
+                        final errorStr = error.toString().toLowerCase();
+                        if (errorStr.contains('aborttrigger') || 
+                            errorStr.contains('requestabortedexception') ||
+                            errorStr.contains('request aborted')) {
+                          return; // Игнорируем отмененные запросы - это нормально
                         }
-                        // Логируем только реальные ошибки
+                        // Логируем только реальные сетевые ошибки (не отмененные запросы)
                         if (kDebugMode) {
                           print('⚠️ Ошибка загрузки тайла: $error');
                         }
@@ -1065,6 +1081,140 @@ class _MapPageState extends ConsumerState<MapPage> {
         _mapController.move(center, AppConfig.defaultZoom);
       } catch (e) {
         print('Ошибка центрирования на объекте: $e');
+      }
+    }
+  }
+
+  Future<void> _exportCimXml() async {
+    if (!mounted) return;
+    
+    // Показываем диалог выбора опций
+    final result = await showDialog<Map<String, bool>>(
+      context: context,
+      builder: (context) => _ExportCimDialog(),
+    );
+    
+    if (result == null) return;
+    
+    try {
+      if (!mounted) return;
+      
+      // Показываем индикатор загрузки
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      final apiService = ref.read(apiServiceProvider);
+      
+      // Выполняем экспорт
+      final response = await apiService.exportCimXml(
+        true, // useCimpy
+        result['substations'] ?? true,
+        result['powerLines'] ?? true,
+      );
+      
+      // Закрываем индикатор загрузки
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // Сохраняем файл
+      final fileName = 'cim_export_${DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0]}.xml';
+      
+      // Получаем данные из response
+      final responseData = response.data;
+      if (responseData == null) {
+        throw Exception('Пустой ответ от сервера');
+      }
+      
+      // Преобразуем в Uint8List
+      // Для ResponseType.bytes данные приходят как List<int>
+      final Uint8List bytes;
+      if (responseData is List<int>) {
+        bytes = Uint8List.fromList(responseData);
+      } else if (responseData is Uint8List) {
+        bytes = responseData;
+      } else if (responseData is List) {
+        // Fallback для других типов списков
+        bytes = Uint8List.fromList((responseData as List).cast<int>());
+      } else {
+        throw Exception('Неожиданный тип данных ответа: ${responseData.runtimeType}');
+      }
+      
+      if (kIsWeb) {
+        // Для веб-платформы: используем HTML5 API для скачивания
+        try {
+          // Создаем Blob из данных
+          final blob = html.Blob([bytes], 'application/xml');
+          final url = html.Url.createObjectUrlFromBlob(blob);
+          
+          // Создаем элемент <a> для скачивания
+          final anchor = html.AnchorElement(
+            href: url,
+          )
+            ..setAttribute('download', fileName)
+            ..click();
+          
+          // Очищаем URL после скачивания
+          html.Url.revokeObjectUrl(url);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Файл успешно скачан'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          // Если не удалось скачать через HTML5 API, показываем сообщение
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Ошибка скачивания файла: $e'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      } else {
+        // Для мобильных платформ: сохраняем в Downloads
+        final directory = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Файл сохранен: ${file.path}'),
+              action: SnackBarAction(
+                label: 'Открыть',
+                onPressed: () async {
+                  await OpenFile.open(file.path);
+                },
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        // Закрываем индикатор загрузки если открыт
+        Navigator.of(context).pop();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка экспорта: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
     }
   }
@@ -2262,6 +2412,61 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ExportCimDialog extends StatefulWidget {
+  @override
+  State<_ExportCimDialog> createState() => _ExportCimDialogState();
+}
+
+class _ExportCimDialogState extends State<_ExportCimDialog> {
+  bool _includeSubstations = true;
+  bool _includePowerLines = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Экспорт в CIM XML'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CheckboxListTile(
+            title: const Text('Включить подстанции'),
+            value: _includeSubstations,
+            onChanged: (value) {
+              setState(() {
+                _includeSubstations = value ?? true;
+              });
+            },
+          ),
+          CheckboxListTile(
+            title: const Text('Включить ЛЭП'),
+            value: _includePowerLines,
+            onChanged: (value) {
+              setState(() {
+                _includePowerLines = value ?? true;
+              });
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(context).pop({
+              'substations': _includeSubstations,
+              'powerLines': _includePowerLines,
+            });
+          },
+          child: const Text('Экспортировать'),
+        ),
+      ],
     );
   }
 }

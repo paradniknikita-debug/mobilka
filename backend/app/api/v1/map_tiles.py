@@ -40,7 +40,24 @@ async def get_power_lines_geojson(
     for power_line in power_lines:
         # Создаем LineString из координат опор, если есть минимум 2 опоры
         if len(power_line.poles) >= 2:
-            coordinates = [[pole.longitude, pole.latitude] for pole in sorted(power_line.poles, key=lambda t: t.pole_number)]
+            coordinates = []
+            for pole in sorted(power_line.poles, key=lambda t: t.pole_number):
+                # Получаем координаты из старого поля (пока миграция не применена)
+                longitude = getattr(pole, 'longitude', None)
+                latitude = getattr(pole, 'latitude', None)
+                
+                # Пытаемся получить из Location, если доступно
+                try:
+                    if hasattr(pole, 'location') and pole.location:
+                        if hasattr(pole.location, 'position_points') and pole.location.position_points:
+                            point = pole.location.position_points[0]
+                            longitude = point.x_position
+                            latitude = point.y_position
+                except (AttributeError, IndexError):
+                    pass
+                
+                if longitude is not None and latitude is not None:
+                    coordinates.append([longitude, latitude])
             
             feature = {
                 "type": "Feature",
@@ -61,22 +78,37 @@ async def get_power_lines_geojson(
         elif len(power_line.poles) == 1:
             # Если есть только одна опора, создаем Point
             pole = power_line.poles[0]
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "id": power_line.id,
-                    "name": power_line.name,
-                    "code": power_line.code,
-                    "voltage_level": power_line.voltage_level,
-                    "status": power_line.status,
-                    "pole_count": len(power_line.poles)
-                },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [pole.longitude, pole.latitude]
+            # Получаем координаты из старого поля (пока миграция не применена)
+            longitude = getattr(pole, 'longitude', None)
+            latitude = getattr(pole, 'latitude', None)
+            
+            # Пытаемся получить из Location, если доступно
+            try:
+                if hasattr(pole, 'location') and pole.location:
+                    if hasattr(pole.location, 'position_points') and pole.location.position_points:
+                        point = pole.location.position_points[0]
+                        longitude = point.x_position
+                        latitude = point.y_position
+            except (AttributeError, IndexError):
+                pass
+            
+            if longitude is not None and latitude is not None:
+                feature = {
+                    "type": "Feature",
+                    "properties": {
+                        "id": power_line.id,
+                        "name": power_line.name,
+                        "code": power_line.code,
+                        "voltage_level": power_line.voltage_level,
+                        "status": power_line.status,
+                        "pole_count": len(power_line.poles)
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [longitude, latitude]
+                    }
                 }
-            }
-            features.append(feature)
+                features.append(feature)
         else:
             # Если опор нет, создаем пустую геометрию (но все равно возвращаем ЛЭП)
             # Используем координаты по умолчанию (центр Минска) для отображения в дереве
@@ -118,28 +150,43 @@ async def get_poles_geojson(
     
     features = []
     for pole in poles:
-        feature = {
-            "type": "Feature",
-            "properties": {
-                "id": pole.id,
-                "mrid": pole.mrid,
-                "pole_number": pole.pole_number,
-                "pole_type": pole.pole_type,
-                "height": pole.height,
-                "condition": pole.condition,
-                "power_line_id": pole.power_line_id,
-                "power_line_name": pole.power_line.name if pole.power_line else None,
-                "connectivity_node_id": pole.connectivity_node_id,
-                "sequence_number": pole.sequence_number,
-                "material": pole.material,
-                "year_installed": pole.year_installed
-            },
-            "geometry": {
-                "type": "Point",
-                "coordinates": [pole.longitude, pole.latitude]
+        # Получаем координаты из старого поля (пока миграция не применена)
+        longitude = getattr(pole, 'longitude', None)
+        latitude = getattr(pole, 'latitude', None)
+        
+        # Пытаемся получить из Location, если доступно
+        try:
+            if hasattr(pole, 'location') and pole.location:
+                if hasattr(pole.location, 'position_points') and pole.location.position_points:
+                    point = pole.location.position_points[0]
+                    longitude = point.x_position
+                    latitude = point.y_position
+        except (AttributeError, IndexError):
+            pass
+        
+        if longitude is not None and latitude is not None:
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "id": pole.id,
+                    "mrid": pole.mrid,
+                    "pole_number": pole.pole_number,
+                    "pole_type": pole.pole_type,
+                    "height": pole.height,
+                    "condition": pole.condition,
+                    "power_line_id": pole.power_line_id,
+                    "power_line_name": pole.power_line.name if pole.power_line else None,
+                    "connectivity_node_id": pole.connectivity_node_id,
+                    "sequence_number": pole.sequence_number,
+                    "material": pole.material,
+                    "year_installed": pole.year_installed
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [longitude, latitude]
+                }
             }
-        }
-        features.append(feature)
+            features.append(feature)
     
     return {
         "type": "FeatureCollection",
@@ -157,7 +204,21 @@ async def get_taps_geojson(
     
     features = []
     for tap in taps:
-        if tap.latitude and tap.longitude:  # Только отпайки с координатами
+        # Получаем координаты из старого поля (пока миграция не применена)
+        longitude = getattr(tap, 'longitude', None)
+        latitude = getattr(tap, 'latitude', None)
+        
+        # Пытаемся получить из Location, если доступно
+        try:
+            if hasattr(tap, 'location') and tap.location:
+                if hasattr(tap.location, 'position_points') and tap.location.position_points:
+                    point = tap.location.position_points[0]
+                    longitude = point.x_position
+                    latitude = point.y_position
+        except (AttributeError, IndexError):
+            pass
+        
+        if longitude is not None and latitude is not None:
             feature = {
                 "type": "Feature",
                 "properties": {
@@ -171,7 +232,7 @@ async def get_taps_geojson(
                 },
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [tap.longitude, tap.latitude]
+                    "coordinates": [longitude, latitude]
                 }
             }
             features.append(feature)
@@ -187,6 +248,7 @@ async def get_substations_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение подстанций в формате GeoJSON"""
+    # Временно используем старые поля, пока миграция не применена
     result = await db.execute(
         select(Substation).where(Substation.is_active == True)
     )
@@ -194,22 +256,37 @@ async def get_substations_geojson(
     
     features = []
     for substation in substations:
-        feature = {
-            "type": "Feature",
-            "properties": {
-                "id": substation.id,
-                "name": substation.name,
-                "dispatcher_name": substation.dispatcher_name,
-                "voltage_level": substation.voltage_level,
-                "branch_id": substation.branch_id,
-                "address": substation.address
-            },
-            "geometry": {
-                "type": "Point",
-                "coordinates": [substation.longitude, substation.latitude]
+        # Получаем координаты из старого поля (пока миграция не применена)
+        longitude = getattr(substation, 'longitude', None)
+        latitude = getattr(substation, 'latitude', None)
+        
+        # Пытаемся получить из Location, если доступно
+        try:
+            if hasattr(substation, 'location') and substation.location:
+                if hasattr(substation.location, 'position_points') and substation.location.position_points:
+                    point = substation.location.position_points[0]
+                    longitude = point.x_position
+                    latitude = point.y_position
+        except (AttributeError, IndexError):
+            pass
+        
+        if longitude is not None and latitude is not None:
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "id": substation.id,
+                    "name": substation.name,
+                    "dispatcher_name": substation.dispatcher_name,
+                    "voltage_level": substation.voltage_level,
+                    "branch_id": substation.branch_id,
+                    "address": substation.address
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [longitude, latitude]
+                }
             }
-        }
-        features.append(feature)
+            features.append(feature)
     
     return {
         "type": "FeatureCollection",

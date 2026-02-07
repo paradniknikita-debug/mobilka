@@ -13,6 +13,10 @@ from .substation import (
 from .geographic_region import GeographicRegion
 from .acline_segment import AClineSegment, line_segments
 from .cim_line_structure import ConnectivityNode, Terminal, LineSection
+from .location import Location, PositionPoint, LocationType
+# Временно закомментировано до применения миграции
+# from .base_voltage import BaseVoltage
+# from .wire_info import WireInfo
 
 __all__ = [
     "User",
@@ -34,5 +38,10 @@ __all__ = [
     "line_segments",
     "ConnectivityNode",
     "Terminal",
-    "LineSection"
+    "LineSection",
+    "Location",
+    "PositionPoint",
+    "LocationType",
+    # "BaseVoltage",  # Временно закомментировано
+    # "WireInfo"  # Временно закомментировано
 ]

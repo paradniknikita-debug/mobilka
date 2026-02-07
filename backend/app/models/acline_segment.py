@@ -59,10 +59,13 @@ class AClineSegment(Base):
     # Уровень напряжения
     voltage_level = Column(Float, nullable=False)  # кВ
     
+    # Связь с WireInfo (CIM стандарт) - временно закомментировано до применения миграции
+    # wire_info_id = Column(Integer, ForeignKey("wire_infos.id"), nullable=True)
+    
     # Общая длина сегмента (сумма длин всех секций)
     length = Column(Float, nullable=False)  # км
     
-    # Параметры по умолчанию (могут переопределяться в LineSection)
+    # Параметры по умолчанию (дублируются из WireInfo для обратной совместимости)
     # Эти параметры используются, если сегмент не имеет секций
     conductor_type = Column(String(50), nullable=True)
     conductor_material = Column(String(50), nullable=True)
@@ -97,6 +100,9 @@ class AClineSegment(Base):
     
     # Секции линии (LineSection)
     line_sections = relationship("LineSection", back_populates="acline_segment", cascade="all, delete-orphan", order_by="LineSection.sequence_number")
+    
+    # Связь с WireInfo - временно закомментировано
+    # wire_info = relationship("WireInfo", back_populates="acline_segments")
     
     creator = relationship("User")
 

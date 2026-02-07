@@ -891,6 +891,19 @@ class _ApiService implements ApiService {
     return _value;
   }
 
+  @override
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  ) {
+    // Этот метод реализован динамически в ApiServiceProvider
+    // Используется прямой Dio вызов для бинарных данных
+    throw UnimplementedError(
+      'exportCimXml должен быть реализован через ApiServiceProvider.create()'
+    );
+  }
+
   RequestOptions _setStreamType<T>(RequestOptions requestOptions) {
     if (T != dynamic &&
         !(requestOptions.responseType == ResponseType.bytes ||
