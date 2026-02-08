@@ -30,15 +30,15 @@ jobs:
           flutter pub get
           flutter precache --ios
       
-      - name: Generate Flutter files
-        run: |
-          cd frontend
-          flutter assemble --output=build/ios/framework ios_framework
-      
       - name: Install CocoaPods dependencies
         run: |
           cd frontend/ios
           pod install --repo-update
+      
+      - name: Build iOS app first (to generate files)
+        run: |
+          cd frontend
+          flutter build ios --release --no-codesign || true
       
       - name: Build IPA (without signing)
         run: |
