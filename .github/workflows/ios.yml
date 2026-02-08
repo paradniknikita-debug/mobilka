@@ -30,10 +30,29 @@ jobs:
           flutter pub get
           flutter precache --ios
       
+      - name: Generate Flutter files
+        run: |
+          cd frontend
+          flutter pub get
+          flutter clean
+          flutter pub get
+          cd ios
+          flutter precache --ios
+          cd ..
+          flutter assemble --output=build/ios/framework ios_framework
+      
       - name: Install CocoaPods dependencies
         run: |
           cd frontend/ios
+          pod deintegrate || true
           pod install --repo-update
+      
+      - name: Verify Flutter files exist
+        run: |
+          cd frontend/ios
+          ls -la Flutter/ || echo "Flutter directory not found"
+          ls -la Flutter/Release.xcconfig || echo "Release.xcconfig not found"
+          ls -la Flutter/Generated.xcconfig || echo "Generated.xcconfig not found (will be created during build)"
       
       - name: Build iOS app
         run: |
