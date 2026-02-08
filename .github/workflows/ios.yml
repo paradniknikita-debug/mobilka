@@ -35,12 +35,13 @@ jobs:
           cd frontend/ios
           pod install --repo-update
       
-      - name: Build iOS app (debug first to generate files)
+      - name: Create Generated.xcconfig placeholder
         run: |
-          cd frontend
-          flutter build ios --debug --no-codesign || true
+          cd frontend/ios/Flutter
+          touch Generated.xcconfig
+          echo "// Placeholder - will be generated during build" > Generated.xcconfig
       
-      - name: Build iOS app (release)
+      - name: Build iOS app
         run: |
           cd frontend
           flutter build ios --release --no-codesign
