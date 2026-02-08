@@ -1,0 +1,44 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+          channel: 'stable'
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          flutter pub get
+      
+      - name: Install CocoaPods
+        run: |
+          cd frontend/ios
+          pod install
+      
+      - name: Build IPA (without signing)
+        run: |
+          cd frontend
+          flutter build ipa --release --no-codesign
+      
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-ipa
+          path: frontend/build/ios/ipa/*.ipa
+          retention-days: 30
+
