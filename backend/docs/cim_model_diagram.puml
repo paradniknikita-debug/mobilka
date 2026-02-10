@@ -1,0 +1,162 @@
+@startuml CIM_Model_Classes
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+title CIM Model Classes and Relationships
+
+' Основные классы CIM
+package "CIM Base Classes" {
+    class IdentifiedObject {
+        +mRID: String
+        +name: String
+        +description: String
+    }
+    
+    class PowerSystemResource {
+        +aliasName: String
+    }
+    
+    class Equipment {
+        +aggregate: Boolean
+        +normallyInService: Boolean
+    }
+    
+    class ConductingEquipment {
+        +phases: PhaseCode
+    }
+    
+    class Terminal {
+        +sequenceNumber: Integer
+        +connected: Boolean
+    }
+    
+    class ConnectivityNode {
+        +description: String
+    }
+}
+
+package "Location Classes" {
+    class Location {
+        +mainAddress: String
+        +telephoneNumber: String
+        +electronicAddress: String
+    }
+    
+    class PositionPoint {
+        +xPosition: Float
+        +yPosition: Float
+        +zPosition: Float
+        +sequenceNumber: Integer
+    }
+}
+
+package "Voltage Classes" {
+    class BaseVoltage {
+        +nominalVoltage: Float
+    }
+    
+    class VoltageLevel {
+        +highVoltageLimit: Float
+        +lowVoltageLimit: Float
+    }
+}
+
+package "Substation Classes" {
+    class Substation {
+        +region: String
+    }
+    
+    class Bay {
+        +bayType: String
+    }
+    
+    class BusbarSection {
+        +ipMax: Float
+    }
+}
+
+package "Line Classes" {
+    class Line {
+        +region: String
+    }
+    
+    class ACLineSegment {
+        +r: Float
+        +x: Float
+        +b: Float
+        +g: Float
+        +length: Float
+        +r0: Float
+        +x0: Float
+        +b0: Float
+        +g0: Float
+    }
+    
+    class Conductor {
+        +length: Float
+    }
+}
+
+package "Wire Info Classes" {
+    class WireInfo {
+        +material: String
+        +section: Float
+        +r: Float
+        +x: Float
+        +b: Float
+        +g: Float
+        +ratedCurrent: Float
+        +breakingLoad: Float
+    }
+}
+
+' Наследование
+IdentifiedObject <|-- PowerSystemResource
+IdentifiedObject <|-- Location
+IdentifiedObject <|-- BaseVoltage
+IdentifiedObject <|-- PositionPoint
+PowerSystemResource <|-- Equipment
+PowerSystemResource <|-- ConnectivityNode
+PowerSystemResource <|-- Terminal
+Equipment <|-- ConductingEquipment
+Equipment <|-- Line
+ConductingEquipment <|-- ACLineSegment
+ConductingEquipment <|-- Conductor
+ConductingEquipment <|-- BusbarSection
+PowerSystemResource <|-- Substation
+PowerSystemResource <|-- VoltageLevel
+PowerSystemResource <|-- Bay
+
+' Связи (Composition/Aggregation)
+Location "1" *-- "0..*" PositionPoint : contains
+Substation "1" *-- "0..*" VoltageLevel : contains
+VoltageLevel "1" *-- "0..*" Bay : contains
+Bay "1" *-- "0..*" ConductingEquipment : contains
+Line "1" *-- "0..*" ACLineSegment : contains
+
+' Связи (Association)
+Substation "1" --> "0..1" Location : located at
+VoltageLevel "1" --> "0..1" BaseVoltage : uses
+ACLineSegment "1" --> "0..1" WireInfo : uses
+ConductingEquipment "1" --> "0..*" Terminal : has
+Terminal "1" --> "0..1" ConnectivityNode : connects to
+ACLineSegment "1" --> "0..1" ConnectivityNode : from
+ACLineSegment "1" --> "0..1" ConnectivityNode : to
+
+note right of Location
+  Географическое местоположение
+  объекта (IEC 61970-301)
+end note
+
+note right of BaseVoltage
+  Базовый уровень напряжения
+  (IEC 61970-301)
+end note
+
+note right of WireInfo
+  Характеристики провода
+  (IEC 61970-301)
+end note
+
+@enduml

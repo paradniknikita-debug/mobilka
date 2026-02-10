@@ -1,0 +1,118 @@
+<h2 mat-dialog-title>{{ isEditMode ? 'Редактирование пролёта' : 'Создание пролёта' }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="spanForm" class="span-form">
+    <div class="form-section">
+      <h3>Выбор опор</h3>
+      
+      <div *ngIf="isLoading" class="loading-indicator">
+        <mat-spinner diameter="30"></mat-spinner>
+        <span>Загрузка опор...</span>
+      </div>
+      
+      <div *ngIf="!isLoading && poles.length === 0" class="warning-box">
+        <mat-icon>warning</mat-icon>
+        <span>В этой линии нет опор. Сначала создайте опоры для линии.</span>
+      </div>
+      
+      <mat-form-field appearance="outline" class="full-width" *ngIf="!isLoading && poles.length > 0">
+        <mat-label>Начальная опора *</mat-label>
+        <mat-select formControlName="from_pole_id" (selectionChange)="calculateDistance()">
+          <mat-option *ngFor="let pole of poles" [value]="pole.id" [disabled]="pole.id === spanForm.get('to_pole_id')?.value">
+            {{ displayPole(pole) }} - {{ pole.pole_type }}
+          </mat-option>
+        </mat-select>
+        <mat-error>{{ getFieldError('from_pole_id') }}</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width" *ngIf="!isLoading && poles.length > 0">
+        <mat-label>Конечная опора *</mat-label>
+        <mat-select formControlName="to_pole_id" (selectionChange)="calculateDistance()">
+          <mat-option *ngFor="let pole of poles" [value]="pole.id" [disabled]="pole.id === spanForm.get('from_pole_id')?.value">
+            {{ displayPole(pole) }} - {{ pole.pole_type }}
+          </mat-option>
+        </mat-select>
+        <mat-error>{{ getFieldError('to_pole_id') }}</mat-error>
+      </mat-form-field>
+
+      <div class="info-box" *ngIf="spanForm.get('from_pole_id')?.value && spanForm.get('to_pole_id')?.value">
+        <mat-icon>info</mat-icon>
+        <span>Пролёт соединит выбранные опоры. Расстояние и наименование будут рассчитаны автоматически.</span>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Основные параметры</h3>
+      
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Наименование пролёта</mat-label>
+        <input matInput formControlName="span_number" placeholder="Формируется автоматически" readonly>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Длина (м)</mat-label>
+        <input matInput type="number" formControlName="length" step="0.01" placeholder="Автоматически">
+        <mat-hint>Расстояние между опорами. Рассчитывается автоматически при выборе опор.</mat-hint>
+        <mat-error>{{ getFieldError('length') }}</mat-error>
+        <button mat-icon-button matSuffix (click)="calculateDistance()" type="button" matTooltip="Пересчитать расстояние">
+          <mat-icon>refresh</mat-icon>
+        </button>
+      </mat-form-field>
+    </div>
+
+    <div class="form-section">
+      <h3>Параметры провода (опционально)</h3>
+      
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Марка провода</mat-label>
+        <input matInput formControlName="conductor_type" placeholder="Например: AC-70">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Материал провода</mat-label>
+        <input matInput formControlName="conductor_material" placeholder="Например: алюминий">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Сечение провода (мм²)</mat-label>
+        <input matInput formControlName="conductor_section" placeholder="Например: 70">
+      </mat-form-field>
+    </div>
+
+    <div class="form-section">
+      <h3>Механические параметры (опционально)</h3>
+      
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Натяжение (Н)</mat-label>
+        <input matInput type="number" formControlName="tension" step="0.1" placeholder="Например: 5000">
+        <mat-error>{{ getFieldError('tension') }}</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Провис (м)</mat-label>
+        <input matInput type="number" formControlName="sag" step="0.01" placeholder="Например: 2.5">
+        <mat-error>{{ getFieldError('sag') }}</mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="form-section">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Примечания</mat-label>
+        <textarea matInput formControlName="notes" rows="3" placeholder="Дополнительная информация"></textarea>
+      </mat-form-field>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Отмена</button>
+  <button 
+    mat-raised-button 
+    color="primary" 
+    (click)="onSubmit()"
+    [disabled]="spanForm.invalid || isCreating">
+    <mat-icon *ngIf="isCreating" class="spinning">refresh</mat-icon>
+    {{ isCreating ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать пролёт') }}
+  </button>
+</mat-dialog-actions>
+

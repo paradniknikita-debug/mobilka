@@ -1,0 +1,66 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+      
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          flutter pub get
+          flutter precache --ios
+      
+      - name: Install CocoaPods dependencies
+        run: |
+          cd frontend/ios
+          pod install --repo-update
+      
+      - name: Create Generated.xcconfig placeholder
+        run: |
+          cd frontend/ios/Flutter
+          touch Generated.xcconfig
+          echo "// Placeholder - will be generated during build" > Generated.xcconfig
+      
+      - name: Build iOS app
+        run: |
+          cd frontend
+          flutter build ios --release --no-codesign
+      
+      - name: Create IPA from build
+        run: |
+          cd frontend/ios
+          mkdir -p build/ipa/Payload
+          cp -r ../build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa
+          zip -r ../Runner.ipa Payload
+          cd ../..
+          mkdir -p ../build/ios/ipa
+          cp build/Runner.ipa ../build/ios/ipa/
+      
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: frontend/build/ios/ipa/*.ipa
+          retention-days: 30
+
