@@ -19,7 +19,11 @@ export class AuthService {
     private apiService: ApiService,
     private router: Router
   ) {
-    this.loadUserFromStorage();
+    // Откладываем загрузку пользователя до следующего тика event loop,
+    // чтобы избежать циклической зависимости при инициализации
+    setTimeout(() => {
+      this.loadUserFromStorage();
+    }, 0);
   }
 
   login(username: string, password: string): Observable<User> {

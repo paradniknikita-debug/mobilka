@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     # Используйте .env или переменные окружения для задания реальной строки подключения
     # Для Docker: postgresql://postgres:postgres@postgres:5432/lepm_db
     # Для локального запуска: postgresql://postgres:password@localhost:5432/lepm_db
+    # По умолчанию используем порт 5433 для Docker, но можно переопределить через .env
     DATABASE_URL: str = "postgresql://postgres:dragon167@localhost:5433/lepm_db"
     
     # JWT настройки

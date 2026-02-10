@@ -16,6 +16,8 @@ class _LoginFormState extends ConsumerState<LoginForm> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  /// Не выходить из аккаунта — сессия сохраняется между запусками и при отсутствии связи
+  bool _stayLoggedIn = true;
 
   @override
   void dispose() {
@@ -90,6 +92,22 @@ class _LoginFormState extends ConsumerState<LoginForm> {
             },
             enabled: !isLoading,
           ),
+          const SizedBox(height: 16),
+
+          // Оставаться в системе
+          CheckboxListTile(
+            value: _stayLoggedIn,
+            onChanged: isLoading
+                ? null
+                : (value) => setState(() => _stayLoggedIn = value ?? true),
+            title: const Text('Оставаться в системе'),
+            subtitle: const Text(
+              'Не выходить из аккаунта при закрытии приложения и при временном отсутствии связи',
+              style: TextStyle(fontSize: 12),
+            ),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
           const SizedBox(height: 24),
 
           // Кнопка входа
@@ -114,6 +132,7 @@ class _LoginFormState extends ConsumerState<LoginForm> {
       ref.read(authServiceProvider.notifier).login(
         _usernameController.text.trim(),
         _passwordController.text,
+        stayLoggedIn: _stayLoggedIn,
       );
     }
   }

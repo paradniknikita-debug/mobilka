@@ -15,12 +15,12 @@ export interface PowerLine {
 
 export interface PowerLineCreate {
   name: string;
-  code: string;
-  voltage_level: number;
+  voltage_level?: number;
   length?: number;
-  region_id?: number;
-  branch_id?: number;
+  branch_name?: string; // Административная принадлежность (текстовое поле)
+  region_name?: string; // Географический регион (текстовое поле)
   status?: string;
   description?: string;
+  mrid?: string; // Опциональный UID, если не указан - генерируется автоматически
 }
 

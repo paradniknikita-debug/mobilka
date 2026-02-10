@@ -53,14 +53,17 @@ services:
       # Для Docker используем имена сервисов из docker-compose
       DATABASE_URL: postgresql://postgres:dragon167@postgres:5432/lepm_db
       REDIS_URL: redis://redis:6379
-      RELOAD: "false"
+      RELOAD: "true"  # Включаем hot reload для разработки
       TZ: Europe/Minsk  # Часовой пояс
     # Для разработки: монтируем код как volume (чтобы не пересобирать образ при каждом изменении)
-    # Раскомментируй следующие строки для разработки:
+    # Убрали :ro (read-only) чтобы hot reload мог работать
     volumes:
-      - ./backend/app:/app/app:ro
+      - ./backend/app:/app/app
     # Тогда при изменении кода достаточно перезапустить контейнер: docker compose restart backend
-    # Не пробрасываем порт наружу, nginx будет проксировать
+    # Пробрасываем порт для прямого доступа (опционально, для отладки)
+    # Для продакшена можно убрать и использовать только через nginx
+    ports:
+      - "8000:8000"
     expose:
       - "8000"
     # Используем команду из Dockerfile (python run.py)
@@ -78,9 +81,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "4201:4201"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./web-frontend/dist/lepm-web-frontend:/app/angular-web:ro
+      - ./frontend/build/web:/app/flutter-web:ro
     restart: unless-stopped
     networks:
       - lepm_network

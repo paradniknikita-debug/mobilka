@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../config/app_config.dart';
 
 /// Менеджер для управления базовым URL с автоматическим fallback HTTPS -> HTTP
@@ -9,51 +8,67 @@ class BaseUrlManager {
   factory BaseUrlManager() => _instance;
   BaseUrlManager._internal();
 
-  static const _serverUrlKey = 'server_url';
-
   // Текущий протокол (https или http)
-  String _protocol = 'https';
+  String? _protocol; // Инициализируем из конфига при первом вызове
   bool _fallbackOccurred = false;
-
   SharedPreferences? _prefs;
-  String? _customServerUrl;
+  static const String _serverUrlKey = 'server_url';
+  static const String _fallbackKey = 'url_fallback_occurred';
 
-  /// Инициализация менеджера с SharedPreferences
+  /// Инициализировать с SharedPreferences
   Future<void> init(SharedPreferences prefs) async {
     _prefs = prefs;
-    _customServerUrl = prefs.getString(_serverUrlKey);
-  }
-
-  /// Получить сохранённый URL сервера (если есть)
-  String? getSavedServerUrl() {
-    return _customServerUrl ?? _prefs?.getString(_serverUrlKey);
-  }
-
-  /// Сохранить URL сервера
-  Future<void> setServerUrl(String url) async {
-    _customServerUrl = url;
-    final prefs = _prefs;
-    if (prefs != null) {
-      await prefs.setString(_serverUrlKey, url);
-    }
+    // При инициализации всегда сбрасываем fallback и устанавливаем протокол из конфига
+    _fallbackOccurred = false;
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
   }
 
   /// Получить базовый URL (с учетом протокола)
   String getBaseUrl() {
-    // Если пользователь задал URL сервера в настройках — используем его
-    final custom = _customServerUrl ?? _prefs?.getString(_serverUrlKey);
-    if (custom != null && custom.isNotEmpty) {
-      return custom;
-    }
-
     if (!kIsWeb) {
-      // Для мобильных платформ используем HTTP напрямую
+      // Для мобильных платформ используем настраиваемый URL
       return _getMobileBaseUrl();
     }
 
-    // Для web: используем настройку из AppConfig.useHttps
-    _protocol = AppConfig.useHttps ? 'https' : 'http';
-    return '$_protocol://localhost';
+    // Для web: инициализируем протокол из конфига, если еще не установлен
+    if (_protocol == null) {
+      _protocol = AppConfig.useHttps ? 'https' : 'http';
+      _fallbackOccurred = false;
+    }
+
+    // Если не было fallback, всегда используем протокол из конфига
+    if (!_fallbackOccurred) {
+      final configProtocol = AppConfig.useHttps ? 'https' : 'http';
+      if (_protocol != configProtocol) {
+        _protocol = configProtocol;
+      }
+    }
+    // Если был fallback, используем сохраненный протокол (HTTP)
+
+    // Определяем порт в зависимости от протокола:
+    // - HTTPS: используем порт 443 (через Nginx)
+    // - HTTP: используем порт 8000 (напрямую к backend)
+    final port = _protocol == 'https' ? 443 : 8000;
+
+    // ВАЖНО: Используем протокол из конфига, а НЕ протокол самого Flutter приложения
+    // Flutter dev server может быть на HTTP, но backend должен быть на HTTPS
+    // Используем тот же хост, что и у веб-приложения
+    // Если запущено на localhost, используем localhost
+    // Если доступно с других устройств, используем IP адрес
+    final hostname = Uri.base.host;
+    final baseUrl = (hostname == 'localhost' ||
+            hostname == '127.0.0.1' ||
+            hostname.isEmpty)
+        ? '$_protocol://localhost:$port'
+        : '$_protocol://$hostname:$port';
+
+    if (kDebugMode && (_fallbackOccurred)) {
+      final flutterProtocol = Uri.base.scheme;
+      print(
+          '🌐 BaseUrl: $baseUrl (протокол: $_protocol, fallback: $_fallbackOccurred, flutter: $flutterProtocol)');
+    }
+
+    return baseUrl;
   }
 
   /// Выполнить fallback на HTTP
@@ -63,14 +78,46 @@ class BaseUrlManager {
       _fallbackOccurred = true;
       if (kDebugMode) {
         print('⚠️ HTTPS недоступен, переключение на HTTP');
+        print(
+            '   Для возврата к HTTPS измените useHttps в конфиге и перезапустите приложение');
+      }
+      // Сохраняем флаг fallback в SharedPreferences (если доступен)
+      if (_prefs != null) {
+        _prefs!.setBool(_fallbackKey, true).catchError((e) {
+          if (kDebugMode) {
+            print('⚠️ Не удалось сохранить флаг fallback: $e');
+          }
+        });
       }
     }
   }
 
   /// Сбросить fallback (для повторной попытки HTTPS)
   void resetFallback() {
-    _protocol = 'https';
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
     _fallbackOccurred = false;
+    // Удаляем флаг fallback из SharedPreferences
+    if (_prefs != null) {
+      _prefs!.remove(_fallbackKey).catchError((e) {
+        if (kDebugMode) {
+          print('⚠️ Не удалось удалить флаг fallback: $e');
+        }
+      });
+    }
+  }
+
+  /// Принудительно обновить протокол из конфига (при изменении useHttps)
+  void updateProtocolFromConfig() {
+    _protocol = AppConfig.useHttps ? 'https' : 'http';
+    _fallbackOccurred = false;
+    // Удаляем флаг fallback из SharedPreferences
+    if (_prefs != null) {
+      _prefs!.remove(_fallbackKey).catchError((e) {
+        if (kDebugMode) {
+          print('⚠️ Не удалось удалить флаг fallback: $e');
+        }
+      });
+    }
   }
 
   /// Проверить, используется ли HTTP (после fallback)
@@ -78,10 +125,43 @@ class BaseUrlManager {
 
   /// Получить базовый URL для мобильных платформ
   String _getMobileBaseUrl() {
-    if (kDebugMode) {
-      return 'http://10.0.2.2:8000';
+    // Пытаемся получить сохраненный URL из SharedPreferences
+    if (_prefs != null) {
+      final savedUrl = _prefs!.getString(_serverUrlKey);
+      if (savedUrl != null && savedUrl.isNotEmpty) {
+        if (kDebugMode) {
+          print('📡 Используется сохраненный URL сервера: $savedUrl');
+        }
+        return savedUrl;
+      }
     }
-    return 'http://192.168.1.100:8000';
+
+    // Если нет сохраненного URL, используем доменное имя по умолчанию
+    // Для эмулятора Android используем специальный адрес, для реальных устройств — пример локального сервера
+    final defaultUrl = 'http://lepm.local:8000';
+    return defaultUrl;
+  }
+
+  /// Установить URL сервера
+  Future<void> setServerUrl(String url) async {
+    if (_prefs != null) {
+      await _prefs!.setString(_serverUrlKey, url);
+      if (kDebugMode) {
+        print('💾 URL сервера сохранен: $url');
+      }
+    } else {
+      if (kDebugMode) {
+        print('⚠️ SharedPreferences не инициализирован, URL не сохранен');
+      }
+    }
+  }
+
+  /// Получить сохраненный URL сервера
+  String? getSavedServerUrl() {
+    if (_prefs != null) {
+      return _prefs!.getString(_serverUrlKey);
+    }
+    return null;
   }
 }
 

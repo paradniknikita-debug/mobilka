@@ -1,9 +1,13 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/map/presentation/pages/map_page.dart';
+import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/settings/presentation/pages/server_settings_page.dart';
 import '../../core/services/auth_service.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -49,18 +53,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
       
-      // Если не авторизован и не на странице логина - перенаправляем на логин
-      if (!isAuthenticated && !isLoggingIn) {
+      final isRegistering = state.matchedLocation == '/register' || currentPath == '/register';
+      
+      // Если не авторизован и не на странице логина/регистрации - перенаправляем на логин
+      if (!isAuthenticated && !isLoggingIn && !isRegistering) {
         if (kDebugMode) {
           print('   → [Router] Перенаправление на /login (не авторизован)');
         }
         return '/login';
       }
       
-      // Если авторизован и на странице логина - перенаправляем на карту
-      if (isAuthenticated && isLoggingIn) {
+      // Если авторизован и на странице логина/регистрации - перенаправляем на карту
+      if (isAuthenticated && (isLoggingIn || isRegistering)) {
         if (kDebugMode) {
-          print('   → [Router] Перенаправление на /map (авторизован на странице логина)');
+          print('   → [Router] Перенаправление на /map (авторизован на странице логина/регистрации)');
         }
         return '/map';
       }
@@ -76,8 +82,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const LoginPage(),
       ),
       GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterPage(),
+      ),
+      GoRoute(
         path: '/map',
         builder: (context, state) => const MapPage(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfilePage(),
+      ),
+      GoRoute(
+        path: '/settings/server',
+        builder: (context, state) => const ServerSettingsPage(),
       ),
     ],
   );

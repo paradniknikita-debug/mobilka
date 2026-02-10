@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../services/base_url_manager.dart';
 
 class AppConfig {
@@ -9,7 +10,7 @@ class AppConfig {
   // ============================================
   // Измените эту переменную для переключения между HTTP и HTTPS
   // true = HTTPS, false = HTTP
-  static const bool useHttps = false; // Для разработки используем HTTP
+  static const bool useHttps = true; // Для разработки используем HTTP
   // ============================================
   
   static final BaseUrlManager _urlManager = BaseUrlManager();
@@ -24,7 +25,12 @@ class AppConfig {
   static void resetUrlFallback() {
     _urlManager.resetFallback();
   }
-  
+
+  /// Принудительно обновить протокол из конфига (вызвать после изменения useHttps)
+  static void updateProtocolFromConfig() {
+    _urlManager.updateProtocolFromConfig();
+  }
+
   /// Проверить, используется ли HTTP (после fallback)
   static bool get isUsingHttp => _urlManager.isUsingHttp;
   
@@ -45,7 +51,12 @@ class AppConfig {
   static const String authTokenKey = 'auth_token';
   static const String userIdKey = 'user_id';
   static const String lastSyncKey = 'last_sync';
+  /// Не выходить из аккаунта: токен не сбрасывается при 401, сессия сохраняется
+  static const String stayLoggedInKey = 'stay_logged_in';
+  static const String usernameKey = 'username'; // для отображения в оффлайн-режиме
+  /// Счётчик для генерации временных локальных ID (отрицательные)
   static const String lastLocalPoleIdKey = 'last_local_pole_id';
+  static const String lastLocalPowerLineIdKey = 'last_local_power_line_id';
   
   // Validation
   static const int minPasswordLength = 6;

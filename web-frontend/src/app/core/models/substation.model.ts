@@ -23,6 +23,7 @@ export interface SubstationCreate {
   address?: string;
   region_id?: number;
   branch_id?: number;
+  description?: string;
   is_active?: boolean;
 }
 

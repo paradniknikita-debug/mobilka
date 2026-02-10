@@ -1,57 +1,50 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_config.dart';
 import '../database/database.dart';
 import 'api_service.dart';
+import 'auth_service.dart'; // prefsProvider
 
-// Замена Freezed на ручной sealed class
-sealed class SyncState {
-  const SyncState();
-}
+part 'sync_service.freezed.dart';
 
-class SyncStateIdle extends SyncState {
-  const SyncStateIdle();
-}
-
-class SyncStateSyncing extends SyncState {
-  const SyncStateSyncing();
-}
-
-class SyncStateCompleted extends SyncState {
-  const SyncStateCompleted();
-}
-
-class SyncStateError extends SyncState {
-  final String message;
-  const SyncStateError(this.message);
-}
-
-// Миграция с StateNotifier на Notifier (Riverpod 3.x)
-class SyncService extends Notifier<SyncState> {
-  // Зависимости получаем через ref, а не через конструктор
-  AppDatabase get _database => ref.read(databaseProvider);
-  ApiService get _apiService => ref.read(apiServiceProvider);
-  
-  final Connectivity _connectivity = Connectivity();
-  final Uuid _uuid = const Uuid();
-
-  // Метод build вместо конструктора с super
-  @override
-  SyncState build() {
-    // Начальное состояние - idle
-    return const SyncStateIdle();
+/// Преобразование ключей camelCase в snake_case для API бэкенда
+Map<String, dynamic> _toSnakeCaseMap(Map<String, dynamic> map) {
+  final result = <String, dynamic>{};
+  for (final e in map.entries) {
+    final key = e.key.replaceAllMapped(
+      RegExp(r'[A-Z]'),
+      (m) => '_${m.group(0)!.toLowerCase()}',
+    );
+    result[key] = e.value;
   }
+  return result;
+}
+
+class SyncService extends StateNotifier<SyncState> {
+  final AppDatabase _database;
+  final ApiService _apiService;
+  final SharedPreferences? _prefs;
+  final Connectivity _connectivity;
+  final Uuid _uuid;
+
+  SyncService(this._database, this._apiService, [this._prefs])
+      : _connectivity = Connectivity(),
+        _uuid = const Uuid(),
+        super(const SyncState.idle());
 
   Future<void> syncData() async {
-    state = const SyncStateSyncing();
+    state = const SyncState.syncing();
 
     try {
       // Проверяем подключение к интернету
       final connectivityResult = await _connectivity.checkConnectivity();
       if (connectivityResult == ConnectivityResult.none) {
-        state = const SyncStateError('Нет подключения к интернету');
+        state = const SyncState.error('Нет подключения к интернету');
         return;
       }
 
@@ -59,9 +52,9 @@ class SyncService extends Notifier<SyncState> {
       await _uploadLocalChanges();
       await _downloadServerChanges();
 
-      state = const SyncStateCompleted();
+      state = const SyncState.completed();
     } catch (e) {
-      state = SyncStateError('Ошибка синхронизации: ${e.toString()}');
+      state = SyncState.error('Ошибка синхронизации: ${e.toString()}');
     }
   }
 
@@ -75,14 +68,14 @@ class SyncService extends Notifier<SyncState> {
     final batchId = _uuid.v4();
     final records = <Map<String, dynamic>>[];
 
-    // Добавляем ЛЭП
+    // Добавляем ЛЭП (бэкенд ожидает snake_case)
     for (final powerLine in powerLines) {
-      records.add(_createSyncRecord('power_line', 'create', powerLine.toJson(), batchId));
+      records.add(_createSyncRecord('power_line', 'create', _toSnakeCaseMap(powerLine.toJson()), batchId));
     }
 
     // Добавляем опоры
     for (final pole in poles) {
-      records.add(_createSyncRecord('pole', 'create', pole.toJson(), batchId));
+      records.add(_createSyncRecord('pole', 'create', _toSnakeCaseMap(pole.toJson()), batchId));
     }
 
     // Добавляем оборудование
@@ -101,9 +94,26 @@ class SyncService extends Notifier<SyncState> {
       final response = await _apiService.uploadSyncBatch(batch);
       
       if (response['success'] == true) {
-        // Помечаем записи как синхронизированные
-        await _markAsSynced(powerLines, poles, equipment);
+        // Удаляем локальные записи после успешной загрузки (сервер создал их с новыми id)
+        await _removeUploadedLocalEntities(powerLines, poles, equipment);
+        await _setLastSyncTime(DateTime.now());
       }
+    }
+  }
+
+  Future<void> _removeUploadedLocalEntities(
+    List<PowerLine> powerLines,
+    List<Pole> poles,
+    List<EquipmentData> equipment,
+  ) async {
+    for (final pl in powerLines) {
+      if (pl.isLocal && pl.id < 0) await _database.deletePowerLine(pl.id);
+    }
+    for (final p in poles) {
+      if (p.isLocal && p.id < 0) await _database.deletePole(p.id);
+    }
+    for (final eq in equipment) {
+      if (eq.isLocal && eq.id < 0) await _database.deleteEquipment(eq.id);
     }
   }
 
@@ -262,57 +272,35 @@ class SyncService extends Notifier<SyncState> {
     }
   }
 
-  Future<void> _markAsSynced(
-    List<PowerLine> powerLines,
-    List<Pole> poles,
-    List<EquipmentData> equipment,
-  ) async {
-    // Помечаем ЛЭП как синхронизированные
-    for (final powerLine in powerLines) {
-      await _database.updatePowerLine(
-        PowerLinesCompanion(
-          id: drift.Value(powerLine.id),
-          needsSync: drift.Value(false),
-        ),
-      );
-    }
-
-    // Помечаем опоры как синхронизированные
-    for (final pole in poles) {
-      await _database.updatePole(
-        PolesCompanion(
-          id: drift.Value(pole.id),
-          needsSync: drift.Value(false),
-        ),
-      );
-    }
-
-    // Помечаем оборудование как синхронизированное
-    for (final equipmentItem in equipment) {
-      await _database.updateEquipment(
-        EquipmentCompanion(
-          id: drift.Value(equipmentItem.id),
-          needsSync: drift.Value(false),
-        ),
-      );
-    }
-  }
-
   Future<String> _getLastSyncTime() async {
-    // Здесь должна быть логика получения времени последней синхронизации
-    // Пока возвращаем время 24 часа назад
-    return DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
+    if (_prefs == null) return DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
+    final s = _prefs!.getString(AppConfig.lastSyncKey);
+    if (s == null || s.isEmpty) return DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
+    return s;
   }
 
   Future<void> _setLastSyncTime(DateTime time) async {
-    // Здесь должна быть логика сохранения времени последней синхронизации
+    await _prefs?.setString(AppConfig.lastSyncKey, time.toIso8601String());
   }
 }
 
-// Provider для SyncService (Riverpod 3.x: NotifierProvider)
-final syncServiceProvider = NotifierProvider<SyncService, SyncState>(() {
-  return SyncService();
+@freezed
+class SyncState with _$SyncState {
+  const factory SyncState.idle() = _Idle;
+  const factory SyncState.syncing() = _Syncing;
+  const factory SyncState.completed() = _Completed;
+  const factory SyncState.error(String message) = _Error;
+}
+
+// Provider для SyncService
+final syncServiceProvider = Provider<SyncService>((ref) {
+  final database = ref.watch(databaseProvider);
+  final apiService = ref.watch(apiServiceProvider);
+  final prefs = ref.watch(prefsProvider);
+  return SyncService(database, apiService, prefs);
 });
 
-// Provider для состояния синхронизации (алиас для syncServiceProvider)
-final syncStateProvider = syncServiceProvider;
+// Provider для состояния синхронизации
+final syncStateProvider = StateNotifierProvider<SyncService, SyncState>((ref) {
+  return ref.watch(syncServiceProvider);
+});

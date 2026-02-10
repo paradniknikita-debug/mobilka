@@ -19,7 +19,12 @@ from app.database import Base
 from app.models import (
     User, PowerLine, Pole, Span, Tap, Equipment,
     Branch, Substation, Connection,
-    GeographicRegion, AClineSegment
+    VoltageLevel, Bay, BusbarSection, ConductingEquipment, ProtectionEquipment,
+    GeographicRegion, AClineSegment,
+    ConnectivityNode, Terminal, LineSection,
+    Location, PositionPoint, LocationType
+    # Временно закомментировано до применения миграции
+    # BaseVoltage, WireInfo
 )
 
 # this is the Alembic Config object, which provides

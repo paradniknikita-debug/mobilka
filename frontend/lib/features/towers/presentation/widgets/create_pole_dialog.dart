@@ -217,6 +217,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         yearInstalled: _yearInstalled,
         condition: _condition,
         notes: _notes?.isEmpty ?? true ? null : _notes,
+        isTap: _isTap,
+        conductorType: _conductorType,
+        conductorMaterial: _conductorMaterial,
+        conductorSection: _conductorSection,
       );
 
       await apiService.createPole(widget.powerLineId, poleData);

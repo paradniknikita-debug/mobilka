@@ -1,20 +1,30 @@
 import redis.asyncio as redis
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.security import HTTPBearer
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 from contextlib import asynccontextmanager
-import os
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export
+# Временно закомментировано до применения миграции
+# from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
 
-redis_client = redis.from_url("redis://localhost:6379", decode_responses=True)
+# Импортируем модели, чтобы они зарегистрировались в Base.metadata
+# Это необходимо для создания таблиц через Base.metadata.create_all
+from app.models import (
+    User, PowerLine, Pole, Span, Tap, Equipment,
+    Branch, Substation, Connection, GeographicRegion, AClineSegment,
+    ConnectivityNode, Terminal, LineSection
+)
+
+# Redis клиент будет инициализирован в lifespan
+redis_client = None
 
 # Инициализация токена безопасности
 security = HTTPBearer()
@@ -22,24 +32,64 @@ security = HTTPBearer()
 @asynccontextmanager # lifespan - управление жизненным циклом приложения
 async def lifespan(app: FastAPI):
     # Инициализация базы данных при запуске. Всё что внутри этой функции будет выполнено при запуске приложения.
-    await init_db()
+    global redis_client
+    
+    # Инициализация Redis (опционально)
+    try:
+        # Пытаемся подключиться к Redis, но не блокируем запуск, если он недоступен
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5)
+        await redis_client.ping()
+        print("OK: Redis подключен")
+    except Exception as e:
+        print(f"WARNING: Redis недоступен: {e}. Продолжаем без Redis.")
+        redis_client = None
+    
+    # Инициализация базы данных (обязательно)
+    try:
+        await init_db()
+    except Exception as e:
+        print(f"ERROR: Критическая ошибка: не удалось инициализировать базу данных.")
+        print(f"Приложение не может быть запущено без подключения к БД.")
+        raise
+    
+    # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
+    
     yield
+    
+    # Закрытие соединений при остановке
+    if redis_client:
+        try:
+            await redis_client.close()
+        except Exception:
+            pass  # Игнорируем ошибки при закрытии Redis
 # Создание FastAPI приложения. Далее можно добавить @app.get, @app.post, @app.put, @app.delete методы.
 app = FastAPI(
     title="ЛЭП Management System",
     description="Система управления линиями электропередач",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    redirect_slashes=False,  # Отключаем автоматический редирект со слэшами
 )
 # app.mount("/static", StaticFiles(directory="static"), name="static")
 # Настройка CORS для Flutter приложения
 app.add_middleware(
     CORSMiddleware, # Перехватывает все запросы и добавляет заголовки CORS
-    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_origins=[
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "*"  # В продакшене указать конкретные домены
+    ],  # Разрешаем localhost с любым портом
     allow_credentials=True, # разрешает cookies и jwt токены
     allow_methods=["*"], # Разрешает все методы get, post, put, delete
     allow_headers=["*"], # Разрешает все заголовки
+    expose_headers=["*"], # Разрешаем доступ ко всем заголовкам ответа
+    max_age=3600,  # Кэширование preflight запросов на 1 час
 )
 
 
@@ -77,6 +127,37 @@ app.include_router(map_tiles.router, prefix="/api/v1/map", tags=["map"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(substations.router, prefix="/api/v1/substations", tags=["substations"])
 app.include_router(excel_import.router, tags=["import"])
+app.include_router(cim_line_structure.router, prefix="/api/v1/cim", tags=["cim"])
+app.include_router(pole_sequence.router, prefix="/api/v1", tags=["pole-sequence"])
+app.include_router(cim_export.router, prefix="/api/v1/cim", tags=["cim-export"])
+# Временно закомментировано до применения миграции
+# app.include_router(base_voltage.router, prefix="/api/v1/base-voltages", tags=["base-voltages"])
+# app.include_router(wire_info.router, prefix="/api/v1/wire-infos", tags=["wire-infos"])
+
+# Обработчик исключений для обеспечения CORS заголовков даже при ошибках
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Глобальный обработчик исключений с CORS заголовками"""
+    import traceback
+    
+    # Логируем ошибку
+    print(f"ERROR: Необработанное исключение: {exc}")
+    print(f"ERROR: Traceback:\n{traceback.format_exc()}")
+    
+    # Возвращаем ответ с CORS заголовками
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Внутренняя ошибка сервера: {str(exc)}"
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 @app.get("/",response_class=HTMLResponse)
 async def root():
@@ -103,8 +184,8 @@ async def root():
                     <p>Система управления линиями электропередач для инженеров и диспетчеров</p>
                 </div>
                 <div class="links">
-                    <a href="/api/docs" class="link">📚 Документация API (Swagger)</a>
-                    <a href="/api/redoc" class="link">📖 Документация API (ReDoc)</a>
+                    <a href="/docs" class="link">📚 Документация API (Swagger)</a>
+                    <a href="/redoc" class="link">📖 Документация API (ReDoc)</a>
                     <a href="/health" class="link">❤️ Проверка здоровья системы</a>
                     <a href="/status" class="link">📊 Статус системы</a>
                 </div>
@@ -163,6 +244,8 @@ async def status_page():
 
 @app.get("/cache")
 async def cache_example():
+    if not redis_client:
+        return {"error": "Redis недоступен"}
     await redis_client.set("hello", "world")
     value = await redis_client.get("hello")
     return {"cached_value": value}

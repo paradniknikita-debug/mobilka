@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -42,24 +40,13 @@ class AuthStateError extends AuthState {
   const AuthStateError(this.message);
 }
 
-class AuthService extends Notifier<AuthState> {
-  // Зависимости получаем через ref
-  ApiService get _apiService => ref.read(apiServiceProvider);
-  SharedPreferences get _prefs => ref.read(prefsProvider);
+class AuthService extends StateNotifier<AuthState> {
+  final ApiService _apiService;
+  final SharedPreferences _prefs;
 
-  @override
-  AuthState build() {
-    // Устанавливаем начальное состояние
-    final token = _prefs.getString(AppConfig.authTokenKey);
-    if (token != null) {
-      // Если есть токен, начинаем проверку асинхронно
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _checkAuthStatus();
-      });
-      return const AuthStateLoading();
-    } else {
-      return const AuthStateUnauthenticated();
-    }
+  AuthService(this._apiService, this._prefs) : super(const AuthStateInitial()) {
+    // Проверяем статус авторизации асинхронно (не блокирует старт)
+    _checkAuthStatus();
   }
 
   Future<void> _checkAuthStatus() async {
@@ -81,18 +68,41 @@ class AuthService extends Notifier<AuthState> {
           print('✅ [AuthService] Статус авторизации проверен: ${user.username}');
         }
       } catch (e) {
-        // Токен невалидный, очищаем
-        if (kDebugMode) {
-          print('❌ [AuthService] Токен невалидный: $e');
+        // Токен невалидный или нет связи. Если «оставаться в системе» — не выходим, работаем оффлайн.
+        final stayLoggedIn = _prefs.getBool(AppConfig.stayLoggedInKey) ?? true;
+        if (stayLoggedIn) {
+          if (kDebugMode) {
+            print('⚠️ [AuthService] Нет связи/токен не проверен, но остаёмся в системе (оффлайн)');
+          }
+          final uid = _prefs.getInt(AppConfig.userIdKey) ?? 0;
+          final uname = _prefs.getString(AppConfig.usernameKey) ?? 'Пользователь';
+          state = AuthStateAuthenticated(User(
+            id: uid,
+            username: uname,
+            email: '',
+            fullName: uname,
+            role: 'engineer',
+            isActive: true,
+            isSuperuser: false,
+            createdAt: DateTime.now(),
+            updatedAt: null,
+          ));
+        } else {
+          if (kDebugMode) {
+            print('❌ [AuthService] Токен невалидный: $e');
+          }
+          await logout();
         }
-        await logout();
       }
     } else {
       state = const AuthStateUnauthenticated();
     }
   }
 
-  Future<void> login(String username, String password) async {
+  /// Режим «не выходить из аккаунта»: при 401 не сбрасывать сессию, данные синхронизируются при появлении связи.
+  bool getStayLoggedIn() => _prefs.getBool(AppConfig.stayLoggedInKey) ?? true;
+
+  Future<void> login(String username, String password, {bool stayLoggedIn = true}) async {
     try {
       state = const AuthStateLoading();
       
@@ -100,6 +110,47 @@ class AuthService extends Notifier<AuthState> {
       final dio = Dio();
       final urlManager = BaseUrlManager();
       dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
+      
+      // Добавляем обработчик ошибок для автоматического fallback на HTTP при проблемах с SSL
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onError: (error, handler) async {
+            // Автоматический fallback HTTPS -> HTTP при ошибках SSL
+            final isSslError = error.message?.contains('CERT_AUTHORITY_INVALID') == true ||
+                              error.message?.contains('ERR_CERT') == true ||
+                              error.message?.contains('certificate') == true ||
+                              error.type == DioExceptionType.connectionError;
+            
+            if (kIsWeb && 
+                !urlManager.isUsingHttp && 
+                isSslError &&
+                error.response == null) {
+              
+              if (kDebugMode) {
+                print('⚠️ [AuthService] Проблема с HTTPS, переключение на HTTP');
+              }
+              
+              urlManager.fallbackToHttp();
+              final newBaseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
+              dio.options.baseUrl = newBaseUrl;
+              
+              try {
+                final newRequestOptions = error.requestOptions.copyWith(
+                  baseUrl: newBaseUrl,
+                );
+                final response = await dio.fetch(newRequestOptions);
+                return handler.resolve(response);
+              } catch (retryError) {
+                if (kDebugMode) {
+                  print('❌ [AuthService] Fallback на HTTP не помог');
+                }
+                urlManager.resetFallback();
+              }
+            }
+            handler.next(error);
+          },
+        ),
+      );
       
       // Для OAuth2PasswordRequestForm нужен application/x-www-form-urlencoded
       final formData = {
@@ -115,45 +166,25 @@ class AuthService extends Notifier<AuthState> {
         ),
       );
       
-      print('📦 Ответ от /auth/login: ${response.data}');
-      print('   Тип данных: ${response.data.runtimeType}');
-      if (response.data is Map) {
-        final data = response.data as Map;
-        print('   Поля в ответе: ${data.keys.toList()}');
-        for (var entry in data.entries) {
-          print('     ${entry.key}: ${entry.value} (${entry.value.runtimeType})');
-        }
-      }
-      
       final authResponse = AuthResponse.fromJson(response.data);
       
-      // Сохраняем токен
+      // Сохраняем токен и настройку «оставаться в системе»
       await _prefs.setString(AppConfig.authTokenKey, authResponse.accessToken);
-      print('✅ Токен сохранен: ${authResponse.accessToken.substring(0, 20)}...');
+      await _prefs.setBool(AppConfig.stayLoggedInKey, stayLoggedIn);
+      if (kDebugMode) {
+        print('✅ Авторизация успешна: токен сохранен, оставаться в системе: $stayLoggedIn');
+      }
       
       // Обновляем prefs в ApiServiceProvider для немедленного использования
       ApiServiceProvider.updatePrefs(_prefs);
       
       // Получаем информацию о пользователе
-      print('📞 Запрос информации о пользователе через API...');
-      
-      // Используем Dio напрямую для получения детальной информации об ответе
       final userDio = Dio();
       final userUrlManager = BaseUrlManager();
       userDio.options.baseUrl = '${userUrlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
       userDio.options.headers['Authorization'] = 'Bearer ${authResponse.accessToken}';
       
       final userResponse = await userDio.get('/auth/me');
-      print('📦 Ответ API /auth/me: ${userResponse.data}');
-      print('   Тип данных: ${userResponse.data.runtimeType}');
-      
-      if (userResponse.data is Map) {
-        final userData = userResponse.data as Map<String, dynamic>;
-        print('   Поля в ответе: ${userData.keys.toList()}');
-        for (var entry in userData.entries) {
-          print('     ${entry.key}: ${entry.value} (${entry.value.runtimeType})');
-        }
-      }
       
       // Парсим данные пользователя напрямую из ответа
       if (userResponse.data is! Map<String, dynamic>) {
@@ -161,23 +192,20 @@ class AuthService extends Notifier<AuthState> {
       }
       
       final user = User.fromJson(userResponse.data as Map<String, dynamic>);
-      print('📋 Данные пользователя получены: id=${user.id}, username=${user.username}, email=${user.email}');
-      print('   fullName: ${user.fullName}, role: ${user.role}');
-      print('   isActive: ${user.isActive}, isSuperuser: ${user.isSuperuser}');
       
       if (user.id > 0) {
         await _prefs.setInt(AppConfig.userIdKey, user.id);
+        await _prefs.setString(AppConfig.usernameKey, user.username);
       }
       
-      print('✅ Пользователь авторизован: ${user.username}');
-      print('🔄 Обновление состояния на AuthStateAuthenticated...');
+      if (kDebugMode) {
+        print('✅ Пользователь авторизован: ${user.username}');
+      }
+      
       state = AuthStateAuthenticated(user);
-      print('✅ Состояние авторизации обновлено: AuthStateAuthenticated');
-      print('   Текущее состояние: ${state.runtimeType}');
       
       // Небольшая задержка для обновления UI
       await Future.delayed(const Duration(milliseconds: 100));
-      print('⏱️ Задержка завершена, состояние должно быть обновлено');
     } catch (e, stackTrace) {
       print('❌ [AuthService] Ошибка при логине: $e');
       print('   Тип ошибки: ${e.runtimeType}');
@@ -201,20 +229,31 @@ class AuthService extends Notifier<AuthState> {
             state = AuthStateError('Ошибка авторизации: ${e.response?.statusCode ?? 'неизвестная ошибка'}');
           }
         } else {
-          state = AuthStateError('Ошибка соединения с сервером');
+          // Проверяем, является ли это ошибкой SSL
+          final isSslError = e.message?.contains('CERT_AUTHORITY_INVALID') == true ||
+                            e.message?.contains('ERR_CERT') == true ||
+                            e.message?.contains('certificate') == true ||
+                            e.error?.toString().contains('CERT_AUTHORITY_INVALID') == true ||
+                            e.error?.toString().contains('ERR_CERT') == true;
+          
+          if (isSslError) {
+            state = AuthStateError('Ошибка SSL сертификата. Пожалуйста:\n\n'
+                '1. Откройте https://localhost в новой вкладке браузера\n'
+                '2. Нажмите "Дополнительно" → "Перейти на localhost (небезопасно)"\n'
+                '3. Или переключите приложение на HTTP в настройках');
+          } else {
+            state = AuthStateError('Ошибка соединения с сервером');
+          }
         }
       } else {
         // Детальная информация об ошибке парсинга
-        print('   ⚠️ Ошибка не связана с DioException');
-        print('   Сообщение: ${e.toString()}');
+        if (kDebugMode) {
+          print('   ⚠️ Ошибка не связана с DioException: ${e.toString()}');
+        }
         
         if (e.toString().contains('null') || e.toString().contains('Null')) {
-          print('   ⚠️ Обнаружена ошибка null - возможно проблема с парсингом JSON');
-          print('   Попробуйте проверить ответ сервера в Network tab браузера');
           state = AuthStateError('Ошибка обработки данных пользователя. Проверьте формат ответа сервера.');
         } else if (e.toString().contains('type') && e.toString().contains('is not a subtype')) {
-          print('   ⚠️ Ошибка приведения типа - возможно несоответствие типов данных');
-          print('   Попробуйте проверить ответ сервера в Network tab браузера');
           state = AuthStateError('Ошибка обработки данных пользователя. Проверьте формат ответа сервера.');
         } else {
           state = AuthStateError('Ошибка: ${e.toString()}');
@@ -263,6 +302,7 @@ class AuthService extends Notifier<AuthState> {
   Future<void> logout() async {
     await _prefs.remove(AppConfig.authTokenKey);
     await _prefs.remove(AppConfig.userIdKey);
+    await _prefs.remove(AppConfig.usernameKey);
     state = const AuthStateUnauthenticated();
   }
 
@@ -271,10 +311,13 @@ class AuthService extends Notifier<AuthState> {
   }
 }
 
-// Provider для AuthService - теперь NotifierProvider
-final authServiceProvider = NotifierProvider<AuthService, AuthState>(() {
-  return AuthService();
+// Provider для AuthService
+final authServiceProvider = StateNotifierProvider<AuthService, AuthState>((ref) {
+  final apiService = ref.watch(apiServiceProvider);
+  final prefs = ref.watch(prefsProvider);
+  return AuthService(apiService, prefs);
 });
 
 // Provider для состояния авторизации (алиас для authServiceProvider)
+// Используем тот же провайдер, так как StateNotifierProvider уже возвращает состояние
 final authStateProvider = authServiceProvider;

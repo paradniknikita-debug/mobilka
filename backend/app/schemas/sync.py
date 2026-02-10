@@ -41,30 +41,28 @@ class SyncResponse(BaseModel):
     timestamp: datetime
 
 # JSON Schema для валидации данных
-# id и внешние ключи могут приходить как число (локальные отрицательные id) или строка
 POWER_LINE_SCHEMA = {
     "type": "object",
     "properties": {
-        "id": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
+        "id": {"type": "string"},
         "name": {"type": "string"},
         "code": {"type": "string"},
         "voltage_level": {"type": "number"},
         "length": {"type": "number"},
-        "branch_id": {"oneOf": [{"type": "integer"}, {"type": "null"}]},
-        "region_id": {"oneOf": [{"type": "integer"}, {"type": "null"}]},
+        "branch_id": {"type": "integer"},
         "status": {"type": "string"},
         "description": {"type": "string"},
         "created_at": {"type": "string", "format": "date-time"},
         "updated_at": {"type": "string", "format": "date-time"}
     },
-    "required": ["name", "voltage_level"]
+    "required": ["name", "code", "voltage_level", "branch_id"]
 }
 
 POLE_SCHEMA = {
     "type": "object",
     "properties": {
-        "id": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
-        "power_line_id": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
+        "id": {"type": "string"},
+        "power_line_id": {"type": "string"},
         "pole_number": {"type": "string"},
         "latitude": {"type": "number"},
         "longitude": {"type": "number"},
@@ -83,8 +81,8 @@ POLE_SCHEMA = {
 EQUIPMENT_SCHEMA = {
     "type": "object",
     "properties": {
-        "id": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
-        "pole_id": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
+        "id": {"type": "string"},
+        "pole_id": {"type": "string"},
         "equipment_type": {"type": "string"},
         "name": {"type": "string"},
         "manufacturer": {"type": "string"},

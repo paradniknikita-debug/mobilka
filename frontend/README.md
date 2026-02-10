@@ -41,6 +41,27 @@ flutter run
 flutter run --release
 ```
 
+## Устранение ошибок сборки
+
+- **Invalid depfile** (kernel_snapshot_program.d), **Kotlin "different roots"**, **Daemon compilation failed**  
+  Выполните полную очистку и повторную сборку:
+  ```bash
+  flutter clean
+  flutter pub get
+  flutter run
+  ```
+  Или запустите скрипт `clean_and_build.bat` в папке frontend.
+
+- **Проект на диске D:, pub cache на C:**  
+  В `android/gradle.properties` включено `kotlin.incremental=false`, чтобы избежать сбоя Kotlin-кэша из-за разных корней дисков. Если ошибки сохраняются, перенесите pub cache на тот же диск, что и проект:
+  ```bash
+  set PUB_CACHE=D:\pub_cache
+  flutter pub get
+  ```
+
+- **Предупреждения "source value 8 is obsolete"**  
+  Идут от части плагинов (Java 8). На сборку не влияют; при желании можно обновить JDK до 11+ и проверить настройки в `android/app/build.gradle.kts`.
+
 ## Структура проекта
 
 ```

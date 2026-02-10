@@ -16,12 +16,18 @@ import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialogModule } from '@angular/material/dialog';
+import { MatDialogModule, MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSelectModule } from '@angular/material/select';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatDividerModule } from '@angular/material/divider';
+
+// CDK Drag & Drop
+import { DragDropModule } from '@angular/cdk/drag-drop';
 
 // Leaflet
 import { LeafletModule } from '@asymmetrik/ngx-leaflet';
@@ -40,6 +46,13 @@ import { SidebarComponent } from './layout/sidebar/sidebar.component';
 // Features
 import { LoginComponent } from './features/auth/login/login.component';
 import { MapComponent } from './features/map/map.component';
+import { CreateObjectDialogComponent } from './features/map/create-object-dialog/create-object-dialog.component';
+import { DeleteObjectDialogComponent } from './features/map/delete-object-dialog/delete-object-dialog.component';
+import { PoleConnectivityDialogComponent } from './features/map/pole-connectivity-dialog/pole-connectivity-dialog.component';
+import { PoleSequenceDialogComponent } from './features/map/pole-sequence-dialog/pole-sequence-dialog.component';
+import { CreateSpanDialogComponent } from './features/map/create-span-dialog/create-span-dialog.component';
+import { CreateSegmentDialogComponent } from './features/map/create-segment-dialog/create-segment-dialog.component';
+import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dialog/edit-power-line-dialog.component';
 
 @NgModule({
   declarations: [
@@ -47,7 +60,14 @@ import { MapComponent } from './features/map/map.component';
     MainLayoutComponent,
     SidebarComponent,
     LoginComponent,
-    MapComponent
+    MapComponent,
+    CreateObjectDialogComponent,
+    DeleteObjectDialogComponent,
+    PoleConnectivityDialogComponent,
+    PoleSequenceDialogComponent,
+    CreateSpanDialogComponent,
+    CreateSegmentDialogComponent,
+    EditPowerLineDialogComponent
   ],
   imports: [
     BrowserModule,
@@ -56,7 +76,7 @@ import { MapComponent } from './features/map/map.component';
     FormsModule,
     ReactiveFormsModule,
     AppRoutingModule,
-    
+
     // Material
     MatToolbarModule,
     MatButtonModule,
@@ -75,7 +95,13 @@ import { MapComponent } from './features/map/map.component';
     MatSortModule,
     MatMenuModule,
     MatTooltipModule,
-    
+    MatSelectModule,
+    MatAutocompleteModule,
+    MatDividerModule,
+
+    // CDK
+    DragDropModule,
+
     // Leaflet
     LeafletModule
   ],
@@ -89,6 +115,16 @@ import { MapComponent } from './features/map/map.component';
       provide: HTTP_INTERCEPTORS,
       useClass: ErrorInterceptor,
       multi: true
+    },
+    // Глобальная конфигурация для MatDialog
+    {
+      provide: MAT_DIALOG_DEFAULT_OPTIONS,
+      useValue: {
+        autoFocus: false,
+        restoreFocus: false,
+        hasBackdrop: true,
+        disableClose: false
+      }
     }
   ],
   bootstrap: [AppComponent]

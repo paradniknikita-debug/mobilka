@@ -1,5 +1,7 @@
 .map-container {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
 }
@@ -11,44 +13,56 @@
 
 .map-controls {
   position: absolute;
-  top: 16px;
+  top: 64px;
   right: 16px;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.map-legend {
+.zoom-indicator {
   position: absolute;
-  top: 80px;
-  right: 16px;
+  bottom: 16px;
+  left: 16px;
   z-index: 1000;
   background: white;
-  padding: 16px;
+  padding: 4px 8px;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.map-legend h3 {
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.map-legend-item {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
-}
-
-.map-legend-item:last-child {
-  margin-bottom: 0;
-}
-
-.map-legend-icon {
-  width: 20px;
-  height: 20px;
-  margin-right: 8px;
-  border-radius: 50%;
-  border: 2px solid white;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: left 0.3s ease;
+  
+  .zoom-button {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    padding: 0;
+    
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+  
+  .zoom-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: rgba(0, 0, 0, 0.6);
+    margin: 0 4px;
+  }
+  
+  .zoom-distance {
+    margin-left: 4px;
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 12px;
+  }
 }
 
 .loading-overlay {
@@ -73,5 +87,148 @@
 // Скрываем атрибуцию OpenStreetMap
 ::ng-deep .leaflet-control-attribution {
   display: none !important;
+}
+
+// Окно свойств опоры
+.pole-properties-panel {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 380px;
+  max-width: 100%;
+  background: white;
+  border-radius: 8px 0 0 0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pole-properties-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+
+  .close-button {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+  }
+}
+
+.pole-properties-content {
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.property-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+
+  &:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .property-label {
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.6);
+    margin-right: 16px;
+    flex-shrink: 0;
+  }
+
+  .property-value {
+    color: rgba(0, 0, 0, 0.87);
+    text-align: right;
+    word-break: break-word;
+  }
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+
+  &.success {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &.warning {
+    background-color: #fff3e0;
+    color: #e65100;
+  }
+}
+
+.pole-properties-actions {
+  padding: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .action-button {
+    width: 100%;
+    
+    mat-icon {
+      margin-right: 8px;
+    }
+  }
+}
+
+// Стили для скроллбара в окне свойств
+.pole-properties-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pole-properties-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pole-properties-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.pole-properties-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+// Стили для подписей опор
+::ng-deep .pole-label {
+  pointer-events: none !important;
+  
+  .pole-label-text {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #2196F3;
+    text-align: center;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(33, 150, 243, 0.3);
+  }
 }
 

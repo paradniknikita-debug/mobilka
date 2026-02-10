@@ -285,7 +285,7 @@ async def import_substations(
             try:
                 # Проверяем уникальность кода
                 existing = await db.execute(
-                    select(Substation).where(Substation.code == str(row['code']))
+                    select(Substation).where(Substation.dispatcher_name == str(row['dispatcher_name']))
                 )
                 if existing.scalar_one_or_none():
                     errors.append(f"Строка {idx + 2}: Подстанция с кодом '{row['code']}' уже существует")
@@ -300,10 +300,10 @@ async def import_substations(
                         region_name=str(row.get('region_name', ''))
                     )
                 
-                # Создаём подстанцию
+                # Создаём подстанцию (модель использует dispatcher_name, не code)
                 substation = Substation(
                     name=str(row['name']),
-                    code=str(row['code']),
+                    dispatcher_name=str(row.get('dispatcher_name') or row.get('code', '')),
                     voltage_level=float(row['voltage_level']),
                     latitude=float(row['latitude']),
                     longitude=float(row['longitude']),

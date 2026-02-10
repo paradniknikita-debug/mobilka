@@ -15,20 +15,6 @@ from app.schemas.sync import SyncBatch, SyncResponse, SyncRecord, SyncStatus, Sy
 from app.schemas.power_line import PowerLineCreate, PoleCreate, EquipmentCreate
 from app.models.base import generate_mrid
 import jsonschema
-from sqlalchemy.exc import IntegrityError
-
-def _normalize_id(v: Any) -> Optional[int]:
-    """Приводит id к int для единообразного маппинга (клиент может отправить -1 или \"-1\")."""
-    if v is None:
-        return None
-    if isinstance(v, int) and not isinstance(v, bool):
-        return v
-    if isinstance(v, str) and v.lstrip("-").isdigit():
-        return int(v)
-    try:
-        return int(float(v))
-    except (TypeError, ValueError):
-        return None
 
 router = APIRouter()
 
@@ -43,8 +29,6 @@ async def upload_sync_batch(
     processed_count = 0
     failed_count = 0
     errors = []
-    # Маппинг локальных (отрицательных) id с клиента на серверные id после создания
-    id_mappings = {"power_line": {}, "pole": {}}
     
     for record in batch.records:
         try:
@@ -53,18 +37,13 @@ async def upload_sync_batch(
                 schema = ENTITY_SCHEMAS[record.entity_type]
                 jsonschema.validate(record.data, schema)
             
-            await process_sync_record(record, current_user, db, id_mappings)
+            # Здесь должна быть логика обработки каждой записи
+            # В зависимости от action (create/update/delete) и entity_type
+            await process_sync_record(record, current_user, db)
             
             processed_count += 1
             record.status = SyncStatus.SYNCED
             
-        except IntegrityError as e:
-            failed_count += 1
-            record.status = SyncStatus.FAILED
-            msg = str(e.orig) if getattr(e, "orig", None) else str(e)
-            record.error_message = msg
-            errors.append({"record_id": record.id, "error": f"Ошибка БД (FK или уникальность): {msg}"})
-            await db.rollback()
         except Exception as e:
             failed_count += 1
             record.status = SyncStatus.FAILED
@@ -73,7 +52,6 @@ async def upload_sync_batch(
                 "record_id": record.id,
                 "error": str(e)
             })
-            await db.rollback()
     
     return SyncResponse(
         success=failed_count == 0,
@@ -216,22 +194,14 @@ async def download_sync_data(
         "count": len(records)
     }
 
-async def process_sync_record(
-    record: SyncRecord,
-    user: User,
-    db: AsyncSession,
-    id_mappings: Optional[Dict[str, Dict[Any, int]]] = None,
-):
-    """Обработка одной записи синхронизации.
-    id_mappings: маппинг локальных id (с клиента) на серверные после создания записей.
-    """
-    if id_mappings is None:
-        id_mappings = {"power_line": {}, "pole": {}}
+async def process_sync_record(record: SyncRecord, user: User, db: AsyncSession):
+    """Обработка одной записи синхронизации"""
+    
     data = record.data
     
     if record.entity_type == "power_line":
         if record.action == SyncAction.CREATE:
-            client_id = data.get('id')
+            # Проверяем, существует ли уже ЛЭП с таким ID или mRID
             existing = await db.execute(
                 select(PowerLine).where(
                     or_(
@@ -243,17 +213,18 @@ async def process_sync_record(
             existing_pl = existing.scalar_one_or_none()
             
             if existing_pl:
+                # Если существует - обновляем
                 for key, value in data.items():
                     if hasattr(existing_pl, key) and key not in ['id', 'mrid', 'created_at']:
                         setattr(existing_pl, key, value)
             else:
+                # Создаем новую
                 mrid = data.get('mrid') or generate_mrid()
-                voltage_level = data.get('voltage_level') if data.get('voltage_level') is not None else 0.0
                 db_pl = PowerLine(
                     mrid=mrid,
                     name=data['name'],
                     code=data.get('code') or f"LEP-{mrid[:8].upper()}",
-                    voltage_level=voltage_level,
+                    voltage_level=data.get('voltage_level'),
                     length=data.get('length'),
                     region_id=data.get('region_id'),
                     branch_id=data.get('branch_id'),
@@ -262,12 +233,9 @@ async def process_sync_record(
                     created_by=user.id
                 )
                 db.add(db_pl)
-                await db.flush()
-                nid = _normalize_id(client_id)
-                if nid is not None:
-                    id_mappings["power_line"][nid] = db_pl.id
         
         elif record.action == SyncAction.UPDATE:
+            # Обновление ЛЭП
             result = await db.execute(
                 select(PowerLine).where(
                     or_(
@@ -285,6 +253,7 @@ async def process_sync_record(
                 raise ValueError(f"PowerLine with id/mrid {data.get('id') or data.get('mrid')} not found")
         
         elif record.action == SyncAction.DELETE:
+            # Удаление ЛЭП
             result = await db.execute(
                 select(PowerLine).where(
                     or_(
@@ -301,6 +270,7 @@ async def process_sync_record(
     
     elif record.entity_type == "pole":
         if record.action == SyncAction.CREATE:
+            # Проверяем существование
             existing = await db.execute(
                 select(Pole).where(
                     or_(
@@ -312,17 +282,16 @@ async def process_sync_record(
             existing_pole = existing.scalar_one_or_none()
             
             if existing_pole:
+                # Обновляем
                 for key, value in data.items():
                     if hasattr(existing_pole, key) and key not in ['id', 'mrid', 'created_at']:
                         setattr(existing_pole, key, value)
             else:
+                # Создаем новую
                 mrid = data.get('mrid') or generate_mrid()
-                pl_id_raw = data['power_line_id']
-                r_pl = id_mappings["power_line"]
-                power_line_id = r_pl.get(_normalize_id(pl_id_raw) or pl_id_raw, r_pl.get(pl_id_raw, pl_id_raw))
                 db_pole = Pole(
                     mrid=mrid,
-                    power_line_id=power_line_id,
+                    power_line_id=data['power_line_id'],
                     pole_number=data['pole_number'],
                     latitude=data['latitude'],
                     longitude=data['longitude'],
@@ -336,10 +305,6 @@ async def process_sync_record(
                     created_by=user.id
                 )
                 db.add(db_pole)
-                await db.flush()
-                pid = _normalize_id(data.get('id'))
-                if pid is not None:
-                    id_mappings["pole"][pid] = db_pole.id
         
         elif record.action == SyncAction.UPDATE:
             result = await db.execute(
@@ -369,6 +334,7 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
+                from sqlalchemy import delete
                 await db.execute(delete(Pole).where(Pole.id == pole.id))
             else:
                 raise ValueError(f"Pole with id/mrid {data.get('id') or data.get('mrid')} not found")
@@ -391,12 +357,9 @@ async def process_sync_record(
                         setattr(existing_eq, key, value)
             else:
                 mrid = data.get('mrid') or generate_mrid()
-                pole_id_raw = data['pole_id']
-                r_pole = id_mappings["pole"]
-                pole_id = r_pole.get(_normalize_id(pole_id_raw) or pole_id_raw, r_pole.get(pole_id_raw, pole_id_raw))
                 db_eq = Equipment(
                     mrid=mrid,
-                    pole_id=pole_id,
+                    pole_id=data['pole_id'],
                     equipment_type=data['equipment_type'],
                     name=data['name'],
                     manufacturer=data.get('manufacturer'),

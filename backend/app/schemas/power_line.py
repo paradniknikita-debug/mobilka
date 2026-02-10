@@ -1,11 +1,16 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from .cim_line_structure import (
+    ConnectivityNodeResponse, TerminalResponse, LineSectionResponse,
+    AClineSegmentResponse, SpanResponse
+)
 
 class PoleBase(BaseModel):
     pole_number: str
-    latitude: float
-    longitude: float
+    # Координаты (для обратной совместимости и удобства)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     pole_type: str
     height: Optional[float] = None
     foundation_type: Optional[str] = None
@@ -13,38 +18,58 @@ class PoleBase(BaseModel):
     year_installed: Optional[int] = None
     condition: str = "good"
     notes: Optional[str] = None
+    sequence_number: Optional[int] = None
+    conductor_type: Optional[str] = None
+    conductor_material: Optional[str] = None
+    conductor_section: Optional[str] = None
 
 class PoleCreate(PoleBase):
-    pass
+    mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
+    is_tap: bool = False  # Является ли опора отпаечной (точкой отпайки)
+    # Параметры кабеля для автоматического создания пролёта
+    conductor_type: Optional[str] = None  # Марка провода (AC-70, AC-95 и т.д.)
+    conductor_material: Optional[str] = None  # Материал (алюминий, медь)
+    conductor_section: Optional[str] = None  # Сечение, мм²
 
 class PoleResponse(PoleBase):
     id: int
+    mrid: str
     power_line_id: int
+    connectivity_node_id: Optional[int] = None
+    sequence_number: Optional[int] = None
+    conductor_type: Optional[str] = None
+    conductor_material: Optional[str] = None
+    conductor_section: Optional[str] = None
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]
+    connectivity_node: Optional[ConnectivityNodeResponse] = None
 
     class Config:
         from_attributes = True
 
 class PowerLineBase(BaseModel):
     name: str
-    code: str
-    voltage_level: float
+    base_voltage_id: Optional[int] = None  # Связь с BaseVoltage (CIM)
+    voltage_level: Optional[float] = None  # кВ (дублируется из BaseVoltage для обратной совместимости)
     length: Optional[float] = None
-    branch_id: int
+    branch_name: Optional[str] = None  # Административная принадлежность (текстовое поле)
+    region_name: Optional[str] = None  # Географический регион (текстовое поле)
     status: str = "active"
     description: Optional[str] = None
 
 class PowerLineCreate(PowerLineBase):
-    pass
+    mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
 
 class PowerLineResponse(PowerLineBase):
     id: int
+    mrid: str
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]
     poles: List[PoleResponse] = []
+    # CIM структура
+    acline_segments: List[AClineSegmentResponse] = []
 
     class Config:
         from_attributes = True

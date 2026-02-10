@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user.dart';
 import '../models/power_line.dart';
+import '../models/substation.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
@@ -40,11 +41,17 @@ abstract class ApiService {
   @GET('/power-lines/{id}')
   Future<PowerLine> getPowerLine(@Path('id') int id);
 
+  @DELETE('/power-lines/{id}')
+  Future<void> deletePowerLine(@Path('id') int id);
+
   @POST('/power-lines/{id}/poles')
   Future<Pole> createPole(@Path('id') int powerLineId, @Body() PoleCreate poleData);
 
   @GET('/power-lines/{id}/poles')
   Future<List<Pole>> getPoles(@Path('id') int powerLineId);
+
+  @DELETE('/power-lines/{powerLineId}/spans/{spanId}')
+  Future<void> deleteSpan(@Path('powerLineId') int powerLineId, @Path('spanId') int spanId);
 
   // Poles
   @GET('/poles')
@@ -52,6 +59,9 @@ abstract class ApiService {
 
   @GET('/poles/{id}')
   Future<Pole> getPole(@Path('id') int id);
+
+  @DELETE('/poles/{id}')
+  Future<void> deletePole(@Path('id') int id);
 
   @POST('/poles/{id}/equipment')
   Future<Equipment> createEquipment(@Path('id') int poleId, @Body() EquipmentCreate equipmentData);
@@ -79,6 +89,13 @@ abstract class ApiService {
   @GET('/map/substations/geojson')
   Future<dynamic> getSubstationsGeoJSON();
 
+  // Substations
+  @POST('/substations')
+  Future<Substation> createSubstation(@Body() SubstationCreate substationData);
+
+  @DELETE('/substations/{id}')
+  Future<void> deleteSubstation(@Path('id') int id);
+
   @GET('/map/bounds')
   Future<dynamic> getDataBounds();
 
@@ -96,13 +113,24 @@ abstract class ApiService {
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
 }
 
+/// Интерфейс ApiService плюс метод CIM Export (реализуется вручную, т.к. Retrofit не поддерживает бинарные ответы).
+abstract class ApiServiceWithCim implements ApiService {
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  );
+}
+
 class ApiServiceProvider {
   static SharedPreferences? _prefs;
   
-  static ApiService create({SharedPreferences? prefs}) {
+  static ApiServiceWithCim create({SharedPreferences? prefs}) {
     _prefs = prefs; // Сохраняем prefs статически
     final dio = Dio();
     final urlManager = BaseUrlManager();
+    // Обновляем протокол из конфига при создании сервиса
+    urlManager.updateProtocolFromConfig();
     dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
     
     // Настройка interceptors
@@ -127,25 +155,29 @@ class ApiServiceProvider {
             }
           }
           
-          if (kDebugMode) {
-            print('📤 [${options.method}] ${options.baseUrl}${options.path}');
-            print('   Headers: ${options.headers.keys.join(", ")}');
+          // Уменьшаем логирование - только для важных запросов
+          if (kDebugMode && (options.path.contains('/auth/') || options.path.contains('/sync/'))) {
+            print('📤 [${options.method}] ${options.path}');
           }
           
           handler.next(options);
         },
         onError: (error, handler) async {
-          // Автоматический fallback HTTPS -> HTTP при ошибках соединения
-          // НО: только если это реальная ошибка соединения, не 404 после редиректа
+          // Автоматический fallback HTTPS -> HTTP при ошибках соединения или SSL
+          // Проверяем различные типы ошибок, которые могут возникнуть при проблемах с SSL
+          final isSslError = error.message?.contains('CERT_AUTHORITY_INVALID') == true ||
+                            error.message?.contains('ERR_CERT') == true ||
+                            error.message?.contains('certificate') == true ||
+                            error.type == DioExceptionType.connectionError;
+          
           if (kIsWeb && 
               !urlManager.isUsingHttp && 
-              error.type == DioExceptionType.connectionError &&
+              isSslError &&
               error.response == null) { // Только если нет ответа (браузер блокирует)
             
             if (kDebugMode) {
-              print('🔄 Попытка fallback на HTTP из-за ошибки: ${error.type}');
-              print('   Примечание: Если Nginx редиректит HTTP→HTTPS, fallback не поможет');
-              print('   Решение: Прими SSL сертификат в браузере на https://localhost');
+              print('⚠️ Проблема с HTTPS (SSL сертификат): ${error.message}');
+              print('   Переключение на HTTP...');
             }
             
             // Выполняем fallback на HTTP
@@ -163,16 +195,17 @@ class ApiServiceProvider {
               
               final response = await dio.fetch(newRequestOptions);
               
+              if (kDebugMode) {
+                print('✅ Запрос успешно выполнен через HTTP после fallback');
+              }
+              
               return handler.resolve(response);
             } catch (retryError) {
               // Если и HTTP не работает (404 после редиректа), это значит:
               // Nginx редиректит HTTP → HTTPS, но HTTPS всё ещё блокируется
               if (kDebugMode) {
-                print('❌ Fallback на HTTP не помог');
-                print('   Вероятная причина: Nginx редиректит HTTP → HTTPS');
-                print('   Решение: Прими SSL сертификат в браузере');
-                print('   1. Открой https://localhost в новой вкладке');
-                print('   2. Нажми "Дополнительно" → "Перейти на localhost (небезопасно)"');
+                print('❌ Fallback на HTTP не помог. Проверьте SSL сертификат.');
+                print('   Решение: Откройте https://localhost в браузере и примите сертификат');
               }
               
               // Сбрасываем fallback, чтобы вернуться к HTTPS после принятия сертификата
@@ -185,8 +218,11 @@ class ApiServiceProvider {
             // Токен истёк, нужно перелогиниться
             await _clearStoredToken();
             if (kDebugMode) {
-              print('🔓 Токен истёк, требуется повторная авторизация');
+              print('🔓 Токен истёк (401), требуется повторная авторизация');
+              print('   Очищен токен из хранилища');
             }
+            // Ошибка 401 будет проброшена дальше, чтобы UI мог обработать её
+            // (например, перенаправить на страницу логина)
           } else if (error.response?.statusCode == 403) {
             final token = await _getStoredToken();
             if (kDebugMode) {
@@ -207,7 +243,8 @@ class ApiServiceProvider {
       ),
     );
 
-    return ApiService(dio, baseUrl: dio.options.baseUrl);
+    final apiService = ApiService(dio, baseUrl: dio.options.baseUrl);
+    return _ApiServiceWrapper(apiService, dio);
   }
 
   static Future<String?> _getStoredToken() async {
@@ -231,12 +268,11 @@ class ApiServiceProvider {
   }
 }
 
-final apiServiceProvider = Provider<ApiService>((ref) {
+final apiServiceProvider = Provider<ApiServiceWithCim>((ref) {
   try {
     final prefs = ref.watch(prefsProvider);
     return ApiServiceProvider.create(prefs: prefs);
   } catch (e) {
-    // Если prefsProvider не переопределен, создаем без prefs
     return ApiServiceProvider.create();
   }
 });
@@ -309,3 +345,119 @@ final dioProvider = Provider<Dio>((ref) {
   
   return dio;
 });
+
+/// Обёртка для ApiService, добавляющая метод exportCimXml.
+class _ApiServiceWrapper implements ApiServiceWithCim {
+  final ApiService _delegate;
+  final Dio _dio;
+
+  _ApiServiceWrapper(this._delegate, this._dio);
+
+  @override
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  ) async {
+    final queryParameters = <String, dynamic>{
+      'use_cimpy': useCimpy,
+      'include_substations': includeSubstations,
+      'include_power_lines': includePowerLines,
+    };
+    
+    final response = await _dio.get<List<int>>(
+      '/cim/export/xml',
+      queryParameters: queryParameters,
+      options: Options(
+        responseType: ResponseType.bytes,
+      ),
+    );
+    
+    return response;
+  }
+
+  // Делегируем все остальные методы к базовому сервису
+  @override
+  Future<AuthResponse> login(String username, String password) => _delegate.login(username, password);
+
+  @override
+  Future<User> register(UserCreate userData) => _delegate.register(userData);
+
+  @override
+  Future<User> getCurrentUser() => _delegate.getCurrentUser();
+
+  @override
+  Future<List<PowerLine>> getPowerLines() => _delegate.getPowerLines();
+
+  @override
+  Future<PowerLine> createPowerLine(PowerLineCreate powerLineData) => _delegate.createPowerLine(powerLineData);
+
+  @override
+  Future<PowerLine> getPowerLine(int id) => _delegate.getPowerLine(id);
+
+  @override
+  Future<void> deletePowerLine(int id) => _delegate.deletePowerLine(id);
+
+  @override
+  Future<Pole> createPole(int powerLineId, PoleCreate poleData) => _delegate.createPole(powerLineId, poleData);
+
+  @override
+  Future<List<Pole>> getPoles(int powerLineId) => _delegate.getPoles(powerLineId);
+
+  @override
+  Future<void> deleteSpan(int powerLineId, int spanId) => _delegate.deleteSpan(powerLineId, spanId);
+
+  @override
+  Future<List<Pole>> getAllPoles() => _delegate.getAllPoles();
+
+  @override
+  Future<Pole> getPole(int id) => _delegate.getPole(id);
+
+  @override
+  Future<void> deletePole(int id) => _delegate.deletePole(id);
+
+  @override
+  Future<Equipment> createEquipment(int poleId, EquipmentCreate equipmentData) => _delegate.createEquipment(poleId, equipmentData);
+
+  @override
+  Future<List<Equipment>> getPoleEquipment(int poleId) => _delegate.getPoleEquipment(poleId);
+
+  @override
+  Future<List<Equipment>> getAllEquipment() => _delegate.getAllEquipment();
+
+  @override
+  Future<Equipment> getEquipment(int id) => _delegate.getEquipment(id);
+
+  @override
+  Future<dynamic> getPowerLinesGeoJSON() => _delegate.getPowerLinesGeoJSON();
+
+  @override
+  Future<dynamic> getTowersGeoJSON() => _delegate.getTowersGeoJSON();
+
+  @override
+  Future<dynamic> getTapsGeoJSON() => _delegate.getTapsGeoJSON();
+
+  @override
+  Future<dynamic> getSubstationsGeoJSON() => _delegate.getSubstationsGeoJSON();
+
+  @override
+  Future<Substation> createSubstation(SubstationCreate substationData) => _delegate.createSubstation(substationData);
+
+  @override
+  Future<void> deleteSubstation(int id) => _delegate.deleteSubstation(id);
+
+  @override
+  Future<dynamic> getDataBounds() => _delegate.getDataBounds();
+
+  @override
+  Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) => _delegate.uploadSyncBatch(batch);
+
+  @override
+  Future<dynamic> downloadSyncData(String lastSync) => _delegate.downloadSyncData(lastSync);
+
+  @override
+  Future<dynamic> getAllSchemas() => _delegate.getAllSchemas();
+
+  @override
+  Future<dynamic> getEntitySchema(String entityType) => _delegate.getEntitySchema(entityType);
+}
