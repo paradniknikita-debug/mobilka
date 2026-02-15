@@ -143,12 +143,37 @@ jobs:
           # Удаляем только артефакты сборки, оставляем конфигурационные файлы
           rm -rf build/ios/iphoneos build/ios/iphonesimulator
       
-      - name: Build iOS app (no codesign)
+      - name: Build iOS app using xcodebuild
         run: |
           cd frontend
-          # Собираем iOS приложение без подписи
-          flutter build ios --release --no-codesign
-          echo "✓ iOS build completed"
+          # Подготавливаем Flutter файлы
+          flutter assemble -dTargetPlatform=ios -dTargetFile=lib/main.dart -dBuildMode=release ios_framework_ios 2>&1 | head -30 || true
+          
+          cd ios
+          # Собираем через xcodebuild с явным отключением подписи
+          xcodebuild clean build \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            CODE_SIGN_STYLE=Manual 2>&1 | tail -100
+          
+          # Копируем результат в ожидаемое место Flutter
+          if [ -d "build/Build/Products/Release-iphoneos/Runner.app" ]; then
+            mkdir -p ../build/ios/iphoneos
+            cp -r build/Build/Products/Release-iphoneos/Runner.app ../build/ios/iphoneos/
+            echo "✓ Build successful, Runner.app copied"
+          else
+            echo "✗ Build failed"
+            exit 1
+          fi
       
       - name: Create IPA from build
         run: |
