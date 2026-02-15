@@ -57,7 +57,7 @@ services:
     networks:
       - lepm_network
 
-  # Nginx reverse proxy
+  # Nginx reverse proxy с HTTPS
   nginx:
     image: nginx:alpine
     container_name: lepm_nginx
@@ -65,12 +65,13 @@ services:
       - backend
     ports:
       - "80:80"
-      # Порт 443 будет открыт после настройки SSL сертификатов
-      # - "443:443"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # Монтирование Let's Encrypt (раскомментировать после получения сертификатов)
-      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Для самоподписанных сертификатов (создаются через nginx/generate-ssl-ubuntu.sh)
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      # Для Let's Encrypt (если используете реальный домен)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./web-frontend/dist/lepm-web-frontend:/app/angular-web:ro
       - ./frontend/build/web:/app/flutter-web:ro
     restart: unless-stopped
