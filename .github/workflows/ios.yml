@@ -143,23 +143,31 @@ jobs:
           # Удаляем только артефакты сборки, оставляем конфигурационные файлы
           rm -rf build/ios/iphoneos build/ios/iphonesimulator
       
-      - name: Build IPA
-        id: build_ipa
+      - name: Build iOS app (no codesign)
         run: |
           cd frontend
-          # Пробуем использовать flutter build ipa
-          flutter build ipa --release --no-codesign || {
-            echo "flutter build ipa failed, trying manual build"
-            # Альтернативный способ: собираем через flutter build ios
-            flutter build ios --release --no-codesign
-            # Создаем IPA вручную
+          # Собираем iOS приложение без подписи
+          flutter build ios --release --no-codesign
+          echo "✓ iOS build completed"
+      
+      - name: Create IPA from build
+        run: |
+          cd frontend
+          # Создаём IPA вручную из собранного .app
+          if [ -d "build/ios/iphoneos/Runner.app" ]; then
+            echo "Creating IPA from Runner.app..."
             cd build/ios/iphoneos
             mkdir -p Payload
             cp -r Runner.app Payload/
             zip -r Runner.ipa Payload
             mkdir -p ../ipa
             mv Runner.ipa ../ipa/
-          }
+            echo "✓ IPA created at build/ios/ipa/Runner.ipa"
+            ls -lh ../ipa/
+          else
+            echo "✗ Runner.app not found"
+            exit 1
+          fi
       
       - name: Verify IPA exists
         run: |
