@@ -5,7 +5,7 @@ PositionPoint - точка с координатами (xPosition, yPosition, zP
 """
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Enum as SQLEnum
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.database import Base
 from app.models.base import generate_mrid
 import enum
@@ -26,7 +26,7 @@ class Location(Base):
     В CIM Location является абстрактным классом, который может быть связан
     с любым PowerSystemResource через атрибут location.
     """
-    __tablename__ = "locations"
+    __tablename__ = "location"
 
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
@@ -48,7 +48,8 @@ class Location(Base):
     # Связи с PositionPoint (один Location может иметь несколько точек)
     # Для точечных объектов (опоры, подстанции) обычно одна точка
     # Для линейных объектов (ЛЭП) - множество точек
-    position_points = relationship("PositionPoint", back_populates="location", cascade="all, delete-orphan")
+    # lazy='selectin' предотвращает ленивую загрузку в async контексте
+    position_points = relationship("PositionPoint", back_populates="location", cascade="all, delete-orphan", lazy='selectin')
     
     # Полиморфные связи с объектами через location_id
     # Эти связи определяются в соответствующих моделях (Pole, Substation, etc.)
@@ -59,17 +60,23 @@ class PositionPoint(Base):
     PositionPoint - точка с координатами
     Соответствует CIM классу: cim:PositionPoint
     
-    В CIM PositionPoint содержит координаты xPosition, yPosition, zPosition
-    и связан с Location.
+    В CIM PositionPoint содержит координаты xPosition, yPosition, zPosition.
+    Теперь хранит координаты всех объектов напрямую (pole, substation, tap, span).
     """
-    __tablename__ = "position_points"
+    __tablename__ = "position_point"
 
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     
-    # Связь с Location
-    location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
+    # Связь с Location (опционально, для обратной совместимости)
+    location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
+    
+    # Полиморфные связи с объектами (прямое хранение координат)
+    pole_id = Column(Integer, ForeignKey("pole.id", ondelete="CASCADE"), nullable=True, index=True)
+    substation_id = Column(Integer, ForeignKey("substation.id", ondelete="CASCADE"), nullable=True, index=True)
+    tap_id = Column(Integer, ForeignKey("tap.id", ondelete="CASCADE"), nullable=True, index=True)
+    span_id = Column(Integer, ForeignKey("span.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Координаты согласно CIM стандарту
     # xPosition - долгота (longitude) в десятичных градусах
@@ -90,5 +97,10 @@ class PositionPoint(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Связи
-    location = relationship("Location", back_populates="position_points")
+    # lazy='selectin' предотвращает ленивую загрузку в async контексте
+    location = relationship("Location", back_populates="position_points", lazy='selectin')
+    pole = relationship("Pole", backref=backref("position_points", lazy='selectin'))
+    substation = relationship("Substation", backref=backref("position_points", lazy='selectin'))
+    tap = relationship("Tap", backref=backref("position_points", lazy='selectin'))
+    span = relationship("Span", backref=backref("position_points", lazy='selectin'))
 

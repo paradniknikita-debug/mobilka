@@ -1,0 +1,86 @@
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    container_name: lepm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lepm_network
+    # Не открываем порт наружу в продакшене
+
+  # Redis для кэширования
+  redis:
+    image: redis:7-alpine
+    container_name: lepm_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lepm_network
+
+  # Backend API сервер
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lepm_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      RELOAD: "false"  # Отключено для продакшена
+      TZ: ${TZ:-Europe/Moscow}
+    # Не монтируем код в продакшене - используем образ
+    # Не открываем порт 8000 наружу - только через nginx
+    expose:
+      - "8000"
+    restart: unless-stopped
+    networks:
+      - lepm_network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: lepm_nginx
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      # Порт 443 будет открыт после настройки SSL сертификатов
+      # - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Монтирование Let's Encrypt (раскомментировать после получения сертификатов)
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./web-frontend/dist/lepm-web-frontend:/app/angular-web:ro
+      - ./frontend/build/web:/app/flutter-web:ro
+    restart: unless-stopped
+    networks:
+      - lepm_network
+
+volumes:
+  pgdata:
+
+networks:
+  lepm_network:
+    driver: bridge
+

@@ -15,21 +15,30 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.substation import Substation, VoltageLevel
-from app.models.power_line import PowerLine
+from app.models.power_line import PowerLine, Pole, Span
 from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
+from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
+from app.models.base_voltage import BaseVoltage
+from app.models.wire_info import WireInfo
 from app.core.cim.cim_xml import CIMXMLExporter
 from app.core.cim.cim_xml_cimpy import CIMpyXMLExporter, CIMPY_AVAILABLE
 from app.core.cim.cim_json import CIMJSONExporter
 from app.core.cim.cim_552_protocol import CIM552Service, MessagePurpose
+from app.core.cim.cim_base import CIMObject
 from app.core.cim.cim_objects import (
     SubstationCIMObject,
     VoltageLevelCIMObject,
+    BaseVoltageCIMObject,
     PowerLineCIMObject,
     LocationCIMObject,
     PositionPointCIMObject,
     ConnectivityNodeCIMObject,
-    AClineSegmentCIMObject
+    AClineSegmentCIMObject,
+    LineSectionCIMObject,
+    SpanCIMObject,
+    WireInfoCIMObject,
+    TerminalCIMObject
 )
 
 router = APIRouter()
@@ -74,47 +83,332 @@ def _substation_to_cim(substation: Substation) -> SubstationCIMObject:
     )
 
 
-def _power_line_to_cim(power_line: PowerLine) -> PowerLineCIMObject:
-    """Преобразование модели PowerLine в CIM объект"""
-    base_voltage = None
-    # if power_line.base_voltage:
-    #     base_voltage = {"mRID": power_line.base_voltage.mrid}
+def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
+    """
+    Преобразование модели PowerLine в список CIM объектов
+    Возвращает список объектов: Line, ACLineSegment, LineSection, Span, ConnectivityNode, Location, PositionPoint, BaseVoltage, WireInfo, Terminal
+    """
+    cim_objects = []
     
-    acline_segments = []
+    # 1. Создаём BaseVoltage для линии (если есть voltage_level)
+    base_voltage = None
+    if power_line.voltage_level:
+        base_voltage = BaseVoltageCIMObject(
+            mrid=f"BV_{power_line.mrid}",
+            name=f"{power_line.voltage_level} кВ",
+            nominal_voltage=power_line.voltage_level
+        )
+        cim_objects.append(base_voltage)
+        base_voltage_ref = {"mRID": base_voltage.mrid}
+    else:
+        base_voltage_ref = None
+    
+    # 2. Создаём ConnectivityNode для всех опор с Location и PositionPoint
+    connectivity_nodes_dict = {}  # mrid -> ConnectivityNodeCIMObject
+    
+    # 3. Обрабатываем ACLineSegment с полной структурой
+    acline_segments_list = []
+    
     for segment in power_line.acline_segments:
-        from_node = None
-        to_node = None
+        # Создаём ConnectivityNode для from_node и to_node
+        from_node_ref = None
+        to_node_ref = None
         
         if segment.from_node:
-            from_node = {
-                "mRID": segment.from_node.mrid,
-                "name": segment.from_node.name
-            }
+            if segment.from_node.mrid not in connectivity_nodes_dict:
+                # Создаём Location и PositionPoint для опоры
+                location = None
+                if segment.from_node.pole and segment.from_node.pole.position_points:
+                    position_points = []
+                    for pp in segment.from_node.pole.position_points:
+                        position_points.append({
+                            "mRID": pp.mrid,
+                            "xPosition": pp.x_position,
+                            "yPosition": pp.y_position,
+                            "zPosition": pp.z_position if pp.z_position is not None else None
+                        })
+                    
+                    location_mrid = segment.from_node.pole.location.mrid if segment.from_node.pole.location else f"LOC_{segment.from_node.mrid}"
+                    location = LocationCIMObject(
+                        mrid=location_mrid,
+                        position_points=position_points
+                    )
+                    cim_objects.append(location)
+                    # Добавляем PositionPoint как отдельные объекты
+                    for pp in segment.from_node.pole.position_points:
+                        cim_objects.append(PositionPointCIMObject(
+                            mrid=pp.mrid,
+                            x_position=pp.x_position,
+                            y_position=pp.y_position,
+                            z_position=pp.z_position
+                        ))
+                
+                cn = ConnectivityNodeCIMObject(
+                    mrid=segment.from_node.mrid,
+                    name=segment.from_node.name or f"Узел {segment.from_node.mrid}",
+                    location={"mRID": location.mrid} if location else None
+                )
+                connectivity_nodes_dict[segment.from_node.mrid] = cn
+                cim_objects.append(cn)
+            
+            from_node_ref = {"mRID": segment.from_node.mrid}
         
         if segment.to_node:
-            to_node = {
-                "mRID": segment.to_node.mrid,
-                "name": segment.to_node.name
-            }
+            if segment.to_node.mrid not in connectivity_nodes_dict:
+                # Создаём Location и PositionPoint для опоры
+                location = None
+                if segment.to_node.pole and segment.to_node.pole.position_points:
+                    position_points = []
+                    for pp in segment.to_node.pole.position_points:
+                        position_points.append({
+                            "mRID": pp.mrid,
+                            "xPosition": pp.x_position,
+                            "yPosition": pp.y_position,
+                            "zPosition": pp.z_position if pp.z_position is not None else None
+                        })
+                    
+                    location_mrid = segment.to_node.pole.location.mrid if segment.to_node.pole.location else f"LOC_{segment.to_node.mrid}"
+                    location = LocationCIMObject(
+                        mrid=location_mrid,
+                        position_points=position_points
+                    )
+                    cim_objects.append(location)
+                    # Добавляем PositionPoint как отдельные объекты
+                    for pp in segment.to_node.pole.position_points:
+                        cim_objects.append(PositionPointCIMObject(
+                            mrid=pp.mrid,
+                            x_position=pp.x_position,
+                            y_position=pp.y_position,
+                            z_position=pp.z_position
+                        ))
+                
+                cn = ConnectivityNodeCIMObject(
+                    mrid=segment.to_node.mrid,
+                    name=segment.to_node.name or f"Узел {segment.to_node.mrid}",
+                    location={"mRID": location.mrid} if location else None
+                )
+                connectivity_nodes_dict[segment.to_node.mrid] = cn
+                cim_objects.append(cn)
+            
+            to_node_ref = {"mRID": segment.to_node.mrid}
         
-        acline_segments.append({
-            "mRID": segment.mrid,
-            "name": segment.name,
-            "fromNode": from_node,
-            "toNode": to_node,
-            "length": segment.length,
-            "r": segment.r,
-            "x": segment.x,
-            "b": segment.b,
-            "g": segment.g
-        })
+        # Обрабатываем LineSection с Span
+        line_sections_list = []
+        for line_section in segment.line_sections:
+            # Создаём WireInfo (если есть параметры провода)
+            wire_info_ref = None
+            if line_section.conductor_type or line_section.conductor_material:
+                wire_info = WireInfoCIMObject(
+                    mrid=f"WI_{line_section.mrid}",
+                    name=line_section.conductor_type or "Unknown",
+                    material=line_section.conductor_material or "Unknown",
+                    section=float(line_section.conductor_section) if line_section.conductor_section else 0.0,
+                    r=line_section.r,
+                    x=line_section.x,
+                    b=line_section.b,
+                    g=line_section.g
+                )
+                cim_objects.append(wire_info)
+                wire_info_ref = {"mRID": wire_info.mrid}
+            
+            # Обрабатываем Span
+            spans_list = []
+            for span in line_section.spans:
+                # Создаём ConnectivityNode для опор пролёта (если ещё не созданы)
+                span_from_node_ref = None
+                span_to_node_ref = None
+                
+                if span.from_connectivity_node:
+                    if span.from_connectivity_node.mrid not in connectivity_nodes_dict:
+                        location = None
+                        if span.from_connectivity_node.pole and span.from_connectivity_node.pole.position_points:
+                            position_points = []
+                            for pp in span.from_connectivity_node.pole.position_points:
+                                position_points.append({
+                                    "mRID": pp.mrid,
+                                    "xPosition": pp.x_position,
+                                    "yPosition": pp.y_position,
+                                    "zPosition": pp.z_position if pp.z_position is not None else None
+                                })
+                            
+                            location_mrid = span.from_connectivity_node.pole.location.mrid if span.from_connectivity_node.pole.location else f"LOC_{span.from_connectivity_node.mrid}"
+                            location = LocationCIMObject(
+                                mrid=location_mrid,
+                                position_points=position_points
+                            )
+                            cim_objects.append(location)
+                            for pp in span.from_connectivity_node.pole.position_points:
+                                cim_objects.append(PositionPointCIMObject(
+                                    mrid=pp.mrid,
+                                    x_position=pp.x_position,
+                                    y_position=pp.y_position,
+                                    z_position=pp.z_position
+                                ))
+                        
+                        cn = ConnectivityNodeCIMObject(
+                            mrid=span.from_connectivity_node.mrid,
+                            name=span.from_connectivity_node.name or f"Узел {span.from_connectivity_node.mrid}",
+                            location={"mRID": location.mrid} if location else None
+                        )
+                        connectivity_nodes_dict[span.from_connectivity_node.mrid] = cn
+                        cim_objects.append(cn)
+                    
+                    span_from_node_ref = {"mRID": span.from_connectivity_node.mrid}
+                
+                if span.to_connectivity_node:
+                    if span.to_connectivity_node.mrid not in connectivity_nodes_dict:
+                        location = None
+                        if span.to_connectivity_node.pole and span.to_connectivity_node.pole.position_points:
+                            position_points = []
+                            for pp in span.to_connectivity_node.pole.position_points:
+                                position_points.append({
+                                    "mRID": pp.mrid,
+                                    "xPosition": pp.x_position,
+                                    "yPosition": pp.y_position,
+                                    "zPosition": pp.z_position if pp.z_position is not None else None
+                                })
+                            
+                            location_mrid = span.to_connectivity_node.pole.location.mrid if span.to_connectivity_node.pole.location else f"LOC_{span.to_connectivity_node.mrid}"
+                            location = LocationCIMObject(
+                                mrid=location_mrid,
+                                position_points=position_points
+                            )
+                            cim_objects.append(location)
+                            for pp in span.to_connectivity_node.pole.position_points:
+                                cim_objects.append(PositionPointCIMObject(
+                                    mrid=pp.mrid,
+                                    x_position=pp.x_position,
+                                    y_position=pp.y_position,
+                                    z_position=pp.z_position
+                                ))
+                        
+                        cn = ConnectivityNodeCIMObject(
+                            mrid=span.to_connectivity_node.mrid,
+                            name=span.to_connectivity_node.name or f"Узел {span.to_connectivity_node.mrid}",
+                            location={"mRID": location.mrid} if location else None
+                        )
+                        connectivity_nodes_dict[span.to_connectivity_node.mrid] = cn
+                        cim_objects.append(cn)
+                    
+                    span_to_node_ref = {"mRID": span.to_connectivity_node.mrid}
+                
+                # Создаём Span объект
+                span_obj = SpanCIMObject(
+                    mrid=span.mrid,
+                    name=span.span_number,
+                    length=span.length,
+                    from_node=span_from_node_ref,
+                    to_node=span_to_node_ref,
+                    tension=span.tension,
+                    sag=span.sag,
+                    conductor_type=span.conductor_type or line_section.conductor_type,
+                    conductor_material=span.conductor_material or line_section.conductor_material,
+                    conductor_section=span.conductor_section or line_section.conductor_section
+                )
+                spans_list.append(span_obj)
+                cim_objects.append(span_obj)
+            
+            # Создаём LineSection объект
+            line_section_obj = LineSectionCIMObject(
+                mrid=line_section.mrid,
+                name=line_section.name,
+                conductor_type=line_section.conductor_type,
+                conductor_material=line_section.conductor_material,
+                conductor_section=line_section.conductor_section,
+                r=line_section.r,
+                x=line_section.x,
+                b=line_section.b,
+                g=line_section.g,
+                total_length=line_section.total_length,
+                wire_info=wire_info_ref,
+                spans=[{"mRID": s.mrid} for s in spans_list]
+            )
+            line_sections_list.append(line_section_obj)
+            cim_objects.append(line_section_obj)
+        
+        # Создаём Terminal для сегмента (если есть)
+        terminals_list = []
+        for terminal in segment.terminals:
+            terminal_cn_ref = None
+            if terminal.connectivity_node:
+                if terminal.connectivity_node.mrid not in connectivity_nodes_dict:
+                    # Создаём ConnectivityNode для терминала
+                    location = None
+                    if terminal.connectivity_node.pole and terminal.connectivity_node.pole.position_points:
+                        position_points = []
+                        for pp in terminal.connectivity_node.pole.position_points:
+                            position_points.append({
+                                "mRID": pp.mrid,
+                                "xPosition": pp.x_position,
+                                "yPosition": pp.y_position,
+                                "zPosition": pp.z_position if pp.z_position is not None else None
+                            })
+                        
+                        location_mrid = terminal.connectivity_node.pole.location.mrid if terminal.connectivity_node.pole.location else f"LOC_{terminal.connectivity_node.mrid}"
+                        location = LocationCIMObject(
+                            mrid=location_mrid,
+                            position_points=position_points
+                        )
+                        cim_objects.append(location)
+                        for pp in terminal.connectivity_node.pole.position_points:
+                            cim_objects.append(PositionPointCIMObject(
+                                mrid=pp.mrid,
+                                x_position=pp.x_position,
+                                y_position=pp.y_position,
+                                z_position=pp.z_position
+                            ))
+                    
+                    cn = ConnectivityNodeCIMObject(
+                        mrid=terminal.connectivity_node.mrid,
+                        name=terminal.connectivity_node.name or f"Узел {terminal.connectivity_node.mrid}",
+                        location={"mRID": location.mrid} if location else None
+                    )
+                    connectivity_nodes_dict[terminal.connectivity_node.mrid] = cn
+                    cim_objects.append(cn)
+                
+                terminal_cn_ref = {"mRID": terminal.connectivity_node.mrid}
+            
+            terminal_obj = TerminalCIMObject(
+                mrid=terminal.mrid,
+                name=terminal.name,
+                connectivity_node=terminal_cn_ref,
+                sequence_number=terminal.sequence_number
+            )
+            terminals_list.append(terminal_obj)
+            cim_objects.append(terminal_obj)
+        
+        # Создаём ACLineSegment объект
+        segment_obj = AClineSegmentCIMObject(
+            mrid=segment.mrid,
+            name=segment.name or segment.code,
+            from_node=from_node_ref,
+            to_node=to_node_ref,
+            length=segment.length,
+            r=segment.r,
+            x=segment.x,
+            b=segment.b,
+            g=segment.g
+        )
+        # Добавляем ссылки на LineSection и Terminal
+        segment_dict = segment_obj.to_cim_dict()
+        if line_sections_list:
+            segment_dict["LineSection"] = [{"mRID": ls.mrid} for ls in line_sections_list]
+        if terminals_list:
+            segment_dict["Terminal"] = [{"mRID": t.mrid} for t in terminals_list]
+        
+        acline_segments_list.append(segment_dict)
+        cim_objects.append(segment_obj)
     
-    return PowerLineCIMObject(
+    # 4. Создаём Line объект
+    line_obj = PowerLineCIMObject(
         mrid=power_line.mrid,
         name=power_line.name,
-        acline_segments=acline_segments,
-        base_voltage=base_voltage
+        acline_segments=acline_segments_list,
+        base_voltage=base_voltage_ref
     )
+    cim_objects.insert(0, line_obj)  # Line должен быть первым
+    
+    return cim_objects
 
 
 @router.get("/export/xml")
@@ -148,15 +442,34 @@ async def export_cim_xml(
         )
         substations_list = result.scalars().all()
     
-    # Загружаем ЛЭП
+    # Загружаем ЛЭП с полной структурой (LineSection, Span, ConnectivityNode, Location)
     if include_power_lines:
         result = await db.execute(
             select(PowerLine)
             .options(
                 selectinload(PowerLine.acline_segments)
-                .selectinload(AClineSegment.from_node),
+                .selectinload(AClineSegment.from_node)
+                .selectinload(ConnectivityNode.pole)
+                .selectinload(Pole.position_points),
                 selectinload(PowerLine.acline_segments)
                 .selectinload(AClineSegment.to_node)
+                .selectinload(ConnectivityNode.pole)
+                .selectinload(Pole.position_points),
+                selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.line_sections)
+                .selectinload(LineSection.spans)
+                .selectinload(Span.from_connectivity_node)
+                .selectinload(ConnectivityNode.pole)
+                .selectinload(Pole.position_points),
+                selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.line_sections)
+                .selectinload(LineSection.spans)
+                .selectinload(Span.to_connectivity_node)
+                .selectinload(ConnectivityNode.pole)
+                .selectinload(Pole.position_points),
+                selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.terminals)
+                .selectinload(Terminal.connectivity_node)
             )
         )
         power_lines_list = result.scalars().all()
@@ -186,7 +499,8 @@ async def export_cim_xml(
                 for substation in substations_list:
                     cim_objects.append(_substation_to_cim(substation))
                 for power_line in power_lines_list:
-                    cim_objects.append(_power_line_to_cim(power_line))
+                    # _power_line_to_cim возвращает список объектов
+                    cim_objects.extend(_power_line_to_cim(power_line))
                 
                 exporter = CIMXMLExporter()
                 xml_content = exporter.export(cim_objects)
@@ -199,7 +513,8 @@ async def export_cim_xml(
                 for substation in substations_list:
                     cim_objects.append(_substation_to_cim(substation))
                 for power_line in power_lines_list:
-                    cim_objects.append(_power_line_to_cim(power_line))
+                    # _power_line_to_cim возвращает список объектов
+                    cim_objects.extend(_power_line_to_cim(power_line))
                 
                 exporter = CIMXMLExporter()
                 xml_content = exporter.export(cim_objects)
@@ -274,7 +589,8 @@ async def export_cim_json(
         power_lines = result.scalars().all()
         
         for power_line in power_lines:
-            cim_objects.append(_power_line_to_cim(power_line))
+            # _power_line_to_cim возвращает список объектов
+            cim_objects.extend(_power_line_to_cim(power_line))
     
     # Экспорт в JSON
     exporter = CIMJSONExporter()
@@ -329,7 +645,9 @@ async def cim_552_request(
                 )
             )
             for power_line in result.scalars().all():
-                cim_objects.append(_power_line_to_cim(power_line).to_cim_dict())
+                # _power_line_to_cim возвращает список объектов, преобразуем каждый в dict
+                power_line_objects = _power_line_to_cim(power_line)
+                cim_objects.extend([obj.to_cim_dict() for obj in power_line_objects])
     
     request = service.create_request(
         purpose=purpose,

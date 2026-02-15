@@ -37,10 +37,10 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     db_user = User(
         username=user_data.username,
         email=user_data.email,
-        last_name=user_data.full_name,
+        full_name=user_data.full_name,
         hashed_password=hashed_password,
         role=user_data.role,
-        branch_id=user_data.branch_id
+        branch_id=user_data.branch_id,
     )
     
     db.add(db_user)

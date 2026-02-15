@@ -23,5 +23,5 @@ class Branch(Base):
 
     # Связи
     users = relationship("User", back_populates="branch")
-    power_lines = relationship("PowerLine", back_populates="branch")
+    lines = relationship("PowerLine", back_populates="branch")
     substations = relationship("Substation", back_populates="branch")

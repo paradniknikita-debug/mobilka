@@ -17,10 +17,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Добавляем поля марки провода в таблицу poles
-    op.add_column('poles', sa.Column('conductor_type', sa.String(length=50), nullable=True))
-    op.add_column('poles', sa.Column('conductor_material', sa.String(length=50), nullable=True))
-    op.add_column('poles', sa.Column('conductor_section', sa.String(length=20), nullable=True))
+    # Добавляем поля марки провода в таблицу poles (с проверкой существования)
+    from sqlalchemy import inspect
+    from sqlalchemy.engine import Connection
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    existing_columns = [col['name'] for col in inspector.get_columns('poles')]
+    
+    if 'conductor_type' not in existing_columns:
+        op.add_column('poles', sa.Column('conductor_type', sa.String(length=50), nullable=True))
+    if 'conductor_material' not in existing_columns:
+        op.add_column('poles', sa.Column('conductor_material', sa.String(length=50), nullable=True))
+    if 'conductor_section' not in existing_columns:
+        op.add_column('poles', sa.Column('conductor_section', sa.String(length=20), nullable=True))
 
 
 def downgrade() -> None:

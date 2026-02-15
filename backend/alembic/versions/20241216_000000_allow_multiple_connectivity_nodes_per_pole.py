@@ -1,7 +1,7 @@
 """allow_multiple_connectivity_nodes_per_pole
 
 Revision ID: 20241216_000000
-Revises: 20241215_100000
+Revises: 20241201_000000
 Create Date: 2024-12-16 00:00:00.000000
 
 Разрешение нескольких ConnectivityNode на одной опоре для поддержки совместного подвеса:
@@ -15,7 +15,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = '20241216_000000'
-down_revision = '20241201_000000'  # Ссылаемся на последнюю применённую миграцию
+down_revision = '20241215_100000'
 branch_labels = None
 depends_on = None
 

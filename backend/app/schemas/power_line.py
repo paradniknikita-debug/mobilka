@@ -8,9 +8,9 @@ from .cim_line_structure import (
 
 class PoleBase(BaseModel):
     pole_number: str
-    # Координаты (для обратной совместимости и удобства)
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    # Координаты согласно CIM стандарту (x_position = longitude, y_position = latitude)
+    x_position: Optional[float] = None  # Долгота (longitude)
+    y_position: Optional[float] = None  # Широта (latitude)
     pole_type: str
     height: Optional[float] = None
     foundation_type: Optional[str] = None
@@ -34,7 +34,7 @@ class PoleCreate(PoleBase):
 class PoleResponse(PoleBase):
     id: int
     mrid: str
-    power_line_id: int
+    line_id: int
     connectivity_node_id: Optional[int] = None
     sequence_number: Optional[int] = None
     conductor_type: Optional[str] = None
@@ -44,9 +44,13 @@ class PoleResponse(PoleBase):
     created_at: datetime
     updated_at: Optional[datetime]
     connectivity_node: Optional[ConnectivityNodeResponse] = None
+    # Переопределяем координаты - всегда должны быть заполнены (не None) для Flutter
+    x_position: float = 0.0  # Долгота (longitude) - значение по умолчанию
+    y_position: float = 0.0  # Широта (latitude) - значение по умолчанию
 
     class Config:
         from_attributes = True
+    
 
 class PowerLineBase(BaseModel):
     name: str
@@ -82,18 +86,22 @@ class SpanBase(BaseModel):
     conductor_section: Optional[str] = None
     tension: Optional[float] = None
     sag: Optional[float] = None
+    sequence_number: Optional[int] = None  # Порядковый номер пролёта в секции
     notes: Optional[str] = None
 
 class SpanCreate(SpanBase):
-    power_line_id: int
+    line_id: int
     from_pole_id: int
     to_pole_id: int
 
 class SpanResponse(SpanBase):
     id: int
-    power_line_id: int
-    from_pole_id: int
-    to_pole_id: int
+    line_id: int
+    line_section_id: Optional[int] = None  # Связь с LineSection (CIM)
+    from_pole_id: Optional[int] = None  # Для обратной совместимости
+    to_pole_id: Optional[int] = None  # Для обратной совместимости
+    from_connectivity_node_id: Optional[int] = None  # CIM структура
+    to_connectivity_node_id: Optional[int] = None  # CIM структура
     created_by: int
     created_at: datetime
 
@@ -110,12 +118,12 @@ class TapBase(BaseModel):
     description: Optional[str] = None
 
 class TapCreate(TapBase):
-    power_line_id: int
+    line_id: int
     pole_id: int
 
 class TapResponse(TapBase):
     id: int
-    power_line_id: int
+    line_id: int
     pole_id: int
     created_by: int
     created_at: datetime

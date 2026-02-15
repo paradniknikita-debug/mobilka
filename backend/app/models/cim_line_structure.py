@@ -21,24 +21,25 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, remote
 from app.database import Base
 from app.models.base import generate_mrid
+from app.models.cim_base import IdentifiedObject
 
 
-class ConnectivityNode(Base):
+class ConnectivityNode(Base, IdentifiedObject):
     """
     CIM ConnectivityNode - узел соединения
     Соответствует CIM классу: cim:ConnectivityNode
     
     Опоры являются ConnectivityNode - точками соединения сегментов линии.
     Одна опора может иметь несколько ConnectivityNode для:
-    1. Основной линии (power_line_id = ID основной линии)
-    2. Отпаек (power_line_id = ID линии отпайки, AClineSegment.is_tap = True)
+    1. Основной линии (line_id = ID основной линии)
+    2. Отпаек (line_id = ID линии отпайки, AClineSegment.is_tap = True)
     3. Совместного подвеса (несколько основных линий на одной опоре)
     
     Различение отпайки и совместного подвеса:
     - Отпайка: AClineSegment.is_tap = True, начинается от ConnectivityNode основной линии
     - Совместный подвес: несколько AClineSegment с is_tap = False разных линий используют ConnectivityNode на одной опоре
     """
-    __tablename__ = "connectivity_nodes"
+    __tablename__ = "connectivity_node"
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
@@ -46,24 +47,28 @@ class ConnectivityNode(Base):
     
     # Связь с опорой (опора = физическое представление ConnectivityNode)
     # Убрали unique=True, чтобы разрешить несколько ConnectivityNode на одной опоре
-    pole_id = Column(Integer, ForeignKey("poles.id"), nullable=False)
+    pole_id = Column(Integer, ForeignKey("pole.id"), nullable=False)
     
     # Связь с линией (для различения отпаек и совместного подвеса)
     # Если несколько ConnectivityNode на одной опоре принадлежат разным линиям с is_tap=False, это совместный подвес
-    power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
+    line_id = Column(Integer, ForeignKey("line.id"), nullable=False)
     
     # Географическая позиция (дублируется из опоры для удобства)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     
-    # Описание узла
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # description, created_at, updated_at - наследуются от IdentifiedObject
+    
+    # Связь с подстанцией (для ConnectivityNode в подстанциях)
+    substation_id = Column(Integer, ForeignKey("substation.id"), nullable=True)
     
     # Связи
     pole = relationship("Pole", foreign_keys=[pole_id], back_populates="connectivity_nodes")
-    power_line = relationship("PowerLine", foreign_keys=[power_line_id])
+    line = relationship("PowerLine", foreign_keys=[line_id], back_populates="connectivity_nodes")
+    substation = relationship("Substation", foreign_keys=[substation_id], back_populates="connectivity_nodes")
+    
+    # CIM-структура: ConnectivityNodeContainer содержит ConnectivityNode
+    # ConnectivityNodeContainer.ConnectivityNodes - обратная связь
     # Терминалы, подключенные к этому узлу
     terminals = relationship("Terminal", back_populates="connectivity_node")
     # Сегменты, начинающиеся от этого узла
@@ -76,7 +81,7 @@ class ConnectivityNode(Base):
     to_spans = relationship("Span", primaryjoin="ConnectivityNode.id == remote(Span.to_connectivity_node_id)", back_populates="to_connectivity_node")
 
 
-class Terminal(Base):
+class Terminal(Base, IdentifiedObject):
     """
     CIM Terminal - точка подключения оборудования
     Соответствует CIM классу: cim:Terminal
@@ -84,21 +89,23 @@ class Terminal(Base):
     Terminal связывает ConductingEquipment (AClineSegment) с ConnectivityNode.
     Для отпаек, подключенных к подстанциям/КТП, Terminal связывает сегмент с оборудованием подстанции.
     """
-    __tablename__ = "terminals"
+    __tablename__ = "terminal"
     
     id = Column(Integer, primary_key=True, index=True)
+    # mRID, name, description, created_at, updated_at - наследуются от IdentifiedObject
+    # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=True)
     
     # Связь с узлом соединения (опорой)
-    connectivity_node_id = Column(Integer, ForeignKey("connectivity_nodes.id"), nullable=True)
+    connectivity_node_id = Column(Integer, ForeignKey("connectivity_node.id"), nullable=True)
     
     # Связь с сегментом линии
-    acline_segment_id = Column(Integer, ForeignKey("acline_segments.id"), nullable=True)
+    acline_segment_id = Column(Integer, ForeignKey("acline_segment.id"), nullable=True)
     
     # Для подключения к подстанции/КТП
     conducting_equipment_id = Column(Integer, ForeignKey("conducting_equipment.id"), nullable=True)
-    bay_id = Column(Integer, ForeignKey("bays.id"), nullable=True)
+    bay_id = Column(Integer, ForeignKey("bay.id"), nullable=True)
     
     # Номер терминала (1, 2, 3... для многофазных линий)
     sequence_number = Column(Integer, nullable=True, default=1)
@@ -106,8 +113,7 @@ class Terminal(Base):
     # Направление подключения (from/to)
     connection_direction = Column(String(20), nullable=False)  # 'from', 'to', 'both'
     
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # description, created_at, updated_at - наследуются от IdentifiedObject
     
     # Связи
     connectivity_node = relationship("ConnectivityNode", back_populates="terminals")
@@ -127,14 +133,14 @@ class LineSection(Base):
     - Материалом
     - Параметрами (R, X, B, G)
     """
-    __tablename__ = "line_sections"
+    __tablename__ = "line_section"
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
     
     # Связь с сегментом линии
-    acline_segment_id = Column(Integer, ForeignKey("acline_segments.id"), nullable=False)
+    acline_segment_id = Column(Integer, ForeignKey("acline_segment.id"), nullable=False)
     
     # Связь с WireInfo (CIM стандарт) - временно закомментировано до применения миграции
     # wire_info_id = Column(Integer, ForeignKey("wire_infos.id"), nullable=True)

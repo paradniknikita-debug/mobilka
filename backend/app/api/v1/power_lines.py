@@ -9,6 +9,7 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
+from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.schemas.power_line import (
@@ -17,6 +18,121 @@ from app.schemas.power_line import (
 )
 
 router = APIRouter()
+
+def get_pole_latitude(pole) -> float:
+    """Получает широту опоры (y_position или latitude)"""
+    # Сначала пытаемся получить из position_points
+    try:
+        if hasattr(pole, 'position_points') and pole.position_points:
+            point = pole.position_points[0]
+            y_pos = getattr(point, 'y_position', None)
+            if y_pos is not None:
+                return float(y_pos)
+    except (AttributeError, IndexError, TypeError):
+        pass
+    
+    # Fallback: старые поля
+    old_latitude = getattr(pole, 'latitude', None)
+    if old_latitude is not None:
+        return float(old_latitude)
+    
+    # Если есть y_position напрямую
+    y_pos = getattr(pole, 'y_position', None)
+    if y_pos is not None:
+        return float(y_pos)
+    
+    return 0.0
+
+def get_pole_longitude(pole) -> float:
+    """Получает долготу опоры (x_position или longitude)"""
+    # Сначала пытаемся получить из position_points
+    try:
+        if hasattr(pole, 'position_points') and pole.position_points:
+            point = pole.position_points[0]
+            x_pos = getattr(point, 'x_position', None)
+            if x_pos is not None:
+                return float(x_pos)
+    except (AttributeError, IndexError, TypeError):
+        pass
+    
+    # Fallback: старые поля
+    old_longitude = getattr(pole, 'longitude', None)
+    if old_longitude is not None:
+        return float(old_longitude)
+    
+    # Если есть x_position напрямую
+    x_pos = getattr(pole, 'x_position', None)
+    if x_pos is not None:
+        return float(x_pos)
+    
+    return 0.0
+
+def fill_pole_coordinates(pole):
+    """Заполняет x_position и y_position из position_points для опоры"""
+    x_position = None  # Долгота (longitude)
+    y_position = None  # Широта (latitude)
+    
+    try:
+        # Пытаемся получить из position_points напрямую
+        if hasattr(pole, 'position_points') and pole.position_points:
+            point = pole.position_points[0]
+            x_position = getattr(point, 'x_position', None)  # x_position = longitude
+            y_position = getattr(point, 'y_position', None)  # y_position = latitude
+    except (AttributeError, IndexError, TypeError):
+        pass
+    
+    # Fallback: пытаемся получить из старого поля или Location
+    if x_position is None or y_position is None:
+        # Старые поля latitude/longitude (для обратной совместимости)
+        old_latitude = getattr(pole, 'latitude', None)
+        old_longitude = getattr(pole, 'longitude', None)
+        if old_latitude is not None:
+            y_position = old_latitude
+        if old_longitude is not None:
+            x_position = old_longitude
+        
+        # Пытаемся получить из Location, если доступно
+        if x_position is None or y_position is None:
+            try:
+                location = getattr(pole, 'location', None)
+                if location:
+                    position_points = getattr(location, 'position_points', None)
+                    if position_points and len(position_points) > 0:
+                        point = position_points[0]
+                        x_position = getattr(point, 'x_position', None)
+                        y_position = getattr(point, 'y_position', None)
+            except (AttributeError, IndexError, TypeError):
+                pass
+    
+    # Устанавливаем координаты в объект (для сериализации Pydantic)
+    # Всегда устанавливаем валидные значения (не null) для Flutter
+    import math
+    
+    if x_position is not None:
+        try:
+            x_val = float(x_position)
+            # Проверяем, что значение валидно (не NaN, не Infinity)
+            if not math.isnan(x_val) and x_val != float('inf') and x_val != float('-inf'):
+                setattr(pole, 'x_position', x_val)
+            else:
+                setattr(pole, 'x_position', 0.0)
+        except (TypeError, ValueError):
+            setattr(pole, 'x_position', 0.0)
+    else:
+        setattr(pole, 'x_position', 0.0)  # Значение по умолчанию для Flutter
+    
+    if y_position is not None:
+        try:
+            y_val = float(y_position)
+            # Проверяем, что значение валидно (не NaN, не Infinity)
+            if not math.isnan(y_val) and y_val != float('inf') and y_val != float('-inf'):
+                setattr(pole, 'y_position', y_val)
+            else:
+                setattr(pole, 'y_position', 0.0)
+        except (TypeError, ValueError):
+            setattr(pole, 'y_position', 0.0)
+    else:
+        setattr(pole, 'y_position', 0.0)  # Значение по умолчанию для Flutter
 
 @router.post("", response_model=PowerLineResponse)
 async def create_power_line(
@@ -178,13 +294,27 @@ async def get_power_lines(
         select(PowerLine)
         .options(
             selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
+            selectinload(PowerLine.poles).selectinload(Pole.position_points),
+            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
             selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals)
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line)
         )
         .offset(skip)
         .limit(limit)
     )
     power_lines = result.scalars().all()
+    
+    # Предзагружаем connectivity_node и заполняем координаты для каждой опоры
+    for power_line in power_lines:
+        for pole in power_line.poles:
+            # Предзагружаем connectivity_node через безопасный метод
+            if hasattr(pole, '_get_connectivity_node_safe'):
+                _ = pole._get_connectivity_node_safe()
+            
+            # Заполняем координаты
+            fill_pole_coordinates(pole)
+    
     return power_lines
 
 @router.get("/{power_line_id}", response_model=PowerLineResponse)
@@ -198,8 +328,11 @@ async def get_power_line(
         select(PowerLine)
         .options(
             selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
+            selectinload(PowerLine.poles).selectinload(Pole.position_points),
+            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
             selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals)
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line)
         )
         .where(PowerLine.id == power_line_id)
     )
@@ -239,19 +372,43 @@ async def create_pole(
                 detail=f"Pole with mrid '{pole_data.mrid}' already exists"
             )
     
-    # Создаем словарь данных, исключая mrid и is_tap (они обрабатываются отдельно)
+    # Создаем словарь данных, исключая mrid, is_tap, x_position и y_position
+    # x_position и y_position будут сохранены в PositionPoint
     # Параметры кабеля теперь сохраняются в опоре
-    pole_dict = pole_data.dict(exclude={'mrid', 'is_tap'})
+    # Также исключаем id, если он случайно передан
+    pole_dict = pole_data.dict(exclude={'mrid', 'is_tap', 'x_position', 'y_position', 'id'})
     if pole_data.mrid:
         pole_dict['mrid'] = pole_data.mrid
     
+    # Убеждаемся, что id не передан (должен генерироваться автоматически)
+    pole_dict.pop('id', None)
+    
+    # Преобразуем x_position/y_position в latitude/longitude для старых полей (обратная совместимость)
+    if pole_data.x_position is not None:
+        pole_dict['longitude'] = pole_data.x_position  # x_position = долгота (longitude)
+    if pole_data.y_position is not None:
+        pole_dict['latitude'] = pole_data.y_position  # y_position = широта (latitude)
+    
     db_pole = Pole(
         **pole_dict,
-        power_line_id=power_line_id,
+        line_id=power_line_id,
         created_by=current_user.id
     )
     db.add(db_pole)
     await db.flush()  # Получаем ID опоры
+    
+    # Создаем PositionPoint для координат опоры
+    if pole_data.x_position is not None and pole_data.y_position is not None:
+        from app.models.base import generate_mrid
+        
+        position_point = PositionPoint(
+            mrid=generate_mrid(),
+            x_position=pole_data.x_position,  # Долгота (longitude)
+            y_position=pole_data.y_position,   # Широта (latitude)
+            pole_id=db_pole.id
+        )
+        db.add(position_point)
+        await db.flush()
     
     # Автоматическое создание ConnectivityNode для опоры
     # Теперь один ConnectivityNode создаётся для линии опоры
@@ -263,9 +420,9 @@ async def create_pole(
         mrid=generate_mrid(),
         name=f"Узел {pole_data.pole_number}",
         pole_id=db_pole.id,
-        power_line_id=power_line_id,  # Связываем узел с линией
-        latitude=pole_data.latitude,
-        longitude=pole_data.longitude,
+        line_id=power_line_id,  # Связываем узел с линией
+        latitude=pole_data.y_position,  # y_position = широта (latitude)
+        longitude=pole_data.x_position,  # x_position = долгота (longitude)
         description=f"Автоматически созданный узел для опоры {pole_data.pole_number} линии {power_line_id}"
     )
     db.add(connectivity_node)
@@ -282,7 +439,7 @@ async def create_pole(
         
         await auto_create_span(
             db=db,
-            power_line_id=power_line_id,
+            line_id=power_line_id,
             new_pole=db_pole,
             new_connectivity_node=connectivity_node,
             conductor_type=pole_data.conductor_type,
@@ -302,15 +459,22 @@ async def create_pole(
     # Загружаем опору с relationships для корректной сериализации ответа
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.connectivity_nodes))
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.line)
+        )
         .where(Pole.id == db_pole.id)
     )
     db_pole = result.scalar_one()
     
-    # Для обратной совместимости добавляем connectivity_node
-    cn = db_pole.get_connectivity_node_for_line(power_line_id)
-    setattr(db_pole, 'connectivity_node', cn)
-    setattr(db_pole, 'connectivity_node_id', cn.id if cn else None)
+    # Для обратной совместимости: connectivity_node доступен через @property
+    # Не нужно устанавливать через setattr, так как это property
+    # Pydantic получит его автоматически через from_attributes=True
+    
+    # Заполняем координаты
+    fill_pole_coordinates(db_pole)
     
     return db_pole
 
@@ -322,9 +486,21 @@ async def get_poles(
 ):
     """Получение опор ЛЭП"""
     result = await db.execute(
-        select(Pole).where(Pole.power_line_id == power_line_id)
+        select(Pole)
+        .where(Pole.line_id == power_line_id)
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.line)
+        )
     )
     poles = result.scalars().all()
+    
+    # Заполняем координаты для каждой опоры
+    for pole in poles:
+        fill_pole_coordinates(pole)
+    
     return poles
 
 @router.get("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
@@ -337,8 +513,13 @@ async def get_pole(
     """Получение опоры по ID"""
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.connectivity_nodes))
-        .where(Pole.id == pole_id, Pole.power_line_id == power_line_id)
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.line)
+        )
+        .where(Pole.id == pole_id, Pole.line_id == power_line_id)
     )
     pole = result.scalar_one_or_none()
     if not pole:
@@ -346,10 +527,13 @@ async def get_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
-    # Для обратной совместимости добавляем connectivity_node
-    cn = pole.get_connectivity_node_for_line(power_line_id)
-    setattr(pole, 'connectivity_node', cn)
-    setattr(pole, 'connectivity_node_id', cn.id if cn else None)
+    # Для обратной совместимости: connectivity_node доступен через @property
+    # Не нужно устанавливать через setattr, так как это property
+    # Pydantic получит его автоматически через from_attributes=True
+    
+    # Заполняем координаты
+    fill_pole_coordinates(pole)
+    
     return pole
 
 @router.put("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
@@ -372,8 +556,13 @@ async def update_pole(
     # Получаем существующую опору
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.connectivity_nodes))
-        .where(Pole.id == pole_id, Pole.power_line_id == power_line_id)
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.line)
+        )
+        .where(Pole.id == pole_id, Pole.line_id == power_line_id)
     )
     pole = result.scalar_one_or_none()
     if not pole:
@@ -382,21 +571,59 @@ async def update_pole(
             detail="Pole not found"
         )
     
-    # Обновляем поля опоры (исключаем mrid, power_line_id, created_by)
-    pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid'})
+    # Обновляем поля опоры (исключаем mrid, power_line_id, created_by, x_position, y_position)
+    # x_position и y_position будут обновлены в PositionPoint
+    pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid', 'x_position', 'y_position'})
+    
+    # Преобразуем x_position/y_position в latitude/longitude для старых полей (обратная совместимость)
+    x_position = None
+    y_position = None
+    if 'x_position' in pole_data.dict(exclude_unset=True):
+        x_position = pole_data.x_position
+        pole_dict['longitude'] = x_position  # x_position = долгота (longitude)
+    if 'y_position' in pole_data.dict(exclude_unset=True):
+        y_position = pole_data.y_position
+        pole_dict['latitude'] = y_position  # y_position = широта (latitude)
     
     for key, value in pole_dict.items():
         if hasattr(pole, key) and value is not None:
             setattr(pole, key, value)
     
+    # Обновляем или создаем PositionPoint для координат опоры
+    if x_position is not None or y_position is not None:
+        from app.models.base import generate_mrid
+        
+        # Ищем существующий PositionPoint для этой опоры
+        existing_point = await db.execute(
+            select(PositionPoint).where(PositionPoint.pole_id == pole.id).limit(1)
+        )
+        position_point = existing_point.scalar_one_or_none()
+        
+        if position_point:
+            # Обновляем существующий
+            if x_position is not None:
+                position_point.x_position = x_position
+            if y_position is not None:
+                position_point.y_position = y_position
+        else:
+            # Создаем новый, если координаты указаны
+            if x_position is not None and y_position is not None:
+                position_point = PositionPoint(
+                    mrid=generate_mrid(),
+                    x_position=x_position,
+                    y_position=y_position,
+                    pole_id=pole.id
+                )
+                db.add(position_point)
+    
     # Обновляем координаты в ConnectivityNode если они изменились
-    if 'latitude' in pole_dict or 'longitude' in pole_dict:
+    if x_position is not None or y_position is not None:
         cn = pole.get_connectivity_node_for_line(power_line_id)
         if cn:
-            if 'latitude' in pole_dict:
-                cn.latitude = pole_dict['latitude']
-            if 'longitude' in pole_dict:
-                cn.longitude = pole_dict['longitude']
+            if x_position is not None:
+                cn.longitude = x_position  # x_position = долгота (longitude)
+            if y_position is not None:
+                cn.latitude = y_position  # y_position = широта (latitude)
     
     await db.commit()
     await db.refresh(pole)
@@ -404,15 +631,19 @@ async def update_pole(
     # Загружаем опору с relationships для корректной сериализации ответа
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.connectivity_nodes))
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.line)
+        )
         .where(Pole.id == pole_id)
     )
     pole = result.scalar_one()
     
-    # Для обратной совместимости добавляем connectivity_node
-    cn = pole.get_connectivity_node_for_line(power_line_id)
-    setattr(pole, 'connectivity_node', cn)
-    setattr(pole, 'connectivity_node_id', cn.id if cn else None)
+    # Для обратной совместимости: connectivity_node доступен через @property
+    # Не нужно устанавливать через setattr, так как это property
+    # Pydantic получит его автоматически через from_attributes=True
     
     return pole
 
@@ -446,22 +677,22 @@ async def create_span(
         )
     
     # Проверяем, что опоры принадлежат этой линии (или разрешаем совместный подвес)
-    if from_pole.power_line_id != power_line_id:
+    if from_pole.line_id != power_line_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"From pole belongs to different power line (line {from_pole.power_line_id})"
+            detail=f"From pole belongs to different power line (line {from_pole.line_id})"
         )
-    if to_pole.power_line_id != power_line_id:
+    if to_pole.line_id != power_line_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"To pole belongs to different power line (line {to_pole.power_line_id})"
+            detail=f"To pole belongs to different power line (line {to_pole.line_id})"
         )
     
     # Находим или создаём ConnectivityNode для опор и этой линии
     result_from_node = await db.execute(
         select(ConnectivityNode).where(
             ConnectivityNode.pole_id == from_pole.id,
-            ConnectivityNode.power_line_id == power_line_id
+            ConnectivityNode.line_id == power_line_id
         )
     )
     from_connectivity_node = result_from_node.scalar_one_or_none()
@@ -473,9 +704,9 @@ async def create_span(
             mrid=generate_mrid(),
             name=f"Узел {from_pole.pole_number}",
             pole_id=from_pole.id,
-            power_line_id=power_line_id,
-            latitude=from_pole.latitude,
-            longitude=from_pole.longitude,
+            line_id=power_line_id,
+            latitude=get_pole_latitude(from_pole),
+            longitude=get_pole_longitude(from_pole),
             description=f"Узел для опоры {from_pole.pole_number} линии {power_line_id}"
         )
         db.add(from_connectivity_node)
@@ -484,7 +715,7 @@ async def create_span(
     result_to_node = await db.execute(
         select(ConnectivityNode).where(
             ConnectivityNode.pole_id == to_pole.id,
-            ConnectivityNode.power_line_id == power_line_id
+            ConnectivityNode.line_id == power_line_id
         )
     )
     to_connectivity_node = result_to_node.scalar_one_or_none()
@@ -496,9 +727,9 @@ async def create_span(
             mrid=generate_mrid(),
             name=f"Узел {to_pole.pole_number}",
             pole_id=to_pole.id,
-            power_line_id=power_line_id,
-            latitude=to_pole.latitude,
-            longitude=to_pole.longitude,
+            line_id=power_line_id,
+            latitude=get_pole_latitude(to_pole),
+            longitude=get_pole_longitude(to_pole),
             description=f"Узел для опоры {to_pole.pole_number} линии {power_line_id}"
         )
         db.add(to_connectivity_node)
@@ -517,7 +748,7 @@ async def create_span(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Segment not found"
             )
-        if target_segment.power_line_id != power_line_id:
+        if target_segment.line_id != power_line_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Segment belongs to different power line"
@@ -526,7 +757,7 @@ async def create_span(
     else:
         # Ищем существующий AClineSegment для этой линии
         result_segment = await db.execute(
-            select(AClineSegment).where(AClineSegment.power_line_id == power_line_id).limit(1)
+            select(AClineSegment).where(AClineSegment.line_id == power_line_id).limit(1)
         )
         existing_segment = result_segment.scalar_one_or_none()
         
@@ -543,7 +774,7 @@ async def create_span(
                 code=segment_code,
                 voltage_level=power_line.voltage_level or 0.0,
                 length=0.0,
-                power_line_id=power_line_id,
+                line_id=power_line_id,
                 from_connectivity_node_id=from_connectivity_node.id,
                 to_connectivity_node_id=to_connectivity_node.id,
                 sequence_number=1,
@@ -585,7 +816,7 @@ async def create_span(
     span_dict['line_section_id'] = line_section_id
     span_dict['from_connectivity_node_id'] = from_connectivity_node.id
     span_dict['to_connectivity_node_id'] = to_connectivity_node.id
-    span_dict['power_line_id'] = power_line_id
+    span_dict['line_id'] = power_line_id
     span_dict['created_by'] = current_user.id
     
     db_span = Span(**span_dict)
@@ -620,16 +851,16 @@ async def get_span(
         )
     
     # Проверяем, что пролёт принадлежит указанной ЛЭП
-    # Проверяем через power_line_id (если есть) или через line_section -> acline_segment -> power_line_id
-    if span.power_line_id and span.power_line_id != power_line_id:
+    # Проверяем через line_id (если есть) или через line_section -> acline_segment -> line_id
+    if span.line_id and span.line_id != power_line_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Span not found in this power line"
         )
     
-    # Если power_line_id не задан, проверяем через line_section
-    if not span.power_line_id and span.line_section and span.line_section.acline_segment:
-        if span.line_section.acline_segment.power_line_id != power_line_id:
+    # Если line_id не задан, проверяем через line_section
+    if not span.line_id and span.line_section and span.line_section.acline_segment:
+        if span.line_section.acline_segment.line_id != power_line_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Span not found in this power line"
@@ -678,15 +909,15 @@ async def update_span(
         )
     
     # Проверяем принадлежность пролёта к ЛЭП
-    if span.power_line_id and span.power_line_id != power_line_id:
+    if span.line_id and span.line_id != power_line_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Span not found in this power line"
         )
     
     # Если power_line_id не задан, проверяем через line_section
-    if not span.power_line_id and span.line_section and span.line_section.acline_segment:
-        if span.line_section.acline_segment.power_line_id != power_line_id:
+    if not span.line_id and span.line_section and span.line_section.acline_segment:
+        if span.line_section.acline_segment.line_id != power_line_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Span not found in this power line"
@@ -707,7 +938,7 @@ async def update_span(
         result_from_node = await db.execute(
             select(ConnectivityNode).where(
                 ConnectivityNode.pole_id == from_pole.id,
-                ConnectivityNode.power_line_id == power_line_id
+                ConnectivityNode.line_id == power_line_id
             )
         )
         from_connectivity_node = result_from_node.scalar_one_or_none()
@@ -718,9 +949,9 @@ async def update_span(
                 mrid=generate_mrid(),
                 name=f"Узел {from_pole.pole_number}",
                 pole_id=from_pole.id,
-                power_line_id=power_line_id,
-                latitude=from_pole.latitude,
-                longitude=from_pole.longitude,
+                line_id=power_line_id,
+                latitude=get_pole_latitude(from_pole),
+                longitude=get_pole_longitude(from_pole),
                 description=f"Узел для опоры {from_pole.pole_number} линии {power_line_id}"
             )
             db.add(from_connectivity_node)
@@ -741,7 +972,7 @@ async def update_span(
         result_to_node = await db.execute(
             select(ConnectivityNode).where(
                 ConnectivityNode.pole_id == to_pole.id,
-                ConnectivityNode.power_line_id == power_line_id
+                ConnectivityNode.line_id == power_line_id
             )
         )
         to_connectivity_node = result_to_node.scalar_one_or_none()
@@ -752,7 +983,7 @@ async def update_span(
                 mrid=generate_mrid(),
                 name=f"Узел {to_pole.pole_number}",
                 pole_id=to_pole.id,
-                power_line_id=power_line_id,
+                line_id=power_line_id,
                 latitude=to_pole.latitude,
                 longitude=to_pole.longitude,
                 description=f"Узел для опоры {to_pole.pole_number} линии {power_line_id}"
@@ -770,9 +1001,9 @@ async def update_span(
         if hasattr(span, key) and value is not None:
             setattr(span, key, value)
     
-    # Обновляем power_line_id если он был передан
-    if span_data.power_line_id:
-        span.power_line_id = span_data.power_line_id
+    # Обновляем line_id если он был передан
+    if span_data.line_id:
+        span.line_id = span_data.line_id
     
     await db.commit()
     await db.refresh(span)
@@ -822,15 +1053,15 @@ async def delete_span(
         )
     
     # Проверяем принадлежность пролёта к ЛЭП
-    if span.power_line_id and span.power_line_id != power_line_id:
+    if span.line_id and span.line_id != power_line_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Span not found in this power line"
         )
     
     # Если power_line_id не задан, проверяем через line_section
-    if not span.power_line_id and span.line_section and span.line_section.acline_segment:
-        if span.line_section.acline_segment.power_line_id != power_line_id:
+    if not span.line_id and span.line_section and span.line_section.acline_segment:
+        if span.line_section.acline_segment.line_id != power_line_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Span not found in this power line"
@@ -868,7 +1099,7 @@ async def auto_create_spans(
     # Получаем опоры, отсортированные по sequence_number
     result = await db.execute(
         select(Pole)
-        .where(Pole.power_line_id == power_line_id)
+        .where(Pole.line_id == power_line_id)
         .where(Pole.sequence_number.isnot(None))
         .order_by(Pole.sequence_number)
     )
@@ -888,7 +1119,7 @@ async def auto_create_spans(
         result_node = await db.execute(
             select(ConnectivityNode).where(
                 ConnectivityNode.pole_id == pole.id,
-                ConnectivityNode.power_line_id == power_line_id
+                ConnectivityNode.line_id == power_line_id
             )
         )
         connectivity_node = result_node.scalar_one_or_none()
@@ -899,9 +1130,9 @@ async def auto_create_spans(
                 mrid=generate_mrid(),
                 name=f"Узел {pole.pole_number}",
                 pole_id=pole.id,
-                power_line_id=power_line_id,
-                latitude=pole.latitude,
-                longitude=pole.longitude,
+                line_id=power_line_id,
+                latitude=get_pole_latitude(pole),
+                longitude=get_pole_longitude(pole),
                 description=f"Автоматически созданный узел для опоры {pole.pole_number} линии {power_line_id}"
             )
             db.add(connectivity_node)
@@ -932,7 +1163,7 @@ async def auto_create_spans(
     
     # Проверяем, есть ли уже AClineSegment для этой линии
     result_segment = await db.execute(
-        select(AClineSegment).where(AClineSegment.power_line_id == power_line_id).limit(1)
+        select(AClineSegment).where(AClineSegment.line_id == power_line_id).limit(1)
     )
     existing_segment = result_segment.scalar_one_or_none()
     
@@ -955,7 +1186,7 @@ async def auto_create_spans(
             code=segment_code,
             voltage_level=power_line.voltage_level or 0.0,
             length=0.0,  # Будет рассчитано позже
-            power_line_id=power_line_id,
+            line_id=power_line_id,
             from_connectivity_node_id=from_connectivity_node_id,
             to_connectivity_node_id=to_connectivity_node_id,
             sequence_number=1,
@@ -989,7 +1220,7 @@ async def auto_create_spans(
             select(Span).where(
                 Span.from_pole_id == from_pole.id,
                 Span.to_pole_id == to_pole.id,
-                Span.power_line_id == power_line_id
+                Span.line_id == power_line_id
             )
         )
         if existing_span.scalar_one_or_none():
@@ -997,8 +1228,8 @@ async def auto_create_spans(
         
         # Рассчитываем расстояние
         distance = haversine_distance(
-            from_pole.latitude, from_pole.longitude,
-            to_pole.latitude, to_pole.longitude
+            get_pole_latitude(from_pole), get_pole_longitude(from_pole),
+            get_pole_latitude(to_pole), get_pole_longitude(to_pole)
         )
         
         # Создаём пролёт
@@ -1012,7 +1243,7 @@ async def auto_create_spans(
         db_span = Span(
             mrid=generate_mrid(),
             line_section_id=temp_line_section.id,  # Привязываем к временной секции
-            power_line_id=power_line_id,
+            line_id=power_line_id,
             from_pole_id=from_pole.id,
             to_pole_id=to_pole.id,
             from_connectivity_node_id=from_connectivity_node_id,
@@ -1100,13 +1331,13 @@ async def delete_power_line(
         
         # Подсчитываем связанные объекты
         poles_count = await db.execute(
-            select(func.count(Pole.id)).where(Pole.power_line_id == power_line_id)
+            select(func.count(Pole.id)).where(Pole.line_id == power_line_id)
         )
         spans_count = await db.execute(
-            select(func.count(Span.id)).where(Span.power_line_id == power_line_id)
+            select(func.count(Span.id)).where(Span.line_id == power_line_id)
         )
         segments_count = await db.execute(
-            select(func.count(AClineSegment.id)).where(AClineSegment.power_line_id == power_line_id)
+            select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
         )
         
         print(f"DEBUG: Связанные объекты - Опоры: {poles_count.scalar()}, Пролёты: {spans_count.scalar()}, Сегменты: {segments_count.scalar()}")
@@ -1114,7 +1345,7 @@ async def delete_power_line(
         # Удаляем связанные Connection вручную (если они есть)
         from app.models.substation import Connection
         connections_result = await db.execute(
-            select(Connection).where(Connection.power_line_id == power_line_id)
+            select(Connection).where(Connection.line_id == power_line_id)
         )
         connections = connections_result.scalars().all()
         for conn in connections:
@@ -1124,7 +1355,7 @@ async def delete_power_line(
         # Удаляем ConnectivityNode, связанные с опорами этой ЛЭП
         # Это нужно сделать перед удалением опор, чтобы избежать ошибки NOT NULL constraint
         connectivity_nodes_result = await db.execute(
-            select(ConnectivityNode).where(ConnectivityNode.power_line_id == power_line_id)
+            select(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id)
         )
         connectivity_nodes = connectivity_nodes_result.scalars().all()
         
@@ -1164,7 +1395,7 @@ async def delete_power_line(
             await db.execute(pole_update_stmt)
         
         # Удаляем ConnectivityNode
-        connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.power_line_id == power_line_id)
+        connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id)
         await db.execute(connectivity_node_stmt)
         print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
         

@@ -18,12 +18,35 @@ double? _doubleFromJsonNullable(dynamic value) {
   return null;
 }
 
+double _doubleFromJson(dynamic value) {
+  if (value == null) return 0.0;  // Возвращаем 0.0 вместо null для обязательных полей
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    final parsed = double.tryParse(value);
+    return parsed ?? 0.0;
+  }
+  return 0.0;  // Значение по умолчанию
+}
+
 int? _intFromJsonNullable(dynamic value) {
   if (value == null) return null;
   if (value is int) return value;
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value);
   return null;
+}
+
+int _intFromJson(dynamic value) {
+  if (value == null) return 0;  // Возвращаем 0 вместо null для обязательных полей
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) {
+    final parsed = int.tryParse(value);
+    return parsed ?? 0;  // Возвращаем 0 если парсинг не удался
+  }
+  return 0;  // Значение по умолчанию
 }
 
 DateTime _dateTimeFromJson(dynamic value) {
@@ -167,8 +190,10 @@ class Pole {
   final int powerLineId;
   @JsonKey(name: 'pole_number', fromJson: _stringFromJson)
   final String poleNumber;
-  final double latitude;
-  final double longitude;
+  @JsonKey(name: 'x_position', fromJson: _doubleFromJson)
+  final double xPosition;  // Долгота (longitude)
+  @JsonKey(name: 'y_position', fromJson: _doubleFromJson)
+  final double yPosition;  // Широта (latitude)
   @JsonKey(name: 'pole_type', fromJson: _stringFromJson)
   final String poleType;
   @JsonKey(fromJson: _doubleFromJsonNullable)
@@ -195,8 +220,8 @@ class Pole {
     required this.id,
     required this.powerLineId,
     required this.poleNumber,
-    required this.latitude,
-    required this.longitude,
+    required this.xPosition,
+    required this.yPosition,
     required this.poleType,
     this.height,
     this.foundationType,
@@ -218,8 +243,8 @@ class Pole {
     int? id,
     int? powerLineId,
     String? poleNumber,
-    double? latitude,
-    double? longitude,
+    double? xPosition,
+    double? yPosition,
     String? poleType,
     double? height,
     String? foundationType,
@@ -236,8 +261,8 @@ class Pole {
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
       poleNumber: poleNumber ?? this.poleNumber,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      xPosition: xPosition ?? this.xPosition,
+      yPosition: yPosition ?? this.yPosition,
       poleType: poleType ?? this.poleType,
       height: height ?? this.height,
       foundationType: foundationType ?? this.foundationType,
@@ -260,8 +285,10 @@ class Pole {
 class PoleCreate {
   @JsonKey(name: 'pole_number')
   final String poleNumber;
-  final double latitude;
-  final double longitude;
+  @JsonKey(name: 'x_position', fromJson: _doubleFromJson)
+  final double xPosition;  // Долгота (longitude)
+  @JsonKey(name: 'y_position', fromJson: _doubleFromJson)
+  final double yPosition;  // Широта (latitude)
   @JsonKey(name: 'pole_type')
   final String poleType;
   final double? height;
@@ -284,8 +311,8 @@ class PoleCreate {
 
   const PoleCreate({
     required this.poleNumber,
-    required this.latitude,
-    required this.longitude,
+    required this.xPosition,
+    required this.yPosition,
     required this.poleType,
     this.height,
     this.foundationType,

@@ -67,7 +67,7 @@ async def find_previous_pole(
     if current_sequence_number is not None:
         # Находим опору с максимальным sequence_number, который меньше текущего
         query = select(Pole).where(
-            Pole.power_line_id == power_line_id,
+            Pole.line_id == power_line_id,
             Pole.sequence_number.isnot(None),
             Pole.sequence_number < current_sequence_number
         )
@@ -83,7 +83,7 @@ async def find_previous_pole(
     
     # Если не нашли по sequence_number, используем поиск по ближайшему расстоянию (обратная совместимость)
     # Это нужно для опор, у которых sequence_number не установлен
-    query = select(Pole).where(Pole.power_line_id == power_line_id)
+    query = select(Pole).where(Pole.line_id == power_line_id)
     if exclude_pole_id:
         query = query.where(Pole.id != exclude_pole_id)
     
@@ -126,7 +126,7 @@ async def is_branching_pole(db: AsyncSession, pole_id: int, power_line_id: int) 
     result = await db.execute(
         select(ConnectivityNode).where(
             ConnectivityNode.pole_id == pole_id,
-            ConnectivityNode.power_line_id == power_line_id
+            ConnectivityNode.line_id == power_line_id
         )
     )
     connectivity_node = result.scalar_one_or_none()
@@ -181,21 +181,21 @@ async def find_or_create_acline_segment(
     # Ищем подключение к подстанции
     is_substation_start = False
     result = await db.execute(
-        select(Connection).where(Connection.power_line_id == power_line_id)
+        select(Connection).where(Connection.line_id == power_line_id)
     )
     connections = result.scalars().all()
     
     # Проверяем, подключена ли линия к подстанции через эту опору
     # (упрощённо: если это первая опора в линии или опора с sequence_number = 1)
     result = await db.execute(
-        select(func.min(Pole.sequence_number)).where(Pole.power_line_id == power_line_id)
+        select(func.min(Pole.sequence_number)).where(Pole.line_id == power_line_id)
     )
     min_sequence = result.scalar_one()
     
     result = await db.execute(
         select(Pole).where(
             Pole.id == from_node.pole_id,
-            Pole.power_line_id == power_line_id
+            Pole.line_id == power_line_id
         )
     )
     pole = result.scalar_one_or_none()
@@ -206,7 +206,7 @@ async def find_or_create_acline_segment(
     if is_substation_start or is_branching:
         # Генерируем код для сегмента
         result = await db.execute(
-            select(func.count(AClineSegment.id)).where(AClineSegment.power_line_id == power_line_id)
+            select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
         )
         segment_count = result.scalar_one() or 0
         code = f"{power_line.code}-SEG-{segment_count + 1}"
@@ -216,7 +216,7 @@ async def find_or_create_acline_segment(
             mrid=generate_mrid(),
             name=f"Сегмент {segment_count + 1} линии {power_line.name}",
             code=code,
-            power_line_id=power_line_id,
+            line_id=power_line_id,
             is_tap=False,
             from_connectivity_node_id=from_connectivity_node_id,
             to_connectivity_node_id=None,  # Будет установлено при завершении сегмента
@@ -232,7 +232,7 @@ async def find_or_create_acline_segment(
     # Иначе ищем незавершённый сегмент (to_connectivity_node_id == None)
     result = await db.execute(
         select(AClineSegment).where(
-            AClineSegment.power_line_id == power_line_id,
+            AClineSegment.line_id == power_line_id,
             AClineSegment.to_connectivity_node_id.is_(None),
             AClineSegment.is_tap == False
         ).order_by(AClineSegment.sequence_number.desc())
@@ -244,7 +244,7 @@ async def find_or_create_acline_segment(
     
     # Если незавершённого сегмента нет, создаём новый (на случай первой опоры)
     result = await db.execute(
-        select(func.count(AClineSegment.id)).where(AClineSegment.power_line_id == power_line_id)
+        select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
     )
     segment_count = result.scalar_one() or 0
     code = f"{power_line.code}-SEG-{segment_count + 1}"
@@ -436,7 +436,7 @@ async def auto_create_span(
     span = Span(
         mrid=generate_mrid(),
         span_number=f"{previous_pole.pole_number}-{new_pole.pole_number}",
-        power_line_id=power_line_id,
+        line_id=power_line_id,
         from_pole_id=previous_pole.id,
         to_pole_id=new_pole.id,
         from_connectivity_node_id=previous_cn.id,

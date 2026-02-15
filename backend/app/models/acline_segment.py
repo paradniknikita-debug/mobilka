@@ -14,34 +14,44 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.models.base import generate_mrid
+from app.models.cim_base import ConductingEquipment
 
 # Промежуточная таблица для связи many-to-many между PowerLine и AClineSegment
 line_segments = Table(
     'line_segments',
     Base.metadata,
-    Column('power_line_id', Integer, ForeignKey('power_lines.id'), primary_key=True),
-    Column('acline_segment_id', Integer, ForeignKey('acline_segments.id'), primary_key=True),
+    Column('line_id', Integer, ForeignKey('line.id'), primary_key=True),
+    Column('acline_segment_id', Integer, ForeignKey('acline_segment.id'), primary_key=True),
 )
 
 
-class AClineSegment(Base):
+class AClineSegment(Base, ConductingEquipment):
     """
     CIM ACLineSegment - сегмент линии переменного тока
     Соответствует CIM классу: cim:ACLineSegment
+    
+    Наследуется от:
+    - ConductingEquipment (Equipment -> ConductingEquipment)
     
     Сегмент может быть:
     1. Основным сегментом линии (от подстанции до подстанции)
     2. Отпайкой (Tap) - начинается от ConnectivityNode основной линии
     """
-    __tablename__ = "acline_segments"
+    __tablename__ = "acline_segment"
 
     id = Column(Integer, primary_key=True, index=True)
+    # mRID, name, description, created_at, updated_at - наследуются от IdentifiedObject
+    # alias_name - наследуется от PowerSystemResource
+    # normally_in_service - наследуется от Equipment
+    # phases - наследуется от ConductingEquipment
+    # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
-    code = Column(String(20), unique=True, index=True, nullable=False)
+    code = Column(String(20), unique=True, index=True, nullable=False)  # Внутренний код (не CIM)
     
-    # Связь с линией (PowerLine)
-    power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
+    # Связь с линией (PowerLine) - это EquipmentContainer для Equipment
+    # Equipment.EquipmentContainer -> Line
+    line_id = Column(Integer, ForeignKey("line.id"), nullable=False)
     
     # Тип сегмента: основной или отпайка
     is_tap = Column(Boolean, default=False, nullable=False)  # True = отпайка, False = основной сегмент
@@ -50,11 +60,11 @@ class AClineSegment(Base):
     # Связь с узлами соединения (ConnectivityNode = опоры)
     # Для основного сегмента: начало и конец линии
     # Для отпайки: начало от опоры основной линии, конец - опора или подстанция
-    from_connectivity_node_id = Column(Integer, ForeignKey("connectivity_nodes.id"), nullable=False)
-    to_connectivity_node_id = Column(Integer, ForeignKey("connectivity_nodes.id"), nullable=True)
+    from_connectivity_node_id = Column(Integer, ForeignKey("connectivity_node.id"), nullable=False)
+    to_connectivity_node_id = Column(Integer, ForeignKey("connectivity_node.id"), nullable=True)
     
     # Для отпаек, заканчивающихся на подстанции/КТП
-    to_terminal_id = Column(Integer, ForeignKey("terminals.id"), nullable=True)
+    to_terminal_id = Column(Integer, ForeignKey("terminal.id"), nullable=True)
     
     # Уровень напряжения
     voltage_level = Column(Float, nullable=False)  # кВ
@@ -87,7 +97,7 @@ class AClineSegment(Base):
     # Связь с линией (для обратной совместимости - many-to-many)
     power_lines = relationship("PowerLine", secondary=line_segments, back_populates="segments")
     # Прямая связь с линией (для отпаек)
-    power_line = relationship("PowerLine", foreign_keys=[power_line_id], back_populates="acline_segments")
+    line = relationship("PowerLine", foreign_keys=[line_id], back_populates="acline_segments")
     
     # Связь с узлами соединения (ConnectivityNode)
     from_node = relationship("ConnectivityNode", foreign_keys=[from_connectivity_node_id], back_populates="from_segments")

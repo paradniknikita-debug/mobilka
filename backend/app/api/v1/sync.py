@@ -134,7 +134,7 @@ async def download_sync_data(
             "data": {
                 "id": pole.id,
                 "mrid": pole.mrid,
-                "power_line_id": pole.power_line_id,
+                "power_line_id": pole.line_id,
                 "pole_number": pole.pole_number,
                 "latitude": pole.latitude,
                 "longitude": pole.longitude,
@@ -291,7 +291,7 @@ async def process_sync_record(record: SyncRecord, user: User, db: AsyncSession):
                 mrid = data.get('mrid') or generate_mrid()
                 db_pole = Pole(
                     mrid=mrid,
-                    power_line_id=data['power_line_id'],
+                    line_id=data['power_line_id'],
                     pole_number=data['pole_number'],
                     latitude=data['latitude'],
                     longitude=data['longitude'],

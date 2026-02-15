@@ -1933,8 +1933,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       
       final poleData = PoleCreate(
         poleNumber: _quickPoleNumber,
-        latitude: _currentLocation!.latitude,
-        longitude: _currentLocation!.longitude,
+        xPosition: _currentLocation!.longitude,  // x_position = долгота
+        yPosition: _currentLocation!.latitude,   // y_position = широта
         poleType: _quickPoleType,
         condition: 'good',
         isTap: _isTapPole,

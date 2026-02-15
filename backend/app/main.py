@@ -76,15 +76,34 @@ app = FastAPI(
 )
 # app.mount("/static", StaticFiles(directory="static"), name="static")
 # Настройка CORS для Flutter приложения
+# Определяем origins из настроек или переменных окружения
+cors_origins = settings.ALLOWED_ORIGINS.copy()
+
+# Если задана переменная CORS_ORIGINS, используем её
+if settings.CORS_ORIGINS:
+    cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+
+# Для разработки добавляем localhost варианты
+import os
+if os.getenv("ENVIRONMENT", "development") == "development":
+    dev_origins = [
+        "http://localhost:53380",
+        "https://localhost:53380",
+        "http://127.0.0.1:53380",
+        "https://127.0.0.1:53380",
+        "http://localhost:8000",
+        "https://localhost:8000",
+    ]
+    cors_origins.extend(dev_origins)
+    cors_origins = list(set(cors_origins))  # Убираем дубликаты
+
+# Проверка на пустой список (для продакшена обязательно указать домены)
+if not cors_origins and os.getenv("ENVIRONMENT") == "production":
+    raise ValueError("CORS_ORIGINS должен быть задан для продакшена! Установите переменную CORS_ORIGINS в .env")
+
 app.add_middleware(
     CORSMiddleware, # Перехватывает все запросы и добавляет заголовки CORS
-    allow_origins=[
-        "http://localhost:*",
-        "https://localhost:*",
-        "http://127.0.0.1:*",
-        "https://127.0.0.1:*",
-        "*"  # В продакшене указать конкретные домены
-    ],  # Разрешаем localhost с любым портом
+    allow_origins=cors_origins if cors_origins else ["*"],  # В продакшене НЕ использовать "*"
     allow_credentials=True, # разрешает cookies и jwt токены
     allow_methods=["*"], # Разрешает все методы get, post, put, delete
     allow_headers=["*"], # Разрешает все заголовки

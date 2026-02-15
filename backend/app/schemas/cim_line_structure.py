@@ -117,7 +117,7 @@ class AClineSegmentBase(BaseModel):
 
 
 class AClineSegmentCreate(AClineSegmentBase):
-    power_line_id: int
+    line_id: int
     from_connectivity_node_id: int
     to_connectivity_node_id: Optional[int] = None
     to_terminal_id: Optional[int] = None
@@ -127,7 +127,7 @@ class AClineSegmentCreate(AClineSegmentBase):
 class AClineSegmentResponse(AClineSegmentBase):
     id: int
     mrid: str
-    power_line_id: int
+    line_id: int
     from_connectivity_node_id: int
     to_connectivity_node_id: Optional[int] = None
     to_terminal_id: Optional[int] = None
@@ -162,7 +162,7 @@ class SpanCreate(SpanBase):
     to_connectivity_node_id: int
     mrid: Optional[str] = None
     # Для обратной совместимости
-    power_line_id: Optional[int] = None
+    line_id: Optional[int] = None
     from_pole_id: Optional[int] = None
     to_pole_id: Optional[int] = None
 
@@ -176,7 +176,7 @@ class SpanResponse(SpanBase):
     created_by: int
     created_at: datetime
     # Для обратной совместимости
-    power_line_id: Optional[int] = None
+    line_id: Optional[int] = None
     from_pole_id: Optional[int] = None
     to_pole_id: Optional[int] = None
     # Связанные объекты

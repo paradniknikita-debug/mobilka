@@ -50,20 +50,23 @@ POWER_LINE_SCHEMA = {
         "voltage_level": {"type": "number"},
         "length": {"type": "number"},
         "branch_id": {"type": "integer"},
+        "region_id": {"type": "integer"},
         "status": {"type": "string"},
         "description": {"type": "string"},
         "created_at": {"type": "string", "format": "date-time"},
         "updated_at": {"type": "string", "format": "date-time"}
     },
-    "required": ["name", "code", "voltage_level", "branch_id"]
+    "required": ["name", "code"]
 }
 
 POLE_SCHEMA = {
     "type": "object",
     "properties": {
         "id": {"type": "string"},
-        "power_line_id": {"type": "string"},
+        "line_id": {"type": "string"},
         "pole_number": {"type": "string"},
+        "x_position": {"type": "number"},
+        "y_position": {"type": "number"},
         "latitude": {"type": "number"},
         "longitude": {"type": "number"},
         "pole_type": {"type": "string"},
@@ -75,7 +78,7 @@ POLE_SCHEMA = {
         "notes": {"type": "string"},
         "created_at": {"type": "string", "format": "date-time"}
     },
-    "required": ["power_line_id", "pole_number", "latitude", "longitude", "pole_type"]
+    "required": ["line_id", "pole_number", "pole_type"]
 }
 
 EQUIPMENT_SCHEMA = {
@@ -105,7 +108,7 @@ ENTITY_SCHEMAS = {
         "type": "object",
         "properties": {
             "id": {"type": "string"},
-            "power_line_id": {"type": "string"},
+            "line_id": {"type": "string"},  # Обновлено: power_line_id -> line_id
             "from_pole_id": {"type": "string"},
             "to_pole_id": {"type": "string"},
             "span_number": {"type": "string"},
@@ -115,15 +118,16 @@ ENTITY_SCHEMAS = {
             "conductor_section": {"type": "string"},
             "tension": {"type": "number"},
             "sag": {"type": "number"},
+            "sequence_number": {"type": "integer"},
             "notes": {"type": "string"}
         },
-        "required": ["power_line_id", "from_pole_id", "to_pole_id", "span_number", "length"]
+        "required": ["line_id", "from_pole_id", "to_pole_id", "span_number", "length"]
     },
     "tap": {
         "type": "object",
         "properties": {
             "id": {"type": "string"},
-            "power_line_id": {"type": "string"},
+            "line_id": {"type": "string"},
             "pole_id": {"type": "string"},
             "tap_number": {"type": "string"},
             "tap_type": {"type": "string"},
@@ -133,6 +137,6 @@ ENTITY_SCHEMAS = {
             "longitude": {"type": "number"},
             "description": {"type": "string"}
         },
-        "required": ["power_line_id", "pole_id", "tap_number", "tap_type", "voltage_level"]
+        "required": ["line_id", "pole_id", "tap_number", "tap_type", "voltage_level"]
     }
 }

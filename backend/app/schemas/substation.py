@@ -27,7 +27,7 @@ class SubstationResponse(SubstationBase):
 
 class ConnectionBase(BaseModel):
     substation_id: int
-    power_line_id: int
+    line_id: int
     connection_type: str
     voltage_level: float
     description: Optional[str] = None

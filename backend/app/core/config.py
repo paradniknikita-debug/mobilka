@@ -4,14 +4,16 @@ import os
 
 class Settings(BaseSettings):
     # База данных
-    # Используйте .env или переменные окружения для задания реальной строки подключения
+    # ОБЯЗАТЕЛЬНО задайте через .env или переменные окружения для продакшена!
     # Для Docker: postgresql://postgres:postgres@postgres:5432/lepm_db
     # Для локального запуска: postgresql://postgres:password@localhost:5432/lepm_db
-    # По умолчанию используем порт 5433 для Docker, но можно переопределить через .env
-    DATABASE_URL: str = "postgresql://postgres:dragon167@localhost:5433/lepm_db"
+    # Дефолтное значение только для development
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:dragon167@localhost:5433/lepm_db")
     
     # JWT настройки
-    SECRET_KEY: str = "CHANGE_ME_SECRET_KEY"
+    # ОБЯЗАТЕЛЬНО задайте через .env для продакшена! Сгенерируйте через: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Дефолтное значение только для development
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "CHANGE_ME_SECRET_KEY")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
@@ -40,6 +42,10 @@ class Settings(BaseSettings):
         # для Flutter Web dev-сервера (случайные порты)
         # при необходимости ограничьте конкретными origin позже
     ]
+    
+    # CORS настройки для продакшена
+    # Задайте через переменную окружения CORS_ORIGINS (через запятую)
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "")
 
 
 
@@ -49,7 +55,22 @@ class Settings(BaseSettings):
     MAX_ZOOM: int = 18
     SSL_KEYFILE: str = "/app/nginx/ssl/key.pem"
     SSL_CERTFILE: str = "/app/nginx/ssl/crt.pem"
+    
+    # Окружение (development/production)
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    
     class Config:
         env_file = ".env"
+        
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Проверка обязательных переменных для продакшена
+        if self.ENVIRONMENT == "production":
+            if not self.DATABASE_URL:
+                raise ValueError("DATABASE_URL обязателен для продакшена!")
+            if not self.SECRET_KEY or self.SECRET_KEY == "CHANGE_ME_SECRET_KEY":
+                raise ValueError("SECRET_KEY должен быть задан для продакшена!")
+            if not self.CORS_ORIGINS:
+                raise ValueError("CORS_ORIGINS должен быть задан для продакшена!")
 
 settings = Settings()

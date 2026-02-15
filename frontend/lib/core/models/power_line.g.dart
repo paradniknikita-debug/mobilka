@@ -7,13 +7,13 @@ part of 'power_line.dart';
 // **************************************************************************
 
 PowerLine _$PowerLineFromJson(Map<String, dynamic> json) => PowerLine(
-      id: (json['id'] as num).toInt(),
+      id: _intFromJson(json['id']),
       name: _stringFromJson(json['name']),
       code: _stringFromJson(json['code']),
       voltageLevel: _doubleFromJsonNullable(json['voltage_level']),
       length: _doubleFromJsonNullable(json['length']),
       branchId: _intFromJsonNullable(json['branch_id']),
-      createdBy: (json['created_by'] as num).toInt(),
+      createdBy: _intFromJson(json['created_by']),
       status:
           json['status'] == null ? 'active' : _stringFromJson(json['status']),
       description: json['description'] as String?,
@@ -55,9 +55,9 @@ PowerLineCreate _$PowerLineCreateFromJson(Map<String, dynamic> json) =>
     PowerLineCreate(
       name: json['name'] as String,
       code: json['code'] as String,
-      voltageLevel: (json['voltageLevel'] as num).toDouble(),
+      voltageLevel: _doubleFromJson(json['voltageLevel']),
       length: (json['length'] as num?)?.toDouble(),
-      branchId: (json['branchId'] as num).toInt(),
+      branchId: _intFromJson(json['branchId']),
       status: json['status'] as String? ?? 'active',
       description: json['description'] as String?,
     );
@@ -74,11 +74,11 @@ Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
     };
 
 Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
-      id: (json['id'] as num).toInt(),
-      powerLineId: (json['power_line_id'] as num).toInt(),
+      id: _intFromJson(json['id']),
+      powerLineId: _intFromJson(json['power_line_id']),
       poleNumber: _stringFromJson(json['pole_number']),
-      latitude: (json['latitude'] as num).toDouble(),
-      longitude: (json['longitude'] as num).toDouble(),
+      xPosition: _doubleFromJson(json['x_position']),
+      yPosition: _doubleFromJson(json['y_position']),
       poleType: _stringFromJson(json['pole_type']),
       height: _doubleFromJsonNullable(json['height']),
       foundationType: json['foundation_type'] as String?,
@@ -89,7 +89,7 @@ Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
           ? 'good'
           : _stringFromJson(json['condition']),
       notes: json['notes'] as String?,
-      createdBy: (json['created_by'] as num).toInt(),
+      createdBy: _intFromJson(json['created_by']),
       createdAt: _dateTimeFromJson(json['created_at']),
       updatedAt: _dateTimeFromJsonNullable(json['updated_at']),
       equipment: (json['equipment'] as List<dynamic>?)
@@ -102,8 +102,8 @@ Map<String, dynamic> _$PoleToJson(Pole instance) {
     'id': instance.id,
     'power_line_id': instance.powerLineId,
     'pole_number': instance.poleNumber,
-    'latitude': instance.latitude,
-    'longitude': instance.longitude,
+    'x_position': instance.xPosition,
+    'y_position': instance.yPosition,
     'pole_type': instance.poleType,
   };
 
@@ -130,8 +130,8 @@ Map<String, dynamic> _$PoleToJson(Pole instance) {
 
 PoleCreate _$PoleCreateFromJson(Map<String, dynamic> json) => PoleCreate(
       poleNumber: json['pole_number'] as String,
-      latitude: (json['latitude'] as num).toDouble(),
-      longitude: (json['longitude'] as num).toDouble(),
+      xPosition: _doubleFromJson(json['x_position']),
+      yPosition: _doubleFromJson(json['y_position']),
       poleType: json['pole_type'] as String,
       height: (json['height'] as num?)?.toDouble(),
       foundationType: json['foundation_type'] as String?,
@@ -148,8 +148,8 @@ PoleCreate _$PoleCreateFromJson(Map<String, dynamic> json) => PoleCreate(
 Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) {
   final val = <String, dynamic>{
     'pole_number': instance.poleNumber,
-    'latitude': instance.latitude,
-    'longitude': instance.longitude,
+    'x_position': instance.xPosition,
+    'y_position': instance.yPosition,
     'pole_type': instance.poleType,
   };
 
@@ -173,8 +173,8 @@ Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) {
 }
 
 Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(
-      id: (json['id'] as num).toInt(),
-      poleId: (json['poleId'] as num).toInt(),
+      id: _intFromJson(json['id']),
+      poleId: _intFromJson(json['poleId']),
       equipmentType: json['equipmentType'] as String,
       name: json['name'] as String,
       manufacturer: json['manufacturer'] as String?,
@@ -186,7 +186,7 @@ Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(
           : DateTime.parse(json['installationDate'] as String),
       condition: json['condition'] as String,
       notes: json['notes'] as String?,
-      createdBy: (json['createdBy'] as num).toInt(),
+      createdBy: _intFromJson(json['createdBy']),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: json['updatedAt'] == null
           ? null

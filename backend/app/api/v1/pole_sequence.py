@@ -71,7 +71,7 @@ async def auto_sequence_poles(
     """
     # Получаем все опоры линии
     result = await db.execute(
-        select(Pole).where(Pole.power_line_id == power_line_id).order_by(Pole.pole_number)
+        select(Pole).where(Pole.line_id == power_line_id).order_by(Pole.pole_number)
     )
     poles = result.scalars().all()
     
@@ -146,7 +146,7 @@ async def update_pole_sequence(
     # Проверяем, что все опоры принадлежат этой линии
     result = await db.execute(
         select(Pole).where(
-            Pole.power_line_id == power_line_id,
+            Pole.line_id == power_line_id,
             Pole.id.in_(pole_sequence)
         )
     )
@@ -183,7 +183,7 @@ async def get_poles_sequence(
     result = await db.execute(
         select(Pole)
         .options(selectinload(Pole.connectivity_nodes))
-        .where(Pole.power_line_id == power_line_id)
+        .where(Pole.line_id == power_line_id)
         .order_by(Pole.sequence_number.asc().nullslast(), Pole.pole_number.asc())
     )
     poles = result.scalars().all()

@@ -4,19 +4,22 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.models.base import generate_mrid
+from app.models.cim_base import ConnectivityNodeContainer
 
-class Substation(Base):
-    __tablename__ = "substations"
+class Substation(Base, ConnectivityNodeContainer):
+    __tablename__ = "substation"
 
     id = Column(Integer, primary_key=True, index=True)
-    # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
+    # mRID, name, description, created_at, updated_at - наследуются от ConnectivityNodeContainer
+    # alias_name - наследуется от PowerSystemResource
+    # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
     dispatcher_name = Column(String(100), nullable=False)  # Диспетчерское наименование (заменяет code)
     voltage_level = Column(Float, nullable=False)  # кВ
     
     # CIM Location - связь с Location для координат
-    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
     
     # Старые поля для обратной совместимости (будут удалены после миграции)
     latitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
@@ -27,17 +30,20 @@ class Substation(Base):
     region_id = Column(Integer, ForeignKey("geographic_regions.id"), nullable=True)
     # Оставляем branch_id для обратной совместимости
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
-    description = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # description, created_at, updated_at - наследуются от IdentifiedObject
+    is_active = Column(Boolean, default=True)  # Дополнительное поле для soft delete
 
     # Связи
     region = relationship("GeographicRegion", back_populates="substations")
     branch = relationship("Branch", back_populates="substations")  # Для обратной совместимости
     connections = relationship("Connection", back_populates="substation")
+    # CIM-структура: Substation (EquipmentContainer) содержит множество VoltageLevel (EquipmentContainer)
     voltage_levels = relationship("VoltageLevel", back_populates="substation", cascade="all, delete-orphan")
     location = relationship("Location", foreign_keys=[location_id])
+    
+    # CIM-структура: ConnectivityNodeContainer содержит множество ConnectivityNode
+    # (для подстанций это узлы соединения в ячейках)
+    connectivity_nodes = relationship("ConnectivityNode", back_populates="substation")
     
     def get_latitude(self) -> float:
         """Получить широту из Location/PositionPoint или из старого поля"""
@@ -57,8 +63,8 @@ class Connection(Base):
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    substation_id = Column(Integer, ForeignKey("substations.id"), nullable=False)
-    power_line_id = Column(Integer, ForeignKey("power_lines.id"), nullable=False)
+    substation_id = Column(Integer, ForeignKey("substation.id"), nullable=False)
+    line_id = Column(Integer, ForeignKey("line.id"), nullable=False)
     connection_type = Column(String(20), nullable=False)  # input, output
     voltage_level = Column(Float, nullable=False)
     description = Column(Text, nullable=True)
@@ -66,7 +72,7 @@ class Connection(Base):
 
     # Связи
     substation = relationship("Substation", back_populates="connections")
-    power_line = relationship("PowerLine", back_populates="connections")
+    line = relationship("PowerLine", foreign_keys=[line_id], back_populates="connections")
 
 
 class VoltageLevel(Base):
@@ -74,11 +80,11 @@ class VoltageLevel(Base):
     VoltageLevel - уровень напряжения в подстанции
     Соответствует CIM классу: cim:VoltageLevel
     """
-    __tablename__ = "voltage_levels"
+    __tablename__ = "voltage_level"
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    substation_id = Column(Integer, ForeignKey("substations.id"), nullable=False)
+    substation_id = Column(Integer, ForeignKey("substation.id"), nullable=False)
     name = Column(String(100), nullable=False)
     code = Column(String(20), nullable=False)
     
@@ -105,11 +111,11 @@ class Bay(Base):
     Bay - ячейка распределительного устройства
     Соответствует CIM классу: cim:Bay
     """
-    __tablename__ = "bays"
+    __tablename__ = "bay"
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    voltage_level_id = Column(Integer, ForeignKey("voltage_levels.id"), nullable=False)
+    voltage_level_id = Column(Integer, ForeignKey("voltage_level.id"), nullable=False)
     name = Column(String(100), nullable=False)
     bay_number = Column(String(20), nullable=False)  # Номер ячейки
     bay_type = Column(String(50), nullable=False)  # ввод, отходящая линия, секционный, трансформатор
@@ -129,11 +135,11 @@ class BusbarSection(Base):
     BusbarSection - секция шин
     Соответствует CIM классу: cim:BusbarSection
     """
-    __tablename__ = "busbar_sections"
+    __tablename__ = "busbar_section"
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    bay_id = Column(Integer, ForeignKey("bays.id"), nullable=False)
+    bay_id = Column(Integer, ForeignKey("bay.id"), nullable=False)
     name = Column(String(100), nullable=False)
     section_number = Column(Integer, nullable=False)  # Номер секции (I, II, III)
     nominal_current = Column(Float, nullable=True)  # А
@@ -154,7 +160,7 @@ class ConductingEquipment(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    bay_id = Column(Integer, ForeignKey("bays.id"), nullable=False)
+    bay_id = Column(Integer, ForeignKey("bay.id"), nullable=False)
     
     # CIM тип оборудования (PowerTransformer, Breaker, Disconnector и т.д.)
     equipment_type = Column(String(50), nullable=False)  # CIM класс
@@ -199,7 +205,7 @@ class ProtectionEquipment(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    bay_id = Column(Integer, ForeignKey("bays.id"), nullable=False)
+    bay_id = Column(Integer, ForeignKey("bay.id"), nullable=False)
     name = Column(String(100), nullable=False)
     protection_type = Column(String(50), nullable=False)  # реле, автомат защиты, УЗО
     manufacturer = Column(String(100), nullable=True)

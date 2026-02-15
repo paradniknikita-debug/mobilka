@@ -192,8 +192,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
 
       final poleData = PoleCreate(
         poleNumber: _poleNumber,
-        latitude: _latitude!,
-        longitude: _longitude!,
+        xPosition: _longitude!,  // x_position = долгота
+        yPosition: _latitude!,   // y_position = широта
         poleType: _poleType,
         height: _height,
         foundationType: _foundationType?.isEmpty ?? true ? null : _foundationType,
