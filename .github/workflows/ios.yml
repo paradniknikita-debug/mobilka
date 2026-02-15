@@ -35,32 +35,60 @@ jobs:
           cd frontend/ios
           pod install --repo-update
       
-      - name: Create Generated.xcconfig placeholder
-        run: |
-          cd frontend/ios/Flutter
-          touch Generated.xcconfig
-          echo "// Placeholder - will be generated during build" > Generated.xcconfig
-      
-      - name: Build iOS app
+      - name: Generate Flutter configuration files
         run: |
           cd frontend
-          flutter build ios --release --no-codesign
+          # Генерируем конфигурационные файлы через flutter build
+          # Используем debug режим для генерации файлов, затем удаляем сборку
+          flutter build ios --debug --no-codesign 2>&1 | head -50 || true
+          # Проверяем, что файлы сгенерированы
+          if [ -f "ios/Flutter/Generated.xcconfig" ]; then
+            echo "Generated.xcconfig created successfully"
+          else
+            echo "Warning: Generated.xcconfig not found"
+          fi
+          # Удаляем debug сборку, оставляем только конфигурационные файлы
+          rm -rf build/ios/iphoneos build/ios/iphonesimulator
       
-      - name: Create IPA from build
+      - name: Build IPA
+        id: build_ipa
         run: |
-          cd frontend/ios
-          mkdir -p build/ipa/Payload
-          cp -r ../build/ios/iphoneos/Runner.app build/ipa/Payload/
-          cd build/ipa
-          zip -r ../Runner.ipa Payload
-          cd ../..
-          mkdir -p ../build/ios/ipa
-          cp build/Runner.ipa ../build/ios/ipa/
+          cd frontend
+          # Пробуем использовать flutter build ipa
+          flutter build ipa --release --no-codesign || {
+            echo "flutter build ipa failed, trying manual build"
+            # Альтернативный способ: собираем через flutter build ios
+            flutter build ios --release --no-codesign
+            # Создаем IPA вручную
+            cd build/ios/iphoneos
+            mkdir -p Payload
+            cp -r Runner.app Payload/
+            zip -r Runner.ipa Payload
+            mkdir -p ../ipa
+            mv Runner.ipa ../ipa/
+          }
+      
+      - name: Verify IPA exists
+        run: |
+          if [ -f "frontend/build/ios/ipa/Runner.ipa" ]; then
+            echo "IPA found at frontend/build/ios/ipa/Runner.ipa"
+            ls -lh frontend/build/ios/ipa/
+          elif [ -f "frontend/build/ios/ipa/*.ipa" ]; then
+            echo "IPA found with wildcard"
+            ls -lh frontend/build/ios/ipa/
+          else
+            echo "IPA not found, listing build directory:"
+            find frontend/build -name "*.ipa" -o -name "*.app" | head -20
+            exit 1
+          fi
       
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: frontend/build/ios/ipa/*.ipa
+          path: |
+            frontend/build/ios/ipa/*.ipa
+            frontend/build/ios/iphoneos/*.ipa
+          if-no-files-found: error
           retention-days: 30
 
