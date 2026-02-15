@@ -24,277 +24,164 @@ jobs:
         run: |
           sudo gem install cocoapods
       
-      - name: Install dependencies
+      - name: Install Flutter dependencies
         run: |
           cd frontend
           flutter pub get
           flutter precache --ios
       
-      - name: Prepare Flutter environment
+      - name: Generate Flutter configuration files
         run: |
           cd frontend
-          # Используем flutter assemble для генерации файлов без полной сборки
-          # Это создаст Generated.xcconfig
-          flutter assemble -dTargetPlatform=ios -dTargetFile=lib/main.dart -dBuildMode=debug ios_framework_ios 2>&1 | head -20 || true
-          # Если файл не создан, создаём его вручную
-          if [ ! -f "ios/Flutter/Generated.xcconfig" ]; then
-            echo "Creating Generated.xcconfig manually..."
-            FLUTTER_ROOT=$(dirname $(dirname $(which flutter)))
-            {
-              echo "// This is a generated file; do not edit or check into version control."
-              echo "FLUTTER_ROOT=$FLUTTER_ROOT"
-              echo "FLUTTER_APPLICATION_PATH=\$(SRCROOT)/.."
-              echo "COCOAPODS_PARALLEL_CODE_SIGN=true"
-              echo "FLUTTER_TARGET=lib/main.dart"
-              echo "FLUTTER_BUILD_DIR=build"
-              echo "FLUTTER_BUILD_NAME=1.0.0"
-              echo "FLUTTER_BUILD_NUMBER=1"
-              echo "EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386"
-              echo "EXCLUDED_ARCHS[sdk=iphoneos*]=armv7"
-              echo "DART_OBFUSCATION=false"
-              echo "TRACK_WIDGET_CREATION=true"
-              echo "TREE_SHAKE_ICONS=false"
-              echo "PACKAGE_CONFIG=.dart_tool/package_config.json"
-            } > ios/Flutter/Generated.xcconfig
-          fi
-          echo "✓ Generated.xcconfig ready"
-          cat ios/Flutter/Generated.xcconfig
+          # Создаём Generated.xcconfig вручную с правильными путями
+          FLUTTER_ROOT=$(dirname $(dirname $(which flutter)))
+          mkdir -p ios/Flutter
+          {
+            echo "// This is a generated file; do not edit or check into version control."
+            echo "FLUTTER_ROOT=$FLUTTER_ROOT"
+            echo "FLUTTER_APPLICATION_PATH=\$(SRCROOT)/.."
+            echo "COCOAPODS_PARALLEL_CODE_SIGN=true"
+            echo "FLUTTER_TARGET=lib/main.dart"
+            echo "FLUTTER_BUILD_DIR=build"
+            echo "FLUTTER_BUILD_NAME=1.0.0"
+            echo "FLUTTER_BUILD_NUMBER=1"
+            echo "EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386"
+            echo "EXCLUDED_ARCHS[sdk=iphoneos*]=armv7"
+            echo "DART_OBFUSCATION=false"
+            echo "TRACK_WIDGET_CREATION=true"
+            echo "TREE_SHAKE_ICONS=false"
+            echo "PACKAGE_CONFIG=.dart_tool/package_config.json"
+          } > ios/Flutter/Generated.xcconfig
+          
           # Убеждаемся, что Debug.xcconfig и Release.xcconfig существуют
           [ -f "ios/Flutter/Debug.xcconfig" ] || echo '#include "Generated.xcconfig"' > ios/Flutter/Debug.xcconfig
           [ -f "ios/Flutter/Release.xcconfig" ] || echo '#include "Generated.xcconfig"' > ios/Flutter/Release.xcconfig
-          echo "✓ All xcconfig files ready"
-          ls -la ios/Flutter/*.xcconfig
+          echo "✓ Flutter config files ready"
       
       - name: Install CocoaPods dependencies
         run: |
           cd frontend/ios
-          # Запускаем pod install после создания конфигурационных файлов
           pod install --repo-update
-          echo "✓ pod install completed"
-          # Проверяем, что файлы Pods созданы
-          if [ -d "Pods/Target Support Files/Pods-Runner" ]; then
-            echo "✓ Pods files directory exists"
-            ls -la "Pods/Target Support Files/Pods-Runner/" || true
-          fi
+          echo "✓ CocoaPods dependencies installed"
       
-      - name: Create missing Pods files for Debug and Release
+      - name: Fix Xcode project paths and create missing Pods files
         run: |
           cd frontend/ios
+          
+          # Создаём все необходимые файлы Pods
           PODS_DIR="Pods/Target Support Files/Pods-Runner"
           mkdir -p "${PODS_DIR}"
           
-          # Создаём файлы для Debug конфигурации, если их нет
-          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
-            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist"
-            echo "✓ Created Debug input files"
-          fi
-          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
-            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist"
-            echo "✓ Created Debug output files"
-          fi
+          # Создаём файлы для Debug
+          [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ] || echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist"
+          [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ] || echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist"
           
-          # Создаём файлы для Release конфигурации
+          # Создаём файлы для Release (копируем из Debug если есть, иначе пустые)
           if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
             if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
-              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" \
-                 "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-              echo "✓ Copied Debug input files to Release"
+              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
             else
               echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-              echo "✓ Created empty Release input files"
             fi
           fi
           if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ]; then
             if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
-              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" \
-                 "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-              echo "✓ Copied Debug output files to Release"
+              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
             else
               echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-              echo "✓ Created empty Release output files"
             fi
           fi
           
-          # Проверяем все файлы
-          echo "All Pods files:"
-          ls -la "${PODS_DIR}/" || true
-      
-      - name: Verify Release.xcconfig exists
-        run: |
-          cd frontend/ios/Flutter
-          if [ -f "Release.xcconfig" ]; then
-            echo "✓ Release.xcconfig exists"
-            cat Release.xcconfig
-          else
-            echo "✗ Release.xcconfig NOT found, creating..."
-            echo '#include "Generated.xcconfig"' > Release.xcconfig
-          fi
-          # Проверяем Generated.xcconfig
-          if [ -f "Generated.xcconfig" ]; then
-            echo "✓ Generated.xcconfig exists"
-          else
-            echo "✗ Generated.xcconfig NOT found"
-            exit 1
-          fi
-      
-      - name: Clean debug build artifacts
-        run: |
-          cd frontend
-          # Удаляем только артефакты сборки, оставляем конфигурационные файлы
-          rm -rf build/ios/iphoneos build/ios/iphonesimulator
-      
-      - name: Prepare Flutter framework
-        run: |
-          cd frontend
-          # Подготавливаем Flutter framework с указанием выходной директории
-          flutter assemble -dTargetPlatform=ios -dTargetFile=lib/main.dart -dBuildMode=release -o build/ios ios_framework_ios 2>&1 | head -30 || true
-          echo "✓ Flutter framework prepared"
-      
-      - name: Re-run pod install to generate Release files
-        run: |
-          cd frontend/ios
-          # Запускаем pod install снова, чтобы создать файлы для Release конфигурации
-          pod install --repo-update 2>&1 | tail -20
-          echo "✓ pod install completed"
-      
-      - name: Fix Pods file paths in Xcode project
-        run: |
-          cd frontend/ios
           # Исправляем абсолютные пути на относительные в project.pbxproj
-          # Заменяем '/Target Support Files/' на правильный относительный путь
           python3 << 'PYTHON_SCRIPT'
           import re
-          import os
           
           project_file = 'Runner.xcodeproj/project.pbxproj'
           with open(project_file, 'r') as f:
               content = f.read()
           
-          # Заменяем абсолютные пути на относительные
-          # Ищем паттерны типа '/Target Support Files/...' и заменяем на правильный путь
+          # Заменяем все варианты абсолютных путей на относительные
+          # Вариант 1: '/Target Support Files/...'
           content = re.sub(
               r"'/Target Support Files/([^']+)'",
               r"'$(SRCROOT)/Pods/Target Support Files/\1'",
               content
           )
           
-          # Также заменяем без кавычек
+          # Вариант 2: "/Target Support Files/..."
           content = re.sub(
               r'"/Target Support Files/([^"]+)"',
               r'"$(SRCROOT)/Pods/Target Support Files/\1"',
               content
           )
           
+          # Вариант 3: без кавычек в некоторых местах
+          content = re.sub(
+              r'(\s)/Target Support Files/([^\s;]+)',
+              r'\1$(SRCROOT)/Pods/Target Support Files/\2',
+              content
+          )
+          
           with open(project_file, 'w') as f:
               f.write(content)
           
-          print("✓ Fixed Pods file paths in project.pbxproj")
+          print("✓ Fixed paths in project.pbxproj")
           PYTHON_SCRIPT
-      
-      - name: Ensure Pods files exist for Release
-        run: |
-          cd frontend/ios
-          PODS_DIR="Pods/Target Support Files/Pods-Runner"
-          mkdir -p "${PODS_DIR}"
           
-          # Создаём файлы для Release, если их нет
-          # Копируем из Debug, если они существуют
-          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
-            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
-              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" \
-                 "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-              echo "✓ Copied Debug input files to Release"
-            else
-              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-              echo "✓ Created empty Release input files"
-            fi
-          fi
-          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ]; then
-            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
-              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" \
-                 "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-              echo "✓ Copied Debug output files to Release"
-            else
-              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-              echo "✓ Created empty Release output files"
-            fi
-          fi
-          
-          # Проверяем все файлы
-          echo "Pods files:"
-          ls -la "${PODS_DIR}/"*Release* 2>/dev/null || echo "No Release files found"
-          ls -la "${PODS_DIR}/"*Debug* 2>/dev/null || echo "No Debug files found"
+          echo "✓ All Pods files created and paths fixed"
       
-      - name: Build iOS app using xcodebuild
-        run: |
-          cd frontend/ios
-          # Собираем через xcodebuild с явным отключением подписи
-          xcodebuild clean build \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            CODE_SIGN_STYLE=Manual 2>&1 | tail -100
-          
-          # Копируем результат в ожидаемое место Flutter
-          if [ -d "build/Build/Products/Release-iphoneos/Runner.app" ]; then
-            mkdir -p ../build/ios/iphoneos
-            cp -r build/Build/Products/Release-iphoneos/Runner.app ../build/ios/iphoneos/
-            echo "✓ Build successful, Runner.app copied"
-          else
-            echo "✗ Build failed - Runner.app not found"
-            echo "Checking build directory:"
-            find build -name "*.app" -type d 2>/dev/null | head -10
-            exit 1
-          fi
-      
-      - name: Create IPA from build
+      - name: Build iOS app
         run: |
           cd frontend
-          # Создаём IPA вручную из собранного .app
+          # Используем flutter build ios напрямую с отключённой подписью
+          # Flutter сам вызовет xcodebuild с правильными параметрами
+          flutter build ios --release --no-codesign \
+            --build-args="--xcode-build-setting=CODE_SIGN_IDENTITY= --xcode-build-setting=CODE_SIGNING_REQUIRED=NO --xcode-build-setting=CODE_SIGNING_ALLOWED=NO --xcode-build-setting=DEVELOPMENT_TEAM=" || {
+            echo "flutter build ios failed, trying xcodebuild directly..."
+            cd ios
+            xcodebuild clean build \
+              -workspace Runner.xcworkspace \
+              -scheme Runner \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" \
+              PROVISIONING_PROFILE_SPECIFIER="" \
+              CODE_SIGN_STYLE=Manual
+            # Копируем результат
+            if [ -d "build/Build/Products/Release-iphoneos/Runner.app" ]; then
+              mkdir -p ../build/ios/iphoneos
+              cp -r build/Build/Products/Release-iphoneos/Runner.app ../build/ios/iphoneos/
+            fi
+          }
+          
+          # Проверяем результат
           if [ -d "build/ios/iphoneos/Runner.app" ]; then
-            echo "Creating IPA from Runner.app..."
-            cd build/ios/iphoneos
-            mkdir -p Payload
-            cp -r Runner.app Payload/
-            zip -r Runner.ipa Payload
-            mkdir -p ../ipa
-            mv Runner.ipa ../ipa/
-            echo "✓ IPA created at build/ios/ipa/Runner.ipa"
-            ls -lh ../ipa/
+            echo "✓ Build successful"
           else
-            echo "✗ Runner.app not found"
+            echo "✗ Build failed - Runner.app not found"
             exit 1
           fi
       
-      - name: Verify IPA exists
+      - name: Create IPA
         run: |
-          if [ -f "frontend/build/ios/ipa/Runner.ipa" ]; then
-            echo "IPA found at frontend/build/ios/ipa/Runner.ipa"
-            ls -lh frontend/build/ios/ipa/
-          elif [ -f "frontend/build/ios/ipa/*.ipa" ]; then
-            echo "IPA found with wildcard"
-            ls -lh frontend/build/ios/ipa/
-          else
-            echo "IPA not found, listing build directory:"
-            find frontend/build -name "*.ipa" -o -name "*.app" | head -20
-            exit 1
-          fi
+          cd frontend/build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r Runner.ipa Payload
+          mkdir -p ../ipa
+          mv Runner.ipa ../ipa/
+          echo "✓ IPA created"
+          ls -lh ../ipa/
       
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: |
-            frontend/build/ios/ipa/*.ipa
-            frontend/build/ios/iphoneos/*.ipa
+          path: frontend/build/ios/ipa/*.ipa
           if-no-files-found: error
           retention-days: 30
-
