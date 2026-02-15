@@ -106,27 +106,45 @@ jobs:
           import os
           import glob
           
-          # Исправляем пути в project.pbxproj
+          # Исправляем пути в project.pbxproj - более агрессивный поиск
           project_file = 'Runner.xcodeproj/project.pbxproj'
           if os.path.exists(project_file):
               with open(project_file, 'r') as f:
                   content = f.read()
               
-              # Заменяем абсолютные пути на относительные
-              content = re.sub(
-                  r"'/Target Support Files/([^']+)'",
-                  r"'$(SRCROOT)/Pods/Target Support Files/\1'",
-                  content
-              )
-              content = re.sub(
-                  r'"/Target Support Files/([^"]+)"',
-                  r'"$(SRCROOT)/Pods/Target Support Files/\1"',
-                  content
-              )
+              original = content
               
-              with open(project_file, 'w') as f:
-                  f.write(content)
-              print("✓ Fixed paths in project.pbxproj")
+              # Все возможные варианты абсолютных путей
+              patterns = [
+                  # С одинарными кавычками
+                  (r"'/Target Support Files/([^']+)'", r"'$(SRCROOT)/Pods/Target Support Files/\1'"),
+                  # С двойными кавычками
+                  (r'"/Target Support Files/([^"]+)"', r'"$(SRCROOT)/Pods/Target Support Files/\1"'),
+                  # Без кавычек, но с пробелом перед
+                  (r'(\s)/Target Support Files/([^\s;\)\]]+)', r'\1$(SRCROOT)/Pods/Target Support Files/\2'),
+                  # В начале строки или после =
+                  (r'(=)\s*/Target Support Files/([^\s;\)\]]+)', r'\1 $(SRCROOT)/Pods/Target Support Files/\2'),
+              ]
+              
+              for pattern, replacement in patterns:
+                  content = re.sub(pattern, replacement, content)
+              
+              if content != original:
+                  with open(project_file, 'w') as f:
+                      f.write(content)
+                  print("✓ Fixed paths in project.pbxproj")
+                  # Показываем, что было заменено
+                  diff_lines = [l for l in content.split('\n') if 'Target Support Files' in l and '$(SRCROOT)' in l]
+                  if diff_lines:
+                      print(f"Found {len(diff_lines)} fixed paths")
+              else:
+                  print("⚠ No paths found to fix in project.pbxproj")
+                  # Показываем, что ищем
+                  search_lines = [l for l in original.split('\n') if '/Target Support Files/' in l]
+                  if search_lines:
+                      print(f"Found {len(search_lines)} lines with absolute paths:")
+                      for line in search_lines[:5]:
+                          print(f"  {line.strip()[:100]}")
           
           # Исправляем пути в скриптах CocoaPods
           script_files = glob.glob('Pods/Target Support Files/Pods-Runner/*.sh')
@@ -141,48 +159,91 @@ jobs:
                       with open(script_file, 'w') as f:
                           f.write(content)
                       print(f"✓ Fixed paths in {script_file}")
-              except:
-                  pass
+              except Exception as e:
+                  print(f"⚠ Could not fix {script_file}: {e}")
           
-          print("✓ All paths fixed")
+          print("✓ Path fixing completed")
           PYTHON_SCRIPT
+          
+          # Дополнительно: ищем и исправляем пути в build phases
+          # CocoaPods может задавать пути в скриптах сборки
+          python3 << 'PYTHON_SCRIPT2'
+          import re
+          import os
+          
+          project_file = 'Runner.xcodeproj/project.pbxproj'
+          if os.path.exists(project_file):
+              with open(project_file, 'r') as f:
+                  content = f.read()
+              
+              # Ищем build phases, которые могут содержать абсолютные пути
+              # Ищем паттерны типа inputPaths или outputPaths с абсолютными путями
+              # Заменяем любые упоминания '/Target Support Files/' на относительный путь
+              
+              # Более агрессивная замена - ищем любые упоминания
+              lines = content.split('\n')
+              fixed_lines = []
+              fixed = False
+              
+              for line in lines:
+                  original_line = line
+                  # Заменяем абсолютные пути в любой форме
+                  if '/Target Support Files/' in line and '$(SRCROOT)' not in line:
+                      line = re.sub(
+                          r'/Target Support Files/',
+                          r'$(SRCROOT)/Pods/Target Support Files/',
+                          line
+                      )
+                      if line != original_line:
+                          fixed = True
+                  fixed_lines.append(line)
+              
+              if fixed:
+                  with open(project_file, 'w') as f:
+                      f.write('\n'.join(fixed_lines))
+                  print("✓ Fixed absolute paths in build phases")
+              else:
+                  print("⚠ No absolute paths found in build phases")
+          PYTHON_SCRIPT2
+          
+          # Также исправляем пути в скриптах, которые выполняются во время сборки
+          # Эти скрипты могут содержать абсолютные пути
+          find "Pods/Target Support Files" -type f -name "*.sh" -o -name "*.xcconfig" | while read file; do
+            if grep -q "/Target Support Files/" "$file" 2>/dev/null; then
+              sed -i '' "s|/Target Support Files/|\$(SRCROOT)/Pods/Target Support Files/|g" "$file" 2>/dev/null || true
+              echo "✓ Fixed paths in $file"
+            fi
+          done
           
           echo "✓ Pods files prepared for Release"
       
       - name: Build iOS app
         run: |
-          cd frontend
-          # Используем flutter build ios напрямую с отключённой подписью
-          # Flutter сам вызовет xcodebuild с правильными параметрами
-          flutter build ios --release --no-codesign \
-            --build-args="--xcode-build-setting=CODE_SIGN_IDENTITY= --xcode-build-setting=CODE_SIGNING_REQUIRED=NO --xcode-build-setting=CODE_SIGNING_ALLOWED=NO --xcode-build-setting=DEVELOPMENT_TEAM=" || {
-            echo "flutter build ios failed, trying xcodebuild directly..."
-            cd ios
-            xcodebuild clean build \
-              -workspace Runner.xcworkspace \
-              -scheme Runner \
-              -configuration Release \
-              -sdk iphoneos \
-              -destination 'generic/platform=iOS' \
-              -derivedDataPath build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              DEVELOPMENT_TEAM="" \
-              PROVISIONING_PROFILE_SPECIFIER="" \
-              CODE_SIGN_STYLE=Manual
-            # Копируем результат
-            if [ -d "build/Build/Products/Release-iphoneos/Runner.app" ]; then
-              mkdir -p ../build/ios/iphoneos
-              cp -r build/Build/Products/Release-iphoneos/Runner.app ../build/ios/iphoneos/
-            fi
-          }
+          cd frontend/ios
+          # Используем xcodebuild напрямую с отключённой подписью
+          xcodebuild clean build \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            CODE_SIGN_STYLE=Manual 2>&1 | tee build.log | tail -100
           
-          # Проверяем результат
-          if [ -d "build/ios/iphoneos/Runner.app" ]; then
-            echo "✓ Build successful"
+          # Копируем результат в ожидаемое место Flutter
+          if [ -d "build/Build/Products/Release-iphoneos/Runner.app" ]; then
+            mkdir -p ../build/ios/iphoneos
+            cp -r build/Build/Products/Release-iphoneos/Runner.app ../build/ios/iphoneos/
+            echo "✓ Build successful, Runner.app copied"
           else
             echo "✗ Build failed - Runner.app not found"
+            echo "Last 50 lines of build log:"
+            tail -50 build.log || true
             exit 1
           fi
       
