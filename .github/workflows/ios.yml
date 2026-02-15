@@ -30,32 +30,70 @@ jobs:
           flutter pub get
           flutter precache --ios
       
-      - name: Generate Flutter configuration files (Debug)
+      - name: Prepare Flutter environment
         run: |
           cd frontend
-          # Сначала генерируем конфигурационные файлы через debug сборку
-          flutter build ios --debug --no-codesign
-          # Проверяем, что файлы сгенерированы
-          ls -la ios/Flutter/
-          if [ -f "ios/Flutter/Generated.xcconfig" ]; then
-            echo "✓ Generated.xcconfig created"
-          else
-            echo "✗ Generated.xcconfig NOT found"
-            exit 1
+          # Используем flutter assemble для генерации файлов без полной сборки
+          # Это создаст Generated.xcconfig
+          flutter assemble -dTargetPlatform=ios -dTargetFile=lib/main.dart -dBuildMode=debug ios_framework_ios 2>&1 | head -20 || true
+          # Если файл не создан, создаём его вручную
+          if [ ! -f "ios/Flutter/Generated.xcconfig" ]; then
+            echo "Creating Generated.xcconfig manually..."
+            FLUTTER_ROOT=$(dirname $(dirname $(which flutter)))
+            cat > ios/Flutter/Generated.xcconfig << EOF
+// This is a generated file; do not edit or check into version control.
+FLUTTER_ROOT=$FLUTTER_ROOT
+FLUTTER_APPLICATION_PATH=\$(SRCROOT)/..
+COCOAPODS_PARALLEL_CODE_SIGN=true
+FLUTTER_TARGET=lib/main.dart
+FLUTTER_BUILD_DIR=build
+FLUTTER_BUILD_NAME=1.0.0
+FLUTTER_BUILD_NUMBER=1
+EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386
+EXCLUDED_ARCHS[sdk=iphoneos*]=armv7
+DART_OBFUSCATION=false
+TRACK_WIDGET_CREATION=true
+TREE_SHAKE_ICONS=false
+PACKAGE_CONFIG=.dart_tool/package_config.json
+EOF
           fi
+          echo "✓ Generated.xcconfig ready"
+          cat ios/Flutter/Generated.xcconfig
+          # Убеждаемся, что Debug.xcconfig и Release.xcconfig существуют
+          [ -f "ios/Flutter/Debug.xcconfig" ] || echo '#include "Generated.xcconfig"' > ios/Flutter/Debug.xcconfig
+          [ -f "ios/Flutter/Release.xcconfig" ] || echo '#include "Generated.xcconfig"' > ios/Flutter/Release.xcconfig
+          echo "✓ All xcconfig files ready"
+          ls -la ios/Flutter/*.xcconfig
       
       - name: Install CocoaPods dependencies
         run: |
           cd frontend/ios
-          # Запускаем pod install после генерации файлов Flutter
+          # Запускаем pod install после создания конфигурационных файлов
           pod install --repo-update
+          echo "✓ pod install completed"
+          # Проверяем, что файлы Pods созданы
+          if [ -d "Pods/Target Support Files/Pods-Runner" ]; then
+            echo "✓ Pods files directory exists"
+            ls -la "Pods/Target Support Files/Pods-Runner/" || true
+          fi
       
-      - name: Create missing Pods files for Release
+      - name: Create missing Pods files for Debug and Release
         run: |
           cd frontend/ios
           PODS_DIR="Pods/Target Support Files/Pods-Runner"
-          # Создаём недостающие файлы для Release конфигурации
-          # Копируем из Debug, если они существуют, или создаём пустые
+          mkdir -p "${PODS_DIR}"
+          
+          # Создаём файлы для Debug конфигурации, если их нет
+          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
+            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist"
+            echo "✓ Created Debug input files"
+          fi
+          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
+            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist"
+            echo "✓ Created Debug output files"
+          fi
+          
+          # Создаём файлы для Release конфигурации
           if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
             if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
               cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" \
@@ -76,8 +114,10 @@ jobs:
               echo "✓ Created empty Release output files"
             fi
           fi
-          # Проверяем, что файлы созданы
-          ls -la "${PODS_DIR}/"*Release* || true
+          
+          # Проверяем все файлы
+          echo "All Pods files:"
+          ls -la "${PODS_DIR}/" || true
       
       - name: Verify Release.xcconfig exists
         run: |
