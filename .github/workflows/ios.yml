@@ -30,24 +30,77 @@ jobs:
           flutter pub get
           flutter precache --ios
       
+      - name: Generate Flutter configuration files (Debug)
+        run: |
+          cd frontend
+          # Сначала генерируем конфигурационные файлы через debug сборку
+          flutter build ios --debug --no-codesign
+          # Проверяем, что файлы сгенерированы
+          ls -la ios/Flutter/
+          if [ -f "ios/Flutter/Generated.xcconfig" ]; then
+            echo "✓ Generated.xcconfig created"
+          else
+            echo "✗ Generated.xcconfig NOT found"
+            exit 1
+          fi
+      
       - name: Install CocoaPods dependencies
         run: |
           cd frontend/ios
+          # Запускаем pod install после генерации файлов Flutter
           pod install --repo-update
       
-      - name: Generate Flutter configuration files
+      - name: Create missing Pods files for Release
+        run: |
+          cd frontend/ios
+          PODS_DIR="Pods/Target Support Files/Pods-Runner"
+          # Создаём недостающие файлы для Release конфигурации
+          # Копируем из Debug, если они существуют, или создаём пустые
+          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
+            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
+              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" \
+                 "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
+              echo "✓ Copied Debug input files to Release"
+            else
+              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
+              echo "✓ Created empty Release input files"
+            fi
+          fi
+          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ]; then
+            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
+              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" \
+                 "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
+              echo "✓ Copied Debug output files to Release"
+            else
+              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
+              echo "✓ Created empty Release output files"
+            fi
+          fi
+          # Проверяем, что файлы созданы
+          ls -la "${PODS_DIR}/"*Release* || true
+      
+      - name: Verify Release.xcconfig exists
+        run: |
+          cd frontend/ios/Flutter
+          if [ -f "Release.xcconfig" ]; then
+            echo "✓ Release.xcconfig exists"
+            cat Release.xcconfig
+          else
+            echo "✗ Release.xcconfig NOT found, creating..."
+            echo '#include "Generated.xcconfig"' > Release.xcconfig
+          fi
+          # Проверяем Generated.xcconfig
+          if [ -f "Generated.xcconfig" ]; then
+            echo "✓ Generated.xcconfig exists"
+          else
+            echo "✗ Generated.xcconfig NOT found"
+            exit 1
+          fi
+      
+      - name: Clean debug build artifacts
         run: |
           cd frontend
-          # Генерируем конфигурационные файлы через flutter build
-          # Используем debug режим для генерации файлов, затем удаляем сборку
-          flutter build ios --debug --no-codesign 2>&1 | head -50 || true
-          # Проверяем, что файлы сгенерированы
-          if [ -f "ios/Flutter/Generated.xcconfig" ]; then
-            echo "Generated.xcconfig created successfully"
-          else
-            echo "Warning: Generated.xcconfig not found"
-          fi
-          # Удаляем debug сборку, оставляем только конфигурационные файлы
+          # Удаляем только артефакты сборки, оставляем конфигурационные файлы
           rm -rf build/ios/iphoneos build/ios/iphonesimulator
       
       - name: Build IPA
