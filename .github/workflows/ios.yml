@@ -64,71 +64,90 @@ jobs:
           pod install --repo-update
           echo "✓ CocoaPods dependencies installed"
       
-      - name: Fix Xcode project paths and create missing Pods files
+      - name: Build Debug first to generate Pods files
         run: |
           cd frontend/ios
+          # Собираем Debug конфигурацию, чтобы CocoaPods создал все необходимые файлы
+          xcodebuild clean build \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            CODE_SIGN_STYLE=Manual 2>&1 | tail -50 || true
           
-          # Создаём все необходимые файлы Pods
+          # Копируем созданные файлы Pods для Release
           PODS_DIR="Pods/Target Support Files/Pods-Runner"
+          if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
+            cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" \
+               "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" 2>/dev/null || true
+          fi
+          if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
+            cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" \
+               "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" 2>/dev/null || true
+          fi
+          
+          # Создаём файлы, если их всё ещё нет
           mkdir -p "${PODS_DIR}"
+          [ -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ] || echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
+          [ -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ] || echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
           
-          # Создаём файлы для Debug
-          [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ] || echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist"
-          [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ] || echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist"
+          # Удаляем debug сборку
+          rm -rf build-debug
           
-          # Создаём файлы для Release (копируем из Debug если есть, иначе пустые)
-          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
-            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
-              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-            else
-              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-            fi
-          fi
-          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ]; then
-            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
-              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-            else
-              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-            fi
-          fi
-          
-          # Исправляем абсолютные пути на относительные в project.pbxproj
+          # Исправляем абсолютные пути во всех файлах CocoaPods
           python3 << 'PYTHON_SCRIPT'
           import re
+          import os
+          import glob
           
+          # Исправляем пути в project.pbxproj
           project_file = 'Runner.xcodeproj/project.pbxproj'
-          with open(project_file, 'r') as f:
-              content = f.read()
+          if os.path.exists(project_file):
+              with open(project_file, 'r') as f:
+                  content = f.read()
+              
+              # Заменяем абсолютные пути на относительные
+              content = re.sub(
+                  r"'/Target Support Files/([^']+)'",
+                  r"'$(SRCROOT)/Pods/Target Support Files/\1'",
+                  content
+              )
+              content = re.sub(
+                  r'"/Target Support Files/([^"]+)"',
+                  r'"$(SRCROOT)/Pods/Target Support Files/\1"',
+                  content
+              )
+              
+              with open(project_file, 'w') as f:
+                  f.write(content)
+              print("✓ Fixed paths in project.pbxproj")
           
-          # Заменяем все варианты абсолютных путей на относительные
-          # Вариант 1: '/Target Support Files/...'
-          content = re.sub(
-              r"'/Target Support Files/([^']+)'",
-              r"'$(SRCROOT)/Pods/Target Support Files/\1'",
-              content
-          )
+          # Исправляем пути в скриптах CocoaPods
+          script_files = glob.glob('Pods/Target Support Files/Pods-Runner/*.sh')
+          for script_file in script_files:
+              try:
+                  with open(script_file, 'r') as f:
+                      content = f.read()
+                  original = content
+                  content = re.sub(r"'/Target Support Files/", "'$(SRCROOT)/Pods/Target Support Files/", content)
+                  content = re.sub(r'"/Target Support Files/', '"$(SRCROOT)/Pods/Target Support Files/', content)
+                  if content != original:
+                      with open(script_file, 'w') as f:
+                          f.write(content)
+                      print(f"✓ Fixed paths in {script_file}")
+              except:
+                  pass
           
-          # Вариант 2: "/Target Support Files/..."
-          content = re.sub(
-              r'"/Target Support Files/([^"]+)"',
-              r'"$(SRCROOT)/Pods/Target Support Files/\1"',
-              content
-          )
-          
-          # Вариант 3: без кавычек в некоторых местах
-          content = re.sub(
-              r'(\s)/Target Support Files/([^\s;]+)',
-              r'\1$(SRCROOT)/Pods/Target Support Files/\2',
-              content
-          )
-          
-          with open(project_file, 'w') as f:
-              f.write(content)
-          
-          print("✓ Fixed paths in project.pbxproj")
+          print("✓ All paths fixed")
           PYTHON_SCRIPT
           
-          echo "✓ All Pods files created and paths fixed"
+          echo "✓ Pods files prepared for Release"
       
       - name: Build iOS app
         run: |
