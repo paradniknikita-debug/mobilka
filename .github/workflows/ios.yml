@@ -157,6 +157,40 @@ jobs:
           pod install --repo-update 2>&1 | tail -20
           echo "✓ pod install completed"
       
+      - name: Fix Pods file paths in Xcode project
+        run: |
+          cd frontend/ios
+          # Исправляем абсолютные пути на относительные в project.pbxproj
+          # Заменяем '/Target Support Files/' на правильный относительный путь
+          python3 << 'PYTHON_SCRIPT'
+          import re
+          import os
+          
+          project_file = 'Runner.xcodeproj/project.pbxproj'
+          with open(project_file, 'r') as f:
+              content = f.read()
+          
+          # Заменяем абсолютные пути на относительные
+          # Ищем паттерны типа '/Target Support Files/...' и заменяем на правильный путь
+          content = re.sub(
+              r"'/Target Support Files/([^']+)'",
+              r"'$(SRCROOT)/Pods/Target Support Files/\1'",
+              content
+          )
+          
+          # Также заменяем без кавычек
+          content = re.sub(
+              r'"/Target Support Files/([^"]+)"',
+              r'"$(SRCROOT)/Pods/Target Support Files/\1"',
+              content
+          )
+          
+          with open(project_file, 'w') as f:
+              f.write(content)
+          
+          print("✓ Fixed Pods file paths in project.pbxproj")
+          PYTHON_SCRIPT
+      
       - name: Ensure Pods files exist for Release
         run: |
           cd frontend/ios
@@ -164,13 +198,26 @@ jobs:
           mkdir -p "${PODS_DIR}"
           
           # Создаём файлы для Release, если их нет
+          # Копируем из Debug, если они существуют
           if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
-            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-            echo "✓ Created Release input files"
+            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" ]; then
+              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-input-files.xcfilelist" \
+                 "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
+              echo "✓ Copied Debug input files to Release"
+            else
+              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
+              echo "✓ Created empty Release input files"
+            fi
           fi
           if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ]; then
-            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-            echo "✓ Created Release output files"
+            if [ -f "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" ]; then
+              cp "${PODS_DIR}/Pods-Runner-frameworks-Debug-output-files.xcfilelist" \
+                 "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
+              echo "✓ Copied Debug output files to Release"
+            else
+              echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
+              echo "✓ Created empty Release output files"
+            fi
           fi
           
           # Проверяем все файлы
