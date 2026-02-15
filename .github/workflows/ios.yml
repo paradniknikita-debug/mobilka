@@ -143,13 +143,44 @@ jobs:
           # Удаляем только артефакты сборки, оставляем конфигурационные файлы
           rm -rf build/ios/iphoneos build/ios/iphonesimulator
       
-      - name: Build iOS app using xcodebuild
+      - name: Prepare Flutter framework
         run: |
           cd frontend
-          # Подготавливаем Flutter файлы
-          flutter assemble -dTargetPlatform=ios -dTargetFile=lib/main.dart -dBuildMode=release ios_framework_ios 2>&1 | head -30 || true
+          # Подготавливаем Flutter framework с указанием выходной директории
+          flutter assemble -dTargetPlatform=ios -dTargetFile=lib/main.dart -dBuildMode=release -o build/ios ios_framework_ios 2>&1 | head -30 || true
+          echo "✓ Flutter framework prepared"
+      
+      - name: Re-run pod install to generate Release files
+        run: |
+          cd frontend/ios
+          # Запускаем pod install снова, чтобы создать файлы для Release конфигурации
+          pod install --repo-update 2>&1 | tail -20
+          echo "✓ pod install completed"
+      
+      - name: Ensure Pods files exist for Release
+        run: |
+          cd frontend/ios
+          PODS_DIR="Pods/Target Support Files/Pods-Runner"
+          mkdir -p "${PODS_DIR}"
           
-          cd ios
+          # Создаём файлы для Release, если их нет
+          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist" ]; then
+            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-input-files.xcfilelist"
+            echo "✓ Created Release input files"
+          fi
+          if [ ! -f "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist" ]; then
+            echo "" > "${PODS_DIR}/Pods-Runner-frameworks-Release-output-files.xcfilelist"
+            echo "✓ Created Release output files"
+          fi
+          
+          # Проверяем все файлы
+          echo "Pods files:"
+          ls -la "${PODS_DIR}/"*Release* 2>/dev/null || echo "No Release files found"
+          ls -la "${PODS_DIR}/"*Debug* 2>/dev/null || echo "No Debug files found"
+      
+      - name: Build iOS app using xcodebuild
+        run: |
+          cd frontend/ios
           # Собираем через xcodebuild с явным отключением подписи
           xcodebuild clean build \
             -workspace Runner.xcworkspace \
@@ -171,7 +202,9 @@ jobs:
             cp -r build/Build/Products/Release-iphoneos/Runner.app ../build/ios/iphoneos/
             echo "✓ Build successful, Runner.app copied"
           else
-            echo "✗ Build failed"
+            echo "✗ Build failed - Runner.app not found"
+            echo "Checking build directory:"
+            find build -name "*.app" -type d 2>/dev/null | head -10
             exit 1
           fi
       
