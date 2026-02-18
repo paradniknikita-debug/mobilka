@@ -74,9 +74,9 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Генератор SQL запроса для создания пользователя')
-    parser.add_argument('--username', '-u', default='admin', help='Имя пользователя (по умолчанию: admin)')
-    parser.add_argument('--email', '-e', default='admin@example.com', help='Email (по умолчанию: admin@example.com)')
-    parser.add_argument('--password', '-p', required=True, help='Пароль (обязательно)')
+    parser.add_argument('--username', '-u', default=None, help='Имя пользователя (по умолчанию: admin)')
+    parser.add_argument('--email', '-e', default=None, help='Email (по умолчанию: admin@example.com)')
+    parser.add_argument('--password', '-p', default=None, help='Пароль (если не указан, будет интерактивный режим)')
     parser.add_argument('--full-name', '-n', default=None, help='Полное имя (по умолчанию: равно username)')
     parser.add_argument('--role', '-r', default='admin', choices=['engineer', 'dispatcher', 'admin'], 
                        help='Роль (по умолчанию: admin)')
@@ -87,8 +87,9 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # Интерактивный режим
-    if args.interactive:
+    # Если пароль не указан, автоматически переходим в интерактивный режим
+    # Или если явно указан флаг --interactive
+    if args.interactive or args.password is None:
         print("=" * 60)
         print("Генератор SQL запроса для создания пользователя")
         print("=" * 60)
@@ -114,13 +115,18 @@ if __name__ == "__main__":
             exit(0)
     else:
         # Режим с аргументами
-        username = args.username
-        email = args.email
+        username = args.username or "admin"
+        email = args.email or "admin@example.com"
         password = args.password
         full_name = args.full_name
         role = args.role
         branch_id = args.branch_id
         is_superuser = args.superuser
+        
+        if not password:
+            print("Ошибка: пароль не может быть пустым!")
+            print("Используйте --password или запустите в интерактивном режиме (--interactive)")
+            exit(1)
     
     print()
     print("=" * 60)
