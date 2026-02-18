@@ -115,7 +115,7 @@ abstract class ApiService {
 
 // Расширенный интерфейс с методом exportCimXml
 // (не может быть в Retrofit из-за бинарных ответов)
-abstract class ApiServiceWithExport extends ApiService {
+abstract class ApiServiceWithExport implements ApiService {
   Future<Response<List<int>>> exportCimXml(
     bool useCimpy,
     bool includeSubstations,
