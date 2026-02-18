@@ -5,11 +5,9 @@ export const environment = {
   apiVersion: 'v1',
   
   get apiUrl(): string {
-    const protocol = this.useHttps ? 'https' : 'http';
-    // В продакшене через nginx (порт 80/443), используем текущий хост
-    const hostname = window.location.hostname;
-    const port = window.location.port ? `:${window.location.port}` : '';
-    return `${protocol}://${hostname}${port}/api/${this.apiVersion}`;
+    // В продакшене используем относительный путь через nginx (без порта 8000)
+    // Это избегает проблем с Mixed Content и работает с HTTPS
+    return `/api/${this.apiVersion}`;
   },
   
   map: {
