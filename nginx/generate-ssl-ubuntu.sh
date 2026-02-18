@@ -37,24 +37,47 @@ echo ""
 
 # Генерация самоподписанного сертификата
 echo "[3/3] Генерация самоподписанного сертификата (действителен 365 дней)..."
+echo "   Включая поддержку IP адресов для мобильных устройств..."
+
+# Создаем временный конфиг файл для OpenSSL
+CONFIG_FILE=$(mktemp)
+cat > "$CONFIG_FILE" <<EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+C = BY
+ST = Minsk
+L = Minsk
+O = LEPM
+CN = 85.239.48.199
+
+[v3_req]
+keyUsage = digitalSignature, keyEncipherment, keyAgreement
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = @alt_names
+basicConstraints = CA:FALSE
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = *.localhost
+DNS.3 = 85.239.48.199
+IP.1 = 127.0.0.1
+IP.2 = ::1
+IP.3 = 85.239.48.199
+EOF
+
 openssl req -new -x509 \
     -key "$SSL_FULL_PATH/key.pem" \
     -out "$SSL_FULL_PATH/cert.pem" \
     -days 365 \
-    -subj "/C=BY/ST=Minsk/L=Minsk/O=LEPM/CN=localhost" \
     -extensions v3_req \
-    -config <(
-        echo "[req]"
-        echo "distinguished_name=req"
-        echo "[v3_req]"
-        echo "keyUsage=keyEncipherment,dataEncipherment"
-        echo "extendedKeyUsage=serverAuth"
-        echo "subjectAltName=@alt_names"
-        echo "[alt_names]"
-        echo "DNS.1=localhost"
-        echo "DNS.2=*.localhost"
-        echo "IP.1=127.0.0.1"
-    )
+    -config "$CONFIG_FILE"
+
+# Удаляем временный файл
+rm -f "$CONFIG_FILE"
 
 chmod 644 "$SSL_FULL_PATH/cert.pem"
 echo "✅ Сертификат создан: $SSL_FULL_PATH/cert.pem"
