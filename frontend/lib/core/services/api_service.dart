@@ -111,9 +111,11 @@ abstract class ApiService {
 
   @GET('/sync/schema/{entity_type}')
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
+}
 
-  // CIM Export - реализован вручную через Dio (Retrofit не поддерживает бинарные ответы)
-  // Метод реализован в ApiServiceProvider
+// Расширенный интерфейс с методом exportCimXml
+// (не может быть в Retrofit из-за бинарных ответов)
+abstract class ApiServiceWithExport extends ApiService {
   Future<Response<List<int>>> exportCimXml(
     bool useCimpy,
     bool includeSubstations,
@@ -124,7 +126,7 @@ abstract class ApiService {
 class ApiServiceProvider {
   static SharedPreferences? _prefs;
   
-  static ApiService create({SharedPreferences? prefs}) {
+  static ApiServiceWithExport create({SharedPreferences? prefs}) {
     _prefs = prefs; // Сохраняем prefs статически
     final dio = Dio();
     final urlManager = BaseUrlManager();
@@ -270,7 +272,7 @@ class ApiServiceProvider {
   }
 }
 
-final apiServiceProvider = Provider<ApiService>((ref) {
+final apiServiceProvider = Provider<ApiServiceWithExport>((ref) {
   try {
     final prefs = ref.watch(prefsProvider);
     return ApiServiceProvider.create(prefs: prefs);
@@ -351,7 +353,7 @@ final dioProvider = Provider<Dio>((ref) {
 
 /// Обёртка для ApiService, добавляющая метод exportCimXml
 /// (Retrofit не поддерживает бинарные ответы через аннотации)
-class _ApiServiceWrapper implements ApiService {
+class _ApiServiceWrapper implements ApiServiceWithExport {
   final ApiService _delegate;
   final Dio _dio;
 
