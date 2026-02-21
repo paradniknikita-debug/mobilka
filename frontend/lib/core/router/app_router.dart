@@ -5,10 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/map/presentation/pages/map_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/settings/presentation/pages/server_settings_page.dart';
+import '../../features/session/presentation/pages/create_session_page.dart';
+import '../../features/session/presentation/pages/continue_session_page.dart';
+import '../../features/patrols/presentation/pages/patrols_list_page.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/widgets/main_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -63,12 +68,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
       
-      // Если авторизован и на странице логина/регистрации - перенаправляем на карту
+      // Если авторизован и на странице логина/регистрации - перенаправляем на главный экран
       if (isAuthenticated && (isLoggingIn || isRegistering)) {
         if (kDebugMode) {
-          print('   → [Router] Перенаправление на /map (авторизован на странице логина/регистрации)');
+          print('   → [Router] Перенаправление на / (главная)');
         }
-        return '/map';
+        return '/';
       }
       
       if (kDebugMode) {
@@ -77,6 +82,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null; // Разрешаем навигацию
     },
     routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            MainShellWithNavBar(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (context, state) => const HomePage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                builder: (context, state) => const ProfilePage(),
+              ),
+            ],
+          ),
+        ],
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginPage(),
@@ -88,6 +115,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/map',
         builder: (context, state) => const MapPage(),
+      ),
+      GoRoute(
+        path: '/session/new',
+        builder: (context, state) => const CreateSessionPage(),
+      ),
+      GoRoute(
+        path: '/session/continue',
+        builder: (context, state) => const ContinueSessionPage(),
+      ),
+      GoRoute(
+        path: '/patrols',
+        builder: (context, state) => const PatrolsListPage(),
       ),
       GoRoute(
         path: '/profile',

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
+from app.models.patrol_session import PatrolSession
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.schemas.power_line import (
@@ -1168,6 +1169,11 @@ async def delete_power_line(
         connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.power_line_id == power_line_id)
         await db.execute(connectivity_node_stmt)
         print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
+        
+        # Удаляем сессии обхода, привязанные к этой ЛЭП (power_line_id NOT NULL — обнулить нельзя)
+        patrol_sessions_stmt = delete(PatrolSession).where(PatrolSession.power_line_id == power_line_id)
+        await db.execute(patrol_sessions_stmt)
+        print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
         
         # Удаляем ЛЭП (каскадное удаление опор, пролётов, отпаек и сегментов настроено в модели)
         # Используем delete через сессию для правильной работы каскадов

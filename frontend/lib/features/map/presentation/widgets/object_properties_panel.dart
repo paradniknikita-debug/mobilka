@@ -205,9 +205,9 @@ class ObjectPropertiesPanel extends StatelessWidget {
       ),
       _buildPropertyItem(
         context,
-        'Координаты (ш,д):',
-        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        'Позиция (X, Y):',
+        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
+        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
       ),
       if (objectProperties['sequence_number'] != null)
         _buildPropertyItem(
@@ -267,9 +267,9 @@ class ObjectPropertiesPanel extends StatelessWidget {
       ),
       _buildPropertyItem(
         context,
-        'Координаты (ш,д):',
-        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        'Позиция (X, Y):',
+        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
+        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
       ),
     ];
   }
@@ -294,9 +294,9 @@ class ObjectPropertiesPanel extends StatelessWidget {
         ),
       _buildPropertyItem(
         context,
-        'Координаты (ш,д):',
-        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        'Позиция (X, Y):',
+        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
+        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
       ),
     ];
   }

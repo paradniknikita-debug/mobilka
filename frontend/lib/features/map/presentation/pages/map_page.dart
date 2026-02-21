@@ -15,17 +15,23 @@ import 'package:drift/drift.dart' as drift;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 
+import '../../../../core/services/connectivity_status.dart';
+
 // Платформенное скачивание: веб — через dart:html, мобильные — через файл
 import 'file_download_stub.dart' if (dart.library.html) 'file_download_web.dart' as file_download;
 
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/sync_service.dart';
+import '../../../../core/services/pending_sync_provider.dart';
+import '../../../../core/services/offline_map_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/models/substation.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
+import '../../../home/presentation/pages/home_page.dart' show activeSessionProvider, recentPatrolsProvider;
 import '../widgets/object_properties_panel.dart' show ObjectPropertiesPanel, ObjectType;
 
 class MapPage extends ConsumerStatefulWidget {
@@ -68,6 +74,23 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// ID ЛЭП, раскрытых в дереве объектов (при клике на опору на карте)
   final Set<int> _expandedPowerLineIds = {};
+  /// Обновили ли карту после завершения синхронизации (чтобы не дергать при каждом build)
+  bool _hasRefreshedAfterSyncCompleted = false;
+  /// Карта готова к использованию MapController (вызван onMapReady).
+  bool _mapReady = false;
+  /// Отложенное центрирование на объектах — применить в onMapReady, т.к. MapController нельзя использовать до первого рендера FlutterMap.
+  LatLng? _pendingCenterOnObjects;
+  /// Зум для отложенного центрирования (например 18 для созданной опоры).
+  double? _pendingCenterZoom;
+
+  /// Название текущей ЛЭП для кнопки «Завершить обход ЛЭП «…»».
+  String get _currentPowerLineDisplayName {
+    if (_currentPowerLineId == null || _powerLinesList == null) return 'ЛЭП';
+    final match = _powerLinesList!.where((pl) => pl.id == _currentPowerLineId);
+    return match.isEmpty ? 'ЛЭП' : match.first.name;
+  }
+  /// Отложенное центрирование на текущее местоположение (пока карта не готова).
+  LatLng? _pendingCenterOnLocation;
 
   @override
   void initState() {
@@ -161,15 +184,19 @@ class _MapPageState extends ConsumerState<MapPage> {
         _currentLocation = LatLng(position.latitude, position.longitude);
       });
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _currentLocation != null) {
-          try {
-            _mapController.move(_currentLocation!, AppConfig.defaultZoom);
-          } catch (e) {
-            print('Ошибка центрирования карты: $e');
+      if (_mapReady) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _currentLocation != null) {
+            try {
+              _mapController.move(_currentLocation!, AppConfig.defaultZoom);
+            } catch (e) {
+              print('Ошибка центрирования карты: $e');
+            }
           }
-        }
-      });
+        });
+      } else {
+        _pendingCenterOnLocation = _currentLocation;
+      }
     } catch (e) {
       print('Ошибка получения местоположения: $e');
       setState(() {
@@ -241,6 +268,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           )).toList();
           _errorMessage = null;
         });
+        _applyActiveSessionIfNeeded();
         _centerOnObjects();
       }
     } catch (e) {
@@ -248,6 +276,105 @@ class _MapPageState extends ConsumerState<MapPage> {
         setState(() => _errorMessage = 'Ошибка загрузки локальных данных: $e');
       }
     }
+  }
+
+  /// Устанавливает текущую ЛЭП из активной сессии обхода, если она есть в списке линий.
+  void _applyActiveSessionIfNeeded() {
+    final prefs = ref.read(prefsProvider);
+    if (prefs == null) return;
+    final sessionLineId = prefs.getInt(AppConfig.activeSessionPowerLineIdKey);
+    if (sessionLineId == null) return;
+    if (_powerLinesList != null &&
+        _powerLinesList!.any((pl) => pl.id == sessionLineId)) {
+      setState(() => _currentPowerLineId = sessionLineId);
+    }
+  }
+
+  /// Сбросить активную сессию обхода, если она привязана к указанной линии (например, при удалении линии).
+  Future<void> _clearActiveSessionIfLine(int powerLineId) async {
+    final prefs = ref.read(prefsProvider);
+    if (prefs == null) return;
+    final sessionLineId = prefs.getInt(AppConfig.activeSessionPowerLineIdKey);
+    if (sessionLineId != powerLineId) return;
+    await prefs.remove(AppConfig.activeSessionPowerLineIdKey);
+    await prefs.remove(AppConfig.activeSessionStartTimeKey);
+    await prefs.remove(AppConfig.activeSessionNoteKey);
+    await prefs.remove(AppConfig.activeSessionLatKey);
+    await prefs.remove(AppConfig.activeSessionLonKey);
+    if (mounted) setState(() => _currentPowerLineId = null);
+  }
+
+  /// Завершить текущий обход: сброс активной сессии и текущей ЛЭП.
+  Future<void> _finishPatrol() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Завершить обход?'),
+        content: const Text(
+          'Текущая сессия обхода будет завершена. Вы сможете начать новый обход с главного экрана.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Завершить обход'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final prefs = ref.read(prefsProvider);
+    final localSessionId = prefs?.getInt(AppConfig.activeSessionLocalIdKey);
+    if (localSessionId != null) {
+      final db = ref.read(drift_db.databaseProvider);
+      final row = await db.getPatrolSession(localSessionId);
+      if (row != null) {
+        await db.setPatrolSessionEnded(localSessionId, DateTime.now());
+        if (row.serverId != null) {
+          try {
+            final apiService = ref.read(apiServiceProvider);
+            await apiService.endPatrolSession(row.serverId!);
+          } catch (_) {
+            // Офлайн: сессия помечена завершённой локально, уйдёт на сервер при синхронизации
+          }
+        }
+      }
+    }
+    if (localSessionId == null) {
+      final serverSessionId = prefs?.getInt(AppConfig.activeSessionServerIdKey);
+      if (serverSessionId != null) {
+        try {
+          final apiService = ref.read(apiServiceProvider);
+          await apiService.endPatrolSession(serverSessionId);
+        } catch (_) {
+          // Офлайн — сервер получит при следующей синхронизации (если сессия была создана с сервера)
+        }
+      }
+    }
+    if (prefs != null) {
+      await prefs.remove(AppConfig.activeSessionPowerLineIdKey);
+      await prefs.remove(AppConfig.activeSessionStartTimeKey);
+      await prefs.remove(AppConfig.activeSessionNoteKey);
+      await prefs.remove(AppConfig.activeSessionLatKey);
+      await prefs.remove(AppConfig.activeSessionLonKey);
+      await prefs.remove(AppConfig.activeSessionLocalIdKey);
+      await prefs.remove(AppConfig.activeSessionServerIdKey);
+    }
+    ref.invalidate(pendingPatrolSessionsCountProvider);
+    ref.invalidate(hasPendingSyncProvider);
+    ref.invalidate(activeSessionProvider);
+    if (!mounted) return;
+    setState(() => _currentPowerLineId = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Обход завершён'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Future<void> _loadMapData() async {
@@ -355,12 +482,29 @@ class _MapPageState extends ConsumerState<MapPage> {
           _powerLinesList = powerLinesList;
           _errorMessage = null;
         });
+        _applyActiveSessionIfNeeded();
 
         _centerOnObjects();
       }
     } catch (e) {
       print('❌ Ошибка загрузки данных карты: $e');
-      
+
+      // Ошибка соединения или таймаут — показываем карту из локальной БД (офлайн)
+      final isConnectionError = e is DioException &&
+          (e.type == DioExceptionType.connectionError ||
+              e.type == DioExceptionType.connectionTimeout);
+      if (isConnectionError && mounted) {
+        await _loadMapDataFromLocal();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Нет связи с сервером. Показаны локальные данные. Синхронизация при подключении.'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
       // Проверяем, не ошибка ли авторизации (401)
       if (e is DioException && e.response?.statusCode == 401) {
         if (mounted) {
@@ -435,9 +579,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
 
-    if (center != null && mounted) {
+    if (center == null || !mounted) return;
+    if (_mapReady) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (mounted && _mapReady) {
           try {
             _mapController.move(center!, AppConfig.defaultZoom);
           } catch (e) {
@@ -445,11 +590,30 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         }
       });
+    } else {
+      _pendingCenterOnObjects = center;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // После успешной синхронизации обновляем карту (локальные ЛЭП/опоры уже в Drift и на сервере)
+    ref.listen<SyncState>(syncStateProvider, (prev, next) {
+      final nextCompleted = next.when(idle: () => false, syncing: () => false, completed: () => true, error: (_) => false);
+      final prevCompleted = prev?.when(idle: () => false, syncing: () => false, completed: () => true, error: (_) => false) ?? false;
+      if (!nextCompleted) _hasRefreshedAfterSyncCompleted = false;
+      if (nextCompleted && !prevCompleted && mounted) {
+        _hasRefreshedAfterSyncCompleted = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _loadMapData());
+      }
+    });
+    // Если открыли карту, а синхронизация уже завершена — один раз обновить данные
+    final syncState = ref.watch(syncStateProvider);
+    final syncCompleted = syncState.when(idle: () => false, syncing: () => false, completed: () => true, error: (_) => false);
+    if (syncCompleted && !_hasRefreshedAfterSyncCompleted && mounted) {
+      _hasRefreshedAfterSyncCompleted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMapData());
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Карта'),
@@ -494,34 +658,38 @@ class _MapPageState extends ConsumerState<MapPage> {
                     minZoom: AppConfig.minZoom,
                     maxZoom: AppConfig.maxZoom,
                     onMapReady: () {
-                      if (_currentLocation != null) {
-                        try {
-                          _mapController.move(_currentLocation!, AppConfig.defaultZoom);
-                        } catch (e) {
-                          print('Ошибка центрирования при готовности карты: $e');
+                      _mapReady = true;
+                      try {
+                        final target = _pendingCenterOnObjects ?? _pendingCenterOnLocation ?? _currentLocation;
+                        final zoom = _pendingCenterZoom ?? AppConfig.defaultZoom;
+                        if (target != null) {
+                          _mapController.move(target, zoom);
                         }
+                        _pendingCenterOnObjects = null;
+                        _pendingCenterZoom = null;
+                        _pendingCenterOnLocation = null;
+                      } catch (e) {
+                        print('Ошибка центрирования при готовности карты: $e');
                       }
                     },
                   ),
                   children: [
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      // Игнорируем ошибки отмененных запросов тайлов (это нормально при быстром перемещении карты)
+                      tileProvider: OfflineMapService.instance.getTileProvider(),
                       errorTileCallback: (tile, error, stackTrace) {
-                        // Полностью подавляем ошибки отмененных запросов (это нормальное поведение)
-                        // FlutterMap автоматически отменяет запросы тайлов при быстром перемещении карты
                         final errorStr = error.toString().toLowerCase();
-                        if (errorStr.contains('aborttrigger') || 
+                        if (errorStr.contains('aborttrigger') ||
                             errorStr.contains('requestabortedexception') ||
-                            errorStr.contains('request aborted')) {
-                          return; // Игнорируем отмененные запросы - это нормально
+                            errorStr.contains('request aborted') ||
+                            errorStr.contains('fmctbrowsingerror') ||
+                            errorStr.contains('noconnectionduringfetch')) {
+                          return; // Ожидаемо при офлайне или отмене — не логируем
                         }
-                        // Логируем только реальные сетевые ошибки (не отмененные запросы)
                         if (kDebugMode) {
                           print('⚠️ Ошибка загрузки тайла: $error');
                         }
                       },
-                      // Увеличиваем таймаут для загрузки тайлов
                       maxNativeZoom: 19,
                       maxZoom: 18,
                       userAgentPackageName: 'com.lepm.mobile',
@@ -564,6 +732,54 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ),
                   ],
                 ),
+
+                // Статус подключения (Онлайн / Офлайн / Нестабильно) сверху по центру
+                Positioned(
+                  top: 8,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: _MapConnectionStatusBadge(status: ref.watch(connectivityStatusProvider)),
+                  ),
+                ),
+
+                // Кнопка «Завершить обход ЛЭП «…»» — показывается при активной сессии
+                if (_currentPowerLineId != null)
+                  Positioned(
+                    top: 50,
+                    left: 16,
+                    child: Material(
+                      elevation: 2,
+                      borderRadius: BorderRadius.circular(20),
+                      child: InkWell(
+                        onTap: _finishPatrol,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.red.shade300),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.stop_circle, size: 20, color: Colors.red.shade700),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Завершить обход ЛЭП «$_currentPowerLineDisplayName»',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.red.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 
                 // Быстрое меню настроек в режиме навигатора (не блокирует экран)
                 if (_isNavigatorMode)
@@ -610,10 +826,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                           ],
                         )
                       : FloatingActionButton.extended(
-                          onPressed: _showCreatePoleDialog,
+                          onPressed: _currentPowerLineId != null ? _showCreatePoleDialog : null,
                           icon: const Icon(Icons.add_location_alt),
                           label: const Text('Создать опору'),
-                          tooltip: 'Создать опору с текущими GPS координатами',
+                          tooltip: _currentPowerLineId != null
+                              ? 'Создать опору в линии текущего обхода'
+                              : 'Начните обход ЛЭП, чтобы создавать опоры',
                         ),
                 ),
                 
@@ -649,23 +867,27 @@ class _MapPageState extends ConsumerState<MapPage> {
   List<Polyline> _buildPowerLinePolylines() {
     final polylines = <Polyline>[];
     final features = _powerLinesData?['features'] as List<dynamic>? ?? [];
+    final powerLineIdsWithGeometry = <int>{};
 
     for (final feature in features) {
       try {
         final geometry = feature['geometry'] as Map<String, dynamic>?;
+        final props = feature['properties'] as Map<String, dynamic>?;
         if (geometry != null && geometry['type'] == 'LineString') {
           final coordinates = geometry['coordinates'] as List<dynamic>?;
-          if (coordinates != null) {
+          if (coordinates != null && coordinates.isNotEmpty) {
+            final id = props != null ? _toInt(props['id']) : null;
+            if (id != null) powerLineIdsWithGeometry.add(id);
             final points = coordinates.map((coord) => LatLng(
               (coord[1] as num).toDouble(),
               (coord[0] as num).toDouble(),
             )).toList();
-            
+            final isCurrentPatrol = id != null && id == _currentPowerLineId;
             polylines.add(
               Polyline(
                 points: points,
-                strokeWidth: 3.0,
-                color: Colors.red,
+                strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
+                color: isCurrentPatrol ? Colors.green : Colors.red,
               ),
             );
           }
@@ -675,7 +897,59 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
 
+    // Опоры без связи: ЛЭП есть в опорах, но геометрии линии нет на сервере — строим линию по точкам опор
+    final poleFeatures = _polesData?['features'] as List<dynamic>? ?? [];
+    final polesByPowerLine = <int, List<Map<String, dynamic>>>{};
+    for (final feature in poleFeatures) {
+      try {
+        final props = feature['properties'] as Map<String, dynamic>?;
+        final geom = feature['geometry'] as Map<String, dynamic>?;
+        final plId = props != null ? _toInt(props['power_line_id']) : null;
+        if (plId == null || geom == null || geom['type'] != 'Point') continue;
+        final coords = geom['coordinates'] as List<dynamic>?;
+        if (coords == null || coords.length < 2) continue;
+        polesByPowerLine.putIfAbsent(plId, () => []).add({
+          'lat': (coords[1] as num).toDouble(),
+          'lng': (coords[0] as num).toDouble(),
+          'pole_number': props!['pole_number']?.toString() ?? '',
+        });
+      } catch (_) {}
+    }
+    for (final entry in polesByPowerLine.entries) {
+      final powerLineId = entry.key;
+      if (powerLineIdsWithGeometry.contains(powerLineId)) continue;
+      final list = entry.value;
+      if (list.length < 2) continue;
+      list.sort((a, b) => (a['pole_number'] as String).compareTo(b['pole_number'] as String));
+      final points = list.map((e) => LatLng(e['lat'] as double, e['lng'] as double)).toList();
+      final isCurrentPatrol = powerLineId == _currentPowerLineId;
+      polylines.add(
+        Polyline(
+          points: points,
+          strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
+          color: isCurrentPatrol ? Colors.green : Colors.orange,
+        ),
+      );
+    }
+
     return polylines;
+  }
+
+  static int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
+
+  /// Формат номинала напряжения: «н/д» при отсутствии или 0, иначе «X кВ».
+  static String _formatVoltageDisplay(double? voltageLevel) {
+    if (voltageLevel == null || voltageLevel == 0) return 'н/д';
+    final v = voltageLevel == voltageLevel.roundToDouble()
+        ? voltageLevel.toInt()
+        : voltageLevel;
+    return '$v кВ';
   }
 
   List<Marker> _buildPoleMarkers() {
@@ -699,7 +973,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             final poleProperties = Map<String, dynamic>.from(properties ?? {});
             poleProperties['latitude'] = latLng.latitude;
             poleProperties['longitude'] = latLng.longitude;
-            
+
+            final plId = _toInt(properties?['power_line_id']);
+            final isCurrentPatrolLine = _currentPowerLineId != null && plId == _currentPowerLineId;
+
             markers.add(
               Marker(
                 point: latLng,
@@ -708,9 +985,15 @@ class _MapPageState extends ConsumerState<MapPage> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.blue,
+                      color: isCurrentPatrolLine ? Colors.green : Colors.blue,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(
+                        color: Colors.white,
+                        width: isCurrentPatrolLine ? 3 : 2,
+                      ),
+                      boxShadow: isCurrentPatrolLine
+                          ? [BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 6, spreadRadius: 1)]
+                          : null,
                     ),
                     child: Icon(
                       MdiIcons.transmissionTower,
@@ -868,27 +1151,143 @@ class _MapPageState extends ConsumerState<MapPage> {
     return Drawer(
       child: Column(
         children: [
-          // Содержимое Drawer - Линии и подстанции на одном уровне
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: const Text('Главная'),
+            onTap: () {
+              Navigator.of(context).pop();
+              context.go('/');
+            },
+          ),
+          const Divider(height: 1),
+          // Блок "Обход" — начало/продолжение обхода (офлайн-сценарий).
+          // Контейнер без фиксированной высоты, чтобы избежать BOTTOM OVERFLOW при переносе кнопок.
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Обход',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Справочники доступны офлайн. Данные синхронизируются при появлении связи.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _showCreatePowerLineDialog();
+                        },
+                        icon: const Icon(Icons.add_road, size: 20),
+                        label: const Text('Новый обход'),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _showContinuePatrolSheet();
+                        },
+                        icon: const Icon(Icons.play_arrow, size: 20),
+                        label: const Text('Продолжить'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Линии и подстанции
           Expanded(
             child: GestureDetector(
               onLongPress: () => _showRootContextMenu(context),
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  // Линии напрямую (без обобщения)
                   if (_powerLinesList != null && _powerLinesList!.isNotEmpty)
-                    ..._powerLinesList!.map<Widget>((powerLine) => 
-                      _buildPowerLineTreeItem(powerLine)
-                    ),
-                  // Подстанции напрямую (без обобщения)
-                  if (_substationsData != null)
-                    ..._buildSubstationsList(),
+                    ..._powerLinesList!.map<Widget>((powerLine) =>
+                        _buildPowerLineTreeItem(powerLine)),
+                  if (_substationsData != null) ..._buildSubstationsList(),
                 ],
               ),
             ),
           ),
-          
         ],
+      ),
+    );
+  }
+
+  /// Показать выбор линии для продолжения обхода (офлайн: список из локальной/загруженной модели).
+  void _showContinuePatrolSheet() {
+    final list = _powerLinesList ?? [];
+    if (list.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Нет линий. Создайте новую через «Новый обход» или меню на карте.'),
+        ),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Продолжить обход по линии',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: list.length,
+                itemBuilder: (context, index) {
+                  final pl = list[index];
+                  return ListTile(
+                    leading: const Icon(Icons.electrical_services),
+                    title: Text(
+                      pl.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${_formatVoltageDisplay(pl.voltageLevel)} • ${pl.code}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _expandedPowerLineIds.add(pl.id);
+                        _currentPowerLineId = pl.id;
+                      });
+                      Navigator.of(context).pop();
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -908,10 +1307,14 @@ class _MapPageState extends ConsumerState<MapPage> {
         title: Text(
           powerLine.name,
           style: const TextStyle(fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          '${powerLine.voltageLevel ?? 0} кВ',
+          _formatVoltageDisplay(powerLine.voltageLevel),
           style: const TextStyle(fontSize: 11),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         children: [
         // Список AClineSegments напрямую (без обобщения)
@@ -926,10 +1329,14 @@ class _MapPageState extends ConsumerState<MapPage> {
             title: Text(
               pole.poleNumber,
               style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
               '${pole.poleType}',
               style: const TextStyle(fontSize: 10),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             onTap: () {
               Navigator.of(context).pop();
@@ -1026,10 +1433,14 @@ class _MapPageState extends ConsumerState<MapPage> {
         title: Text(
           segmentName,
           style: const TextStyle(fontSize: 12),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           '${lineSections.length} секций',
           style: const TextStyle(fontSize: 10),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         children: _buildLineSectionsTree(lineSections),
       );
@@ -1063,10 +1474,14 @@ class _MapPageState extends ConsumerState<MapPage> {
         title: Text(
           sectionName,
           style: const TextStyle(fontSize: 12),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           '${spans.length} пролётов • ${sectionData['conductor_type'] ?? 'N/A'}',
           style: const TextStyle(fontSize: 10),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         children: _buildSpansTree(spans),
       );
@@ -1118,16 +1533,23 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     return features.map<Widget>((feature) {
       final props = feature['properties'] as Map<String, dynamic>;
+      final voltageDisplay = props['voltage_level_display']?.toString() ??
+          (props['voltage_level'] != null ? '${props['voltage_level']} кВ' : 'н/д');
+      final voltageText = voltageDisplay.contains('кВ') ? voltageDisplay : '$voltageDisplay кВ';
       return ListTile(
         dense: true,
         leading: const Icon(Icons.power, size: 14, color: Colors.purple),
         title: Text(
           props['name'] ?? 'Без названия',
           style: const TextStyle(fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          '${props['voltage_level']} кВ',
+          voltageText,
           style: const TextStyle(fontSize: 11),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         onTap: () {
           Navigator.of(context).pop();
@@ -1329,11 +1751,22 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Future<void> _showCreatePoleDialog() async {
+    // Создавать опору можно только в линии текущего обхода
+    if (_currentPowerLineId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Начните или продолжите обход ЛЭП, чтобы создавать опоры в этой линии.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     // Проверяем, что местоположение получено
     if (_currentLocation == null) {
-      // Пытаемся получить местоположение
       await _getCurrentLocation();
-      
       if (_currentLocation == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1347,94 +1780,45 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
 
-    // Загружаем список ЛЭП для выбора (с сервера или из локальной БД при оффлайне)
-    List<PowerLine> powerLines = [];
-    try {
-      final apiService = ref.read(apiServiceProvider);
-      powerLines = await apiService.getPowerLines();
-    } catch (_) {
-      final db = ref.read(drift_db.databaseProvider);
-      final localLines = await db.getAllPowerLines();
-      powerLines = localLines.map((pl) => PowerLine(
-        id: pl.id,
-        name: pl.name,
-        code: pl.code,
-        voltageLevel: pl.voltageLevel,
-        length: pl.length,
-        branchId: pl.branchId,
-        createdBy: pl.createdBy,
-        status: pl.status,
-        description: pl.description,
-        createdAt: pl.createdAt,
-        updatedAt: pl.updatedAt,
-        poles: null,
-        aclineSegments: null,
-      )).toList();
-    }
-    if (powerLines.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Нет доступных ЛЭП. Создайте ЛЭП сначала (при наличии связи).'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    // Если только одна ЛЭП, используем её, иначе показываем выбор
-    int? selectedPowerLineId;
-    if (powerLines.length == 1) {
-      selectedPowerLineId = powerLines.first.id;
-    } else {
-      // Показываем диалог выбора ЛЭП
-      selectedPowerLineId = await showDialog<int>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Выберите ЛЭП'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: powerLines.length,
-              itemBuilder: (context, index) {
-                final powerLine = powerLines[index];
-                return ListTile(
-                  title: Text(powerLine.name),
-                  subtitle: Text('${powerLine.code} • ${powerLine.voltageLevel} кВ'),
-                  onTap: () => Navigator.of(context).pop(powerLine.id),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-
-      if (selectedPowerLineId == null) {
-        return; // Пользователь отменил выбор
-      }
-    }
+    // Используем только линию текущего обхода — выбор другой линии недоступен
+    final selectedPowerLineId = _currentPowerLineId!;
 
     // Показываем диалог создания опоры с текущими GPS координатами
-    final result = await showDialog<bool>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
-        powerLineId: selectedPowerLineId!,
+        powerLineId: selectedPowerLineId,
         initialLatitude: _currentLocation!.latitude,
         initialLongitude: _currentLocation!.longitude,
       ),
     );
 
-    // Если опора создана успешно, обновляем данные на карте
-    if (result == true && mounted) {
+    // Если опора создана успешно, обновляем данные и центрируем карту на ней
+    if (result != null && result['success'] == true && mounted) {
       await _loadMapData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Опора успешно создана'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      final latRaw = result['latitude'];
+      final lngRaw = result['longitude'];
+      final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
+      final lng = lngRaw is num ? lngRaw.toDouble() : (lngRaw is double ? lngRaw : null);
+      if (lat != null && lng != null) {
+        final target = LatLng(lat, lng);
+        if (_mapReady) {
+          _mapController.move(target, 18.0);
+        } else {
+          setState(() {
+            _pendingCenterOnObjects = target;
+            _pendingCenterZoom = 18.0;
+          });
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Опора успешно создана'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 
@@ -2248,14 +2632,39 @@ class _MapPageState extends ConsumerState<MapPage> {
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.deletePowerLine(powerLine.id);
-      
+
+      final db = ref.read(drift_db.databaseProvider);
+      await db.deletePatrolSessionsByPowerLineId(powerLine.id);
+      await db.deletePowerLine(powerLine.id);
+      final linePoles = await db.getPolesByPowerLine(powerLine.id);
+      for (final p in linePoles) {
+        await db.deletePole(p.id);
+      }
+
+      await _clearActiveSessionIfLine(powerLine.id);
+      ref.invalidate(recentPatrolsProvider);
       await _loadMapData();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Линия успешно удалена'),
             backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      final isOffline = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout;
+      if (isOffline) {
+        await _deletePowerLineOffline(powerLine);
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка удаления линии: ${e.message ?? e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -2268,6 +2677,50 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         );
       }
+    }
+  }
+
+  /// Удаление линии локально (офлайн): из Drift и при необходимости в очередь на удаление на сервере.
+  Future<void> _deletePowerLineOffline(PowerLine powerLine) async {
+    final db = ref.read(drift_db.databaseProvider);
+    final prefs = ref.read(prefsProvider);
+
+    if (powerLine.id < 0) {
+      // Локально созданная линия — просто удаляем из БД
+      await db.deletePatrolSessionsByPowerLineId(powerLine.id);
+      await db.deletePowerLine(powerLine.id);
+      final linePoles = await db.getPolesByPowerLine(powerLine.id);
+      for (final p in linePoles) {
+        await db.deletePole(p.id);
+      }
+    } else {
+      // Линия с сервера — добавляем в очередь отложенного удаления и убираем из локального кэша
+      final key = AppConfig.pendingDeletePowerLineIdsKey;
+      final list = prefs.getStringList(key) ?? [];
+      list.add(powerLine.id.toString());
+      await prefs.setStringList(key, list);
+      await db.deletePatrolSessionsByPowerLineId(powerLine.id);
+      await db.deletePowerLine(powerLine.id);
+      final linePoles = await db.getPolesByPowerLine(powerLine.id);
+      for (final p in linePoles) {
+        await db.deletePole(p.id);
+      }
+    }
+
+    await _clearActiveSessionIfLine(powerLine.id);
+    ref.invalidate(recentPatrolsProvider);
+    await _loadMapDataFromLocal();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            powerLine.id < 0
+                ? 'Линия удалена (офлайн).'
+                : 'Линия удалена локально. Удаление на сервере произойдёт при синхронизации.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -2297,9 +2750,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                 controller: voltageController,
                 decoration: const InputDecoration(
                   labelText: 'Напряжение (кВ)',
+                  hintText: '0.4, 6, 10, 35, 110, 220, 330, 500, 750',
                   border: OutlineInputBorder(),
                 ),
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -2498,7 +2952,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               const SizedBox(height: 16),
               if (latitude != null && longitude != null)
                 Text(
-                  'Координаты: ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}',
+                  'Позиция (X, Y): ${longitude!.toStringAsFixed(6)}, ${latitude!.toStringAsFixed(6)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
@@ -2564,7 +3018,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               if (latitude == null || longitude == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Не удалось получить координаты. Включите GPS.'),
+                    content: Text('Не удалось получить позицию (X, Y). Включите GPS.'),
                     backgroundColor: Colors.red,
                   ),
                 );
@@ -2672,6 +3126,67 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
           child: const Text('Экспортировать'),
         ),
       ],
+    );
+  }
+}
+
+/// Индикатор статуса подключения на карте: Онлайн / Офлайн / Нестабильно.
+class _MapConnectionStatusBadge extends StatelessWidget {
+  const _MapConnectionStatusBadge({required this.status});
+
+  final ConnectionStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label, bgColor, fgColor) = switch (status) {
+      ConnectionStatus.online => (
+          Icons.cloud_done,
+          'Онлайн',
+          Colors.green.shade100,
+          Colors.green.shade800,
+        ),
+      ConnectionStatus.offline => (
+          Icons.cloud_off,
+          'Офлайн',
+          Colors.orange.shade100,
+          Colors.orange.shade800,
+        ),
+      ConnectionStatus.unstable => (
+          Icons.cloud_queue,
+          'Нестабильно',
+          Colors.amber.shade100,
+          Colors.amber.shade900,
+        ),
+    };
+    return Material(
+      elevation: 2,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: fgColor,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: fgColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: fgColor,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

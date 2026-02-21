@@ -9,7 +9,9 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Tap
 from app.models.substation import Substation
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/tiles/{z}/{x}/{y}")
@@ -38,6 +40,14 @@ async def get_power_lines_geojson(
     
     features = []
     for power_line in power_lines:
+        poles_with_coords = sum(
+            1 for p in power_line.poles
+            if getattr(p, 'longitude', None) is not None and getattr(p, 'latitude', None) is not None
+        )
+        logger.info(
+            "map/power-lines/geojson: ЛЭП id=%d name=%r опор=%d с координатами=%d",
+            power_line.id, power_line.name, len(power_line.poles), poles_with_coords
+        )
         # Создаем LineString из координат опор, если есть минимум 2 опоры
         if len(power_line.poles) >= 2:
             coordinates = []
@@ -248,18 +258,19 @@ async def get_substations_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение подстанций в формате GeoJSON"""
-    # Временно используем старые поля, пока миграция не применена
     result = await db.execute(
-        select(Substation).where(Substation.is_active == True)
+        select(Substation)
+        .where(Substation.is_active == True)
+        .options(selectinload(Substation.voltage_levels))
     )
     substations = result.scalars().all()
-    
+
     features = []
     for substation in substations:
         # Получаем координаты из старого поля (пока миграция не применена)
         longitude = getattr(substation, 'longitude', None)
         latitude = getattr(substation, 'latitude', None)
-        
+
         # Пытаемся получить из Location, если доступно
         try:
             if hasattr(substation, 'location') and substation.location:
@@ -269,18 +280,28 @@ async def get_substations_geojson(
                     latitude = point.y_position
         except (AttributeError, IndexError):
             pass
-        
+
+        # Номинал: из уровней напряжения (110/10) или одно значение
+        voltage_level = substation.voltage_level
+        voltage_level_display = None
+        if hasattr(substation, 'voltage_levels') and substation.voltage_levels:
+            nominals = sorted([vl.nominal_voltage for vl in substation.voltage_levels], reverse=True)
+            voltage_level_display = "/".join(str(int(v) if v == int(v) else v) for v in nominals)
+
         if longitude is not None and latitude is not None:
+            props = {
+                "id": substation.id,
+                "name": substation.name,
+                "dispatcher_name": substation.dispatcher_name,
+                "voltage_level": voltage_level,
+                "branch_id": substation.branch_id,
+                "address": substation.address
+            }
+            if voltage_level_display is not None:
+                props["voltage_level_display"] = voltage_level_display
             feature = {
                 "type": "Feature",
-                "properties": {
-                    "id": substation.id,
-                    "name": substation.name,
-                    "dispatcher_name": substation.dispatcher_name,
-                    "voltage_level": substation.voltage_level,
-                    "branch_id": substation.branch_id,
-                    "address": substation.address
-                },
+                "properties": props,
                 "geometry": {
                     "type": "Point",
                     "coordinates": [longitude, latitude]

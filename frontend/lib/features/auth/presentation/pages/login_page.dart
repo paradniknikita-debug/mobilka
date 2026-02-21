@@ -21,50 +21,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    
-    // Слушаем изменения состояния авторизации
+    ref.watch(authStateProvider);
+
+    // Слушаем изменения состояния авторизации.
+    // Редирект на /map выполняет роутер (app_router.dart), дублировать навигацию здесь не нужно —
+    // иначе LoginPage размонтируется до срабатывания addPostFrameCallback и появляется предупреждение.
     ref.listen<AuthState>(authStateProvider, (previous, next) {
-      print('📢 [LoginPage] Изменение состояния авторизации:');
-      print('   Предыдущее: ${previous.runtimeType}');
-      print('   Текущее: ${next.runtimeType}');
-      
       if (next is AuthStateAuthenticated) {
-        print('✅ [LoginPage] Обнаружено состояние AuthStateAuthenticated');
-        print('   Пользователь: ${next.user.username}');
-        print('   ID: ${next.user.id}');
-        
-        // После успешной авторизации перенаправляем на карту
-        if (mounted) {
-          print('🔄 [LoginPage] Виджет mounted, начинаю перенаправление...');
-          
-          // Используем SchedulerBinding для гарантированного выполнения после кадра
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              print('🚀 [LoginPage] Выполняю context.go("/map")...');
-              try {
-                context.go('/map');
-                print('✅ [LoginPage] Перенаправление на карту выполнено через context.go');
-              } catch (e, stackTrace) {
-                print('❌ [LoginPage] Ошибка навигации через context.go: $e');
-                print('   Stack trace: $stackTrace');
-                
-                // Пробуем через роутер напрямую
-                try {
-                  final router = GoRouter.of(context);
-                  router.go('/map');
-                  print('✅ [LoginPage] Перенаправление выполнено через GoRouter.of');
-                } catch (e2) {
-                  print('❌ [LoginPage] Ошибка навигации через GoRouter.of: $e2');
-                }
-              }
-            } else {
-              print('⚠️ [LoginPage] Виджет не mounted в addPostFrameCallback');
-            }
-          });
-        } else {
-          print('⚠️ [LoginPage] Виджет не mounted');
-        }
+        // Роутер сам перенаправит на /map при AuthStateAuthenticated.
       } else if (next is AuthStateError) {
         print('❌ [LoginPage] Ошибка авторизации: ${next.message}');
         // Показываем ошибку

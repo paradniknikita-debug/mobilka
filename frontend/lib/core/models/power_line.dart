@@ -137,8 +137,10 @@ class PowerLine {
 class PowerLineCreate {
   final String name;
   final String code;
+  @JsonKey(name: 'voltage_level')
   final double voltageLevel;
   final double? length;
+  @JsonKey(name: 'branch_id')
   final int branchId;
   final String status;
   final String? description;

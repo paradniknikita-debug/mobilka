@@ -55,9 +55,9 @@ PowerLineCreate _$PowerLineCreateFromJson(Map<String, dynamic> json) =>
     PowerLineCreate(
       name: json['name'] as String,
       code: json['code'] as String,
-      voltageLevel: (json['voltageLevel'] as num).toDouble(),
+      voltageLevel: (json['voltage_level'] as num).toDouble(),
       length: (json['length'] as num?)?.toDouble(),
-      branchId: (json['branchId'] as num).toInt(),
+      branchId: (json['branch_id'] as num).toInt(),
       status: json['status'] as String? ?? 'active',
       description: json['description'] as String?,
     );
@@ -66,9 +66,9 @@ Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
     <String, dynamic>{
       'name': instance.name,
       'code': instance.code,
-      'voltageLevel': instance.voltageLevel,
+      'voltage_level': instance.voltageLevel,
       'length': instance.length,
-      'branchId': instance.branchId,
+      'branch_id': instance.branchId,
       'status': instance.status,
       'description': instance.description,
     };

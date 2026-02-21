@@ -226,7 +226,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       await apiService.createPole(widget.powerLineId, poleData);
 
       if (mounted) {
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(<String, dynamic>{
+          'success': true,
+          'latitude': _latitude!,
+          'longitude': _longitude!,
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Опора успешно создана'),
@@ -241,7 +245,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       if (isOffline && mounted) {
         final saved = await _savePoleToLocalDb();
         if (mounted && saved) {
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pop(<String, dynamic>{
+            'success': true,
+            'latitude': _latitude!,
+            'longitude': _longitude!,
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Нет связи. Опора сохранена локально и будет синхронизирована при подключении.'),
@@ -309,13 +317,13 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               ),
               const SizedBox(height: 16),
 
-              // Координаты
+              // Позиция (X, Y)
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
                       decoration: InputDecoration(
-                        labelText: 'Широта *',
+                        labelText: 'Y (позиция) *',
                         hintText: '53.9045',
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.my_location),
@@ -327,11 +335,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       initialValue: _latitude?.toString(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Введите широту';
+                          return 'Введите Y (позиция)';
                         }
                         final lat = double.tryParse(value);
                         if (lat == null || lat < -90 || lat > 90) {
-                          return 'Широта должна быть от -90 до 90';
+                          return 'Y должна быть от -90 до 90';
                         }
                         return null;
                       },
@@ -348,18 +356,18 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                   Expanded(
                     child: TextFormField(
                       decoration: const InputDecoration(
-                        labelText: 'Долгота *',
+                        labelText: 'X (позиция) *',
                         hintText: '27.5615',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       initialValue: _longitude?.toString(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Введите долготу';
+                          return 'Введите X (позиция)';
                         }
                         final lon = double.tryParse(value);
                         if (lon == null || lon < -180 || lon > 180) {
-                          return 'Долгота должна быть от -180 до 180';
+                          return 'X должна быть от -180 до 180';
                         }
                         return null;
                       },

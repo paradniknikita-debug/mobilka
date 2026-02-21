@@ -37,68 +37,149 @@ class SyncService extends StateNotifier<SyncState> {
         _uuid = const Uuid(),
         super(const SyncState.idle());
 
+  /// Порог: если последняя синхронизация старше этого срока — делаем полную загрузку с сервера (чтобы офлайн показывал актуальные данные).
+  static const Duration _fullSyncIfOlderThan = Duration(days: 30);
+
+  /// Метка времени «очень давно» для запроса полного набора данных с сервера.
+  static const String _fullSyncSince = '2000-01-01T00:00:00Z';
+
   Future<void> syncData() async {
     state = const SyncState.syncing();
 
     try {
-      // Проверяем подключение к интернету
       final connectivityResult = await _connectivity.checkConnectivity();
       if (connectivityResult == ConnectivityResult.none) {
         state = const SyncState.error('Нет подключения к интернету');
         return;
       }
 
-      // Синхронизируем данные в обе стороны
-      await _uploadLocalChanges();
-      await _downloadServerChanges();
+      final lastSyncDt = await _getLastSyncDateTime();
+      final needFullDownload = lastSyncDt == null ||
+          (DateTime.now().toUtc().difference(lastSyncDt) > _fullSyncIfOlderThan);
 
+      // Фиксируем время до выгрузки для инкрементальной загрузки
+      final lastSyncBeforeUpload = await _getLastSyncTime();
+
+      await _uploadPatrolSessions();
+      final uploadResult = await _uploadLocalChanges();
+
+      if (needFullDownload) {
+        await _downloadServerChanges(useLastSync: _fullSyncSince);
+      } else {
+        await _downloadServerChanges(useLastSync: lastSyncBeforeUpload);
+      }
+
+      // Удаляем локальные копии только после успешной выгрузки И загрузки — иначе данные не потеряются при сбое
+      if (uploadResult != null) {
+        await _removeUploadedLocalEntities(uploadResult.$1, uploadResult.$2, uploadResult.$3);
+        _clearPendingDeletePowerLineIds();
+      }
+      await _setLastSyncTime(DateTime.now());
       state = const SyncState.completed();
     } catch (e) {
-      state = SyncState.error('Ошибка синхронизации: ${e.toString()}');
+      final msg = e.toString();
+      final short = msg.contains('DioException') && msg.contains('status code')
+          ? _shortSyncError(msg)
+          : msg;
+      state = SyncState.error('Ошибка синхронизации: $short');
     }
   }
 
-  Future<void> _uploadLocalChanges() async {
-    // Получаем все записи, которые нужно синхронизировать
+  static String _shortSyncError(String dioMessage) {
+    if (dioMessage.contains('400')) return 'Сервер отклонил запрос (400). Проверьте данные или обновите приложение.';
+    if (dioMessage.contains('401')) return 'Сессия истекла. Войдите снова.';
+    if (dioMessage.contains('404')) return 'Сервер не найден. Проверьте адрес и сеть.';
+    if (dioMessage.contains('500')) return 'Ошибка на сервере. Попробуйте позже.';
+    return 'Ошибка сети или сервера. Проверьте подключение.';
+  }
+
+  /// Выгрузить сессии обхода со статусом pending: POST на сервер, обновить локально serverId и synced.
+  /// Сессии с power_line_id < 0 (локальная ЛЭП) пропускаем — линия ещё не на сервере.
+  Future<void> _uploadPatrolSessions() async {
+    final pending = await _database.getPendingPatrolSessions();
+    for (final row in pending) {
+      if (row.powerLineId < 0) continue; // ЛЭП создана офлайн — отправим после синхронизации линии
+      final body = <String, dynamic>{
+        'power_line_id': row.powerLineId,
+        if (row.note != null && row.note!.isNotEmpty) 'note': row.note,
+      };
+      final response = await _apiService.createPatrolSession(body);
+      final serverId = (response['id'] as num?)?.toInt();
+      if (serverId == null) continue;
+
+      await _database.setPatrolSessionSynced(row.id, serverId);
+
+      if (row.endedAt != null) {
+        await _apiService.endPatrolSession(serverId);
+      }
+    }
+  }
+
+  /// Возвращает (powerLines, poles, equipment) для последующего удаления из локальной БД после успешного download, или null.
+  Future<(List<PowerLine>, List<Pole>, List<EquipmentData>)?> _uploadLocalChanges() async {
+    // Порядок: сначала отложенные удаления ЛЭП, затем создание (ЛЭП → опоры → оборудование).
     final powerLines = await _database.getPowerLinesNeedingSync();
     final poles = await _database.getPolesNeedingSync();
     final equipment = await _database.getEquipmentNeedingSync();
+    final pendingDeletePlIds = _getPendingDeletePowerLineIds();
 
-    // Создаем пакет для отправки
     final batchId = _uuid.v4();
     final records = <Map<String, dynamic>>[];
 
-    // Добавляем ЛЭП (бэкенд ожидает snake_case)
-    for (final powerLine in powerLines) {
-      records.add(_createSyncRecord('power_line', 'create', _toSnakeCaseMap(powerLine.toJson()), batchId));
+    // Отложенные удаления ЛЭП (офлайн-удаление)
+    for (final id in pendingDeletePlIds) {
+      records.add(_createSyncRecord('power_line', 'delete', {'id': id}, batchId));
     }
 
-    // Добавляем опоры
+    // Создание: сначала ЛЭП (бэкенд требует name, code, voltage_level — задаём явно)
+    for (final powerLine in powerLines) {
+      final data = _toSnakeCaseMap(powerLine.toJson());
+      // Всегда задаём обязательные поля, чтобы не терялись при сериализации
+      final String name = (powerLine.name.trim().isNotEmpty)
+          ? powerLine.name
+          : (powerLine.code.trim().isNotEmpty ? powerLine.code : 'ЛЭП');
+      final String code = powerLine.code.trim().isNotEmpty
+          ? powerLine.code
+          : (powerLine.id >= 0 ? 'LEP-${powerLine.id}' : 'LEP-L${-powerLine.id}');
+      final num voltageLevel = powerLine.voltageLevel;
+      data['name'] = name;
+      data['code'] = code;
+      data['voltage_level'] = voltageLevel is int ? voltageLevel.toDouble() : (voltageLevel as double? ?? 0.0);
+      records.add(_createSyncRecord('power_line', 'create', data, batchId));
+    }
+
+    // Затем опоры (power_line_id может быть локальным < 0 — сервер подставит server id)
     for (final pole in poles) {
       records.add(_createSyncRecord('pole', 'create', _toSnakeCaseMap(pole.toJson()), batchId));
     }
 
-    // Добавляем оборудование
+    // Оборудование
     for (final equipmentItem in equipment) {
       records.add(_createSyncRecord('equipment', 'create', _equipmentToJson(equipmentItem), batchId));
     }
 
-    if (records.isNotEmpty) {
-      final batch = {
-        'batch_id': batchId,
-        'timestamp': DateTime.now().toIso8601String(),
-        'records': records,
-      };
+    if (records.isEmpty) return null;
 
-      // Отправляем на сервер
-      final response = await _apiService.uploadSyncBatch(batch);
-      
-      if (response['success'] == true) {
-        // Удаляем локальные записи после успешной загрузки (сервер создал их с новыми id)
-        await _removeUploadedLocalEntities(powerLines, poles, equipment);
-        await _setLastSyncTime(DateTime.now());
-      }
+    final batch = {
+      'batch_id': batchId,
+      'timestamp': DateTime.now().toIso8601String(),
+      'records': records,
+    };
+    final response = await _apiService.uploadSyncBatch(batch);
+    if (response['success'] == true) {
+      return (powerLines, poles, equipment);
     }
+    return null;
+  }
+
+  List<int> _getPendingDeletePowerLineIds() {
+    if (_prefs == null) return [];
+    final list = _prefs!.getStringList(AppConfig.pendingDeletePowerLineIdsKey) ?? [];
+    return list.map((s) => int.tryParse(s)).whereType<int>().toList();
+  }
+
+  void _clearPendingDeletePowerLineIds() {
+    _prefs?.setStringList(AppConfig.pendingDeletePowerLineIdsKey, []);
   }
 
   Future<void> _removeUploadedLocalEntities(
@@ -117,21 +198,16 @@ class SyncService extends StateNotifier<SyncState> {
     }
   }
 
-  Future<void> _downloadServerChanges() async {
-    // Получаем последнюю дату синхронизации
-    final lastSync = await _getLastSyncTime();
-    
-    // Скачиваем изменения с сервера
+  /// [useLastSync] — если задано, использовать его для запроса (например, время до выгрузки).
+  Future<void> _downloadServerChanges({String? useLastSync}) async {
+    final lastSync = useLastSync ?? await _getLastSyncTime();
     final response = await _apiService.downloadSyncData(lastSync);
     final records = response['records'] as List<dynamic>? ?? [];
 
-    // Обрабатываем каждую запись
     for (final recordData in records) {
       await _processServerRecord(recordData);
     }
-
-    // Обновляем время последней синхронизации
-    await _setLastSyncTime(DateTime.now());
+    // Время обновляется в syncData() после успешного завершения
   }
 
   Map<String, dynamic> _equipmentToJson(EquipmentData equipment) {
@@ -187,28 +263,40 @@ class SyncService extends StateNotifier<SyncState> {
     }
   }
 
+  static int _toInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0);
+  static double _toDouble(dynamic v) => v is double ? v : (v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0);
+  static DateTime? _parseDateTime(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final s = v.toString();
+    return s.isEmpty ? null : DateTime.tryParse(s);
+  }
+
   Future<void> _processPowerLineRecord(String action, Map<String, dynamic> data) async {
     switch (action) {
       case 'create':
       case 'update':
-        await _database.insertPowerLine(
+        final id = _toInt(data['id']);
+        final createdAt = _parseDateTime(data['created_at']) ?? DateTime.now();
+        final updatedAt = _parseDateTime(data['updated_at']);
+        await _database.insertPowerLineOrReplace(
           PowerLinesCompanion.insert(
-            id: drift.Value(data['id']),
-            name: data['name'],
-            code: data['code'],
-            voltageLevel: data['voltage_level'],
-            length: drift.Value(data['length']),
-            branchId: data['branch_id'],
-            createdBy: data['created_by'],
-            status: data['status'],
-            description: drift.Value(data['description']),
-            createdAt: DateTime.parse(data['created_at']),
-            updatedAt: drift.Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
+            id: drift.Value(id),
+            name: data['name'] as String? ?? '',
+            code: data['code'] as String? ?? '',
+            voltageLevel: _toDouble(data['voltage_level']),
+            length: drift.Value(data['length'] != null ? _toDouble(data['length']) : null),
+            branchId: _toInt(data['branch_id']) != 0 ? _toInt(data['branch_id']) : 1,
+            createdBy: _toInt(data['created_by']),
+            status: data['status'] as String? ?? 'active',
+            description: drift.Value(data['description'] as String?),
+            createdAt: createdAt,
+            updatedAt: drift.Value(updatedAt),
           ),
         );
         break;
       case 'delete':
-        await _database.deletePowerLine(data['id']);
+        await _database.deletePowerLine(_toInt(data['id']));
         break;
     }
   }
@@ -217,28 +305,32 @@ class SyncService extends StateNotifier<SyncState> {
     switch (action) {
       case 'create':
       case 'update':
-        await _database.insertPole(
+        final id = _toInt(data['id']);
+        final powerLineId = _toInt(data['power_line_id']);
+        final createdAt = _parseDateTime(data['created_at']) ?? DateTime.now();
+        final updatedAt = _parseDateTime(data['updated_at']);
+        await _database.insertPoleOrReplace(
           PolesCompanion.insert(
-            id: drift.Value(data['id']),
-            powerLineId: data['power_line_id'],
-            poleNumber: data['pole_number'],
-            latitude: data['latitude'],
-            longitude: data['longitude'],
-            poleType: data['pole_type'],
-            height: drift.Value(data['height']),
-            foundationType: drift.Value(data['foundation_type']),
-            material: drift.Value(data['material']),
-            yearInstalled: drift.Value(data['year_installed']),
-            condition: data['condition'],
-            notes: drift.Value(data['notes']),
-            createdBy: data['created_by'],
-            createdAt: DateTime.parse(data['created_at']),
-            updatedAt: drift.Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
+            id: drift.Value(id),
+            powerLineId: powerLineId,
+            poleNumber: data['pole_number'] as String? ?? '',
+            latitude: _toDouble(data['latitude']),
+            longitude: _toDouble(data['longitude']),
+            poleType: data['pole_type'] as String? ?? 'unknown',
+            height: drift.Value(data['height'] != null ? _toDouble(data['height']) : null),
+            foundationType: drift.Value(data['foundation_type'] as String?),
+            material: drift.Value(data['material'] as String?),
+            yearInstalled: drift.Value(data['year_installed'] != null ? _toInt(data['year_installed']) : null),
+            condition: data['condition'] as String? ?? 'good',
+            notes: drift.Value(data['notes'] as String?),
+            createdBy: _toInt(data['created_by']),
+            createdAt: createdAt,
+            updatedAt: drift.Value(updatedAt),
           ),
         );
         break;
       case 'delete':
-        await _database.deletePole(data['id']);
+        await _database.deletePole(_toInt(data['id']));
         break;
     }
   }
@@ -247,7 +339,7 @@ class SyncService extends StateNotifier<SyncState> {
     switch (action) {
       case 'create':
       case 'update':
-        await _database.insertEquipment(
+        await _database.insertEquipmentOrReplace(
           EquipmentCompanion.insert(
             id: drift.Value(data['id']),
             poleId: data['pole_id'] ?? data['tower_id'], // Поддержка старого формата
@@ -277,6 +369,14 @@ class SyncService extends StateNotifier<SyncState> {
     final s = _prefs!.getString(AppConfig.lastSyncKey);
     if (s == null || s.isEmpty) return DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
     return s;
+  }
+
+  /// Возвращает дату последней синхронизации или null, если ещё ни разу не синхронизировались.
+  Future<DateTime?> _getLastSyncDateTime() async {
+    if (_prefs == null) return null;
+    final s = _prefs!.getString(AppConfig.lastSyncKey);
+    if (s == null || s.isEmpty) return null;
+    return DateTime.tryParse(s);
   }
 
   Future<void> _setLastSyncTime(DateTime time) async {

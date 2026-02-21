@@ -783,6 +783,119 @@ class _ApiService implements ApiService {
   }
 
   @override
+  Future<List<PatrolSession>> getPatrolSessions(
+    int? userId,
+    int? powerLineId,
+    int? limit,
+    int? offset,
+  ) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{
+      r'user_id': userId,
+      r'power_line_id': powerLineId,
+      r'limit': limit,
+      r'offset': offset,
+    };
+    queryParameters.removeWhere((k, v) => v == null);
+    final _headers = <String, dynamic>{};
+    const Map<String, dynamic>? _data = null;
+    final _options = _setStreamType<List<PatrolSession>>(Options(
+      method: 'GET',
+      headers: _headers,
+      extra: _extra,
+    )
+        .compose(
+          _dio.options,
+          '/patrol-sessions',
+          queryParameters: queryParameters,
+          data: _data,
+        )
+        .copyWith(
+            baseUrl: _combineBaseUrls(
+          _dio.options.baseUrl,
+          baseUrl,
+        )));
+    final _result = await _dio.fetch<List<dynamic>>(_options);
+    late List<PatrolSession> _value;
+    try {
+      _value = _result.data!
+          .map((dynamic i) => PatrolSession.fromJson(i as Map<String, dynamic>))
+          .toList();
+    } on Object catch (e, s) {
+      errorLogger?.logError(e, s, _options);
+      rethrow;
+    }
+    return _value;
+  }
+
+  @override
+  Future<Map<String, dynamic>> createPatrolSession(
+      Map<String, dynamic> body) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    final _data = <String, dynamic>{};
+    _data.addAll(body);
+    final _options = _setStreamType<Map<String, dynamic>>(Options(
+      method: 'POST',
+      headers: _headers,
+      extra: _extra,
+    )
+        .compose(
+          _dio.options,
+          '/patrol-sessions',
+          queryParameters: queryParameters,
+          data: _data,
+        )
+        .copyWith(
+            baseUrl: _combineBaseUrls(
+          _dio.options.baseUrl,
+          baseUrl,
+        )));
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    final _value = _result.data!;
+    return _value;
+  }
+
+  @override
+  Future<Map<String, dynamic>> endPatrolSession(int id) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    const Map<String, dynamic>? _data = null;
+    final _options = _setStreamType<Map<String, dynamic>>(Options(
+      method: 'PATCH',
+      headers: _headers,
+      extra: _extra,
+    )
+        .compose(
+          _dio.options,
+          '/patrol-sessions/${id}',
+          queryParameters: queryParameters,
+          data: _data,
+        )
+        .copyWith(
+            baseUrl: _combineBaseUrls(
+          _dio.options.baseUrl,
+          baseUrl,
+        )));
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    final _value = _result.data!;
+    return _value;
+  }
+
+  @override
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  ) async {
+    throw UnimplementedError(
+      'exportCimXml должен быть реализован через ApiServiceProvider.create()',
+    );
+  }
+
+  @override
   Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
@@ -889,19 +1002,6 @@ class _ApiService implements ApiService {
     final _result = await _dio.fetch(_options);
     final _value = _result.data;
     return _value;
-  }
-
-  @override
-  Future<Response<List<int>>> exportCimXml(
-    bool useCimpy,
-    bool includeSubstations,
-    bool includePowerLines,
-  ) {
-    // Этот метод реализован динамически в ApiServiceProvider
-    // Используется прямой Dio вызов для бинарных данных
-    throw UnimplementedError(
-      'exportCimXml должен быть реализован через ApiServiceProvider.create()'
-    );
   }
 
   RequestOptions _setStreamType<T>(RequestOptions requestOptions) {

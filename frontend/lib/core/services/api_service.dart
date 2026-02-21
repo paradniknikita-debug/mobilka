@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/power_line.dart';
 import '../models/substation.dart';
+import '../models/patrol_session.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
@@ -99,6 +100,23 @@ abstract class ApiService {
   @GET('/map/bounds')
   Future<dynamic> getDataBounds();
 
+  // Сессии обхода (админ видит все, инженер — свои)
+  @GET('/patrol-sessions')
+  Future<List<PatrolSession>> getPatrolSessions(
+    @Query('user_id') int? userId,
+    @Query('power_line_id') int? powerLineId,
+    @Query('limit') int? limit,
+    @Query('offset') int? offset,
+  );
+
+  @POST('/patrol-sessions')
+  Future<Map<String, dynamic>> createPatrolSession(
+    @Body() Map<String, dynamic> body,
+  );
+
+  @PATCH('/patrol-sessions/{id}')
+  Future<Map<String, dynamic>> endPatrolSession(@Path('id') int id);
+
   // Sync
   @POST('/sync/upload')
   Future<dynamic> uploadSyncBatch(@Body() Map<String, dynamic> batch);
@@ -111,6 +129,14 @@ abstract class ApiService {
 
   @GET('/sync/schema/{entity_type}')
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
+
+  // CIM Export - реализован вручную через Dio (Retrofit не поддерживает бинарные ответы)
+  // Метод реализован в ApiServiceProvider
+  Future<Response<List<int>>> exportCimXml(
+    bool useCimpy,
+    bool includeSubstations,
+    bool includePowerLines,
+  );
 }
 
 /// Интерфейс ApiService плюс метод CIM Export (реализуется вручную, т.к. Retrofit не поддерживает бинарные ответы).
@@ -448,6 +474,17 @@ class _ApiServiceWrapper implements ApiServiceWithCim {
 
   @override
   Future<dynamic> getDataBounds() => _delegate.getDataBounds();
+
+  @override
+  Future<List<PatrolSession>> getPatrolSessions(int? userId, int? powerLineId, int? limit, int? offset) =>
+      _delegate.getPatrolSessions(userId, powerLineId, limit, offset);
+
+  @override
+  Future<Map<String, dynamic>> createPatrolSession(Map<String, dynamic> body) =>
+      _delegate.createPatrolSession(body);
+
+  @override
+  Future<Map<String, dynamic>> endPatrolSession(int id) => _delegate.endPatrolSession(id);
 
   @override
   Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) => _delegate.uploadSyncBatch(batch);
