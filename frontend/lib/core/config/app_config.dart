@@ -10,7 +10,7 @@ class AppConfig {
   // ============================================
   // Измените эту переменную для переключения между HTTP и HTTPS
   // true = HTTPS, false = HTTP
-  static const bool useHttps = true; // Для разработки используем HTTP
+  static const bool useHttps = false; // Для разработки — HTTP (localhost:8000), иначе ERR_CERT_AUTHORITY_INVALID
   // ============================================
   
   static final BaseUrlManager _urlManager = BaseUrlManager();

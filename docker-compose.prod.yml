@@ -47,7 +47,9 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       SECRET_KEY: ${SECRET_KEY}
-      RELOAD: "false"  # Отключено для продакшена
+      ENVIRONMENT: production
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      RELOAD: "false"
       TZ: ${TZ:-Europe/Moscow}
     # Не монтируем код в продакшене - используем образ
     # Не открываем порт 8000 наружу - только через nginx
@@ -57,7 +59,7 @@ services:
     networks:
       - lepm_network
 
-  # Nginx reverse proxy с HTTPS
+  # Nginx для прода: статика (Angular + Flutter) + прокси API + HTTPS
   nginx:
     image: nginx:alpine
     container_name: lepm_nginx

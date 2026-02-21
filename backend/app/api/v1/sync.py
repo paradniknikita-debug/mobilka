@@ -116,7 +116,21 @@ async def download_sync_data(
     db: AsyncSession = Depends(get_db)
 ):
     """Скачивание изменений с сервера с момента last_sync"""
-    
+    try:
+        return await _download_sync_data_impl(last_sync, current_user, db)
+    except Exception as e:
+        logger.exception("sync/download: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"sync/download: {type(e).__name__}: {e}",
+        ) from e
+
+
+async def _download_sync_data_impl(
+    last_sync: Optional[str],
+    current_user: User,
+    db: AsyncSession,
+):
     # Парсим last_sync или используем время 24 часа назад. Сдвиг на 60 сек назад,
     # чтобы не терять записи из-за разницы часов поясов или задержки коммита.
     if last_sync:
@@ -146,25 +160,28 @@ async def download_sync_data(
     power_lines = power_lines_result.scalars().all()
     for pl in power_lines:
         pl_created = _ensure_utc(pl.created_at)
+        pl_data = {
+            "id": pl.id,
+            "name": pl.name,
+            "code": pl.code,
+            "voltage_level": pl.voltage_level,
+            "length": pl.length,
+            "branch_id": getattr(pl, "branch_id", None),
+            "status": pl.status,
+            "description": pl.description,
+            "created_by": pl.created_by,
+            "created_at": pl.created_at.isoformat() if pl.created_at else None,
+            "updated_at": pl.updated_at.isoformat() if pl.updated_at else None,
+        }
+        if getattr(pl, "mrid", None) is not None:
+            pl_data["mrid"] = pl.mrid
+        if getattr(pl, "region_id", None) is not None:
+            pl_data["region_id"] = pl.region_id
         records.append({
             "id": str(uuid.uuid4()),
             "entity_type": "power_line",
             "action": "create" if (pl_created and pl_created >= last_sync_dt) else "update",
-            "data": {
-                "id": pl.id,
-                "mrid": pl.mrid,
-                "name": pl.name,
-                "code": pl.code,
-                "voltage_level": pl.voltage_level,
-                "length": pl.length,
-                "region_id": pl.region_id,
-                "branch_id": pl.branch_id,
-                "status": pl.status,
-                "description": pl.description,
-                "created_by": pl.created_by,
-                "created_at": pl.created_at.isoformat() if pl.created_at else None,
-                "updated_at": pl.updated_at.isoformat() if pl.updated_at else None,
-            },
+            "data": pl_data,
             "timestamp": (pl.updated_at or pl.created_at).isoformat() if (pl.updated_at or pl.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     
@@ -181,28 +198,30 @@ async def download_sync_data(
     poles = poles_result.scalars().all()
     for pole in poles:
         pole_created = _ensure_utc(pole.created_at)
+        pole_data = {
+            "id": pole.id,
+            "power_line_id": pole.line_id,
+            "pole_number": pole.pole_number,
+            "latitude": pole.latitude,
+            "longitude": pole.longitude,
+            "pole_type": pole.pole_type,
+            "height": pole.height,
+            "foundation_type": pole.foundation_type,
+            "material": pole.material,
+            "year_installed": pole.year_installed,
+            "condition": pole.condition,
+            "notes": pole.notes,
+            "created_by": pole.created_by,
+            "created_at": pole.created_at.isoformat() if pole.created_at else None,
+            "updated_at": pole.updated_at.isoformat() if pole.updated_at else None,
+        }
+        if getattr(pole, "mrid", None) is not None:
+            pole_data["mrid"] = pole.mrid
         records.append({
             "id": str(uuid.uuid4()),
             "entity_type": "pole",
             "action": "create" if (pole_created and pole_created >= last_sync_dt) else "update",
-            "data": {
-                "id": pole.id,
-                "mrid": pole.mrid,
-                "power_line_id": pole.line_id,
-                "pole_number": pole.pole_number,
-                "latitude": pole.latitude,
-                "longitude": pole.longitude,
-                "pole_type": pole.pole_type,
-                "height": pole.height,
-                "foundation_type": pole.foundation_type,
-                "material": pole.material,
-                "year_installed": pole.year_installed,
-                "condition": pole.condition,
-                "notes": pole.notes,
-                "created_by": pole.created_by,
-                "created_at": pole.created_at.isoformat() if pole.created_at else None,
-                "updated_at": pole.updated_at.isoformat() if pole.updated_at else None,
-            },
+            "data": pole_data,
             "timestamp": (pole.updated_at or pole.created_at).isoformat() if (pole.updated_at or pole.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     
@@ -219,27 +238,29 @@ async def download_sync_data(
     equipment_list = equipment_result.scalars().all()
     for eq in equipment_list:
         eq_created = _ensure_utc(eq.created_at)
+        eq_data = {
+            "id": eq.id,
+            "pole_id": eq.pole_id,
+            "equipment_type": eq.equipment_type,
+            "name": eq.name,
+            "manufacturer": eq.manufacturer,
+            "model": eq.model,
+            "serial_number": eq.serial_number,
+            "year_manufactured": eq.year_manufactured,
+            "installation_date": eq.installation_date.isoformat() if eq.installation_date else None,
+            "condition": eq.condition,
+            "notes": eq.notes,
+            "created_by": eq.created_by,
+            "created_at": eq.created_at.isoformat() if eq.created_at else None,
+            "updated_at": eq.updated_at.isoformat() if eq.updated_at else None,
+        }
+        if getattr(eq, "mrid", None) is not None:
+            eq_data["mrid"] = eq.mrid
         records.append({
             "id": str(uuid.uuid4()),
             "entity_type": "equipment",
             "action": "create" if (eq_created and eq_created >= last_sync_dt) else "update",
-            "data": {
-                "id": eq.id,
-                "mrid": eq.mrid,
-                "pole_id": eq.pole_id,
-                "equipment_type": eq.equipment_type,
-                "name": eq.name,
-                "manufacturer": eq.manufacturer,
-                "model": eq.model,
-                "serial_number": eq.serial_number,
-                "year_manufactured": eq.year_manufactured,
-                "installation_date": eq.installation_date.isoformat() if eq.installation_date else None,
-                "condition": eq.condition,
-                "notes": eq.notes,
-                "created_by": eq.created_by,
-                "created_at": eq.created_at.isoformat() if eq.created_at else None,
-                "updated_at": eq.updated_at.isoformat() if eq.updated_at else None,
-            },
+            "data": eq_data,
             "timestamp": (eq.updated_at or eq.created_at).isoformat() if (eq.updated_at or eq.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     

@@ -21,7 +21,16 @@ def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
     existing_tables = inspector.get_table_names()
-    
+
+    # Колонка is_tap_pole нужна модели Pole; добавляем, если ещё нет (любая ветка миграций).
+    if 'pole' in existing_tables:
+        cols = [c['name'] for c in inspector.get_columns('pole')]
+        if 'is_tap_pole' not in cols:
+            op.add_column(
+                'pole',
+                sa.Column('is_tap_pole', sa.Boolean(), nullable=False, server_default=sa.text('false')),
+            )
+
     if 'spans' in existing_tables:
         existing_columns = [col['name'] for col in inspector.get_columns('spans')]
         
@@ -38,7 +47,12 @@ def downgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
     existing_tables = inspector.get_table_names()
-    
+
+    if 'pole' in existing_tables:
+        cols = [c['name'] for c in inspector.get_columns('pole')]
+        if 'is_tap_pole' in cols:
+            op.drop_column('pole', 'is_tap_pole')
+
     if 'spans' in existing_tables:
         existing_columns = [col['name'] for col in inspector.get_columns('spans')]
         

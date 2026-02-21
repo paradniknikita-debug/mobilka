@@ -1,3 +1,6 @@
+# Локальная разработка и тесты.
+# Переменные: из .env в корне или --env-file .env.local (см. .env.local.example).
+# Backend: ENVIRONMENT=development (CORS для localhost:4200, :53380, :8000).
 services:
   # PostgreSQL база данных
   postgres:
@@ -50,11 +53,11 @@ services:
     # env_file:
     #   - ./backend/.env
     environment:
-      # Для Docker используем имена сервисов из docker-compose
-      DATABASE_URL: postgresql://postgres:dragon167@postgres:5432/lepm_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dragon167}@postgres:5432/${POSTGRES_DB:-lepm_db}
       REDIS_URL: redis://redis:6379
-      RELOAD: "true"  # Включаем hot reload для разработки
-      TZ: Europe/Minsk  # Часовой пояс
+      ENVIRONMENT: development
+      RELOAD: "true"
+      TZ: Europe/Minsk
     # Для разработки: монтируем код как volume (чтобы не пересобирать образ при каждом изменении)
     # Убрали :ro (read-only) чтобы hot reload мог работать
     volumes:
@@ -72,7 +75,7 @@ services:
     networks:
       - lepm_network
 
-  # Nginx reverse proxy с HTTPS
+  # Nginx: для локальных тестов — только прокси API (фронты запускаются отдельно)
   nginx:
     image: nginx:alpine
     container_name: lepm_nginx
@@ -80,13 +83,9 @@ services:
       - backend
     ports:
       - "80:80"
-      - "443:443"
       - "4201:4201"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./web-frontend/dist/lepm-web-frontend:/app/angular-web:ro
-      - ./frontend/build/web:/app/flutter-web:ro
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
     restart: unless-stopped
     networks:
       - lepm_network

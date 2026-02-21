@@ -4,7 +4,7 @@ Revision ID: 20250221_000000
 Revises: 20241216_100000
 Create Date: 2025-02-21 00:00:00.000000
 
-- Добавление is_tap_pole в poles (отпаечная опора — конец участка ACLineSegment)
+- Добавление is_tap_pole в pole (отпаечная опора — конец участка ACLineSegment)
 - connectivity_node.pole_id nullable для узлов на подстанциях
 """
 from alembic import op
@@ -22,10 +22,10 @@ def upgrade() -> None:
     inspector = inspect(conn)
     existing_tables = inspector.get_table_names()
 
-    if 'poles' in existing_tables:
-        cols = [c['name'] for c in inspector.get_columns('poles')]
+    if 'pole' in existing_tables:
+        cols = [c['name'] for c in inspector.get_columns('pole')]
         if 'is_tap_pole' not in cols:
-            op.add_column('poles', sa.Column('is_tap_pole', sa.Boolean(), nullable=False, server_default=sa.text('false')))
+            op.add_column('pole', sa.Column('is_tap_pole', sa.Boolean(), nullable=False, server_default=sa.text('false')))
 
     if 'connectivity_node' in existing_tables:
         op.alter_column(
@@ -49,7 +49,7 @@ def downgrade() -> None:
             nullable=False,
         )
 
-    if 'poles' in existing_tables:
-        cols = [c['name'] for c in inspector.get_columns('poles')]
+    if 'pole' in existing_tables:
+        cols = [c['name'] for c in inspector.get_columns('pole')]
         if 'is_tap_pole' in cols:
-            op.drop_column('poles', 'is_tap_pole')
+            op.drop_column('pole', 'is_tap_pole')

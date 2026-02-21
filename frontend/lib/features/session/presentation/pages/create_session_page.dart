@@ -223,7 +223,24 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 final isOffline = e.type == DioExceptionType.connectionError ||
                     e.type == DioExceptionType.connectionTimeout ||
                     e.type == DioExceptionType.unknown;
-                if (!isOffline) rethrow;
+                if (!isOffline) {
+                  String message;
+                  final data = e.response?.data;
+                  if (data is Map && data['detail'] != null) {
+                    final d = data['detail'];
+                    message = d is String ? d : d.toString();
+                  } else if (e.response?.statusCode == 400) {
+                    message = 'Проверьте введённые данные: название, напряжение (кВ), длина (км).';
+                  } else {
+                    message = 'Ошибка создания линии: ${e.message}';
+                  }
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
+                    );
+                  }
+                  return;
+                }
                 final prefs = ref.read(prefsProvider);
                 final db = ref.read(drift_db.databaseProvider);
                 int localId = prefs.getInt(AppConfig.lastLocalPowerLineIdKey) ?? -1;

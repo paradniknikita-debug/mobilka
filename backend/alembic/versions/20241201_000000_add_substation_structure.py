@@ -21,7 +21,18 @@ def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
     existing_tables = inspector.get_table_names()
-    
+
+    # Колонка is_tap_pole для модели Pole — добавляем при первом запуске, если таблица уже есть (recreate_db и т.п.)
+    if 'pole' in existing_tables:
+        cols = [c['name'] for c in inspector.get_columns('pole')]
+        if 'is_tap_pole' not in cols:
+            op.add_column('pole', sa.Column('is_tap_pole', sa.Boolean(), nullable=False, server_default=sa.text('false')))
+
+    # voltage_levels ссылается на подстанции — создаём только если есть таблица подстанций
+    substation_table = 'substations' if 'substations' in existing_tables else ('substation' if 'substation' in existing_tables else None)
+    if not substation_table:
+        return  # подстанций нет (база пустая или другая цепь миграций) — не создаём эти таблицы
+
     # Создание таблицы voltage_levels
     if 'voltage_levels' not in existing_tables:
         op.create_table(
@@ -37,7 +48,7 @@ def upgrade() -> None:
             sa.Column('description', sa.Text(), nullable=True),
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
             sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-            sa.ForeignKeyConstraint(['substation_id'], ['substations.id'], ),
+            sa.ForeignKeyConstraint(['substation_id'], [f'{substation_table}.id'], ),
             sa.PrimaryKeyConstraint('id')
         )
         op.create_index(op.f('ix_voltage_levels_id'), 'voltage_levels', ['id'], unique=False)

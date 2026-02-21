@@ -1,7 +1,7 @@
 """add_mrid_and_new_models
 
 Revision ID: 20251208_231206
-Revises: 20241117_220000
+Revises: 20250221_000000
 Create Date: 2025-12-08T23:12:06.693889
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '20251208_231206'
-down_revision = '20241117_220000'
+down_revision = '20250221_000000'
 branch_labels = None
 depends_on = None
 

@@ -439,7 +439,31 @@ class _MapPageState extends ConsumerState<MapPage> {
       var polesData = futures[1] as Map<String, dynamic>;
       final tapsData = futures[2] as Map<String, dynamic>;
       final substationsData = futures[3] as Map<String, dynamic>;
-      var powerLinesList = futures[4] as List<PowerLine>;
+      var powerLinesList = List<PowerLine>.from(futures[4] as List<PowerLine>);
+
+      // Дерево объектов должно показывать те же ЛЭП, что и выпадающий список (например, при создании сессии).
+      // Выпадающий список берёт данные из локальной БД; дополняем список с сервера локальными ЛЭП.
+      final localPowerLines = await db.getAllPowerLines();
+      final serverIds = powerLinesList.map((pl) => pl.id).toSet();
+      for (final pl in localPowerLines) {
+        if (!serverIds.contains(pl.id)) {
+          powerLinesList.add(PowerLine(
+            id: pl.id,
+            name: pl.name,
+            code: pl.code,
+            voltageLevel: pl.voltageLevel,
+            length: pl.length,
+            branchId: pl.branchId,
+            createdBy: pl.createdBy,
+            status: pl.status,
+            description: pl.description,
+            createdAt: pl.createdAt,
+            updatedAt: pl.updatedAt,
+            poles: null,
+            aclineSegments: null,
+          ));
+        }
+      }
 
       // Добавляем локальные несинхронизированные опоры к данным с сервера
       final localPoles = await db.getPolesNeedingSync();
@@ -1160,60 +1184,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
           ),
           const Divider(height: 1),
-          // Блок "Обход" — начало/продолжение обхода (офлайн-сценарий).
-          // Контейнер без фиксированной высоты, чтобы избежать BOTTOM OVERFLOW при переносе кнопок.
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Обход',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Справочники доступны офлайн. Данные синхронизируются при появлении связи.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _showCreatePowerLineDialog();
-                        },
-                        icon: const Icon(Icons.add_road, size: 20),
-                        label: const Text('Новый обход'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _showContinuePatrolSheet();
-                        },
-                        icon: const Icon(Icons.play_arrow, size: 20),
-                        label: const Text('Продолжить'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Линии и подстанции
+          // Дерево объектов: только ЛЭП и подстанции (без блока «Обход»)
           Expanded(
             child: GestureDetector(
               onLongPress: () => _showRootContextMenu(context),
@@ -2899,7 +2870,29 @@ class _MapPageState extends ConsumerState<MapPage> {
                   final isOffline = e.type == DioExceptionType.connectionError ||
                       e.type == DioExceptionType.connectionTimeout ||
                       e.type == DioExceptionType.unknown;
-                  if (!isOffline) rethrow;
+                  if (!isOffline) {
+                    String message;
+                    final data = e.response?.data;
+                    if (data is Map && data['detail'] != null) {
+                      final d = data['detail'];
+                      message = d is String ? d : d.toString();
+                    } else if (e.response?.statusCode == 400) {
+                      message = 'Проверьте введённые данные: название, напряжение (кВ), длина (км).';
+                    } else {
+                      message = 'Ошибка создания линии: ${e.message}';
+                    }
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(message),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 5),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  rethrow;
                   // Сохраняем ЛЭП локально для последующей синхронизации
                   final prefs = ref.read(prefsProvider);
                   final db = ref.read(drift_db.databaseProvider);

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Дефолтное значение только для development
     SECRET_KEY: str = os.getenv("SECRET_KEY", "CHANGE_ME_SECRET_KEY")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 часов (можно задать через .env)
     
     # Redis для кэширования
     REDIS_URL: str = "redis://localhost:6379"

@@ -91,6 +91,10 @@ if os.getenv("ENVIRONMENT", "development") == "development":
         "https://localhost:53380",
         "http://127.0.0.1:53380",
         "https://127.0.0.1:53380",
+        "http://localhost:4200",
+        "https://localhost:4200",
+        "http://127.0.0.1:4200",
+        "https://127.0.0.1:4200",
         "http://localhost:8000",
         "https://localhost:8000",
     ]
