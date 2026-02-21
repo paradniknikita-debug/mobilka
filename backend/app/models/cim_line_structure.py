@@ -46,8 +46,8 @@ class ConnectivityNode(Base, IdentifiedObject):
     name = Column(String(100), nullable=False)
     
     # Связь с опорой (опора = физическое представление ConnectivityNode)
-    # Убрали unique=True, чтобы разрешить несколько ConnectivityNode на одной опоре
-    pole_id = Column(Integer, ForeignKey("pole.id"), nullable=False)
+    # nullable=True для узлов на подстанциях (при link_line_to_substation)
+    pole_id = Column(Integer, ForeignKey("pole.id"), nullable=True)
     
     # Связь с линией (для различения отпаек и совместного подвеса)
     # Если несколько ConnectivityNode на одной опоре принадлежат разным линиям с is_tap=False, это совместный подвес
@@ -62,7 +62,7 @@ class ConnectivityNode(Base, IdentifiedObject):
     # Связь с подстанцией (для ConnectivityNode в подстанциях)
     substation_id = Column(Integer, ForeignKey("substation.id"), nullable=True)
     
-    # Связи
+    # Связи (pole может быть None для узла на подстанции)
     pole = relationship("Pole", foreign_keys=[pole_id], back_populates="connectivity_nodes")
     line = relationship("PowerLine", foreign_keys=[line_id], back_populates="connectivity_nodes")
     substation = relationship("Substation", foreign_keys=[substation_id], back_populates="connectivity_nodes")

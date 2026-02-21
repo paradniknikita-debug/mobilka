@@ -123,9 +123,11 @@ class User {
 class UserCreate {
   final String username;
   final String email;
+  @JsonKey(name: 'full_name')
   final String fullName;
   final String password;
   final String role;
+  @JsonKey(name: 'branch_id')
   final int? branchId;
 
   const UserCreate({

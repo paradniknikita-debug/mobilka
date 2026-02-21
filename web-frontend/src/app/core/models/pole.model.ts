@@ -6,6 +6,7 @@ export interface Pole {
   connectivity_node_id?: number;
   pole_number: string;
   sequence_number?: number;  // Порядковый номер опоры в линии
+  is_tap_pole?: boolean;     // Отпаечная опора (конец участка ACLineSegment)
   latitude: number;
   longitude: number;
   pole_type: string;
@@ -32,5 +33,6 @@ export interface PoleCreate {
   year_installed?: number;
   condition?: string;
   notes?: string;
+  is_tap?: boolean;  // Отпаечная опора при создании/обновлении
 }
 

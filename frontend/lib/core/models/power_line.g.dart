@@ -66,9 +66,9 @@ Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
     <String, dynamic>{
       'name': instance.name,
       'code': instance.code,
-      'voltageLevel': instance.voltageLevel,
+      'voltage_level': instance.voltageLevel,
       'length': instance.length,
-      'branchId': instance.branchId,
+      'branch_id': instance.branchId,
       'status': instance.status,
       'description': instance.description,
     };
@@ -85,6 +85,7 @@ Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
       material: json['material'] as String?,
       yearInstalled: _intFromJsonNullable(json['year_installed']),
       sequenceNumber: _intFromJsonNullable(json['sequence_number']),
+      isTapPole: json['is_tap_pole'] == true,
       condition: json['condition'] == null
           ? 'good'
           : _stringFromJson(json['condition']),
@@ -118,6 +119,7 @@ Map<String, dynamic> _$PoleToJson(Pole instance) {
   writeNotNull('material', instance.material);
   writeNotNull('year_installed', instance.yearInstalled);
   writeNotNull('sequence_number', instance.sequenceNumber);
+  val['is_tap_pole'] = instance.isTapPole;
   val['condition'] = instance.condition;
   writeNotNull('notes', instance.notes);
   val['created_by'] = instance.createdBy;

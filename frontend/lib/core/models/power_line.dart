@@ -160,8 +160,10 @@ class PowerLine {
 class PowerLineCreate {
   final String name;
   final String code;
+  @JsonKey(name: 'voltage_level')
   final double voltageLevel;
   final double? length;
+  @JsonKey(name: 'branch_id')
   final int branchId;
   final String status;
   final String? description;
@@ -205,6 +207,8 @@ class Pole {
   final int? yearInstalled;
   @JsonKey(name: 'sequence_number', fromJson: _intFromJsonNullable)
   final int? sequenceNumber;
+  @JsonKey(name: 'is_tap_pole', defaultValue: false)
+  final bool isTapPole;
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
@@ -228,6 +232,7 @@ class Pole {
     this.material,
     this.yearInstalled,
     this.sequenceNumber,
+    this.isTapPole = false,
     required this.condition,
     this.notes,
     required this.createdBy,
@@ -250,6 +255,8 @@ class Pole {
     String? foundationType,
     String? material,
     int? yearInstalled,
+    int? sequenceNumber,
+    bool? isTapPole,
     String? condition,
     String? notes,
     int? createdBy,
@@ -268,6 +275,8 @@ class Pole {
       foundationType: foundationType ?? this.foundationType,
       material: material ?? this.material,
       yearInstalled: yearInstalled ?? this.yearInstalled,
+      sequenceNumber: sequenceNumber ?? this.sequenceNumber,
+      isTapPole: isTapPole ?? this.isTapPole,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
       createdBy: createdBy ?? this.createdBy,

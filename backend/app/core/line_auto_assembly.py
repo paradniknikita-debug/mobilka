@@ -29,6 +29,62 @@ from app.models.substation import Substation, Connection
 from app.models.base import generate_mrid
 
 
+async def get_or_create_connectivity_node_for_pole(
+    db: AsyncSession,
+    pole: Pole,
+    power_line_id: int,
+) -> ConnectivityNode:
+    """
+    Получить или создать ConnectivityNode для опоры в данной линии.
+    ConnectivityNode создаётся по требованию только когда нужен для пролёта/участка
+    (при создании опоры узел создаётся только для отпаечных опор).
+    """
+    result = await db.execute(
+        select(ConnectivityNode).where(
+            ConnectivityNode.pole_id == pole.id,
+            ConnectivityNode.line_id == power_line_id,
+        )
+    )
+    node = result.scalar_one_or_none()
+    if node:
+        return node
+    lat = getattr(pole, "latitude", None) or (pole.get_latitude() if hasattr(pole, "get_latitude") else 0.0)
+    lon = getattr(pole, "longitude", None) or (pole.get_longitude() if hasattr(pole, "get_longitude") else 0.0)
+    node = ConnectivityNode(
+        mrid=generate_mrid(),
+        name=f"Узел {pole.pole_number}",
+        pole_id=pole.id,
+        line_id=power_line_id,
+        latitude=float(lat) if lat is not None else 0.0,
+        longitude=float(lon) if lon is not None else 0.0,
+    )
+    db.add(node)
+    await db.flush()
+    return node
+
+
+async def _connectivity_node_display_name(
+    db: AsyncSession, connectivity_node_id: int
+) -> str:
+    """Имя для подписи: «ПС Название» для узла подстанции, иначе «оп. N»."""
+    result = await db.execute(
+        select(ConnectivityNode)
+        .where(ConnectivityNode.id == connectivity_node_id)
+        .options(
+            selectinload(ConnectivityNode.substation),
+            selectinload(ConnectivityNode.pole),
+        )
+    )
+    node = result.scalar_one_or_none()
+    if not node:
+        return f"Узел {connectivity_node_id}"
+    if getattr(node, "substation_id", None) and node.substation:
+        return (node.substation.name or node.substation.dispatcher_name or "ПС")[:50]
+    if node.pole:
+        return f"оп. {node.pole.pole_number}"
+    return f"Узел {connectivity_node_id}"
+
+
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Вычисление расстояния между двумя GPS координатами по формуле гаверсинуса (Haversine)
@@ -253,7 +309,7 @@ async def find_or_create_acline_segment(
         mrid=generate_mrid(),
         name=f"Сегмент {segment_count + 1} линии {power_line.name}",
         code=code,
-        power_line_id=power_line_id,
+        line_id=power_line_id,
         is_tap=False,
         from_connectivity_node_id=from_connectivity_node_id,
         to_connectivity_node_id=None,
@@ -348,7 +404,7 @@ async def auto_create_span(
     db: AsyncSession,
     power_line_id: int,
     new_pole: Pole,
-    new_connectivity_node: ConnectivityNode,
+    new_connectivity_node: Optional[ConnectivityNode] = None,
     conductor_type: Optional[str] = None,
     conductor_material: Optional[str] = None,
     conductor_section: Optional[str] = None,
@@ -356,31 +412,27 @@ async def auto_create_span(
     current_user_id: int = 1
 ) -> Optional[Span]:
     """
-    Автоматически создать пролёт от предыдущей опоры к новой опоре
-    
-    Логика:
-    1. Находит предыдущую опору в линии по sequence_number (или ближайшую, если sequence_number не указан)
-    2. Берёт марку провода из предыдущей опоры (если не указана явно)
-    3. Создаёт Span между опорами
-    4. Группирует в LineSection по марке кабеля (создаёт новую секцию, если марка провода изменилась)
-    5. Добавляет в AClineSegment от подстанции/ветвления до следующего ветвления/подстанции
+    Автоматически создать пролёт от предыдущей опоры к новой опоре.
+    ConnectivityNode для опор создаётся по требованию (только отпаечные получают узел при создании опоры).
     """
     from app.models.power_line import PowerLine
-    
+
+    # Узел новой опоры: передан или создаём по требованию для пролёта
+    if new_connectivity_node is None:
+        new_connectivity_node = await get_or_create_connectivity_node_for_pole(db, new_pole, power_line_id)
+
     # Находим предыдущую опору по sequence_number (или ближайшую для обратной совместимости)
     previous_pole = await find_previous_pole(
         db, power_line_id, new_pole.sequence_number, exclude_pole_id=new_pole.id
     )
-    
+
     if not previous_pole:
-        # Первая опора в линии - пролёта нет
         return None
-    
-    # Получаем ConnectivityNode для предыдущей опоры
+
+    # Узел предыдущей опоры: только отпаечные/подстанции имеют узел заранее, остальным создаём по требованию
     previous_cn = previous_pole.get_connectivity_node_for_line(power_line_id)
-    if not previous_cn:
-        # Если ConnectivityNode нет, пропускаем создание пролёта
-        return None
+    if previous_cn is None:
+        previous_cn = await get_or_create_connectivity_node_for_pole(db, previous_pole, power_line_id)
     
     # Берём марку провода из предыдущей опоры (если не указана явно)
     # Марка провода пролёта определяется по марке провода начальной опоры пролёта
@@ -408,16 +460,14 @@ async def auto_create_span(
     )
     
     # Обновляем to_connectivity_node_id текущего сегмента на новую опору
-    # (если это не ветвление и не отпаечная опора)
     is_new_pole_branching = await is_branching_pole(db, new_pole.id, power_line_id)
-    if not is_new_pole_branching and not is_tap:
+    if not is_new_pole_branching or is_tap:
         acline_segment.to_connectivity_node_id = new_connectivity_node.id
-    
-    # Если это отпаечная опора, завершаем текущий сегмент
-    if is_tap:
-        acline_segment.to_connectivity_node_id = new_connectivity_node.id
-        # Помечаем сегмент как завершённый (to_connectivity_node_id установлен)
-    
+        # Именование сегмента при закрытии: «ПС X - оп. N» или «оп. N - оп. M»
+        from_name = await _connectivity_node_display_name(db, acline_segment.from_connectivity_node_id)
+        to_name = await _connectivity_node_display_name(db, new_connectivity_node.id)
+        acline_segment.name = f"{from_name} - {to_name}"
+
     # Находим или создаём LineSection с нужной маркой кабеля
     # check_last_section=True означает, что нужно проверить последнюю секцию
     # и создать новую, если марка провода отличается
@@ -432,10 +482,15 @@ async def auto_create_span(
     )
     span_count = result.scalar_one() or 0
     
+    # Имена для наименования пролёта: «Пролёт X - Y»
+    from_span_name = await _connectivity_node_display_name(db, previous_cn.id)
+    to_span_name = await _connectivity_node_display_name(db, new_connectivity_node.id)
+    span_number = f"Пролёт {from_span_name} - {to_span_name}"
+
     # Создаём пролёт
     span = Span(
         mrid=generate_mrid(),
-        span_number=f"{previous_pole.pole_number}-{new_pole.pole_number}",
+        span_number=span_number,
         line_id=power_line_id,
         from_pole_id=previous_pole.id,
         to_pole_id=new_pole.id,
@@ -468,4 +523,161 @@ async def auto_create_span(
     await db.flush()
     
     return span
+
+
+async def link_line_to_substation(
+    db: AsyncSession,
+    power_line_id: int,
+    first_pole_id: int,
+    substation_id: int,
+    current_user_id: int,
+) -> AClineSegment:
+    """
+    Привязка первой опоры линии к подстанции (по «перетаскиванию» на карте).
+    Создаёт ACLineSegment от подстанции до первой опоры и первый пролёт.
+    """
+    from app.models.power_line import PowerLine
+
+    power_line = await db.get(PowerLine, power_line_id)
+    if not power_line:
+        raise ValueError(f"ЛЭП {power_line_id} не найдена")
+    substation = await db.get(Substation, substation_id)
+    if not substation:
+        raise ValueError(f"Подстанция {substation_id} не найдена")
+    pole_result = await db.execute(
+        select(Pole)
+        .where(Pole.id == first_pole_id, Pole.line_id == power_line_id)
+        .options(selectinload(Pole.connectivity_nodes))
+    )
+    first_pole = pole_result.scalar_one_or_none()
+    if not first_pole:
+        raise ValueError(f"Опора {first_pole_id} не найдена или не принадлежит ЛЭП {power_line_id}")
+
+    first_cn = first_pole.get_connectivity_node_for_line(power_line_id)
+    if first_cn is None:
+        first_cn = await get_or_create_connectivity_node_for_pole(db, first_pole, power_line_id)
+
+    sub_lat = getattr(substation, "latitude", None) or (substation.get_latitude() if hasattr(substation, "get_latitude") else None)
+    sub_lon = getattr(substation, "longitude", None) or (substation.get_longitude() if hasattr(substation, "get_longitude") else None)
+    if sub_lat is None or sub_lon is None:
+        sub_lat = first_cn.latitude
+        sub_lon = first_cn.longitude
+
+    # Узел подстанции для этой линии (один на пару линия–подстанция)
+    result = await db.execute(
+        select(ConnectivityNode).where(
+            ConnectivityNode.substation_id == substation_id,
+            ConnectivityNode.line_id == power_line_id,
+        )
+    )
+    substation_cn = result.scalar_one_or_none()
+    if not substation_cn:
+        substation_cn = ConnectivityNode(
+            mrid=generate_mrid(),
+            name=substation.name or substation.dispatcher_name or "ПС",
+            pole_id=None,
+            line_id=power_line_id,
+            latitude=float(sub_lat),
+            longitude=float(sub_lon),
+            substation_id=substation_id,
+        )
+        db.add(substation_cn)
+        await db.flush()
+
+    # Есть ли уже сегмент от этой подстанции до этой опоры
+    result = await db.execute(
+        select(AClineSegment).where(
+            AClineSegment.line_id == power_line_id,
+            AClineSegment.from_connectivity_node_id == substation_cn.id,
+            AClineSegment.to_connectivity_node_id == first_cn.id,
+        )
+    )
+    if result.scalar_one_or_none():
+        raise ValueError("Участок от этой подстанции до этой опоры уже создан")
+
+    segment_count_result = await db.execute(
+        select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
+    )
+    segment_count = segment_count_result.scalar_one() or 0
+    code = f"{power_line.code}-SEG-{segment_count + 1}"
+
+    from_name = await _connectivity_node_display_name(db, substation_cn.id)
+    to_name = await _connectivity_node_display_name(db, first_cn.id)
+    segment_name = f"{from_name} - {to_name}"
+
+    segment = AClineSegment(
+        mrid=generate_mrid(),
+        name=segment_name,
+        code=code,
+        line_id=power_line_id,
+        is_tap=False,
+        from_connectivity_node_id=substation_cn.id,
+        to_connectivity_node_id=first_cn.id,
+        voltage_level=power_line.voltage_level or 10.0,
+        length=0.0,
+        sequence_number=segment_count + 1,
+        created_by=current_user_id,
+    )
+    db.add(segment)
+    await db.flush()
+
+    conductor_type = getattr(first_pole, "conductor_type", None) or "AC-70"
+    conductor_material = getattr(first_pole, "conductor_material", None) or "алюминий"
+    conductor_section = getattr(first_pole, "conductor_section", None) or "70"
+
+    line_section = await find_or_create_line_section(
+        db, segment.id, conductor_type, conductor_material, conductor_section,
+        current_user_id, check_last_section=False
+    )
+    line_section.name = f"{from_name} - {to_name} ({conductor_type})"
+    await db.flush()
+
+    distance = calculate_distance(
+        float(sub_lat), float(sub_lon),
+        first_pole.latitude or 0, first_pole.longitude or 0,
+    )
+    span_number = f"Пролёт {from_name} - {to_name}"
+
+    span = Span(
+        mrid=generate_mrid(),
+        span_number=span_number,
+        line_id=power_line_id,
+        from_pole_id=None,
+        to_pole_id=first_pole.id,
+        from_connectivity_node_id=substation_cn.id,
+        to_connectivity_node_id=first_cn.id,
+        line_section_id=line_section.id,
+        length=distance,
+        conductor_type=conductor_type,
+        conductor_material=conductor_material,
+        conductor_section=conductor_section,
+        sequence_number=1,
+        created_by=current_user_id,
+    )
+    db.add(span)
+    await db.flush()
+
+    line_section.total_length = distance / 1000.0
+    segment.length = distance / 1000.0
+    await db.flush()
+
+    # Связь линии с подстанцией (если ещё нет)
+    conn_result = await db.execute(
+        select(Connection).where(
+            Connection.line_id == power_line_id,
+            Connection.substation_id == substation_id,
+        )
+    )
+    if conn_result.scalar_one_or_none() is None:
+        from app.models.base import generate_mrid
+        conn = Connection(
+            mrid=generate_mrid(),
+            substation_id=substation_id,
+            line_id=power_line_id,
+            connection_type="output",
+            voltage_level=power_line.voltage_level or 10.0,
+        )
+        db.add(conn)
+
+    return segment
 

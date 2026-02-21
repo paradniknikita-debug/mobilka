@@ -37,6 +37,7 @@ class PoleResponse(PoleBase):
     line_id: int
     connectivity_node_id: Optional[int] = None
     sequence_number: Optional[int] = None
+    is_tap_pole: bool = False
     conductor_type: Optional[str] = None
     conductor_material: Optional[str] = None
     conductor_section: Optional[str] = None
@@ -65,8 +66,22 @@ class PowerLineBase(BaseModel):
 class PowerLineCreate(PowerLineBase):
     mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
 
+
+class PowerLineUpdate(BaseModel):
+    """Тело запроса на обновление ЛЭП (все поля опциональны)."""
+    name: Optional[str] = None
+    base_voltage_id: Optional[int] = None
+    voltage_level: Optional[float] = None
+    length: Optional[float] = None
+    branch_name: Optional[str] = None
+    region_name: Optional[str] = None
+    status: Optional[str] = None
+    description: Optional[str] = None
+
+
 class PowerLineResponse(PowerLineBase):
     id: int
+    code: str
     mrid: str
     created_by: int
     created_at: datetime

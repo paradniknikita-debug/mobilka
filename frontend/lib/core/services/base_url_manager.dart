@@ -21,10 +21,6 @@ class BaseUrlManager {
     // При инициализации всегда сбрасываем fallback и устанавливаем протокол из конфига
     _fallbackOccurred = false;
     _protocol = AppConfig.useHttps ? 'https' : 'http';
-    // Логируем только при первой инициализации
-    // if (kDebugMode) {
-    //   print('🔄 BaseUrlManager инициализирован с протоколом: $_protocol');
-    // }
   }
 
   /// Получить базовый URL (с учетом протокола)
@@ -38,21 +34,13 @@ class BaseUrlManager {
     if (_protocol == null) {
       _protocol = AppConfig.useHttps ? 'https' : 'http';
       _fallbackOccurred = false;
-      // Логируем только при необходимости
-      // if (kDebugMode) {
-      //   print('🔄 Протокол инициализирован из конфига: $_protocol');
-      // }
     }
-    
+
     // Если не было fallback, всегда используем протокол из конфига
     if (!_fallbackOccurred) {
       final configProtocol = AppConfig.useHttps ? 'https' : 'http';
       if (_protocol != configProtocol) {
         _protocol = configProtocol;
-        // Логируем только при необходимости
-        // if (kDebugMode) {
-        //   print('🔄 Протокол обновлен из конфига: $_protocol');
-        // }
       }
     }
     // Если был fallback, используем сохраненный протокол (HTTP)
@@ -68,16 +56,18 @@ class BaseUrlManager {
     // Development: абсолютный путь с портом
     final port = _protocol == 'https' ? 443 : 8000;
     final hostname = Uri.base.host;
-    final baseUrl = (hostname == 'localhost' || hostname == '127.0.0.1' || hostname.isEmpty)
+    final baseUrl = (hostname == 'localhost' ||
+            hostname == '127.0.0.1' ||
+            hostname.isEmpty)
         ? '$_protocol://localhost:$port'
         : '$_protocol://$hostname:$port';
-    
-    // Логируем только при изменении протокола или при инициализации
-    if (kDebugMode && (_protocol == null || _fallbackOccurred)) {
+
+    if (kDebugMode && (_fallbackOccurred)) {
       final flutterProtocol = Uri.base.scheme;
-      print('🌐 BaseUrl: $baseUrl (протокол: $_protocol, fallback: $_fallbackOccurred)');
+      print(
+          '🌐 BaseUrl: $baseUrl (протокол: $_protocol, fallback: $_fallbackOccurred, flutter: $flutterProtocol)');
     }
-    
+
     return baseUrl;
   }
 
@@ -88,7 +78,8 @@ class BaseUrlManager {
       _fallbackOccurred = true;
       if (kDebugMode) {
         print('⚠️ HTTPS недоступен, переключение на HTTP');
-        print('   Для возврата к HTTPS измените useHttps в конфиге и перезапустите приложение');
+        print(
+            '   Для возврата к HTTPS измените useHttps в конфиге и перезапустите приложение');
       }
       // Сохраняем флаг fallback в SharedPreferences (если доступен)
       if (_prefs != null) {
@@ -113,9 +104,6 @@ class BaseUrlManager {
         }
       });
     }
-    if (kDebugMode) {
-      print('🔄 Fallback сброшен, протокол: $_protocol');
-    }
   }
 
   /// Принудительно обновить протокол из конфига (при изменении useHttps)
@@ -130,10 +118,6 @@ class BaseUrlManager {
         }
       });
     }
-    // Логируем только при необходимости
-    // if (kDebugMode) {
-    //   print('🔄 Протокол обновлен из конфига: $_protocol');
-    // }
   }
 
   /// Проверить, используется ли HTTP (после fallback)
@@ -151,15 +135,10 @@ class BaseUrlManager {
         return savedUrl;
       }
     }
-    
+
     // Если нет сохраненного URL, используем доменное имя по умолчанию
-    // Доменное имя работает независимо от изменения IP адреса
-    // Для эмулятора Android используем специальный адрес
+    // Для эмулятора Android используем специальный адрес, для реальных устройств — пример локального сервера
     final defaultUrl = 'http://lepm.local:8000';
-    // Логируем только при первой загрузке
-    // if (kDebugMode) {
-    //   print('📡 Используется URL по умолчанию: $defaultUrl');
-    // }
     return defaultUrl;
   }
 

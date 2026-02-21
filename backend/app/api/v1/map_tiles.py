@@ -12,7 +12,9 @@ from app.models.power_line import PowerLine, Pole, Tap, Span
 from app.models.substation import Substation
 from app.models.location import Location, PositionPoint
 from app.models.cim_line_structure import ConnectivityNode
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def filter_none_properties(props: Dict[str, Any]) -> Dict[str, Any]:
@@ -38,6 +40,17 @@ async def get_power_lines_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение ЛЭП в формате GeoJSON"""
+    try:
+        return await _get_power_lines_geojson_impl(db)
+    except Exception as e:
+        logger.exception("map/power-lines/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/power-lines/geojson: {type(e).__name__}: {e}",
+        ) from e
+
+
+async def _get_power_lines_geojson_impl(db: AsyncSession):
     result = await db.execute(
         select(PowerLine).options(
             selectinload(PowerLine.poles).selectinload(Pole.position_points),
@@ -48,6 +61,14 @@ async def get_power_lines_geojson(
     
     features = []
     for power_line in power_lines:
+        poles_with_coords = sum(
+            1 for p in power_line.poles
+            if getattr(p, 'longitude', None) is not None and getattr(p, 'latitude', None) is not None
+        )
+        logger.info(
+            "map/power-lines/geojson: ЛЭП id=%d name=%r опор=%d с координатами=%d",
+            power_line.id, power_line.name, len(power_line.poles), poles_with_coords
+        )
         # Создаем LineString из координат опор, если есть минимум 2 опоры
         if len(power_line.poles) >= 2:
             coordinates = []
@@ -209,11 +230,12 @@ async def get_power_lines_geojson(
                 }
             }
             features.append(feature)
-    
+
     return {
         "type": "FeatureCollection",
         "features": features
     }
+
 
 @router.get("/poles/geojson")
 async def get_poles_geojson(
@@ -221,6 +243,17 @@ async def get_poles_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение опор в формате GeoJSON"""
+    try:
+        return await _get_poles_geojson_impl(db)
+    except Exception as e:
+        logger.exception("map/poles/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/poles/geojson: {type(e).__name__}: {e}",
+        ) from e
+
+
+async def _get_poles_geojson_impl(db: AsyncSession):
     result = await db.execute(
         select(Pole).options(
             selectinload(Pole.line),
@@ -283,10 +316,10 @@ async def get_poles_geojson(
             except (TypeError, ValueError):
                 continue  # Пропускаем объекты с невалидными координатами
             
-            # Создаем properties, исключая None значения
+            # Создаем properties, исключая None значения (mrid может отсутствовать в старых БД)
             properties = {
                 "id": int(pole.id),
-                "mrid": str(pole.mrid) if pole.mrid else "",
+                "mrid": str(getattr(pole, "mrid", None) or ""),
                 "pole_number": str(pole.pole_number) if pole.pole_number else "",
                 "pole_type": str(pole.pole_type) if pole.pole_type else "",
                 "condition": str(pole.condition) if pole.condition else "good"
@@ -420,12 +453,13 @@ async def get_substations_geojson(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение подстанций в формате GeoJSON"""
-    # Временно используем старые поля, пока миграция не применена
     result = await db.execute(
-        select(Substation).where(Substation.is_active == True)
+        select(Substation)
+        .where(Substation.is_active == True)
+        .options(selectinload(Substation.voltage_levels))
     )
     substations = result.scalars().all()
-    
+
     features = []
     for substation in substations:
         # Получаем координаты из position_point (новая структура)
@@ -433,6 +467,11 @@ async def get_substations_geojson(
         latitude = None
         
         # Пытаемся получить из position_points напрямую
+        # Получаем координаты из старого поля (пока миграция не применена)
+        longitude = getattr(substation, 'longitude', None)
+        latitude = getattr(substation, 'latitude', None)
+
+        # Пытаемся получить из Location, если доступно
         try:
             if hasattr(substation, 'position_points') and substation.position_points:
                 point = substation.position_points[0]
@@ -460,6 +499,14 @@ async def get_substations_geojson(
                     pass
         
         # Включаем только объекты с валидными координатами
+
+        # Номинал: из уровней напряжения (110/10) или одно значение
+        voltage_level = substation.voltage_level
+        voltage_level_display = None
+        if hasattr(substation, 'voltage_levels') and substation.voltage_levels:
+            nominals = sorted([vl.nominal_voltage for vl in substation.voltage_levels], reverse=True)
+            voltage_level_display = "/".join(str(int(v) if v == int(v) else v) for v in nominals)
+
         if longitude is not None and latitude is not None:
             try:
                 longitude = float(longitude)
@@ -478,14 +525,14 @@ async def get_substations_geojson(
                 "name": str(substation.name) if substation.name else "",
                 "dispatcher_name": str(substation.dispatcher_name) if substation.dispatcher_name else ""
             }
-            # Добавляем опциональные поля только если они не None
             if substation.voltage_level is not None:
                 properties["voltage_level"] = float(substation.voltage_level)
             if substation.branch_id is not None:
                 properties["branch_id"] = int(substation.branch_id)
             if substation.address:
                 properties["address"] = str(substation.address)
-            
+            if voltage_level_display is not None:
+                properties["voltage_level_display"] = voltage_level_display
             feature = {
                 "type": "Feature",
                 "properties": properties,

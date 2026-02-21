@@ -91,12 +91,43 @@ class SyncRecords extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [PowerLines, Poles, Equipment, SyncRecords])
+/// Локальные сессии обхода ЛЭП. Синхронизация только по кнопке.
+class PatrolSessions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get serverId => integer().nullable()();
+  IntColumn get powerLineId => integer()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get endedAt => dateTime().nullable()();
+  TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
+  IntColumn get userId => integer().nullable()();
+}
+
+@DriftDatabase(tables: [PowerLines, Poles, Equipment, SyncRecords, PatrolSessions])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
   int get schemaVersion => AppConfig.databaseVersion;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (migrator, from, to) async {
+          if (from < 2) {
+            await migrator.issueCustomQuery(
+              'CREATE TABLE IF NOT EXISTS patrol_sessions ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, '
+              'server_id INTEGER, '
+              'power_line_id INTEGER NOT NULL, '
+              'note TEXT, '
+              'started_at DATETIME NOT NULL, '
+              'ended_at DATETIME, '
+              'sync_status TEXT NOT NULL DEFAULT "pending", '
+              'user_id INTEGER)',
+            );
+          }
+        },
+      );
 
   // Методы для работы с ЛЭП
   Future<List<PowerLine>> getAllPowerLines() => select(powerLines).get();
@@ -106,6 +137,10 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> insertPowerLine(PowerLinesCompanion powerLine) => 
       into(powerLines).insert(powerLine);
+  
+  /// Вставка или замена (для синхронизации: запись с сервера по id)
+  Future<int> insertPowerLineOrReplace(PowerLinesCompanion powerLine) => 
+      into(powerLines).insert(powerLine, mode: InsertMode.insertOrReplace);
   
   Future<bool> updatePowerLine(PowerLinesCompanion powerLine) => 
       update(powerLines).replace(powerLine);
@@ -125,6 +160,9 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertPole(PolesCompanion pole) => 
       into(poles).insert(pole);
   
+  Future<int> insertPoleOrReplace(PolesCompanion pole) => 
+      into(poles).insert(pole, mode: InsertMode.insertOrReplace);
+  
   Future<bool> updatePole(PolesCompanion pole) => 
       update(poles).replace(pole);
   
@@ -142,6 +180,9 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> insertEquipment(EquipmentCompanion equipmentItem) => 
       into(equipment).insert(equipmentItem);
+  
+  Future<int> insertEquipmentOrReplace(EquipmentCompanion equipmentItem) => 
+      into(equipment).insert(equipmentItem, mode: InsertMode.insertOrReplace);
   
   Future<bool> updateEquipment(EquipmentCompanion equipmentItem) => 
       update(equipment).replace(equipmentItem);
@@ -171,6 +212,43 @@ class AppDatabase extends _$AppDatabase {
   
   Future<List<EquipmentData>> getEquipmentNeedingSync() => 
       (select(equipment)..where((tbl) => tbl.needsSync.equals(true))).get();
+
+  // Сессии обхода (офлайн + синхронизация по кнопке)
+  Future<List<PatrolSession>> getPendingPatrolSessions() =>
+      (select(patrolSessions)..where((tbl) => tbl.syncStatus.equals('pending'))).get();
+
+  /// Недавние сессии обхода из локальной БД (для блока «Последние обходы» при офлайне).
+  Future<List<PatrolSession>> getRecentPatrolSessionsFromDb(int limit) =>
+      (select(patrolSessions)
+            ..orderBy([(t) => OrderingTerm.desc(t.startedAt)])
+            ..limit(limit))
+          .get();
+
+  Future<PatrolSession?> getPatrolSession(int id) =>
+      (select(patrolSessions)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+
+  Future<int> insertPatrolSession(PatrolSessionsCompanion row) =>
+      into(patrolSessions).insert(row);
+
+  Future<bool> updatePatrolSession(PatrolSessionsCompanion row) =>
+      update(patrolSessions).replace(row);
+
+  /// Проставить время окончания сессии обхода (при завершении обхода).
+  Future<int> setPatrolSessionEnded(int id, DateTime endedAt) =>
+      (update(patrolSessions)..where((tbl) => tbl.id.equals(id)))
+          .write(PatrolSessionsCompanion(endedAt: Value(endedAt)));
+
+  /// После успешной отправки на сервер: проставить serverId и статус synced.
+  Future<int> setPatrolSessionSynced(int id, int serverId) =>
+      (update(patrolSessions)..where((tbl) => tbl.id.equals(id)))
+          .write(PatrolSessionsCompanion(
+        serverId: Value(serverId),
+        syncStatus: const Value('synced'),
+      ));
+
+  /// Удалить все сессии обхода по данной ЛЭП (при удалении линии).
+  Future<int> deletePatrolSessionsByPowerLineId(int powerLineId) =>
+      (delete(patrolSessions)..where((tbl) => tbl.powerLineId.equals(powerLineId))).go();
 }
 
 LazyDatabase _openConnection() {

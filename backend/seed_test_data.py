@@ -1,6 +1,11 @@
 """
-Скрипт для добавления тестовых данных в базу данных
-Использование: python seed_test_data.py
+Скрипт для добавления тестовых данных в базу данных.
+
+Использование:
+    python seed_test_data.py
+
+Или после пересоздания БД (recreate_db.py):
+    python recreate_db.py
 """
 import asyncio
 import sys
@@ -11,24 +16,28 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text as sa_text
+from sqlalchemy import select
 from app.database import AsyncSessionLocal, init_db
 from app.models import (
-    User, GeographicRegion, PowerLine, Tower, AClineSegment,
-    Substation, Branch
+    User,
+    GeographicRegion,
+    PowerLine,
+    Pole,
+    Substation,
+    Branch,
 )
 from app.core.security import get_password_hash
 
 
 async def create_test_data():
-    """Создание тестовых данных"""
-    
+    """Создание тестовых данных."""
+
     # Инициализация БД (создание таблиц, если их нет)
     await init_db()
-    
+
     async with AsyncSessionLocal() as session:
         try:
-            # 1. Создаем пользователя (если его нет)
+            # 1. Пользователь
             result = await session.execute(select(User).where(User.id == 1))
             user = result.scalar_one_or_none()
             if not user:
@@ -39,15 +48,15 @@ async def create_test_data():
                     hashed_password=get_password_hash("admin123"),
                     is_active=True,
                     is_superuser=True,
-                    role="admin"
+                    role="admin",
                 )
                 session.add(user)
-                await session.flush()  # Получаем ID пользователя
-                print("✅ Создан пользователь: admin / admin123")
+                await session.flush()
+                print("[OK] Создан пользователь: admin / admin123")
             else:
-                print("ℹ️  Пользователь уже существует")
-            
-            # 2. Создаем Branch (для обратной совместимости)
+                print("[i] Пользователь уже существует")
+
+            # 2. Филиал
             result = await session.execute(select(Branch).where(Branch.code == "TEST_BRANCH"))
             branch = result.scalar_one_or_none()
             if not branch:
@@ -55,15 +64,16 @@ async def create_test_data():
                     name="Тестовый филиал",
                     code="TEST_BRANCH",
                     address="г. Минск, ул. Тестовая, 1",
-                    is_active=True
+                    is_active=True,
                 )
                 session.add(branch)
                 await session.flush()
-                print("✅ Создан филиал: Тестовый филиал")
-            
-            # 3. Создаем географическую иерархию
-            # Рабочая область (корневой уровень)
-            result = await session.execute(select(GeographicRegion).where(GeographicRegion.code == "WORK_AREA_1"))
+                print("[OK] Создан филиал: Тестовый филиал")
+
+            # 3. Географическая иерархия
+            result = await session.execute(
+                select(GeographicRegion).where(GeographicRegion.code == "WORK_AREA_1")
+            )
             root_region = result.scalar_one_or_none()
             if not root_region:
                 root_region = GeographicRegion(
@@ -73,14 +83,15 @@ async def create_test_data():
                     level=0,
                     parent_id=None,
                     description="Основная рабочая область для Минска",
-                    is_active=True
+                    is_active=True,
                 )
                 session.add(root_region)
                 await session.flush()
-                print("✅ Создана рабочая область: Минск")
-            
-            # ФЭС (уровень 1)
-            result = await session.execute(select(GeographicRegion).where(GeographicRegion.code == "FES_1"))
+                print("[OK] Создана рабочая область: Минск")
+
+            result = await session.execute(
+                select(GeographicRegion).where(GeographicRegion.code == "FES_1")
+            )
             fes_region = result.scalar_one_or_none()
             if not fes_region:
                 fes_region = GeographicRegion(
@@ -90,14 +101,15 @@ async def create_test_data():
                     level=1,
                     parent_id=root_region.id,
                     description="Федеральная энергосистема Минская",
-                    is_active=True
+                    is_active=True,
                 )
                 session.add(fes_region)
                 await session.flush()
-                print("✅ Создана ФЭС: Минская")
-            
-            # РЭС (уровень 2)
-            result = await session.execute(select(GeographicRegion).where(GeographicRegion.code == "RES_1"))
+                print("[OK] Создана ФЭС: Минская")
+
+            result = await session.execute(
+                select(GeographicRegion).where(GeographicRegion.code == "RES_1")
+            )
             res_region = result.scalar_one_or_none()
             if not res_region:
                 res_region = GeographicRegion(
@@ -107,19 +119,21 @@ async def create_test_data():
                     level=2,
                     parent_id=fes_region.id,
                     description="Региональная энергосистема Минск-Запад",
-                    is_active=True
+                    is_active=True,
                 )
                 session.add(res_region)
                 await session.flush()
-                print("✅ Создан РЭС: Минск-Запад")
-            
-            # 4. Создаем подстанцию
-            result = await session.execute(select(Substation).where(Substation.code == "SUB_110_1"))
+                print("[OK] Создан РЭС: Минск-Запад")
+
+            # 4. Подстанция (dispatcher_name — диспетчерское наименование)
+            result = await session.execute(
+                select(Substation).where(Substation.dispatcher_name == "SUB_110_1")
+            )
             substation = result.scalar_one_or_none()
             if not substation:
                 substation = Substation(
                     name="Подстанция 110/10 кВ №1",
-                    code="SUB_110_1",
+                    dispatcher_name="SUB_110_1",
                     voltage_level=110.0,
                     latitude=53.9045,
                     longitude=27.5615,
@@ -127,173 +141,110 @@ async def create_test_data():
                     region_id=res_region.id,
                     branch_id=branch.id if branch else None,
                     description="Тестовая подстанция 110 кВ",
-                    is_active=True
+                    is_active=True,
                 )
                 session.add(substation)
                 await session.flush()
-                print("✅ Создана подстанция: Подстанция 110/10 кВ №1")
-            
-            # 5. Создаем линию электропередачи
-            result = await session.execute(select(PowerLine).where(PowerLine.code == "LINE_110_1"))
+                print("[OK] Создана подстанция: Подстанция 110/10 кВ №1")
+
+            # 5. Линия электропередачи
+            result = await session.execute(
+                select(PowerLine).where(PowerLine.code == "LINE_110_1")
+            )
             power_line = result.scalar_one_or_none()
             if not power_line:
                 power_line = PowerLine(
                     name="ЛЭП 110 кВ Минск-Западная",
                     code="LINE_110_1",
                     voltage_level=110.0,
-                    length=25.5,  # км
+                    length=25.5,
                     region_id=res_region.id,
                     branch_id=branch.id if branch else None,
                     created_by=user.id,
                     status="active",
-                    description="Тестовая линия 110 кВ"
+                    description="Тестовая линия 110 кВ",
                 )
                 session.add(power_line)
                 await session.flush()
-                print("✅ Создана линия: ЛЭП 110 кВ Минск-Западная")
-            
-            # 6. Создаем опоры
-            towers_data = [
+                print("[OK] Создана линия: ЛЭП 110 кВ Минск-Западная")
+
+            # 6. Опоры (модель Pole: pole_number, pole_type, latitude, longitude и т.д.)
+            poles_data = [
                 {
-                    "tower_number": "T001",
+                    "pole_number": "ОП-001",
                     "latitude": 53.9045,
                     "longitude": 27.5615,
-                    "tower_type": "анкерная",
-                    "height": 25.0
+                    "pole_type": "анкерная",
+                    "height": 25.0,
                 },
                 {
-                    "tower_number": "T002",
+                    "pole_number": "ОП-002",
                     "latitude": 53.9100,
                     "longitude": 27.5700,
-                    "tower_type": "промежуточная",
-                    "height": 23.0
+                    "pole_type": "промежуточная",
+                    "height": 23.0,
                 },
                 {
-                    "tower_number": "T003",
+                    "pole_number": "ОП-003",
                     "latitude": 53.9150,
                     "longitude": 27.5800,
-                    "tower_type": "промежуточная",
-                    "height": 23.0
+                    "pole_type": "промежуточная",
+                    "height": 23.0,
                 },
                 {
-                    "tower_number": "T004",
+                    "pole_number": "ОП-004",
                     "latitude": 53.9200,
                     "longitude": 27.5900,
-                    "tower_type": "анкерная",
-                    "height": 25.0
+                    "pole_type": "анкерная",
+                    "height": 25.0,
                 },
             ]
-            
-            towers = []
-            for tower_data in towers_data:
+
+            poles = []
+            for i, pdata in enumerate(poles_data):
                 result = await session.execute(
-                    select(Tower).where(
-                        Tower.power_line_id == power_line.id,
-                        Tower.tower_number == tower_data["tower_number"]
+                    select(Pole).where(
+                        Pole.power_line_id == power_line.id,
+                        Pole.pole_number == pdata["pole_number"],
                     )
                 )
-                existing_tower = result.scalar_one_or_none()
-                if not existing_tower:
-                    tower = Tower(
+                existing = result.scalar_one_or_none()
+                if not existing:
+                    pole = Pole(
                         power_line_id=power_line.id,
-                        tower_number=tower_data["tower_number"],
-                        latitude=tower_data["latitude"],
-                        longitude=tower_data["longitude"],
-                        tower_type=tower_data["tower_type"],
-                        height=tower_data["height"],
+                        pole_number=pdata["pole_number"],
+                        latitude=pdata["latitude"],
+                        longitude=pdata["longitude"],
+                        pole_type=pdata["pole_type"],
+                        height=pdata["height"],
                         material="металл",
                         foundation_type="железобетон",
                         year_installed=2020,
                         condition="good",
-                        created_by=user.id
+                        sequence_number=i + 1,
+                        created_by=user.id,
                     )
-                    session.add(tower)
-                    towers.append(tower)
-            
+                    session.add(pole)
+                    poles.append(pole)
+
             await session.flush()
-            print(f"✅ Создано опор: {len(towers)}")
-            
-            # 7. Создаем сегменты линии
-            if len(towers) >= 2:
-                result = await session.execute(select(AClineSegment).where(AClineSegment.code == "SEG_110_1"))
-                segment1 = result.scalar_one_or_none()
-                if not segment1:
-                    segment1 = AClineSegment(
-                        name="Сегмент 1: T001-T002",
-                        code="SEG_110_1",
-                        voltage_level=110.0,
-                        length=5.2,  # км
-                        conductor_type="АС-150",
-                        conductor_material="алюминий",
-                        conductor_section="150",
-                        start_tower_id=towers[0].id,
-                        end_tower_id=towers[1].id,
-                        r=0.21,  # Ом/км
-                        x=0.42,  # Ом/км
-                        description="Первый сегмент линии",
-                        created_by=user.id
-                    )
-                    session.add(segment1)
-                    await session.flush()
-                    
-                    # Связываем сегмент с линией (many-to-many) через прямой SQL
-                    await session.execute(
-                        sa_text("INSERT INTO line_segments (power_line_id, acline_segment_id) VALUES (:line_id, :seg_id) ON CONFLICT DO NOTHING"),
-                        {"line_id": power_line.id, "seg_id": segment1.id}
-                    )
-                    await session.flush()
-                    print("✅ Создан сегмент: Сегмент 1: T001-T002")
-                
-                if len(towers) >= 3:
-                    result = await session.execute(select(AClineSegment).where(AClineSegment.code == "SEG_110_2"))
-                    segment2 = result.scalar_one_or_none()
-                    if not segment2:
-                        segment2 = AClineSegment(
-                            name="Сегмент 2: T002-T003",
-                            code="SEG_110_2",
-                            voltage_level=110.0,
-                            length=4.8,  # км
-                            conductor_type="АС-150",
-                            conductor_material="алюминий",
-                            conductor_section="150",
-                            start_tower_id=towers[1].id,
-                            end_tower_id=towers[2].id,
-                            r=0.21,
-                            x=0.42,
-                            description="Второй сегмент линии",
-                            created_by=user.id
-                        )
-                        session.add(segment2)
-                        await session.flush()
-                        
-                        # Связываем сегмент с линией (many-to-many) через прямой SQL
-                        await session.execute(
-                            sa_text("INSERT INTO line_segments (power_line_id, acline_segment_id) VALUES (:line_id, :seg_id) ON CONFLICT DO NOTHING"),
-                            {"line_id": power_line.id, "seg_id": segment2.id}
-                        )
-                        await session.flush()
-                        print("✅ Создан сегмент: Сегмент 2: T002-T003")
-            
-            # Сохраняем все изменения
+            print(f"[OK] Создано опор: {len(poles)}")
+
             await session.commit()
-            print("\n✅ Все тестовые данные успешно добавлены!")
-            print("\n📊 Структура данных:")
-            print("   - 1 пользователь (admin/admin123)")
-            print("   - 1 рабочая область")
-            print("   - 1 ФЭС")
-            print("   - 1 РЭС")
+            print("\n[OK] Все тестовые данные успешно добавлены!")
+            print("\nСтруктура данных:")
+            print("   - 1 пользователь (admin / admin123)")
+            print("   - 1 рабочая область, 1 ФЭС, 1 РЭС")
             print("   - 1 подстанция")
             print("   - 1 линия электропередачи")
             print("   - 4 опоры")
-            print("   - 2 сегмента линии")
-            
+
         except Exception as e:
             await session.rollback()
-            print(f"❌ Ошибка при создании тестовых данных: {e}")
+            print(f"[FAIL] Ошибка при создании тестовых данных: {e}")
             raise
 
 
 if __name__ == "__main__":
-    print("🌱 Начинаю создание тестовых данных...\n")
+    print("Начинаю создание тестовых данных...\n")
     asyncio.run(create_test_data())
-

@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:dio/dio.dart';
 
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/database/database.dart';
 import '../../../../core/models/power_line.dart';
+import '../../../../core/config/app_config.dart';
+import '../../../../core/config/pole_reference_data.dart';
 
 class CreatePoleDialog extends ConsumerStatefulWidget {
   final int powerLineId;
@@ -26,49 +32,25 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   bool _isLoading = false;
   bool _isGettingLocation = false;
 
-  // Поля формы
+  // Поля формы (справочники из PoleReferenceData)
   String _poleNumber = '';
-  String _poleType = 'промежуточная';
+  String _poleType = PoleReferenceData.defaultPoleType;
   double? _latitude;
   double? _longitude;
   double? _height;
   String? _foundationType;
   String? _material;
   int? _yearInstalled;
-  String _condition = 'good';
+  String _condition = PoleReferenceData.defaultCondition;
   String? _notes;
 
   // Параметры кабеля
-  String? _conductorType = 'AC-70';
-  String? _conductorMaterial = 'алюминий';
-  String? _conductorSection = '70';
+  String? _conductorType = PoleReferenceData.defaultConductorType;
+  String? _conductorMaterial = PoleReferenceData.defaultConductorMaterial;
+  String? _conductorSection = PoleReferenceData.defaultConductorSection;
   
   // Отпаечная опора
   bool _isTap = false;
-
-  final List<String> _poleTypes = [
-    'анкерная',
-    'промежуточная',
-    'угловая',
-    'концевая',
-    'переходная',
-    'транспозиционная',
-  ];
-
-  final List<String> _conductorTypes = [
-    'AC-70',
-    'AC-95',
-    'AC-120',
-    'AC-150',
-    'AC-185',
-    'AC-240',
-    'AC-300',
-  ];
-
-  final List<String> _conductorMaterials = [
-    'алюминий',
-    'медь',
-  ];
 
   @override
   void initState() {
@@ -83,6 +65,41 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _getCurrentLocation();
       });
+    }
+  }
+
+  /// Сохранить опору в локальную БД для последующей синхронизации
+  Future<bool> _savePoleToLocalDb() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final prefs = ref.read(prefsProvider);
+      int localId = prefs.getInt(AppConfig.lastLocalPoleIdKey) ?? -1;
+      localId--;
+      await prefs.setInt(AppConfig.lastLocalPoleIdKey, localId);
+      final userId = prefs.getInt(AppConfig.userIdKey) ?? 0;
+      final now = DateTime.now();
+      await db.insertPole(PolesCompanion.insert(
+        id: drift.Value(localId),
+        powerLineId: widget.powerLineId,
+        poleNumber: _poleNumber,
+        latitude: _latitude!,
+        longitude: _longitude!,
+        poleType: _poleType,
+        height: drift.Value(_height),
+        foundationType: drift.Value(_foundationType),
+        material: drift.Value(_material),
+        yearInstalled: drift.Value(_yearInstalled),
+        condition: _condition,
+        notes: drift.Value(_notes),
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: drift.Value(now),
+        isLocal: const drift.Value(true),
+        needsSync: const drift.Value(true),
+      ));
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -189,7 +206,6 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
 
     try {
       final apiService = ref.read(apiServiceProvider);
-
       final poleData = PoleCreate(
         poleNumber: _poleNumber,
         xPosition: _longitude!,  // x_position = долгота
@@ -210,11 +226,49 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       await apiService.createPole(widget.powerLineId, poleData);
 
       if (mounted) {
-        Navigator.of(context).pop(true); // Возвращаем true, чтобы обновить список
+        Navigator.of(context).pop(<String, dynamic>{
+          'success': true,
+          'latitude': _latitude!,
+          'longitude': _longitude!,
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Опора успешно создана'),
             backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      final isOffline = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.response == null;
+      if (isOffline && mounted) {
+        final saved = await _savePoleToLocalDb();
+        if (mounted && saved) {
+          Navigator.of(context).pop(<String, dynamic>{
+            'success': true,
+            'latitude': _latitude!,
+            'longitude': _longitude!,
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Нет связи. Опора сохранена локально и будет синхронизирована при подключении.'),
+              backgroundColor: Colors.blue,
+            ),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка создания опоры: ${e.message}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка создания опоры: ${e.message ?? e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -263,13 +317,13 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               ),
               const SizedBox(height: 16),
 
-              // Координаты
+              // Позиция (X, Y)
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
                       decoration: InputDecoration(
-                        labelText: 'Широта *',
+                        labelText: 'Y (позиция) *',
                         hintText: '53.9045',
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.my_location),
@@ -281,11 +335,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       initialValue: _latitude?.toString(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Введите широту';
+                          return 'Введите Y (позиция)';
                         }
                         final lat = double.tryParse(value);
                         if (lat == null || lat < -90 || lat > 90) {
-                          return 'Широта должна быть от -90 до 90';
+                          return 'Y должна быть от -90 до 90';
                         }
                         return null;
                       },
@@ -302,18 +356,18 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                   Expanded(
                     child: TextFormField(
                       decoration: const InputDecoration(
-                        labelText: 'Долгота *',
+                        labelText: 'X (позиция) *',
                         hintText: '27.5615',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       initialValue: _longitude?.toString(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Введите долготу';
+                          return 'Введите X (позиция)';
                         }
                         final lon = double.tryParse(value);
                         if (lon == null || lon < -180 || lon > 180) {
-                          return 'Долгота должна быть от -180 до 180';
+                          return 'X должна быть от -180 до 180';
                         }
                         return null;
                       },
@@ -335,18 +389,18 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                 ),
               const SizedBox(height: 16),
 
-              // Тип опоры
+              // Тип опоры (справочник из приложения)
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Тип опоры *'),
                 value: _poleType,
-                items: _poleTypes.map((type) {
+                items: PoleReferenceData.poleTypes.map((type) {
                   return DropdownMenuItem(
                     value: type,
                     child: Text(type),
                   );
                 }).toList(),
                 onChanged: (value) {
-                  setState(() => _poleType = value ?? 'промежуточная');
+                  setState(() => _poleType = value ?? PoleReferenceData.defaultPoleType);
                 },
               ),
               const SizedBox(height: 16),
@@ -361,7 +415,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Марка провода'),
                 value: _conductorType,
-                items: _conductorTypes.map((type) {
+                items: PoleReferenceData.conductorTypes.map((type) {
                   return DropdownMenuItem(
                     value: type,
                     child: Text(type),
@@ -375,7 +429,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Материал провода'),
                 value: _conductorMaterial,
-                items: _conductorMaterials.map((material) {
+                items: PoleReferenceData.conductorMaterials.map((material) {
                   return DropdownMenuItem(
                     value: material,
                     child: Text(material),
@@ -416,20 +470,42 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                 onChanged: (value) => _height = double.tryParse(value),
               ),
               const SizedBox(height: 8),
-              TextFormField(
+              DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Тип фундамента'),
-                onChanged: (value) => _foundationType = value.isEmpty ? null : value,
+                value: _foundationType,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('— не указан')),
+                  ...PoleReferenceData.foundationTypes.map((f) => DropdownMenuItem(value: f, child: Text(f))),
+                ],
+                onChanged: (value) => setState(() => _foundationType = value),
               ),
               const SizedBox(height: 8),
-              TextFormField(
+              DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Материал опоры'),
-                onChanged: (value) => _material = value.isEmpty ? null : value,
+                value: _material,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('— не указан')),
+                  ...PoleReferenceData.materials.map((m) => DropdownMenuItem(value: m, child: Text(m))),
+                ],
+                onChanged: (value) => setState(() => _material = value),
               ),
               const SizedBox(height: 8),
               TextFormField(
                 decoration: const InputDecoration(labelText: 'Год установки'),
                 keyboardType: TextInputType.number,
                 onChanged: (value) => _yearInstalled = int.tryParse(value),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Состояние'),
+                value: _condition,
+                items: PoleReferenceData.conditions.map((c) {
+                  return DropdownMenuItem(
+                    value: c,
+                    child: Text(PoleReferenceData.conditionLabels[c] ?? c),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => _condition = value ?? PoleReferenceData.defaultCondition),
               ),
               const SizedBox(height: 8),
               TextFormField(

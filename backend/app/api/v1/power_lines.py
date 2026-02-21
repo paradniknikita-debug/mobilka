@@ -1,5 +1,6 @@
 from typing import List, Optional
 import uuid
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
@@ -10,14 +11,22 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
 from app.models.location import Location, PositionPoint
+from app.models.patrol_session import PatrolSession
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.schemas.power_line import (
-    PowerLineCreate, PowerLineResponse, PoleCreate, PoleResponse,
+    PowerLineCreate, PowerLineUpdate, PowerLineResponse, PoleCreate, PoleResponse,
     SpanCreate, SpanResponse, TapCreate, TapResponse, EquipmentCreate, EquipmentResponse
 )
 
 router = APIRouter()
+
+
+class LinkLineToSubstationBody(BaseModel):
+    """Тело запроса привязки первой опоры линии к подстанции."""
+    first_pole_id: int
+    substation_id: int
+
 
 def get_pole_latitude(pole) -> float:
     """Получает широту опоры (y_position или latitude)"""
@@ -192,20 +201,37 @@ async def create_power_line(
     
     final_description = '\n'.join(description_parts) if description_parts else None
     
-    # Валидация напряжения (стандартные значения)
+    # Допустимые стандартные напряжения (кВ), отсортированы
+    STANDARD_VOLTAGES_KV = [
+        0.23, 0.4, 0.66, 3, 6, 6.3, 6.6, 10, 10.5, 11, 13.8, 15, 15.75, 18, 20, 21, 22, 24,
+        27.5, 35, 60, 87, 110, 150, 220, 330, 400, 500, 750, 1150,
+    ]
+    # Валидация напряжения (диапазон и стандартные значения)
     voltage_level = power_line_dict.get('voltage_level')
     if voltage_level is not None:
-        if voltage_level != 0:
-            standard_voltages = [0.4, 6, 10, 35, 110, 220, 330, 500, 750]
-            # Проверяем с учетом возможных погрешностей float (округляем до 1 знака)
-            voltage_rounded = round(float(voltage_level), 1)
-            if voltage_rounded not in standard_voltages:
+        try:
+            v = float(voltage_level)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Номинальное напряжение должно быть числом (например: 10, 35, 110).",
+            )
+        if v < 0:
+            raise HTTPException(status_code=400, detail="Напряжение не может быть отрицательным.")
+        if v > 1200:
+            raise HTTPException(
+                status_code=400,
+                detail="Номинальное напряжение не должно превышать 1200 кВ. Укажите одно из стандартных значений (см. подсказку в форме).",
+            )
+        if v != 0:
+            voltage_rounded = round(v, 2)
+            allowed_set = {round(x, 2) for x in STANDARD_VOLTAGES_KV}
+            if voltage_rounded not in allowed_set:
+                str_values = ", ".join(str(x) for x in STANDARD_VOLTAGES_KV)
                 raise HTTPException(
-                    status_code=400, 
-                    detail=f"Номинальное напряжение должно быть одним из стандартных значений: {', '.join(map(str, standard_voltages))} кВ"
+                    status_code=400,
+                    detail=f"Номинальное напряжение должно быть одним из стандартных значений (кВ): {str_values}. Вы ввели: {voltage_rounded} кВ.",
                 )
-        if voltage_level < 0:
-            raise HTTPException(status_code=400, detail="Напряжение не может быть отрицательным")
     
     # Если напряжение не указано, устанавливаем значение по умолчанию (0)
     # Это требуется, так как поле voltage_level в модели не nullable
@@ -228,6 +254,7 @@ async def create_power_line(
     power_line_dict.pop('branch_id', None)
     power_line_dict.pop('region_id', None)
     power_line_dict.pop('code', None)  # code генерируется автоматически
+    power_line_dict.pop('base_voltage_id', None)  # в модели нет (зарезервировано под CIM)
     # ВАЖНО: description удаляем в последний момент перед созданием объекта
     # чтобы избежать конфликта с явно передаваемым description=final_description
     
@@ -344,6 +371,78 @@ async def get_power_line(
         )
     return power_line
 
+
+@router.put("/{power_line_id}", response_model=PowerLineResponse)
+async def update_power_line(
+    power_line_id: int,
+    body: PowerLineUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновление ЛЭП по ID (название, напряжение, длина, описание и т.д.)."""
+    power_line = await db.get(PowerLine, power_line_id)
+    if not power_line:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Power line not found",
+        )
+    data = body.dict(exclude_unset=True)
+    if not data:
+        await db.refresh(power_line)
+        return power_line
+
+    STANDARD_VOLTAGES_KV = [
+        0.23, 0.4, 0.66, 3, 6, 6.3, 6.6, 10, 10.5, 11, 13.8, 15, 15.75, 18, 20, 21, 22, 24,
+        27.5, 35, 60, 87, 110, 150, 220, 330, 400, 500, 750, 1150,
+    ]
+    if "voltage_level" in data and data["voltage_level"] is not None:
+        try:
+            v = float(data["voltage_level"])
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Номинальное напряжение должно быть числом (например: 10, 35, 110).",
+            )
+        if v < 0:
+            raise HTTPException(status_code=400, detail="Напряжение не может быть отрицательным.")
+        if v > 1200:
+            raise HTTPException(
+                status_code=400,
+                detail="Номинальное напряжение не должно превышать 1200 кВ.",
+            )
+        if v != 0:
+            voltage_rounded = round(v, 2)
+            allowed_set = {round(x, 2) for x in STANDARD_VOLTAGES_KV}
+            if voltage_rounded not in allowed_set:
+                str_values = ", ".join(str(x) for x in STANDARD_VOLTAGES_KV)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Номинальное напряжение должно быть одним из стандартных значений (кВ): {str_values}. Вы ввели: {voltage_rounded} кВ.",
+                )
+        data["voltage_level"] = v
+    if "length" in data and data["length"] is not None and data["length"] < 0:
+        raise HTTPException(status_code=400, detail="Длина не может быть отрицательной")
+
+    for key, value in data.items():
+        if hasattr(power_line, key):
+            setattr(power_line, key, value)
+    await db.commit()
+    await db.refresh(power_line)
+    result = await db.execute(
+        select(PowerLine)
+        .options(
+            selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
+            selectinload(PowerLine.poles).selectinload(Pole.position_points),
+            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals),
+            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line),
+        )
+        .where(PowerLine.id == power_line_id),
+    )
+    return result.scalar_one()
+
+
 @router.post("/{power_line_id}/poles", response_model=PoleResponse)
 async def create_pole(
     power_line_id: int,
@@ -394,6 +493,7 @@ async def create_pole(
         line_id=power_line_id,
         created_by=current_user.id
     )
+    db_pole.is_tap_pole = getattr(pole_data, "is_tap", False)
     db.add(db_pole)
     await db.flush()  # Получаем ID опоры
     
@@ -410,36 +510,33 @@ async def create_pole(
         db.add(position_point)
         await db.flush()
     
-    # Автоматическое создание ConnectivityNode для опоры
-    # Теперь один ConnectivityNode создаётся для линии опоры
-    # Если нужно создать совместный подвес, можно создать дополнительный ConnectivityNode вручную
+    # ConnectivityNode создаётся только для отпаечных опор (и для подстанций при привязке).
+    # Для остальных опор узел создаётся по требованию при создании пролёта в auto_create_span.
     from app.models.cim_line_structure import ConnectivityNode
     from app.models.base import generate_mrid
-    
-    connectivity_node = ConnectivityNode(
-        mrid=generate_mrid(),
-        name=f"Узел {pole_data.pole_number}",
-        pole_id=db_pole.id,
-        line_id=power_line_id,  # Связываем узел с линией
-        latitude=pole_data.y_position,  # y_position = широта (latitude)
-        longitude=pole_data.x_position,  # x_position = долгота (longitude)
-        description=f"Автоматически созданный узел для опоры {pole_data.pole_number} линии {power_line_id}"
-    )
-    db.add(connectivity_node)
-    await db.flush()
-    
-    # Связываем опору с узлом (для обратной совместимости)
-    db_pole.connectivity_node_id = connectivity_node.id
-    
-    # Автоматическое создание пролёта от предыдущей опоры к новой опоре
-    # Это создаёт Span, группирует в LineSection по марке кабеля,
-    # и добавляет в AClineSegment от подстанции/ветвления до следующего ветвления/подстанции
+
+    connectivity_node = None
+    if pole_data.is_tap:
+        connectivity_node = ConnectivityNode(
+            mrid=generate_mrid(),
+            name=f"Узел {pole_data.pole_number}",
+            pole_id=db_pole.id,
+            line_id=power_line_id,
+            latitude=pole_data.y_position or 0.0,
+            longitude=pole_data.x_position or 0.0,
+            description=f"Узел отпаечной опоры {pole_data.pole_number} линии {power_line_id}",
+        )
+        db.add(connectivity_node)
+        await db.flush()
+        db_pole.connectivity_node_id = connectivity_node.id
+
+    # Автоматическое создание пролёта от предыдущей опоры к новой (узлы создаются по требованию)
     try:
         from app.core.line_auto_assembly import auto_create_span
-        
+
         await auto_create_span(
             db=db,
-            line_id=power_line_id,
+            power_line_id=power_line_id,
             new_pole=db_pole,
             new_connectivity_node=connectivity_node,
             conductor_type=pole_data.conductor_type,
@@ -536,6 +633,34 @@ async def get_pole(
     
     return pole
 
+
+@router.post("/{power_line_id}/link-substation")
+async def link_line_to_substation(
+    power_line_id: int,
+    body: LinkLineToSubstationBody,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Привязка первой опоры ЛЭП к подстанции (по «перетаскиванию» от опоры до ПС на карте).
+    Создаёт участок (ACLineSegment) от подстанции до опоры и первый пролёт.
+    """
+    try:
+        from app.core.line_auto_assembly import link_line_to_substation as do_link
+        segment = await do_link(
+            db=db,
+            power_line_id=power_line_id,
+            first_pole_id=body.first_pole_id,
+            substation_id=body.substation_id,
+            current_user_id=current_user.id,
+        )
+        await db.commit()
+        await db.refresh(segment)
+        return {"acline_segment_id": segment.id, "name": segment.name}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.put("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
 async def update_pole(
     power_line_id: int,
@@ -585,10 +710,99 @@ async def update_pole(
         y_position = pole_data.y_position
         pole_dict['latitude'] = y_position  # y_position = широта (latitude)
     
+    if "is_tap" in pole_data.dict(exclude_unset=True):
+        pole.is_tap_pole = pole_data.is_tap
     for key, value in pole_dict.items():
-        if hasattr(pole, key) and value is not None:
+        if hasattr(pole, key) and key != "is_tap" and value is not None:
             setattr(pole, key, value)
-    
+
+    # Если опору пометили как отпаечную — закрываем текущий участок на этой опоре
+    if pole_data.is_tap and not (getattr(pole, "is_tap_pole", False)):
+        try:
+            from app.core.line_auto_assembly import (
+                find_previous_pole,
+                find_or_create_acline_segment,
+                find_or_create_line_section,
+                _connectivity_node_display_name,
+                get_or_create_connectivity_node_for_pole,
+            )
+            from app.models.power_line import PowerLine as PL
+            pl = await db.get(PL, power_line_id)
+            voltage_level = pl.voltage_level if pl else 10.0
+            prev_pole = await find_previous_pole(db, power_line_id, pole.sequence_number, exclude_pole_id=pole.id)
+            pole_cn = pole.get_connectivity_node_for_line(power_line_id) or await get_or_create_connectivity_node_for_pole(db, pole, power_line_id)
+            if prev_pole and pole_cn:
+                prev_cn = prev_pole.get_connectivity_node_for_line(power_line_id) or await get_or_create_connectivity_node_for_pole(db, prev_pole, power_line_id)
+                if prev_cn:
+                    open_seg = await db.execute(
+                        select(AClineSegment).where(
+                            AClineSegment.line_id == power_line_id,
+                            AClineSegment.to_connectivity_node_id.is_(None),
+                            AClineSegment.is_tap == False,
+                        ).order_by(AClineSegment.sequence_number.desc())
+                    )
+                    seg = open_seg.scalar_one_or_none()
+                    if seg and seg.from_connectivity_node_id == prev_cn.id:
+                        seg.to_connectivity_node_id = pole_cn.id
+                        from_name = await _connectivity_node_display_name(db, seg.from_connectivity_node_id)
+                        to_name = await _connectivity_node_display_name(db, pole_cn.id)
+                        seg.name = f"{from_name} - {to_name}"
+                        dist = __import__("app.core.line_auto_assembly", fromlist=["calculate_distance"]).calculate_distance(
+                            prev_pole.latitude or 0, prev_pole.longitude or 0,
+                            pole.latitude or 0, pole.longitude or 0,
+                        )
+                        ct = getattr(prev_pole, "conductor_type", None) or "AC-70"
+                        cm = getattr(prev_pole, "conductor_material", None) or "алюминий"
+                        cs = getattr(prev_pole, "conductor_section", None) or "70"
+                        ls = await find_or_create_line_section(db, seg.id, ct, cm, cs, current_user.id, check_last_section=True)
+                        from app.models.power_line import Span
+                        from app.models.base import generate_mrid
+                        span_name = f"Пролёт {from_name} - {to_name}"
+                        span_cnt = (await db.execute(select(func.count(Span.id)).where(Span.line_section_id == ls.id))).scalar_one() or 0
+                        new_span = Span(
+                            mrid=generate_mrid(),
+                            span_number=span_name,
+                            line_id=power_line_id,
+                            from_pole_id=prev_pole.id,
+                            to_pole_id=pole.id,
+                            from_connectivity_node_id=prev_cn.id,
+                            to_connectivity_node_id=pole_cn.id,
+                            line_section_id=ls.id,
+                            length=dist,
+                            conductor_type=ct,
+                            conductor_material=cm,
+                            conductor_section=cs,
+                            sequence_number=span_cnt + 1,
+                            created_by=current_user.id,
+                        )
+                        db.add(new_span)
+                        await db.flush()
+                        from sqlalchemy import func as sqlfunc
+                        total_len = (await db.execute(select(sqlfunc.sum(Span.length)).where(Span.line_section_id == ls.id))).scalar_one() or 0
+                        ls.total_length = total_len / 1000.0
+                        seg.length = (await db.execute(select(sqlfunc.sum(LineSection.total_length)).where(LineSection.acline_segment_id == seg.id))).scalar_one() or 0
+                        # Новый открытый участок от этой отпаечной опоры для следующих пролётов
+                        from app.models.acline_segment import AClineSegment as ACS
+                        from app.models.base import generate_mrid
+                        seg_count = (await db.execute(select(func.count(ACS.id)).where(ACS.line_id == power_line_id))).scalar_one() or 0
+                        new_seg = ACS(
+                            mrid=generate_mrid(),
+                            name=f"Участок от оп. {pole.pole_number}",
+                            code=f"{power_line.code}-SEG-{seg_count + 1}",
+                            line_id=power_line_id,
+                            is_tap=False,
+                            from_connectivity_node_id=pole_cn.id,
+                            to_connectivity_node_id=None,
+                            voltage_level=voltage_level,
+                            length=0.0,
+                            sequence_number=seg_count + 1,
+                            created_by=current_user.id,
+                        )
+                        db.add(new_seg)
+        except Exception as e:
+            import traceback
+            print(f"Ошибка при закрытии участка на отпаечной опоре: {e}\n{traceback.format_exc()}")
+
     # Обновляем или создаем PositionPoint для координат опоры
     if x_position is not None or y_position is not None:
         from app.models.base import generate_mrid
@@ -1398,6 +1612,11 @@ async def delete_power_line(
         connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id)
         await db.execute(connectivity_node_stmt)
         print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
+        
+        # Удаляем сессии обхода, привязанные к этой ЛЭП (power_line_id NOT NULL — обнулить нельзя)
+        patrol_sessions_stmt = delete(PatrolSession).where(PatrolSession.power_line_id == power_line_id)
+        await db.execute(patrol_sessions_stmt)
+        print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
         
         # Удаляем ЛЭП (каскадное удаление опор, пролётов, отпаек и сегментов настроено в модели)
         # Используем delete через сессию для правильной работы каскадов

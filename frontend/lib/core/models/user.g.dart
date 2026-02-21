@@ -35,20 +35,20 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
 UserCreate _$UserCreateFromJson(Map<String, dynamic> json) => UserCreate(
       username: json['username'] as String,
       email: json['email'] as String,
-      fullName: json['fullName'] as String,
+      fullName: json['full_name'] as String,
       password: json['password'] as String,
       role: json['role'] as String? ?? 'engineer',
-      branchId: (json['branchId'] as num?)?.toInt(),
+      branchId: (json['branch_id'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$UserCreateToJson(UserCreate instance) =>
     <String, dynamic>{
       'username': instance.username,
       'email': instance.email,
-      'fullName': instance.fullName,
+      'full_name': instance.fullName,
       'password': instance.password,
       'role': instance.role,
-      'branchId': instance.branchId,
+      'branch_id': instance.branchId,
     };
 
 UserLogin _$UserLoginFromJson(Map<String, dynamic> json) => UserLogin(

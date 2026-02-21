@@ -14,6 +14,7 @@ from .geographic_region import GeographicRegion
 from .acline_segment import AClineSegment, line_segments
 from .cim_line_structure import ConnectivityNode, Terminal, LineSection
 from .location import Location, PositionPoint, LocationType
+from .patrol_session import PatrolSession
 # Временно закомментировано до применения миграции
 # from .base_voltage import BaseVoltage
 # from .wire_info import WireInfo
@@ -42,6 +43,7 @@ __all__ = [
     "Location",
     "PositionPoint",
     "LocationType",
+    "PatrolSession",
     # "BaseVoltage",  # Временно закомментировано
     # "WireInfo"  # Временно закомментировано
 ]

@@ -95,6 +95,8 @@ class Pole(Base):
     conductor_type = Column(String(50), nullable=True)  # AC-70, AC-95 и т.д.
     conductor_material = Column(String(50), nullable=True)  # алюминий, медь
     conductor_section = Column(String(20), nullable=True)  # 70, 95 и т.д. (сечение в мм²)
+    # Отпаечная опора: на этой опоре заканчивается текущий ACLineSegment (участок от ПС/пред. отпайки)
+    is_tap_pole = Column(Boolean, default=False, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -2656,6 +2656,421 @@ class SyncRecordsCompanion extends UpdateCompanion<SyncRecord> {
   }
 }
 
+class $PatrolSessionsTable extends PatrolSessions
+    with TableInfo<$PatrolSessionsTable, PatrolSession> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PatrolSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _serverIdMeta =
+      const VerificationMeta('serverId');
+  @override
+  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
+      'server_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _powerLineIdMeta =
+      const VerificationMeta('powerLineId');
+  @override
+  late final GeneratedColumn<int> powerLineId = GeneratedColumn<int>(
+      'power_line_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _startedAtMeta =
+      const VerificationMeta('startedAt');
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+      'started_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _endedAtMeta =
+      const VerificationMeta('endedAt');
+  @override
+  late final GeneratedColumn<DateTime> endedAt = GeneratedColumn<DateTime>(
+      'ended_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _syncStatusMeta =
+      const VerificationMeta('syncStatus');
+  @override
+  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
+      'sync_status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('pending'));
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+      'user_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, serverId, powerLineId, note, startedAt, endedAt, syncStatus, userId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'patrol_sessions';
+  @override
+  VerificationContext validateIntegrity(Insertable<PatrolSession> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('server_id')) {
+      context.handle(_serverIdMeta,
+          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
+    }
+    if (data.containsKey('power_line_id')) {
+      context.handle(
+          _powerLineIdMeta,
+          powerLineId.isAcceptableOrUnknown(
+              data['power_line_id']!, _powerLineIdMeta));
+    } else if (isInserting) {
+      context.missing(_powerLineIdMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(_startedAtMeta,
+          startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta));
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('ended_at')) {
+      context.handle(_endedAtMeta,
+          endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta));
+    }
+    if (data.containsKey('sync_status')) {
+      context.handle(
+          _syncStatusMeta,
+          syncStatus.isAcceptableOrUnknown(
+              data['sync_status']!, _syncStatusMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PatrolSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PatrolSession(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      serverId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}server_id']),
+      powerLineId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}power_line_id'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
+      startedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}started_at'])!,
+      endedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}ended_at']),
+      syncStatus: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sync_status'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}user_id']),
+    );
+  }
+
+  @override
+  $PatrolSessionsTable createAlias(String alias) {
+    return $PatrolSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class PatrolSession extends DataClass implements Insertable<PatrolSession> {
+  final int id;
+  final int? serverId;
+  final int powerLineId;
+  final String? note;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final String syncStatus;
+  final int? userId;
+  const PatrolSession(
+      {required this.id,
+      this.serverId,
+      required this.powerLineId,
+      this.note,
+      required this.startedAt,
+      this.endedAt,
+      required this.syncStatus,
+      this.userId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<int>(serverId);
+    }
+    map['power_line_id'] = Variable<int>(powerLineId);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['started_at'] = Variable<DateTime>(startedAt);
+    if (!nullToAbsent || endedAt != null) {
+      map['ended_at'] = Variable<DateTime>(endedAt);
+    }
+    map['sync_status'] = Variable<String>(syncStatus);
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<int>(userId);
+    }
+    return map;
+  }
+
+  PatrolSessionsCompanion toCompanion(bool nullToAbsent) {
+    return PatrolSessionsCompanion(
+      id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
+      powerLineId: Value(powerLineId),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      startedAt: Value(startedAt),
+      endedAt: endedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endedAt),
+      syncStatus: Value(syncStatus),
+      userId:
+          userId == null && nullToAbsent ? const Value.absent() : Value(userId),
+    );
+  }
+
+  factory PatrolSession.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PatrolSession(
+      id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<int?>(json['serverId']),
+      powerLineId: serializer.fromJson<int>(json['powerLineId']),
+      note: serializer.fromJson<String?>(json['note']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      endedAt: serializer.fromJson<DateTime?>(json['endedAt']),
+      syncStatus: serializer.fromJson<String>(json['syncStatus']),
+      userId: serializer.fromJson<int?>(json['userId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<int?>(serverId),
+      'powerLineId': serializer.toJson<int>(powerLineId),
+      'note': serializer.toJson<String?>(note),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'endedAt': serializer.toJson<DateTime?>(endedAt),
+      'syncStatus': serializer.toJson<String>(syncStatus),
+      'userId': serializer.toJson<int?>(userId),
+    };
+  }
+
+  PatrolSession copyWith(
+          {int? id,
+          Value<int?> serverId = const Value.absent(),
+          int? powerLineId,
+          Value<String?> note = const Value.absent(),
+          DateTime? startedAt,
+          Value<DateTime?> endedAt = const Value.absent(),
+          String? syncStatus,
+          Value<int?> userId = const Value.absent()}) =>
+      PatrolSession(
+        id: id ?? this.id,
+        serverId: serverId.present ? serverId.value : this.serverId,
+        powerLineId: powerLineId ?? this.powerLineId,
+        note: note.present ? note.value : this.note,
+        startedAt: startedAt ?? this.startedAt,
+        endedAt: endedAt.present ? endedAt.value : this.endedAt,
+        syncStatus: syncStatus ?? this.syncStatus,
+        userId: userId.present ? userId.value : this.userId,
+      );
+  PatrolSession copyWithCompanion(PatrolSessionsCompanion data) {
+    return PatrolSession(
+      id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      powerLineId:
+          data.powerLineId.present ? data.powerLineId.value : this.powerLineId,
+      note: data.note.present ? data.note.value : this.note,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
+      syncStatus:
+          data.syncStatus.present ? data.syncStatus.value : this.syncStatus,
+      userId: data.userId.present ? data.userId.value : this.userId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PatrolSession(')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('powerLineId: $powerLineId, ')
+          ..write('note: $note, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('userId: $userId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, serverId, powerLineId, note, startedAt, endedAt, syncStatus, userId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PatrolSession &&
+          other.id == this.id &&
+          other.serverId == this.serverId &&
+          other.powerLineId == this.powerLineId &&
+          other.note == this.note &&
+          other.startedAt == this.startedAt &&
+          other.endedAt == this.endedAt &&
+          other.syncStatus == this.syncStatus &&
+          other.userId == this.userId);
+}
+
+class PatrolSessionsCompanion extends UpdateCompanion<PatrolSession> {
+  final Value<int> id;
+  final Value<int?> serverId;
+  final Value<int> powerLineId;
+  final Value<String?> note;
+  final Value<DateTime> startedAt;
+  final Value<DateTime?> endedAt;
+  final Value<String> syncStatus;
+  final Value<int?> userId;
+  const PatrolSessionsCompanion({
+    this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.powerLineId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.endedAt = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.userId = const Value.absent(),
+  });
+  PatrolSessionsCompanion.insert({
+    this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    required int powerLineId,
+    this.note = const Value.absent(),
+    required DateTime startedAt,
+    this.endedAt = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.userId = const Value.absent(),
+  })  : powerLineId = Value(powerLineId),
+        startedAt = Value(startedAt);
+  static Insertable<PatrolSession> custom({
+    Expression<int>? id,
+    Expression<int>? serverId,
+    Expression<int>? powerLineId,
+    Expression<String>? note,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? endedAt,
+    Expression<String>? syncStatus,
+    Expression<int>? userId,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
+      if (powerLineId != null) 'power_line_id': powerLineId,
+      if (note != null) 'note': note,
+      if (startedAt != null) 'started_at': startedAt,
+      if (endedAt != null) 'ended_at': endedAt,
+      if (syncStatus != null) 'sync_status': syncStatus,
+      if (userId != null) 'user_id': userId,
+    });
+  }
+
+  PatrolSessionsCompanion copyWith(
+      {Value<int>? id,
+      Value<int?>? serverId,
+      Value<int>? powerLineId,
+      Value<String?>? note,
+      Value<DateTime>? startedAt,
+      Value<DateTime?>? endedAt,
+      Value<String>? syncStatus,
+      Value<int?>? userId}) {
+    return PatrolSessionsCompanion(
+      id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      powerLineId: powerLineId ?? this.powerLineId,
+      note: note ?? this.note,
+      startedAt: startedAt ?? this.startedAt,
+      endedAt: endedAt ?? this.endedAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      userId: userId ?? this.userId,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (serverId.present) {
+      map['server_id'] = Variable<int>(serverId.value);
+    }
+    if (powerLineId.present) {
+      map['power_line_id'] = Variable<int>(powerLineId.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (endedAt.present) {
+      map['ended_at'] = Variable<DateTime>(endedAt.value);
+    }
+    if (syncStatus.present) {
+      map['sync_status'] = Variable<String>(syncStatus.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PatrolSessionsCompanion(')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('powerLineId: $powerLineId, ')
+          ..write('note: $note, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('userId: $userId')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2663,12 +3078,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PolesTable poles = $PolesTable(this);
   late final $EquipmentTable equipment = $EquipmentTable(this);
   late final $SyncRecordsTable syncRecords = $SyncRecordsTable(this);
+  late final $PatrolSessionsTable patrolSessions = $PatrolSessionsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [powerLines, poles, equipment, syncRecords];
+      [powerLines, poles, equipment, syncRecords, patrolSessions];
 }
 
 typedef $$PowerLinesTableCreateCompanionBuilder = PowerLinesCompanion Function({
@@ -3857,6 +4273,219 @@ typedef $$SyncRecordsTableProcessedTableManager = ProcessedTableManager<
     (SyncRecord, BaseReferences<_$AppDatabase, $SyncRecordsTable, SyncRecord>),
     SyncRecord,
     PrefetchHooks Function()>;
+typedef $$PatrolSessionsTableCreateCompanionBuilder = PatrolSessionsCompanion
+    Function({
+  Value<int> id,
+  Value<int?> serverId,
+  required int powerLineId,
+  Value<String?> note,
+  required DateTime startedAt,
+  Value<DateTime?> endedAt,
+  Value<String> syncStatus,
+  Value<int?> userId,
+});
+typedef $$PatrolSessionsTableUpdateCompanionBuilder = PatrolSessionsCompanion
+    Function({
+  Value<int> id,
+  Value<int?> serverId,
+  Value<int> powerLineId,
+  Value<String?> note,
+  Value<DateTime> startedAt,
+  Value<DateTime?> endedAt,
+  Value<String> syncStatus,
+  Value<int?> userId,
+});
+
+class $$PatrolSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $PatrolSessionsTable> {
+  $$PatrolSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get powerLineId => $composableBuilder(
+      column: $table.powerLineId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get syncStatus => $composableBuilder(
+      column: $table.syncStatus, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+}
+
+class $$PatrolSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PatrolSessionsTable> {
+  $$PatrolSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get powerLineId => $composableBuilder(
+      column: $table.powerLineId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get syncStatus => $composableBuilder(
+      column: $table.syncStatus, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PatrolSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PatrolSessionsTable> {
+  $$PatrolSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<int> get powerLineId => $composableBuilder(
+      column: $table.powerLineId, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endedAt =>
+      $composableBuilder(column: $table.endedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get syncStatus => $composableBuilder(
+      column: $table.syncStatus, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+}
+
+class $$PatrolSessionsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $PatrolSessionsTable,
+    PatrolSession,
+    $$PatrolSessionsTableFilterComposer,
+    $$PatrolSessionsTableOrderingComposer,
+    $$PatrolSessionsTableAnnotationComposer,
+    $$PatrolSessionsTableCreateCompanionBuilder,
+    $$PatrolSessionsTableUpdateCompanionBuilder,
+    (
+      PatrolSession,
+      BaseReferences<_$AppDatabase, $PatrolSessionsTable, PatrolSession>
+    ),
+    PatrolSession,
+    PrefetchHooks Function()> {
+  $$PatrolSessionsTableTableManager(
+      _$AppDatabase db, $PatrolSessionsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PatrolSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PatrolSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PatrolSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int?> serverId = const Value.absent(),
+            Value<int> powerLineId = const Value.absent(),
+            Value<String?> note = const Value.absent(),
+            Value<DateTime> startedAt = const Value.absent(),
+            Value<DateTime?> endedAt = const Value.absent(),
+            Value<String> syncStatus = const Value.absent(),
+            Value<int?> userId = const Value.absent(),
+          }) =>
+              PatrolSessionsCompanion(
+            id: id,
+            serverId: serverId,
+            powerLineId: powerLineId,
+            note: note,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            syncStatus: syncStatus,
+            userId: userId,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int?> serverId = const Value.absent(),
+            required int powerLineId,
+            Value<String?> note = const Value.absent(),
+            required DateTime startedAt,
+            Value<DateTime?> endedAt = const Value.absent(),
+            Value<String> syncStatus = const Value.absent(),
+            Value<int?> userId = const Value.absent(),
+          }) =>
+              PatrolSessionsCompanion.insert(
+            id: id,
+            serverId: serverId,
+            powerLineId: powerLineId,
+            note: note,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            syncStatus: syncStatus,
+            userId: userId,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$PatrolSessionsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $PatrolSessionsTable,
+    PatrolSession,
+    $$PatrolSessionsTableFilterComposer,
+    $$PatrolSessionsTableOrderingComposer,
+    $$PatrolSessionsTableAnnotationComposer,
+    $$PatrolSessionsTableCreateCompanionBuilder,
+    $$PatrolSessionsTableUpdateCompanionBuilder,
+    (
+      PatrolSession,
+      BaseReferences<_$AppDatabase, $PatrolSessionsTable, PatrolSession>
+    ),
+    PatrolSession,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3869,4 +4498,6 @@ class $AppDatabaseManager {
       $$EquipmentTableTableManager(_db, _db.equipment);
   $$SyncRecordsTableTableManager get syncRecords =>
       $$SyncRecordsTableTableManager(_db, _db.syncRecords);
+  $$PatrolSessionsTableTableManager get patrolSessions =>
+      $$PatrolSessionsTableTableManager(_db, _db.patrolSessions);
 }

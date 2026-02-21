@@ -41,42 +41,49 @@ class SyncResponse(BaseModel):
     timestamp: datetime
 
 # JSON Schema для валидации данных
+# branch_id и region_id не обязательны — мобильное приложение может создавать ЛЭП без филиала/региона
 POWER_LINE_SCHEMA = {
     "type": "object",
     "properties": {
-        "id": {"type": "string"},
+        "id": {"type": ["integer", "string"]},
+        "mrid": {"type": "string"},
         "name": {"type": "string"},
         "code": {"type": "string"},
         "voltage_level": {"type": "number"},
         "length": {"type": "number"},
+        "region_id": {"type": "integer"},
         "branch_id": {"type": "integer"},
         "region_id": {"type": "integer"},
         "status": {"type": "string"},
-        "description": {"type": "string"},
-        "created_at": {"type": "string", "format": "date-time"},
-        "updated_at": {"type": "string", "format": "date-time"}
+        "description": {"type": ["string", "null"]},
+        "created_by": {"type": "integer"},
+        "created_at": {"type": ["string", "number"]},
+        "updated_at": {"type": ["string", "number"]}
     },
-    "required": ["name", "code"]
+    "required": ["name", "code", "voltage_level"]
 }
 
 POLE_SCHEMA = {
     "type": "object",
     "properties": {
-        "id": {"type": "string"},
-        "line_id": {"type": "string"},
+        "id": {"type": ["integer", "string"]},
+        "mrid": {"type": "string"},
+        "power_line_id": {"type": ["integer", "string"]},
         "pole_number": {"type": "string"},
         "x_position": {"type": "number"},
         "y_position": {"type": "number"},
         "latitude": {"type": "number"},
         "longitude": {"type": "number"},
         "pole_type": {"type": "string"},
-        "height": {"type": "number"},
-        "foundation_type": {"type": "string"},
-        "material": {"type": "string"},
-        "year_installed": {"type": "integer"},
+        "height": {"type": ["number", "null"]},
+        "foundation_type": {"type": ["string", "null"]},
+        "material": {"type": ["string", "null"]},
+        "year_installed": {"type": ["integer", "null"]},
         "condition": {"type": "string"},
-        "notes": {"type": "string"},
-        "created_at": {"type": "string", "format": "date-time"}
+        "notes": {"type": ["string", "null"]},
+        "created_by": {"type": "integer"},
+        "created_at": {"type": ["string", "number"]},
+        "updated_at": {"type": ["string", "number", "null"]}
     },
     "required": ["line_id", "pole_number", "pole_type"]
 }
@@ -84,8 +91,8 @@ POLE_SCHEMA = {
 EQUIPMENT_SCHEMA = {
     "type": "object",
     "properties": {
-        "id": {"type": "string"},
-        "pole_id": {"type": "string"},
+        "id": {"type": ["integer", "string"]},
+        "pole_id": {"type": ["integer", "string"]},
         "equipment_type": {"type": "string"},
         "name": {"type": "string"},
         "manufacturer": {"type": "string"},

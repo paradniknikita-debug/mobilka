@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/power_line.dart';
 import '../models/substation.dart';
+import '../models/patrol_session.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
@@ -49,6 +50,12 @@ abstract class ApiService {
 
   @GET('/power-lines/{id}/poles')
   Future<List<Pole>> getPoles(@Path('id') int powerLineId);
+
+  @POST('/power-lines/{id}/link-substation')
+  Future<Map<String, dynamic>> linkLineToSubstation(
+    @Path('id') int powerLineId,
+    @Body() Map<String, dynamic> body,
+  );
 
   @DELETE('/power-lines/{powerLineId}/spans/{spanId}')
   Future<void> deleteSpan(@Path('powerLineId') int powerLineId, @Path('spanId') int spanId);
@@ -99,6 +106,27 @@ abstract class ApiService {
   @GET('/map/bounds')
   Future<dynamic> getDataBounds();
 
+  // Сессии обхода (админ видит все, инженер — свои)
+  @GET('/patrol-sessions')
+  Future<List<PatrolSession>> getPatrolSessions(
+    @Query('user_id') int? userId,
+    @Query('power_line_id') int? powerLineId,
+    @Query('limit') int? limit,
+    @Query('offset') int? offset,
+  );
+
+  @POST('/patrol-sessions')
+  Future<Map<String, dynamic>> createPatrolSession(
+    @Body() Map<String, dynamic> body,
+  );
+
+  @PATCH('/patrol-sessions/{id}')
+  Future<Map<String, dynamic>> endPatrolSession(@Path('id') int id);
+
+  // CIM: карточка участка линии (AClineSegment)
+  @GET('/cim/acline-segments/{id}')
+  Future<Map<String, dynamic>> getAclineSegment(@Path('id') int segmentId);
+
   // Sync
   @POST('/sync/upload')
   Future<dynamic> uploadSyncBatch(@Body() Map<String, dynamic> batch);
@@ -146,21 +174,10 @@ class ApiServiceProvider {
           final token = await _getStoredToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
-            if (kDebugMode) {
-              print('🔑 [${options.method} ${options.path}] Добавлен токен авторизации');
-            }
-          } else {
-            if (kDebugMode) {
-              print('⚠️ [${options.method} ${options.path}] Токен авторизации отсутствует!');
-              print('   Запрос будет выполнен без авторизации (может вернуть 403)');
-            }
+          } else if (kDebugMode && !options.path.contains('/auth/login')) {
+            print('⚠️ [${options.method} ${options.path}] Токен отсутствует');
           }
-          
-          // Уменьшаем логирование - только для важных запросов
-          if (kDebugMode && (options.path.contains('/auth/') || options.path.contains('/sync/'))) {
-            print('📤 [${options.method}] ${options.path}');
-          }
-          
+
           handler.next(options);
         },
         onError: (error, handler) async {
@@ -245,9 +262,6 @@ class ApiServiceProvider {
     );
 
     final apiService = ApiService(dio, baseUrl: dio.options.baseUrl);
-    
-    // Создаём обёртку для добавления метода exportCimXml
-    // (Retrofit не поддерживает бинарные ответы через аннотации)
     return _ApiServiceWrapper(apiService, dio);
   }
 
@@ -277,7 +291,6 @@ final apiServiceProvider = Provider<ApiServiceWithExport>((ref) {
     final prefs = ref.watch(prefsProvider);
     return ApiServiceProvider.create(prefs: prefs);
   } catch (e) {
-    // Если prefsProvider не переопределен, создаем без prefs
     return ApiServiceProvider.create();
   }
 });
@@ -411,6 +424,10 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<List<Pole>> getPoles(int powerLineId) => _delegate.getPoles(powerLineId);
 
   @override
+  Future<Map<String, dynamic>> linkLineToSubstation(int powerLineId, Map<String, dynamic> body) =>
+      _delegate.linkLineToSubstation(powerLineId, body);
+
+  @override
   Future<void> deleteSpan(int powerLineId, int spanId) => _delegate.deleteSpan(powerLineId, spanId);
 
   @override
@@ -447,6 +464,9 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<dynamic> getSubstationsGeoJSON() => _delegate.getSubstationsGeoJSON();
 
   @override
+  Future<Map<String, dynamic>> getAclineSegment(int segmentId) => _delegate.getAclineSegment(segmentId);
+
+  @override
   Future<Substation> createSubstation(SubstationCreate substationData) => _delegate.createSubstation(substationData);
 
   @override
@@ -454,6 +474,17 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<dynamic> getDataBounds() => _delegate.getDataBounds();
+
+  @override
+  Future<List<PatrolSession>> getPatrolSessions(int? userId, int? powerLineId, int? limit, int? offset) =>
+      _delegate.getPatrolSessions(userId, powerLineId, limit, offset);
+
+  @override
+  Future<Map<String, dynamic>> createPatrolSession(Map<String, dynamic> body) =>
+      _delegate.createPatrolSession(body);
+
+  @override
+  Future<Map<String, dynamic>> endPatrolSession(int id) => _delegate.endPatrolSession(id);
 
   @override
   Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) => _delegate.uploadSyncBatch(batch);

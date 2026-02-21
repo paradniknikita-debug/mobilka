@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/base_url_manager.dart';
 import '../../../../core/services/api_service.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class ServerSettingsPage extends ConsumerStatefulWidget {
   const ServerSettingsPage({super.key});
@@ -83,8 +84,8 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Настройки сервера сохранены'),
-            backgroundColor: Colors.green,
+            content: Text('Настройки сервера сохранены', style: TextStyle(color: PatrolColors.background)),
+            backgroundColor: PatrolColors.statusSynced,
           ),
         );
         setState(() {
@@ -95,8 +96,8 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка сохранения: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Ошибка сохранения: $e', style: const TextStyle(color: PatrolColors.textPrimary)),
+            backgroundColor: PatrolColors.statusPending,
           ),
         );
       }
@@ -206,8 +207,12 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: PatrolColors.background,
       appBar: AppBar(
-        title: const Text('Настройки сервера'),
+        backgroundColor: PatrolColors.background,
+        elevation: 0,
+        title: const Text('Настройки сервера', style: TextStyle(color: PatrolColors.textPrimary)),
+        iconTheme: const IconThemeData(color: PatrolColors.textPrimary),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -216,140 +221,138 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Информация о текущем сервере
               if (_currentServerUrl != null)
-                Card(
-                  color: Colors.blue.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Текущий сервер:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: PatrolColors.surfaceCard,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Текущий сервер:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: PatrolColors.textSecondary,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _currentServerUrl!,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _currentServerUrl!,
+                        style: const TextStyle(fontSize: 16, color: PatrolColors.textPrimary),
+                      ),
+                    ],
                   ),
                 ),
-              
               const SizedBox(height: 24),
-              
-              // Поле ввода IP адреса
               TextFormField(
                 controller: _ipController,
-                decoration: const InputDecoration(
+                style: const TextStyle(color: PatrolColors.textPrimary),
+                decoration: InputDecoration(
                   labelText: 'IP адрес или доменное имя',
                   hintText: '192.168.1.100 или lepm.local',
-                  prefixIcon: Icon(Icons.dns),
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.dns, color: PatrolColors.accent),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  labelStyle: const TextStyle(color: PatrolColors.textSecondary),
+                  hintStyle: const TextStyle(color: PatrolColors.textSecondary),
                 ),
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.next,
                 validator: _validateIp,
                 enabled: !_isLoading,
               ),
-              
               const SizedBox(height: 16),
-              
-              // Поле ввода порта
               TextFormField(
                 controller: _portController,
-                decoration: const InputDecoration(
+                style: const TextStyle(color: PatrolColors.textPrimary),
+                decoration: InputDecoration(
                   labelText: 'Порт',
                   hintText: '8000',
-                  prefixIcon: Icon(Icons.settings_ethernet),
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.settings_ethernet, color: PatrolColors.accent),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  labelStyle: const TextStyle(color: PatrolColors.textSecondary),
+                  hintStyle: const TextStyle(color: PatrolColors.textSecondary),
                 ),
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
                 validator: _validatePort,
                 enabled: !_isLoading,
               ),
-              
               const SizedBox(height: 24),
-              
-              // Результат теста
               if (_testResult != null)
-                Card(
-                  color: _testResult!.contains('успешно') 
-                      ? Colors.green.shade50 
-                      : Colors.red.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      _testResult!,
-                      style: TextStyle(
-                        color: _testResult!.contains('успешно') 
-                            ? Colors.green.shade900 
-                            : Colors.red.shade900,
-                      ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _testResult!.contains('успешно')
+                        ? PatrolColors.statusSynced.withOpacity(0.2)
+                        : PatrolColors.statusPending.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _testResult!,
+                    style: TextStyle(
+                      color: _testResult!.contains('успешно')
+                          ? PatrolColors.statusSynced
+                          : PatrolColors.statusPending,
                     ),
                   ),
                 ),
-              
               if (_testResult != null) const SizedBox(height: 16),
-              
-              // Кнопка тестирования
               OutlinedButton.icon(
                 onPressed: _isLoading ? null : _testConnection,
-                icon: const Icon(Icons.network_check),
-                label: const Text('Проверить подключение'),
+                icon: const Icon(Icons.network_check, color: PatrolColors.accent),
+                label: const Text('Проверить подключение', style: TextStyle(color: PatrolColors.accent)),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: PatrolColors.accent),
                 ),
               ),
-              
               const SizedBox(height: 16),
-              
-              // Кнопка сохранения
               ElevatedButton.icon(
                 onPressed: _isLoading ? null : _saveSettings,
                 icon: _isLoading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: PatrolColors.background),
                       )
-                    : const Icon(Icons.save),
-                label: Text(_isLoading ? 'Сохранение...' : 'Сохранить настройки'),
+                    : const Icon(Icons.save, color: PatrolColors.background),
+                label: Text(
+                  _isLoading ? 'Сохранение...' : 'Сохранить настройки',
+                  style: const TextStyle(color: PatrolColors.background),
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: PatrolColors.accent,
                 ),
               ),
-              
               const SizedBox(height: 24),
-              
-              // Подсказки
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Подсказки:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: PatrolColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Подсказки:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: PatrolColors.textPrimary,
                       ),
-                      const SizedBox(height: 8),
-                      const Text('• Введите IP адрес сервера (например: 192.168.1.100)'),
-                      const Text('• Или доменное имя (например: lepm.local)'),
-                      const Text('• Порт по умолчанию: 8000'),
-                      const Text('• Используйте кнопку "Проверить подключение" для теста'),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('• Введите IP адрес сервера (например: 192.168.1.100)', style: TextStyle(color: PatrolColors.textSecondary)),
+                    const Text('• Или доменное имя (например: lepm.local)', style: TextStyle(color: PatrolColors.textSecondary)),
+                    const Text('• Порт по умолчанию: 8000', style: TextStyle(color: PatrolColors.textSecondary)),
+                    const Text('• Используйте кнопку "Проверить подключение" для теста', style: TextStyle(color: PatrolColors.textSecondary)),
+                  ],
                 ),
               ),
             ],

@@ -69,14 +69,15 @@ class _TowersPageState extends ConsumerState<TowersPage> {
       return;
     }
 
-    final result = await showDialog<bool>(
+    final result = await showDialog<dynamic>(
       context: context,
       builder: (context) => CreatePoleDialog(
         powerLineId: _selectedPowerLineId!,
       ),
     );
 
-    if (result == true && mounted) {
+    final success = result == true || (result is Map && result['success'] == true);
+    if (success && mounted) {
       // Опора создана, можно обновить список или показать уведомление
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

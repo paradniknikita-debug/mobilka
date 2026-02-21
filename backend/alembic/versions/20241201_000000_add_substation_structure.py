@@ -1,7 +1,7 @@
 """add_substation_structure
 
 Revision ID: 20241201_000000
-Revises: 20241117_220000
+Revises: None (base revision for recreate_db.py)
 Create Date: 2024-12-01 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = '20241201_000000'
-down_revision = '20241117_220000'
+down_revision = None
 branch_labels = None
 depends_on = None
 

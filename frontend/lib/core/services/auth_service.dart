@@ -68,18 +68,41 @@ class AuthService extends StateNotifier<AuthState> {
           print('✅ [AuthService] Статус авторизации проверен: ${user.username}');
         }
       } catch (e) {
-        // Токен невалидный, очищаем
-        if (kDebugMode) {
-          print('❌ [AuthService] Токен невалидный: $e');
+        // Токен невалидный или нет связи. Если «оставаться в системе» — не выходим, работаем оффлайн.
+        final stayLoggedIn = _prefs.getBool(AppConfig.stayLoggedInKey) ?? true;
+        if (stayLoggedIn) {
+          if (kDebugMode) {
+            print('⚠️ [AuthService] Нет связи/токен не проверен, но остаёмся в системе (оффлайн)');
+          }
+          final uid = _prefs.getInt(AppConfig.userIdKey) ?? 0;
+          final uname = _prefs.getString(AppConfig.usernameKey) ?? 'Пользователь';
+          state = AuthStateAuthenticated(User(
+            id: uid,
+            username: uname,
+            email: '',
+            fullName: uname,
+            role: 'engineer',
+            isActive: true,
+            isSuperuser: false,
+            createdAt: DateTime.now(),
+            updatedAt: null,
+          ));
+        } else {
+          if (kDebugMode) {
+            print('❌ [AuthService] Токен невалидный: $e');
+          }
+          await logout();
         }
-        await logout();
       }
     } else {
       state = const AuthStateUnauthenticated();
     }
   }
 
-  Future<void> login(String username, String password) async {
+  /// Режим «не выходить из аккаунта»: при 401 не сбрасывать сессию, данные синхронизируются при появлении связи.
+  bool getStayLoggedIn() => _prefs.getBool(AppConfig.stayLoggedInKey) ?? true;
+
+  Future<void> login(String username, String password, {bool stayLoggedIn = true}) async {
     try {
       state = const AuthStateLoading();
       
@@ -145,10 +168,11 @@ class AuthService extends StateNotifier<AuthState> {
       
       final authResponse = AuthResponse.fromJson(response.data);
       
-      // Сохраняем токен
+      // Сохраняем токен и настройку «оставаться в системе»
       await _prefs.setString(AppConfig.authTokenKey, authResponse.accessToken);
+      await _prefs.setBool(AppConfig.stayLoggedInKey, stayLoggedIn);
       if (kDebugMode) {
-        print('✅ Авторизация успешна: токен сохранен');
+        print('✅ Авторизация успешна: токен сохранен, оставаться в системе: $stayLoggedIn');
       }
       
       // Обновляем prefs в ApiServiceProvider для немедленного использования
@@ -171,6 +195,7 @@ class AuthService extends StateNotifier<AuthState> {
       
       if (user.id > 0) {
         await _prefs.setInt(AppConfig.userIdKey, user.id);
+        await _prefs.setString(AppConfig.usernameKey, user.username);
       }
       
       if (kDebugMode) {
@@ -277,6 +302,7 @@ class AuthService extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await _prefs.remove(AppConfig.authTokenKey);
     await _prefs.remove(AppConfig.userIdKey);
+    await _prefs.remove(AppConfig.usernameKey);
     state = const AuthStateUnauthenticated();
   }
 

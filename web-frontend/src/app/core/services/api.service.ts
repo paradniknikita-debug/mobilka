@@ -85,6 +85,13 @@ export class ApiService {
     return this.http.post<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles`, pole);
   }
 
+  linkLineToSubstation(powerLineId: number, firstPoleId: number, substationId: number): Observable<{ acline_segment_id: number; name: string }> {
+    return this.http.post<{ acline_segment_id: number; name: string }>(
+      `${this.apiUrl}/power-lines/${powerLineId}/link-substation`,
+      { first_pole_id: firstPoleId, substation_id: substationId }
+    );
+  }
+
   getPoleByPowerLine(powerLineId: number, poleId: number): Observable<Pole> {
     return this.http.get<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles/${poleId}`);
   }
@@ -183,6 +190,10 @@ export class ApiService {
 
   getDataBounds(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/map/bounds`);
+  }
+
+  getAclineSegment(segmentId: number): Observable<AClineSegment> {
+    return this.http.get<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${segmentId}`);
   }
 
   // ========== Sync ==========

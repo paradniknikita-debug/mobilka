@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions
 # Временно закомментировано до применения миграции
 # from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.models import (
     User, PowerLine, Pole, Span, Tap, Equipment,
     Branch, Substation, Connection, GeographicRegion, AClineSegment,
-    ConnectivityNode, Terminal, LineSection
+    ConnectivityNode, Terminal, LineSection, PatrolSession
 )
 
 # Redis клиент будет инициализирован в lifespan
@@ -149,6 +149,7 @@ app.include_router(excel_import.router, tags=["import"])
 app.include_router(cim_line_structure.router, prefix="/api/v1/cim", tags=["cim"])
 app.include_router(pole_sequence.router, prefix="/api/v1", tags=["pole-sequence"])
 app.include_router(cim_export.router, prefix="/api/v1/cim", tags=["cim-export"])
+app.include_router(patrol_sessions.router, prefix="/api/v1/patrol-sessions", tags=["patrol-sessions"])
 # Временно закомментировано до применения миграции
 # app.include_router(base_voltage.router, prefix="/api/v1/base-voltages", tags=["base-voltages"])
 # app.include_router(wire_info.router, prefix="/api/v1/wire-infos", tags=["wire-infos"])
