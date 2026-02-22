@@ -82,8 +82,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         id: drift.Value(localId),
         powerLineId: widget.powerLineId,
         poleNumber: _poleNumber,
-        latitude: _latitude!,
-        longitude: _longitude!,
+        xPosition: _longitude!,  // CIM: x = долгота
+        yPosition: _latitude!,   // CIM: y = широта
         poleType: _poleType,
         height: drift.Value(_height),
         foundationType: drift.Value(_foundationType),
@@ -228,8 +228,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       if (mounted) {
         Navigator.of(context).pop(<String, dynamic>{
           'success': true,
-          'latitude': _latitude!,
-          'longitude': _longitude!,
+          'x_position': _longitude!,
+          'y_position': _latitude!,
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -247,8 +247,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         if (mounted && saved) {
           Navigator.of(context).pop(<String, dynamic>{
             'success': true,
-            'latitude': _latitude!,
-            'longitude': _longitude!,
+            'x_position': _longitude!,
+            'y_position': _latitude!,
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

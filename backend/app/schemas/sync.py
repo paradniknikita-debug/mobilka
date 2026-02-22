@@ -48,19 +48,17 @@ POWER_LINE_SCHEMA = {
         "id": {"type": ["integer", "string"]},
         "mrid": {"type": "string"},
         "name": {"type": "string"},
-        "code": {"type": "string"},
         "voltage_level": {"type": "number"},
         "length": {"type": "number"},
         "region_id": {"type": "integer"},
         "branch_id": {"type": "integer"},
-        "region_id": {"type": "integer"},
         "status": {"type": "string"},
         "description": {"type": ["string", "null"]},
         "created_by": {"type": "integer"},
         "created_at": {"type": ["string", "number"]},
         "updated_at": {"type": ["string", "number"]}
     },
-    "required": ["name", "code", "voltage_level"]
+    "required": ["name", "voltage_level"]
 }
 
 POLE_SCHEMA = {

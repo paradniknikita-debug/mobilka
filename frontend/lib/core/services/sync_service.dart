@@ -131,19 +131,12 @@ class SyncService extends StateNotifier<SyncState> {
       records.add(_createSyncRecord('power_line', 'delete', {'id': id}, batchId));
     }
 
-    // Создание: сначала ЛЭП (бэкенд требует name, code, voltage_level — задаём явно)
+    // Создание: сначала ЛЭП (бэкенд требует name, voltage_level)
     for (final powerLine in powerLines) {
       final data = _toSnakeCaseMap(powerLine.toJson());
-      // Всегда задаём обязательные поля, чтобы не терялись при сериализации
-      final String name = (powerLine.name.trim().isNotEmpty)
-          ? powerLine.name
-          : (powerLine.code.trim().isNotEmpty ? powerLine.code : 'ЛЭП');
-      final String code = powerLine.code.trim().isNotEmpty
-          ? powerLine.code
-          : (powerLine.id >= 0 ? 'LEP-${powerLine.id}' : 'LEP-L${-powerLine.id}');
+      final String name = powerLine.name.trim().isNotEmpty ? powerLine.name : 'ЛЭП';
       final num voltageLevel = powerLine.voltageLevel;
       data['name'] = name;
-      data['code'] = code;
       data['voltage_level'] = voltageLevel is int ? voltageLevel.toDouble() : (voltageLevel as double? ?? 0.0);
       records.add(_createSyncRecord('power_line', 'create', data, batchId));
     }
@@ -314,8 +307,8 @@ class SyncService extends StateNotifier<SyncState> {
             id: drift.Value(id),
             powerLineId: powerLineId,
             poleNumber: data['pole_number'] as String? ?? '',
-            latitude: _toDouble(data['latitude']),
-            longitude: _toDouble(data['longitude']),
+            xPosition: _toDouble(data['x_position'] ?? data['longitude']),
+            yPosition: _toDouble(data['y_position'] ?? data['latitude']),
             poleType: data['pole_type'] as String? ?? 'unknown',
             height: drift.Value(data['height'] != null ? _toDouble(data['height']) : null),
             foundationType: drift.Value(data['foundation_type'] as String?),

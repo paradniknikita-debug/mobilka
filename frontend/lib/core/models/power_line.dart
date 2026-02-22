@@ -83,8 +83,6 @@ class PowerLine {
   final int id;
   @JsonKey(fromJson: _stringFromJson)
   final String name;
-  @JsonKey(fromJson: _stringFromJson)
-  final String code;
   @JsonKey(name: 'voltage_level', fromJson: _doubleFromJsonNullable)
   final double? voltageLevel; // Может быть null на backend
   @JsonKey(fromJson: _doubleFromJsonNullable)
@@ -107,7 +105,6 @@ class PowerLine {
   const PowerLine({
     required this.id,
     required this.name,
-    required this.code,
     this.voltageLevel,
     this.length,
     this.branchId,
@@ -126,7 +123,6 @@ class PowerLine {
   PowerLine copyWith({
     int? id,
     String? name,
-    String? code,
     double? voltageLevel,
     double? length,
     int? branchId,
@@ -141,7 +137,6 @@ class PowerLine {
     return PowerLine(
       id: id ?? this.id,
       name: name ?? this.name,
-      code: code ?? this.code,
       voltageLevel: voltageLevel ?? this.voltageLevel,
       length: length ?? this.length,
       branchId: branchId ?? this.branchId,
@@ -159,7 +154,6 @@ class PowerLine {
 @JsonSerializable()
 class PowerLineCreate {
   final String name;
-  final String code;
   @JsonKey(name: 'voltage_level')
   final double voltageLevel;
   final double? length;
@@ -170,7 +164,6 @@ class PowerLineCreate {
 
   const PowerLineCreate({
     required this.name,
-    required this.code,
     required this.voltageLevel,
     this.length,
     required this.branchId,

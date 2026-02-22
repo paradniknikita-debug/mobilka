@@ -208,8 +208,8 @@ export class CreateSpanDialogComponent implements OnInit {
     if (fromPole && toPole) {
       // Расчёт расстояния по формуле Гаверсинуса
       const distance = this.calculateHaversineDistance(
-        fromPole.latitude, fromPole.longitude,
-        toPole.latitude, toPole.longitude
+        fromPole.y_position, fromPole.x_position,
+        toPole.y_position, toPole.x_position
       );
       
       this.spanForm.patchValue({ length: distance.toFixed(2) });

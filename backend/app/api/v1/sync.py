@@ -163,7 +163,6 @@ async def _download_sync_data_impl(
         pl_data = {
             "id": pl.id,
             "name": pl.name,
-            "code": pl.code,
             "voltage_level": pl.voltage_level,
             "length": pl.length,
             "branch_id": getattr(pl, "branch_id", None),
@@ -202,8 +201,8 @@ async def _download_sync_data_impl(
             "id": pole.id,
             "power_line_id": pole.line_id,
             "pole_number": pole.pole_number,
-            "latitude": pole.latitude,
-            "longitude": pole.longitude,
+            "x_position": pole.x_position,
+            "y_position": pole.y_position,
             "pole_type": pole.pole_type,
             "height": pole.height,
             "foundation_type": pole.foundation_type,
@@ -294,19 +293,12 @@ async def process_sync_record(
             
             if existing_pl:
                 for key, value in data.items():
-                    if hasattr(existing_pl, key) and key not in ['id', 'mrid', 'created_at']:
+                    if hasattr(existing_pl, key) and key not in ['id', 'mrid', 'created_at', 'code']:
                         setattr(existing_pl, key, value)
                 if isinstance(client_id, int) and client_id < 0:
                     id_mapping["power_line"][client_id] = existing_pl.id
             else:
                 mrid = data.get('mrid') or generate_mrid()
-                base_code = data.get('code') or f"LEP-{mrid[:8].upper()}"
-                code = base_code
-                for attempt in range(10):
-                    existing_code = await db.execute(select(PowerLine).where(PowerLine.code == code))
-                    if existing_code.scalar_one_or_none() is None:
-                        break
-                    code = f"{base_code}-{mrid[:6]}" if attempt == 0 else f"{base_code}-{attempt}"
                 voltage = data.get('voltage_level')
                 voltage_level = float(voltage) if voltage is not None else 0.0
                 branch_id = data.get('branch_id')
@@ -322,7 +314,6 @@ async def process_sync_record(
                 db_pl = PowerLine(
                     mrid=mrid,
                     name=data.get('name') or 'ЛЭП',
-                    code=code,
                     voltage_level=voltage_level,
                     length=float(data['length']) if data.get('length') is not None else None,
                     region_id=data.get('region_id'),
@@ -349,7 +340,7 @@ async def process_sync_record(
             pl = result.scalar_one_or_none()
             if pl:
                 for key, value in data.items():
-                    if hasattr(pl, key) and key not in ['id', 'mrid', 'created_at', 'created_by']:
+                    if hasattr(pl, key) and key not in ['id', 'mrid', 'created_at', 'created_by', 'code']:
                         setattr(pl, key, value)
             # иначе уже удалена — не ошибка
         
@@ -389,16 +380,16 @@ async def process_sync_record(
             else:
                 client_id = data.get('id')
                 mrid = data.get('mrid') or generate_mrid()
-                lat = data.get('latitude')
-                lon = data.get('longitude')
-                latitude = float(lat) if lat is not None else None
-                longitude = float(lon) if lon is not None else None
+                lat = data.get('y_position') or data.get('latitude')
+                lon = data.get('x_position') or data.get('longitude')
+                y_pos = float(lat) if lat is not None else None
+                x_pos = float(lon) if lon is not None else None
                 db_pole = Pole(
                     mrid=mrid,
                     line_id=int(data['power_line_id']),
                     pole_number=data.get('pole_number') or '0',
-                    latitude=latitude,
-                    longitude=longitude,
+                    y_position=y_pos,
+                    x_position=x_pos,
                     pole_type=data.get('pole_type') or 'unknown',
                     height=float(data['height']) if data.get('height') is not None else None,
                     foundation_type=data.get('foundation_type'),
@@ -424,7 +415,15 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
-                for key, value in data.items():
+                # Нормализация координат: в БД только x_position, y_position
+                upd = dict(data)
+                if 'latitude' in upd and 'y_position' not in upd:
+                    upd['y_position'] = upd['latitude']
+                if 'longitude' in upd and 'x_position' not in upd:
+                    upd['x_position'] = upd['longitude']
+                for key in ['latitude', 'longitude']:
+                    upd.pop(key, None)
+                for key, value in upd.items():
                     if hasattr(pole, key) and key not in ['id', 'mrid', 'created_at', 'created_by']:
                         setattr(pole, key, value)
         

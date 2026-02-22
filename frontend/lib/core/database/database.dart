@@ -35,8 +35,10 @@ class Poles extends Table {
   IntColumn get id => integer()();
   IntColumn get powerLineId => integer()();
   TextColumn get poleNumber => text()();
-  RealColumn get latitude => real()();
-  RealColumn get longitude => real()();
+  /// Долгота (longitude), CIM x_position
+  RealColumn get xPosition => real()();
+  /// Широта (latitude), CIM y_position
+  RealColumn get yPosition => real()();
   TextColumn get poleType => text()();
   RealColumn get height => real().nullable()();
   TextColumn get foundationType => text().nullable()();
@@ -124,6 +126,15 @@ class AppDatabase extends _$AppDatabase {
               'ended_at DATETIME, '
               'sync_status TEXT NOT NULL DEFAULT "pending", '
               'user_id INTEGER)',
+            );
+          }
+          if (from < 3) {
+            // CIM: latitude -> y_position, longitude -> x_position
+            await migrator.issueCustomQuery(
+              'ALTER TABLE poles RENAME COLUMN latitude TO y_position',
+            );
+            await migrator.issueCustomQuery(
+              'ALTER TABLE poles RENAME COLUMN longitude TO x_position',
             );
           }
         },

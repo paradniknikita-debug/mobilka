@@ -1,7 +1,7 @@
 """migrate_data_from_plural_to_singular_tables
 
 Revision ID: 051d1d1d39df
-Revises: b64942757d2c
+Revises: df0c351f69f8
 Create Date: 2026-02-08 14:51:25.784933
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = '051d1d1d39df'
-down_revision = 'b64942757d2c'
+down_revision = 'df0c351f69f8'
 branch_labels = None
 depends_on = None
 

@@ -48,15 +48,15 @@ async def get_or_create_connectivity_node_for_pole(
     node = result.scalar_one_or_none()
     if node:
         return node
-    lat = getattr(pole, "latitude", None) or (pole.get_latitude() if hasattr(pole, "get_latitude") else 0.0)
-    lon = getattr(pole, "longitude", None) or (pole.get_longitude() if hasattr(pole, "get_longitude") else 0.0)
+    lat = pole.y_position
+    lon = pole.x_position
     node = ConnectivityNode(
         mrid=generate_mrid(),
         name=f"Узел {pole.pole_number}",
         pole_id=pole.id,
         line_id=power_line_id,
-        latitude=float(lat) if lat is not None else 0.0,
-        longitude=float(lon) if lon is not None else 0.0,
+        y_position=float(lat) if lat is not None else 0.0,
+        x_position=float(lon) if lon is not None else 0.0,
     )
     db.add(node)
     await db.flush()
@@ -163,8 +163,8 @@ async def find_previous_pole(
         if current_pole:
             for pole in poles:
                 distance = calculate_distance(
-                    current_pole.latitude, current_pole.longitude,
-                    pole.latitude, pole.longitude
+                    current_pole.y_position, current_pole.x_position,
+                    pole.y_position, pole.x_position
                 )
                 if distance < min_distance:
                     min_distance = distance
@@ -265,7 +265,7 @@ async def find_or_create_acline_segment(
             select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
         )
         segment_count = result.scalar_one() or 0
-        code = f"{power_line.code}-SEG-{segment_count + 1}"
+        code = f"SEG-{power_line.mrid[:8].upper()}-{segment_count + 1}"
         
         # Создаём новый AClineSegment
         segment = AClineSegment(
@@ -303,7 +303,7 @@ async def find_or_create_acline_segment(
         select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
     )
     segment_count = result.scalar_one() or 0
-    code = f"{power_line.code}-SEG-{segment_count + 1}"
+    code = f"SEG-{power_line.mrid[:8].upper()}-{segment_count + 1}"
     
     segment = AClineSegment(
         mrid=generate_mrid(),
@@ -446,8 +446,8 @@ async def auto_create_span(
     
     # Вычисляем расстояние между опорами (в метрах)
     distance = calculate_distance(
-        previous_pole.latitude, previous_pole.longitude,
-        new_pole.latitude, new_pole.longitude
+        previous_pole.y_position, previous_pole.x_position,
+        new_pole.y_position, new_pole.x_position
     )
     
     # Получаем информацию о линии для voltage_level
@@ -557,11 +557,11 @@ async def link_line_to_substation(
     if first_cn is None:
         first_cn = await get_or_create_connectivity_node_for_pole(db, first_pole, power_line_id)
 
-    sub_lat = getattr(substation, "latitude", None) or (substation.get_latitude() if hasattr(substation, "get_latitude") else None)
-    sub_lon = getattr(substation, "longitude", None) or (substation.get_longitude() if hasattr(substation, "get_longitude") else None)
-    if sub_lat is None or sub_lon is None:
-        sub_lat = first_cn.latitude
-        sub_lon = first_cn.longitude
+    sub_lat = substation.y_position
+    sub_lon = substation.x_position
+    if sub_lat == 0 and sub_lon == 0:
+        sub_lat = first_cn.y_position
+        sub_lon = first_cn.x_position
 
     # Узел подстанции для этой линии (один на пару линия–подстанция)
     result = await db.execute(
@@ -577,8 +577,8 @@ async def link_line_to_substation(
             name=substation.name or substation.dispatcher_name or "ПС",
             pole_id=None,
             line_id=power_line_id,
-            latitude=float(sub_lat),
-            longitude=float(sub_lon),
+            y_position=float(sub_lat),
+            x_position=float(sub_lon),
             substation_id=substation_id,
         )
         db.add(substation_cn)
@@ -599,7 +599,7 @@ async def link_line_to_substation(
         select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
     )
     segment_count = segment_count_result.scalar_one() or 0
-    code = f"{power_line.code}-SEG-{segment_count + 1}"
+    code = f"SEG-{power_line.mrid[:8].upper()}-{segment_count + 1}"
 
     from_name = await _connectivity_node_display_name(db, substation_cn.id)
     to_name = await _connectivity_node_display_name(db, first_cn.id)
@@ -634,7 +634,7 @@ async def link_line_to_substation(
 
     distance = calculate_distance(
         float(sub_lat), float(sub_lon),
-        first_pole.latitude or 0, first_pole.longitude or 0,
+        first_pole.y_position or 0, first_pole.x_position or 0,
     )
     span_number = f"Пролёт {from_name} - {to_name}"
 

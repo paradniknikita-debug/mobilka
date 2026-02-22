@@ -21,9 +21,9 @@ class Substation(Base, ConnectivityNodeContainer):
     # CIM Location - связь с Location для координат
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
     
-    # Старые поля для обратной совместимости (будут удалены после миграции)
-    latitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
-    longitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
+    # Координаты (CIM: x_position = долгота, y_position = широта)
+    y_position = Column(Float, nullable=True)
+    x_position = Column(Float, nullable=True)
     
     address = Column(Text, nullable=True)  # Адрес теперь хранится в Location, но оставляем для обратной совместимости
     # Заменяем branch_id на region_id для географической иерархии
@@ -46,16 +46,28 @@ class Substation(Base, ConnectivityNodeContainer):
     connectivity_nodes = relationship("ConnectivityNode", back_populates="substation")
     
     def get_latitude(self) -> float:
-        """Получить широту из Location/PositionPoint или из старого поля"""
+        """Получить широту из Location/PositionPoint или из колонки"""
         if self.location and self.location.position_points:
             return self.location.position_points[0].y_position
-        return self.__dict__.get('latitude')
+        return self.__dict__.get('y_position')
     
     def get_longitude(self) -> float:
-        """Получить долготу из Location/PositionPoint или из старого поля"""
+        """Получить долготу из Location/PositionPoint или из колонки"""
         if self.location and self.location.position_points:
             return self.location.position_points[0].x_position
-        return self.__dict__.get('longitude')
+        return self.__dict__.get('x_position')
+
+    @property
+    def x_position(self) -> float:
+        """Долгота (CIM x_position)."""
+        val = self.get_longitude()
+        return float(val) if val is not None else 0.0
+
+    @property
+    def y_position(self) -> float:
+        """Широта (CIM y_position)."""
+        val = self.get_latitude()
+        return float(val) if val is not None else 0.0
 
 class Connection(Base):
     __tablename__ = "connections"

@@ -53,9 +53,9 @@ class ConnectivityNode(Base, IdentifiedObject):
     # Если несколько ConnectivityNode на одной опоре принадлежат разным линиям с is_tap=False, это совместный подвес
     line_id = Column(Integer, ForeignKey("line.id"), nullable=False)
     
-    # Географическая позиция (дублируется из опоры для удобства)
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
+    # Координаты (CIM: x_position = долгота, y_position = широта)
+    y_position = Column(Float, nullable=False)
+    x_position = Column(Float, nullable=False)
     
     # description, created_at, updated_at - наследуются от IdentifiedObject
     

@@ -85,7 +85,7 @@ async def import_power_lines(
         df = pd.read_excel(io.BytesIO(contents))
         
         # Проверка обязательных колонок
-        required_columns = ['name', 'code', 'voltage_level']
+        required_columns = ['name', 'voltage_level']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise HTTPException(
@@ -95,31 +95,36 @@ async def import_power_lines(
         
         created = 0
         errors = []
-        
+        from app.models.base import generate_mrid
+
         for idx, row in df.iterrows():
             try:
                 # Получаем или создаём регион
                 region_id = None
                 if 'region_code' in df.columns and pd.notna(row.get('region_code')):
                     region_id = await get_or_create_region(
-                        db, 
+                        db,
                         region_code=str(row['region_code']),
                         region_name=str(row.get('region_name', ''))
                     )
-                
-                # Проверяем уникальность кода
+                name = str(row['name'])
+                voltage_level = float(row['voltage_level'])
+                # Проверяем уникальность по имени и напряжению
                 existing = await db.execute(
-                    select(PowerLine).where(PowerLine.code == str(row['code']))
+                    select(PowerLine).where(
+                        PowerLine.name == name,
+                        PowerLine.voltage_level == voltage_level
+                    )
                 )
                 if existing.scalar_one_or_none():
-                    errors.append(f"Строка {idx + 2}: ЛЭП с кодом '{row['code']}' уже существует")
+                    errors.append(f"Строка {idx + 2}: ЛЭП '{name}' ({voltage_level} кВ) уже существует")
                     continue
-                
-                # Создаём ЛЭП
+
+                # Создаём ЛЭП (mrid генерируется автоматически)
                 power_line = PowerLine(
-                    name=str(row['name']),
-                    code=str(row['code']),
-                    voltage_level=float(row['voltage_level']),
+                    mrid=generate_mrid(),
+                    name=name,
+                    voltage_level=voltage_level,
                     length=float(row['length']) if pd.notna(row.get('length')) else None,
                     region_id=region_id,
                     status=str(row.get('status', 'active')),
@@ -193,22 +198,22 @@ async def import_poles(
         
         for idx, row in df.iterrows():
             try:
-                # Находим ЛЭП по коду
+                # Находим ЛЭП по названию
                 power_line_result = await db.execute(
-                    select(PowerLine).where(PowerLine.code == str(row['power_line_code']))
+                    select(PowerLine).where(PowerLine.name == str(row['power_line_code']))
                 )
                 power_line = power_line_result.scalar_one_or_none()
                 
                 if not power_line:
-                    errors.append(f"Строка {idx + 2}: ЛЭП с кодом '{row['power_line_code']}' не найдена")
+                    errors.append(f"Строка {idx + 2}: ЛЭП с названием '{row['power_line_code']}' не найдена")
                     continue
                 
                 # Создаём опору
                 pole = Pole(
                     line_id=power_line.id,
                     pole_number=str(row['pole_number']),
-                    latitude=float(row['latitude']),
-                    longitude=float(row['longitude']),
+                    y_position=float(row['latitude']),
+                    x_position=float(row['longitude']),
                     pole_type=str(row['pole_type']),
                     height=float(row['height']) if pd.notna(row.get('height')) else None,
                     foundation_type=str(row['foundation_type']) if pd.notna(row.get('foundation_type')) else None,
@@ -305,8 +310,8 @@ async def import_substations(
                     name=str(row['name']),
                     dispatcher_name=str(row.get('dispatcher_name') or row.get('code', '')),
                     voltage_level=float(row['voltage_level']),
-                    latitude=float(row['latitude']),
-                    longitude=float(row['longitude']),
+                    y_position=float(row['latitude']),
+                    x_position=float(row['longitude']),
                     address=str(row['address']) if pd.notna(row.get('address')) else None,
                     region_id=region_id,
                     description=str(row['description']) if pd.notna(row.get('description')) else None,
@@ -378,14 +383,14 @@ async def import_equipment(
         
         for idx, row in df.iterrows():
             try:
-                # Находим ЛЭП и опору
+                # Находим ЛЭП и опору по названию ЛЭП
                 power_line_result = await db.execute(
-                    select(PowerLine).where(PowerLine.code == str(row['power_line_code']))
+                    select(PowerLine).where(PowerLine.name == str(row['power_line_code']))
                 )
                 power_line = power_line_result.scalar_one_or_none()
                 
                 if not power_line:
-                    errors.append(f"Строка {idx + 2}: ЛЭП с кодом '{row['power_line_code']}' не найдена")
+                    errors.append(f"Строка {idx + 2}: ЛЭП с названием '{row['power_line_code']}' не найдена")
                     continue
                 
                 pole_result = await db.execute(

@@ -14,6 +14,7 @@ from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, sub
 # Временно закомментировано до применения миграции
 # from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
+from app.core.redis_client import set_redis_client, get_redis_client
 
 # Импортируем модели, чтобы они зарегистрировались в Base.metadata
 # Это необходимо для создания таблиц через Base.metadata.create_all
@@ -36,13 +37,14 @@ async def lifespan(app: FastAPI):
     
     # Инициализация Redis (опционально)
     try:
-        # Пытаемся подключиться к Redis, но не блокируем запуск, если он недоступен
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5)
         await redis_client.ping()
+        set_redis_client(redis_client)
         print("OK: Redis подключен")
     except Exception as e:
         print(f"WARNING: Redis недоступен: {e}. Продолжаем без Redis.")
         redis_client = None
+        set_redis_client(None)
     
     # Инициализация базы данных (обязательно)
     try:
@@ -58,11 +60,12 @@ async def lifespan(app: FastAPI):
     yield
     
     # Закрытие соединений при остановке
+    set_redis_client(None)
     if redis_client:
         try:
             await redis_client.close()
         except Exception:
-            pass  # Игнорируем ошибки при закрытии Redis
+            pass
 # Создание FastAPI приложения. Далее можно добавить @app.get, @app.post, @app.put, @app.delete методы.
 app = FastAPI(
     title="ЛЭП Management System",
@@ -268,15 +271,29 @@ async def status_page():
 
 @app.get("/cache")
 async def cache_example():
-    if not redis_client:
+    """Демо: запись/чтение из Redis (для проверки подключения)."""
+    client = get_redis_client()
+    if not client:
         return {"error": "Redis недоступен"}
-    await redis_client.set("hello", "world")
-    value = await redis_client.get("hello")
+    await client.set("hello", "world")
+    value = await client.get("hello")
     return {"cached_value": value}
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Базовый health: статус приложения и Redis."""
+    redis_ok = False
+    if get_redis_client():
+        try:
+            await get_redis_client().ping()
+            redis_ok = True
+        except Exception:
+            pass
+    return {
+        "status": "healthy",
+        "redis": "connected" if redis_ok else "disconnected",
+    }
 
 if __name__ == "__main__":
     uvicorn.run(

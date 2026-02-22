@@ -60,6 +60,9 @@ abstract class ApiService {
   @DELETE('/power-lines/{powerLineId}/spans/{spanId}')
   Future<void> deleteSpan(@Path('powerLineId') int powerLineId, @Path('spanId') int spanId);
 
+  @POST('/power-lines/{id}/spans/auto-create')
+  Future<Map<String, dynamic>> autoCreateSpans(@Path('id') int powerLineId);
+
   // Poles
   @GET('/poles')
   Future<List<Pole>> getAllPoles();
@@ -429,6 +432,9 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<void> deleteSpan(int powerLineId, int spanId) => _delegate.deleteSpan(powerLineId, spanId);
+
+  @override
+  Future<Map<String, dynamic>> autoCreateSpans(int powerLineId) => _delegate.autoCreateSpans(powerLineId);
 
   @override
   Future<List<Pole>> getAllPoles() => _delegate.getAllPoles();

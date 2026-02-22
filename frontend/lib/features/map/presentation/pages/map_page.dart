@@ -215,15 +215,15 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       final poleFeatures = allPoles.map((p) => {
         'type': 'Feature',
-        'geometry': {'type': 'Point', 'coordinates': [p.longitude, p.latitude]},
+        'geometry': {'type': 'Point', 'coordinates': [p.xPosition, p.yPosition]},
         'properties': {
           'id': p.id,
           'power_line_id': p.powerLineId,
           'pole_number': p.poleNumber,
           'pole_type': p.poleType,
           'condition': p.condition,
-          'latitude': p.latitude,
-          'longitude': p.longitude,
+          'x_position': p.xPosition,
+          'y_position': p.yPosition,
           'is_local': p.isLocal,
           'needs_sync': p.needsSync,
         },
@@ -238,7 +238,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             'type': 'Feature',
             'geometry': {
               'type': 'LineString',
-              'coordinates': plPoles.map((p) => [p.longitude, p.latitude]).toList(),
+              'coordinates': plPoles.map((p) => [p.xPosition, p.yPosition]).toList(),
             },
             'properties': {'id': pl.id, 'name': pl.name, 'is_local': pl.isLocal},
           });
@@ -254,7 +254,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           _powerLinesList = allPowerLines.map((pl) => PowerLine(
             id: pl.id,
             name: pl.name,
-            code: pl.code,
             voltageLevel: pl.voltageLevel,
             length: pl.length,
             branchId: pl.branchId,
@@ -450,7 +449,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           powerLinesList.add(PowerLine(
             id: pl.id,
             name: pl.name,
-            code: pl.code,
             voltageLevel: pl.voltageLevel,
             length: pl.length,
             branchId: pl.branchId,
@@ -472,15 +470,15 @@ class _MapPageState extends ConsumerState<MapPage> {
         for (final p in localPoles) {
           serverFeatures.add({
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [p.longitude, p.latitude]},
+            'geometry': {'type': 'Point', 'coordinates': [p.xPosition, p.yPosition]},
             'properties': {
               'id': p.id,
               'power_line_id': p.powerLineId,
               'pole_number': p.poleNumber,
               'pole_type': p.poleType,
               'condition': p.condition,
-              'latitude': p.latitude,
-              'longitude': p.longitude,
+              'x_position': p.xPosition,
+              'y_position': p.yPosition,
               'is_local': true,
               'needs_sync': true,
             },
@@ -879,6 +877,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                               }
                             }
                           : null,
+                      onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
                       onDelete: _handleDeleteObject,
                     ),
                   ),
@@ -993,10 +992,10 @@ class _MapPageState extends ConsumerState<MapPage> {
               (coordinates[0] as num).toDouble(),
             );
             
-            // Добавляем координаты в properties для использования в _showPoleInfo
+            // Добавляем координаты в properties (CIM: x_position=долгота, y_position=широта)
             final poleProperties = Map<String, dynamic>.from(properties ?? {});
-            poleProperties['latitude'] = latLng.latitude;
-            poleProperties['longitude'] = latLng.longitude;
+            poleProperties['x_position'] = latLng.longitude;
+            poleProperties['y_position'] = latLng.latitude;
 
             final plId = _toInt(properties?['power_line_id']);
             final isCurrentPatrolLine = _currentPowerLineId != null && plId == _currentPowerLineId;
@@ -1242,7 +1241,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      '${_formatVoltageDisplay(pl.voltageLevel)} • ${pl.code}',
+                      _formatVoltageDisplay(pl.voltageLevel),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1833,8 +1832,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     // Если опора создана успешно, обновляем данные и центрируем карту на ней
     if (result != null && result['success'] == true && mounted) {
       await _loadMapData();
-      final latRaw = result['latitude'];
-      final lngRaw = result['longitude'];
+      final latRaw = result['y_position'] ?? result['latitude'];
+      final lngRaw = result['x_position'] ?? result['longitude'];
       final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
       final lng = lngRaw is num ? lngRaw.toDouble() : (lngRaw is double ? lngRaw : null);
       if (lat != null && lng != null) {
@@ -1870,9 +1869,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (coordinates != null && coordinates.length >= 2) {
         lat = (coordinates[1] as num).toDouble();
         lng = (coordinates[0] as num).toDouble();
-        properties['latitude'] = lat;
-        properties['longitude'] = lng;
+        properties['x_position'] = lng;
+        properties['y_position'] = lat;
       }
+    } else if (properties['x_position'] != null && properties['y_position'] != null) {
+      lng = (properties['x_position'] as num).toDouble();
+      lat = (properties['y_position'] as num).toDouble();
     } else if (properties['latitude'] != null && properties['longitude'] != null) {
       lat = (properties['latitude'] as num).toDouble();
       lng = (properties['longitude'] as num).toDouble();
@@ -1948,14 +1950,63 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
   
-  void _handleAutoCreateSpans() {
-    // TODO: Реализовать автоматическое создание пролётов
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Функция автоматического создания пролётов будет реализована'),
-        backgroundColor: Colors.orange,
+  Future<void> _handleAutoCreateSpans() async {
+    final powerLineId = _selectedObjectProperties?['power_line_id'] as int?;
+    if (powerLineId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Выберите опору, принадлежащую линии'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Создать пролёты автоматически'),
+        content: const Text(
+          'Создать пролёты между всеми опорами линии в порядке их последовательности?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Создать'),
+          ),
+        ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final response = await apiService.autoCreateSpans(powerLineId);
+      final count = response['created_count'] as int? ?? (response['spans'] as List?)?.length ?? 0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Создано пролётов: $count'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await _loadMapData();
+      }
+    } catch (e, st) {
+      if (kDebugMode) print('Ошибка автоматического создания пролётов: $e $st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleDeleteObject() async {
@@ -2538,8 +2589,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         id: drift.Value(localId),
         powerLineId: _currentPowerLineId!,
         poleNumber: _quickPoleNumber,
-        latitude: _currentLocation!.latitude,
-        longitude: _currentLocation!.longitude,
+        xPosition: _currentLocation!.longitude,
+        yPosition: _currentLocation!.latitude,
         poleType: _quickPoleType,
         height: const drift.Value.absent(),
         foundationType: const drift.Value.absent(),
@@ -2833,7 +2884,6 @@ class _MapPageState extends ConsumerState<MapPage> {
               try {
                 final apiService = ref.read(apiServiceProvider);
                 final name = nameController.text.trim();
-                final code = name;
                 final voltageLevel = double.tryParse(voltageController.text) ?? 0.0;
                 final length = double.tryParse(lengthController.text);
                 final branchId = 1; // TODO: Получить реальный branchId
@@ -2844,7 +2894,6 @@ class _MapPageState extends ConsumerState<MapPage> {
 
                 final powerLineData = PowerLineCreate(
                   name: name,
-                  code: code,
                   voltageLevel: voltageLevel,
                   length: length,
                   branchId: branchId,
@@ -2904,7 +2953,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   await db.insertPowerLine(drift_db.PowerLinesCompanion.insert(
                     id: drift.Value(localId),
                     name: name,
-                    code: code,
+                    code: name,
                     voltageLevel: voltageLevel,
                     length: length != null ? drift.Value(length) : const drift.Value.absent(),
                     branchId: branchId,

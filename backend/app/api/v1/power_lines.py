@@ -28,121 +28,6 @@ class LinkLineToSubstationBody(BaseModel):
     substation_id: int
 
 
-def get_pole_latitude(pole) -> float:
-    """Получает широту опоры (y_position или latitude)"""
-    # Сначала пытаемся получить из position_points
-    try:
-        if hasattr(pole, 'position_points') and pole.position_points:
-            point = pole.position_points[0]
-            y_pos = getattr(point, 'y_position', None)
-            if y_pos is not None:
-                return float(y_pos)
-    except (AttributeError, IndexError, TypeError):
-        pass
-    
-    # Fallback: старые поля
-    old_latitude = getattr(pole, 'latitude', None)
-    if old_latitude is not None:
-        return float(old_latitude)
-    
-    # Если есть y_position напрямую
-    y_pos = getattr(pole, 'y_position', None)
-    if y_pos is not None:
-        return float(y_pos)
-    
-    return 0.0
-
-def get_pole_longitude(pole) -> float:
-    """Получает долготу опоры (x_position или longitude)"""
-    # Сначала пытаемся получить из position_points
-    try:
-        if hasattr(pole, 'position_points') and pole.position_points:
-            point = pole.position_points[0]
-            x_pos = getattr(point, 'x_position', None)
-            if x_pos is not None:
-                return float(x_pos)
-    except (AttributeError, IndexError, TypeError):
-        pass
-    
-    # Fallback: старые поля
-    old_longitude = getattr(pole, 'longitude', None)
-    if old_longitude is not None:
-        return float(old_longitude)
-    
-    # Если есть x_position напрямую
-    x_pos = getattr(pole, 'x_position', None)
-    if x_pos is not None:
-        return float(x_pos)
-    
-    return 0.0
-
-def fill_pole_coordinates(pole):
-    """Заполняет x_position и y_position из position_points для опоры"""
-    x_position = None  # Долгота (longitude)
-    y_position = None  # Широта (latitude)
-    
-    try:
-        # Пытаемся получить из position_points напрямую
-        if hasattr(pole, 'position_points') and pole.position_points:
-            point = pole.position_points[0]
-            x_position = getattr(point, 'x_position', None)  # x_position = longitude
-            y_position = getattr(point, 'y_position', None)  # y_position = latitude
-    except (AttributeError, IndexError, TypeError):
-        pass
-    
-    # Fallback: пытаемся получить из старого поля или Location
-    if x_position is None or y_position is None:
-        # Старые поля latitude/longitude (для обратной совместимости)
-        old_latitude = getattr(pole, 'latitude', None)
-        old_longitude = getattr(pole, 'longitude', None)
-        if old_latitude is not None:
-            y_position = old_latitude
-        if old_longitude is not None:
-            x_position = old_longitude
-        
-        # Пытаемся получить из Location, если доступно
-        if x_position is None or y_position is None:
-            try:
-                location = getattr(pole, 'location', None)
-                if location:
-                    position_points = getattr(location, 'position_points', None)
-                    if position_points and len(position_points) > 0:
-                        point = position_points[0]
-                        x_position = getattr(point, 'x_position', None)
-                        y_position = getattr(point, 'y_position', None)
-            except (AttributeError, IndexError, TypeError):
-                pass
-    
-    # Устанавливаем координаты в объект (для сериализации Pydantic)
-    # Всегда устанавливаем валидные значения (не null) для Flutter
-    import math
-    
-    if x_position is not None:
-        try:
-            x_val = float(x_position)
-            # Проверяем, что значение валидно (не NaN, не Infinity)
-            if not math.isnan(x_val) and x_val != float('inf') and x_val != float('-inf'):
-                setattr(pole, 'x_position', x_val)
-            else:
-                setattr(pole, 'x_position', 0.0)
-        except (TypeError, ValueError):
-            setattr(pole, 'x_position', 0.0)
-    else:
-        setattr(pole, 'x_position', 0.0)  # Значение по умолчанию для Flutter
-    
-    if y_position is not None:
-        try:
-            y_val = float(y_position)
-            # Проверяем, что значение валидно (не NaN, не Infinity)
-            if not math.isnan(y_val) and y_val != float('inf') and y_val != float('-inf'):
-                setattr(pole, 'y_position', y_val)
-            else:
-                setattr(pole, 'y_position', 0.0)
-        except (TypeError, ValueError):
-            setattr(pole, 'y_position', 0.0)
-    else:
-        setattr(pole, 'y_position', 0.0)  # Значение по умолчанию для Flutter
-
 @router.post("", response_model=PowerLineResponse)
 async def create_power_line(
     power_line_data: PowerLineCreate,
@@ -169,27 +54,7 @@ async def create_power_line(
             raise HTTPException(status_code=400, detail=f"ЛЭП с UID '{mrid}' уже существует")
     else:
         mrid = generate_mrid()
-    
-    # Генерируем код автоматически на основе mrid
-    code = f"LEP-{mrid[:8].upper()}"
-    
-    # Проверяем уникальность code
-    existing = await db.execute(
-        select(PowerLine).where(PowerLine.code == code)
-    )
-    if existing.scalar_one_or_none():
-        # Если код уже существует, добавляем суффикс
-        counter = 1
-        while True:
-            new_code = f"{code}-{counter}"
-            existing = await db.execute(
-                select(PowerLine).where(PowerLine.code == new_code)
-            )
-            if not existing.scalar_one_or_none():
-                code = new_code
-                break
-            counter += 1
-    
+
     # Формируем описание из branch_name и region_name
     description_parts = []
     if branch_name:
@@ -253,7 +118,6 @@ async def create_power_line(
     # Удаляем поля, которые не должны передаваться в модель
     power_line_dict.pop('branch_id', None)
     power_line_dict.pop('region_id', None)
-    power_line_dict.pop('code', None)  # code генерируется автоматически
     power_line_dict.pop('base_voltage_id', None)  # в модели нет (зарезервировано под CIM)
     # ВАЖНО: description удаляем в последний момент перед созданием объекта
     # чтобы избежать конфликта с явно передаваемым description=final_description
@@ -261,7 +125,6 @@ async def create_power_line(
     # Логируем данные перед созданием
     print(f"DEBUG: Создание ЛЭП с данными:")
     print(f"  mrid: {mrid}")
-    print(f"  code: {code}")
     print(f"  name: {power_line_dict.get('name')}")
     print(f"  voltage_level: {power_line_dict.get('voltage_level')}")
     print(f"  length: {power_line_dict.get('length')}")
@@ -278,7 +141,6 @@ async def create_power_line(
     try:
         db_power_line = PowerLine(
             mrid=mrid,
-            code=code,
             description=final_description,
             created_by=current_user.id,
             **power_line_dict_clean
@@ -339,8 +201,6 @@ async def get_power_lines(
             if hasattr(pole, '_get_connectivity_node_safe'):
                 _ = pole._get_connectivity_node_safe()
             
-            # Заполняем координаты
-            fill_pole_coordinates(pole)
     
     return power_lines
 
@@ -482,12 +342,14 @@ async def create_pole(
     # Убеждаемся, что id не передан (должен генерироваться автоматически)
     pole_dict.pop('id', None)
     
-    # Преобразуем x_position/y_position в latitude/longitude для старых полей (обратная совместимость)
-    if pole_data.x_position is not None:
-        pole_dict['longitude'] = pole_data.x_position  # x_position = долгота (longitude)
-    if pole_data.y_position is not None:
-        pole_dict['latitude'] = pole_data.y_position  # y_position = широта (latitude)
-    
+    # Координаты в БД: x_position = долгота, y_position = широта
+    lon_val = getattr(pole_data, 'x_position', None)
+    lat_val = getattr(pole_data, 'y_position', None)
+    if lon_val is not None:
+        pole_dict['x_position'] = float(lon_val)
+    if lat_val is not None:
+        pole_dict['y_position'] = float(lat_val)
+
     db_pole = Pole(
         **pole_dict,
         line_id=power_line_id,
@@ -497,14 +359,14 @@ async def create_pole(
     db.add(db_pole)
     await db.flush()  # Получаем ID опоры
     
-    # Создаем PositionPoint для координат опоры
-    if pole_data.x_position is not None and pole_data.y_position is not None:
+    # Создаем PositionPoint для координат опоры (x_position=долгота, y_position=широта)
+    if lon_val is not None and lat_val is not None:
         from app.models.base import generate_mrid
         
         position_point = PositionPoint(
             mrid=generate_mrid(),
-            x_position=pole_data.x_position,  # Долгота (longitude)
-            y_position=pole_data.y_position,   # Широта (latitude)
+            x_position=float(lon_val),
+            y_position=float(lat_val),
             pole_id=db_pole.id
         )
         db.add(position_point)
@@ -522,8 +384,8 @@ async def create_pole(
             name=f"Узел {pole_data.pole_number}",
             pole_id=db_pole.id,
             line_id=power_line_id,
-            latitude=pole_data.y_position or 0.0,
-            longitude=pole_data.x_position or 0.0,
+            y_position=float(lat_val) if lat_val is not None else 0.0,
+            x_position=float(lon_val) if lon_val is not None else 0.0,
             description=f"Узел отпаечной опоры {pole_data.pole_number} линии {power_line_id}",
         )
         db.add(connectivity_node)
@@ -570,8 +432,6 @@ async def create_pole(
     # Не нужно устанавливать через setattr, так как это property
     # Pydantic получит его автоматически через from_attributes=True
     
-    # Заполняем координаты
-    fill_pole_coordinates(db_pole)
     
     return db_pole
 
@@ -593,10 +453,6 @@ async def get_poles(
         )
     )
     poles = result.scalars().all()
-    
-    # Заполняем координаты для каждой опоры
-    for pole in poles:
-        fill_pole_coordinates(pole)
     
     return poles
 
@@ -628,8 +484,6 @@ async def get_pole(
     # Не нужно устанавливать через setattr, так как это property
     # Pydantic получит его автоматически через from_attributes=True
     
-    # Заполняем координаты
-    fill_pole_coordinates(pole)
     
     return pole
 
@@ -700,15 +554,15 @@ async def update_pole(
     # x_position и y_position будут обновлены в PositionPoint
     pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid', 'x_position', 'y_position'})
     
-    # Преобразуем x_position/y_position в latitude/longitude для старых полей (обратная совместимость)
+    # Координаты в БД: x_position = долгота, y_position = широта
     x_position = None
     y_position = None
     if 'x_position' in pole_data.dict(exclude_unset=True):
         x_position = pole_data.x_position
-        pole_dict['longitude'] = x_position  # x_position = долгота (longitude)
+        pole_dict['x_position'] = x_position
     if 'y_position' in pole_data.dict(exclude_unset=True):
         y_position = pole_data.y_position
-        pole_dict['latitude'] = y_position  # y_position = широта (latitude)
+        pole_dict['y_position'] = y_position
     
     if "is_tap" in pole_data.dict(exclude_unset=True):
         pole.is_tap_pole = pole_data.is_tap
@@ -748,8 +602,8 @@ async def update_pole(
                         to_name = await _connectivity_node_display_name(db, pole_cn.id)
                         seg.name = f"{from_name} - {to_name}"
                         dist = __import__("app.core.line_auto_assembly", fromlist=["calculate_distance"]).calculate_distance(
-                            prev_pole.latitude or 0, prev_pole.longitude or 0,
-                            pole.latitude or 0, pole.longitude or 0,
+                            prev_pole.y_position or 0, prev_pole.x_position or 0,
+                            pole.y_position or 0, pole.x_position or 0,
                         )
                         ct = getattr(prev_pole, "conductor_type", None) or "AC-70"
                         cm = getattr(prev_pole, "conductor_material", None) or "алюминий"
@@ -788,7 +642,7 @@ async def update_pole(
                         new_seg = ACS(
                             mrid=generate_mrid(),
                             name=f"Участок от оп. {pole.pole_number}",
-                            code=f"{power_line.code}-SEG-{seg_count + 1}",
+                            code=f"SEG-{power_line.mrid[:8].upper()}-{seg_count + 1}",
                             line_id=power_line_id,
                             is_tap=False,
                             from_connectivity_node_id=pole_cn.id,
@@ -835,9 +689,9 @@ async def update_pole(
         cn = pole.get_connectivity_node_for_line(power_line_id)
         if cn:
             if x_position is not None:
-                cn.longitude = x_position  # x_position = долгота (longitude)
+                cn.x_position = x_position
             if y_position is not None:
-                cn.latitude = y_position  # y_position = широта (latitude)
+                cn.y_position = y_position
     
     await db.commit()
     await db.refresh(pole)
@@ -919,8 +773,8 @@ async def create_span(
             name=f"Узел {from_pole.pole_number}",
             pole_id=from_pole.id,
             line_id=power_line_id,
-            latitude=get_pole_latitude(from_pole),
-            longitude=get_pole_longitude(from_pole),
+            y_position=from_pole.y_position,
+            x_position=from_pole.x_position,
             description=f"Узел для опоры {from_pole.pole_number} линии {power_line_id}"
         )
         db.add(from_connectivity_node)
@@ -942,8 +796,8 @@ async def create_span(
             name=f"Узел {to_pole.pole_number}",
             pole_id=to_pole.id,
             line_id=power_line_id,
-            latitude=get_pole_latitude(to_pole),
-            longitude=get_pole_longitude(to_pole),
+            y_position=to_pole.y_position,
+            x_position=to_pole.x_position,
             description=f"Узел для опоры {to_pole.pole_number} линии {power_line_id}"
         )
         db.add(to_connectivity_node)
@@ -1164,8 +1018,8 @@ async def update_span(
                 name=f"Узел {from_pole.pole_number}",
                 pole_id=from_pole.id,
                 line_id=power_line_id,
-                latitude=get_pole_latitude(from_pole),
-                longitude=get_pole_longitude(from_pole),
+                y_position=from_pole.y_position,
+                x_position=from_pole.x_position,
                 description=f"Узел для опоры {from_pole.pole_number} линии {power_line_id}"
             )
             db.add(from_connectivity_node)
@@ -1198,8 +1052,8 @@ async def update_span(
                 name=f"Узел {to_pole.pole_number}",
                 pole_id=to_pole.id,
                 line_id=power_line_id,
-                latitude=to_pole.latitude,
-                longitude=to_pole.longitude,
+                y_position=to_pole.y_position,
+                x_position=to_pole.x_position,
                 description=f"Узел для опоры {to_pole.pole_number} линии {power_line_id}"
             )
             db.add(to_connectivity_node)
@@ -1297,11 +1151,12 @@ async def auto_create_spans(
 ):
     """
     Автоматическое создание пролётов на основе последовательности опор.
-    Создаёт пролёты между соседними опорами в порядке их sequence_number.
+    Создаёт пролёты между соседними опорами в порядке sequence_number,
+    а также участки линии (AClineSegment) и секции линии (LineSection)
+    по той же логике, что и при пошаговом добавлении опор.
     """
-    import math
     from app.models.base import generate_mrid
-    
+
     # Проверка существования ЛЭП
     power_line = await db.get(PowerLine, power_line_id)
     if not power_line:
@@ -1345,8 +1200,8 @@ async def auto_create_spans(
                 name=f"Узел {pole.pole_number}",
                 pole_id=pole.id,
                 line_id=power_line_id,
-                latitude=get_pole_latitude(pole),
-                longitude=get_pole_longitude(pole),
+                y_position=pole.y_position,
+                x_position=pole.x_position,
                 description=f"Автоматически созданный узел для опоры {pole.pole_number} линии {power_line_id}"
             )
             db.add(connectivity_node)
@@ -1358,78 +1213,15 @@ async def auto_create_spans(
         # Сохраняем ConnectivityNode в опоре для использования ниже
         pole._connectivity_node = connectivity_node
     
-    # Функция для расчёта расстояния по формуле Гаверсинуса
-    def haversine_distance(lat1, lon1, lat2, lon2):
-        R = 6371000  # Радиус Земли в метрах
-        phi1 = math.radians(lat1)
-        phi2 = math.radians(lat2)
-        delta_phi = math.radians(lat2 - lat1)
-        delta_lambda = math.radians(lon2 - lon1)
-        
-        a = math.sin(delta_phi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-        return R * c
-    
-    # Создаём временную CIM структуру для всей линии
-    # Это нужно для обратной совместимости, так как Span требует line_section_id
-    from app.models.cim_line_structure import LineSection
-    from app.models.acline_segment import AClineSegment
-    
-    # Проверяем, есть ли уже AClineSegment для этой линии
-    result_segment = await db.execute(
-        select(AClineSegment).where(AClineSegment.line_id == power_line_id).limit(1)
-    )
-    existing_segment = result_segment.scalar_one_or_none()
-    
-    if not existing_segment:
-        # Создаём временный AClineSegment для всей линии
-        first_pole = poles[0]
-        last_pole = poles[-1]
-        
-        # Используем ConnectivityNode из опор (уже загружены выше)
-        from_connectivity_node_id = first_pole._connectivity_node.id
-        to_connectivity_node_id = last_pole._connectivity_node.id
-        
-        # Генерируем короткий код для сегмента (максимум 20 символов)
-        short_uuid = str(uuid.uuid4()).replace('-', '')[:8].upper()
-        segment_code = f"SEG-{short_uuid}"  # Максимум 12 символов
-        
-        temp_segment = AClineSegment(
-            mrid=generate_mrid(),
-            name=f"Сегмент {power_line.name}",
-            code=segment_code,
-            voltage_level=power_line.voltage_level or 0.0,
-            length=0.0,  # Будет рассчитано позже
-            line_id=power_line_id,
-            from_connectivity_node_id=from_connectivity_node_id,
-            to_connectivity_node_id=to_connectivity_node_id,
-            sequence_number=1,
-            created_by=current_user.id
-        )
-        db.add(temp_segment)
-        await db.flush()  # Получаем ID сегмента
-        segment_id = temp_segment.id
-    else:
-        segment_id = existing_segment.id
-    
-    # Создаём временную LineSection
-    temp_line_section = LineSection(
-        mrid=generate_mrid(),
-        name=f"Секция линии {power_line.name}",
-        acline_segment_id=segment_id,
-        sequence_number=1,
-        description="Автоматически созданная секция для пролётов"
-    )
-    db.add(temp_line_section)
-    await db.flush()  # Получаем ID секции
-    
-    # Создаём пролёты между соседними опорами
+    # Используем ту же логику, что и при пошаговом добавлении опор: создаются
+    # участки линии (AClineSegment) по ветвлениям/подстанциям и секции линии
+    # (LineSection) по марке провода — через auto_create_span из line_auto_assembly
+    from app.core.line_auto_assembly import auto_create_span
+
     created_spans = []
-    for i in range(len(poles) - 1):
-        from_pole = poles[i]
-        to_pole = poles[i + 1]
-        
-        # Проверяем, не существует ли уже такой пролёт
+    for i in range(1, len(poles)):
+        from_pole = poles[i - 1]
+        to_pole = poles[i]
         existing_span = await db.execute(
             select(Span).where(
                 Span.from_pole_id == from_pole.id,
@@ -1438,38 +1230,19 @@ async def auto_create_spans(
             )
         )
         if existing_span.scalar_one_or_none():
-            continue  # Пропускаем, если пролёт уже существует
-        
-        # Рассчитываем расстояние
-        distance = haversine_distance(
-            get_pole_latitude(from_pole), get_pole_longitude(from_pole),
-            get_pole_latitude(to_pole), get_pole_longitude(to_pole)
+            continue
+        span = await auto_create_span(
+            db,
+            power_line_id,
+            to_pole,
+            conductor_type=getattr(from_pole, "conductor_type", None),
+            conductor_material=getattr(from_pole, "conductor_material", None),
+            conductor_section=getattr(from_pole, "conductor_section", None),
+            current_user_id=current_user.id,
         )
-        
-        # Создаём пролёт
-        span_number = f"ПР-{from_pole.sequence_number}-{to_pole.sequence_number}"
-        
-        # Используем ConnectivityNode из опор (уже загружены выше)
-        from_connectivity_node_id = from_pole._connectivity_node.id
-        to_connectivity_node_id = to_pole._connectivity_node.id
-        
-        # Для обратной совместимости создаём пролёт со старыми полями
-        db_span = Span(
-            mrid=generate_mrid(),
-            line_section_id=temp_line_section.id,  # Привязываем к временной секции
-            line_id=power_line_id,
-            from_pole_id=from_pole.id,
-            to_pole_id=to_pole.id,
-            from_connectivity_node_id=from_connectivity_node_id,
-            to_connectivity_node_id=to_connectivity_node_id,
-            span_number=span_number,
-            length=distance,
-            sequence_number=i + 1,
-            created_by=current_user.id
-        )
-        db.add(db_span)
-        created_spans.append(db_span)
-    
+        if span:
+            created_spans.append(span)
+
     await db.commit()
     
     # Обновляем объекты для возврата

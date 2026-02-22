@@ -81,7 +81,6 @@ class PowerLineUpdate(BaseModel):
 
 class PowerLineResponse(PowerLineBase):
     id: int
-    code: str
     mrid: str
     created_by: int
     created_at: datetime

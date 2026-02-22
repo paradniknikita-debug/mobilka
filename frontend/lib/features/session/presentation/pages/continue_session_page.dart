@@ -137,7 +137,7 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
                               leading: const Icon(Icons.electrical_services),
                               title: Text(pl.name),
                               subtitle: Text(
-                                  '${pl.code.trim().isEmpty ? pl.name : pl.code} • ${pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д'}'),
+                                  '${pl.name} • ${pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д'}'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: () => _selectLineAndGoToMap(pl),
                             ),

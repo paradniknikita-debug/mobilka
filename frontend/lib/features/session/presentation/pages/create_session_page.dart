@@ -178,7 +178,6 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 return;
               }
               final name = nameController.text.trim();
-              final code = name;
               final voltageLevel = double.tryParse(voltageController.text) ?? 0.0;
               final length = double.tryParse(lengthController.text);
               final branchId = 1;
@@ -188,7 +187,6 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                   : descriptionController.text.trim();
               final powerLineData = PowerLineCreate(
                 name: name,
-                code: code,
                 voltageLevel: voltageLevel,
                 length: length,
                 branchId: branchId,
@@ -199,13 +197,10 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 final apiService = ref.read(apiServiceProvider);
                 final db = ref.read(drift_db.databaseProvider);
                 final created = await apiService.createPowerLine(powerLineData);
-                final lineCode = created.code.trim().isEmpty
-                    ? 'LEP-${created.id.toRadixString(16).toUpperCase().padLeft(8, '0')}'
-                    : created.code;
                 await db.insertPowerLineOrReplace(drift_db.PowerLinesCompanion.insert(
                   id: drift.Value(created.id),
                   name: created.name,
-                  code: lineCode,
+                  code: created.name,
                   voltageLevel: created.voltageLevel ?? 0.0,
                   length: drift.Value(created.length),
                   branchId: created.branchId ?? 1,
@@ -251,7 +246,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 await db.insertPowerLine(drift_db.PowerLinesCompanion.insert(
                   id: drift.Value(localId),
                   name: name,
-                  code: code,
+                  code: name,
                   voltageLevel: voltageLevel,
                   length: length != null ? drift.Value(length) : const drift.Value.absent(),
                   branchId: branchId,
@@ -538,7 +533,7 @@ class _LineSelector extends StatelessWidget {
               Expanded(
                 child: Text(
                   selected != null
-                      ? '${selected!.name} (${selected!.code})'
+                      ? selected!.name
                       : 'Введите название или номер...',
                   style: TextStyle(
                     fontSize: 15,
@@ -622,9 +617,7 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
         _filtered = List.from(widget.powerLines);
       } else {
         _filtered = widget.powerLines
-            .where((pl) =>
-                pl.name.toLowerCase().contains(q) ||
-                pl.code.toLowerCase().contains(q))
+            .where((pl) => pl.name.toLowerCase().contains(q))
             .toList();
       }
     });
@@ -640,7 +633,7 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
             controller: _queryController,
             style: const TextStyle(color: PatrolColors.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Поиск по названию или коду',
+              labelText: 'Поиск по названию',
               labelStyle: const TextStyle(color: PatrolColors.textSecondary),
               prefixIcon: const Icon(Icons.search, color: PatrolColors.textSecondary),
               filled: true,
@@ -673,7 +666,7 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
                   ),
                 ),
                 subtitle: Text(
-                  'ID: ${pl.code.trim().isEmpty ? pl.name : pl.code} • ${pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д'}',
+                  pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д',
                   style: const TextStyle(color: PatrolColors.textSecondary, fontSize: 12),
                 ),
                 selected: isSelected,

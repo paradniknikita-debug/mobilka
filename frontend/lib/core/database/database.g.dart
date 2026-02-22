@@ -649,17 +649,17 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   late final GeneratedColumn<String> poleNumber = GeneratedColumn<String>(
       'pole_number', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _latitudeMeta =
-      const VerificationMeta('latitude');
+  static const VerificationMeta _xPositionMeta =
+      const VerificationMeta('xPosition');
   @override
-  late final GeneratedColumn<double> latitude = GeneratedColumn<double>(
-      'latitude', aliasedName, false,
+  late final GeneratedColumn<double> xPosition = GeneratedColumn<double>(
+      'x_position', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
-  static const VerificationMeta _longitudeMeta =
-      const VerificationMeta('longitude');
+  static const VerificationMeta _yPositionMeta =
+      const VerificationMeta('yPosition');
   @override
-  late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
-      'longitude', aliasedName, false,
+  late final GeneratedColumn<double> yPosition = GeneratedColumn<double>(
+      'y_position', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
   static const VerificationMeta _poleTypeMeta =
       const VerificationMeta('poleType');
@@ -744,8 +744,8 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         id,
         powerLineId,
         poleNumber,
-        latitude,
-        longitude,
+        xPosition,
+        yPosition,
         poleType,
         height,
         foundationType,
@@ -788,17 +788,17 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     } else if (isInserting) {
       context.missing(_poleNumberMeta);
     }
-    if (data.containsKey('latitude')) {
-      context.handle(_latitudeMeta,
-          latitude.isAcceptableOrUnknown(data['latitude']!, _latitudeMeta));
+    if (data.containsKey('x_position')) {
+      context.handle(_xPositionMeta,
+          xPosition.isAcceptableOrUnknown(data['x_position']!, _xPositionMeta));
     } else if (isInserting) {
-      context.missing(_latitudeMeta);
+      context.missing(_xPositionMeta);
     }
-    if (data.containsKey('longitude')) {
-      context.handle(_longitudeMeta,
-          longitude.isAcceptableOrUnknown(data['longitude']!, _longitudeMeta));
+    if (data.containsKey('y_position')) {
+      context.handle(_yPositionMeta,
+          yPosition.isAcceptableOrUnknown(data['y_position']!, _yPositionMeta));
     } else if (isInserting) {
-      context.missing(_longitudeMeta);
+      context.missing(_yPositionMeta);
     }
     if (data.containsKey('pole_type')) {
       context.handle(_poleTypeMeta,
@@ -875,10 +875,10 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
           .read(DriftSqlType.int, data['${effectivePrefix}power_line_id'])!,
       poleNumber: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}pole_number'])!,
-      latitude: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}latitude'])!,
-      longitude: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}longitude'])!,
+      xPosition: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}x_position'])!,
+      yPosition: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}y_position'])!,
       poleType: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}pole_type'])!,
       height: attachedDatabase.typeMapping
@@ -916,8 +916,8 @@ class Pole extends DataClass implements Insertable<Pole> {
   final int id;
   final int powerLineId;
   final String poleNumber;
-  final double latitude;
-  final double longitude;
+  final double xPosition;
+  final double yPosition;
   final String poleType;
   final double? height;
   final String? foundationType;
@@ -934,8 +934,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       {required this.id,
       required this.powerLineId,
       required this.poleNumber,
-      required this.latitude,
-      required this.longitude,
+      required this.xPosition,
+      required this.yPosition,
       required this.poleType,
       this.height,
       this.foundationType,
@@ -954,8 +954,8 @@ class Pole extends DataClass implements Insertable<Pole> {
     map['id'] = Variable<int>(id);
     map['power_line_id'] = Variable<int>(powerLineId);
     map['pole_number'] = Variable<String>(poleNumber);
-    map['latitude'] = Variable<double>(latitude);
-    map['longitude'] = Variable<double>(longitude);
+    map['x_position'] = Variable<double>(xPosition);
+    map['y_position'] = Variable<double>(yPosition);
     map['pole_type'] = Variable<String>(poleType);
     if (!nullToAbsent || height != null) {
       map['height'] = Variable<double>(height);
@@ -988,8 +988,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       id: Value(id),
       powerLineId: Value(powerLineId),
       poleNumber: Value(poleNumber),
-      latitude: Value(latitude),
-      longitude: Value(longitude),
+      xPosition: Value(xPosition),
+      yPosition: Value(yPosition),
       poleType: Value(poleType),
       height:
           height == null && nullToAbsent ? const Value.absent() : Value(height),
@@ -1022,8 +1022,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       id: serializer.fromJson<int>(json['id']),
       powerLineId: serializer.fromJson<int>(json['powerLineId']),
       poleNumber: serializer.fromJson<String>(json['poleNumber']),
-      latitude: serializer.fromJson<double>(json['latitude']),
-      longitude: serializer.fromJson<double>(json['longitude']),
+      xPosition: serializer.fromJson<double>(json['x_position']),
+      yPosition: serializer.fromJson<double>(json['y_position']),
       poleType: serializer.fromJson<String>(json['poleType']),
       height: serializer.fromJson<double?>(json['height']),
       foundationType: serializer.fromJson<String?>(json['foundationType']),
@@ -1045,8 +1045,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       'id': serializer.toJson<int>(id),
       'powerLineId': serializer.toJson<int>(powerLineId),
       'poleNumber': serializer.toJson<String>(poleNumber),
-      'latitude': serializer.toJson<double>(latitude),
-      'longitude': serializer.toJson<double>(longitude),
+      'x_position': serializer.toJson<double>(xPosition),
+      'y_position': serializer.toJson<double>(yPosition),
       'poleType': serializer.toJson<String>(poleType),
       'height': serializer.toJson<double?>(height),
       'foundationType': serializer.toJson<String?>(foundationType),
@@ -1066,8 +1066,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           {int? id,
           int? powerLineId,
           String? poleNumber,
-          double? latitude,
-          double? longitude,
+          double? xPosition,
+          double? yPosition,
           String? poleType,
           Value<double?> height = const Value.absent(),
           Value<String?> foundationType = const Value.absent(),
@@ -1084,8 +1084,8 @@ class Pole extends DataClass implements Insertable<Pole> {
         id: id ?? this.id,
         powerLineId: powerLineId ?? this.powerLineId,
         poleNumber: poleNumber ?? this.poleNumber,
-        latitude: latitude ?? this.latitude,
-        longitude: longitude ?? this.longitude,
+        xPosition: xPosition ?? this.xPosition,
+        yPosition: yPosition ?? this.yPosition,
         poleType: poleType ?? this.poleType,
         height: height.present ? height.value : this.height,
         foundationType:
@@ -1108,8 +1108,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           data.powerLineId.present ? data.powerLineId.value : this.powerLineId,
       poleNumber:
           data.poleNumber.present ? data.poleNumber.value : this.poleNumber,
-      latitude: data.latitude.present ? data.latitude.value : this.latitude,
-      longitude: data.longitude.present ? data.longitude.value : this.longitude,
+      xPosition: data.xPosition.present ? data.xPosition.value : this.xPosition,
+      yPosition: data.yPosition.present ? data.yPosition.value : this.yPosition,
       poleType: data.poleType.present ? data.poleType.value : this.poleType,
       height: data.height.present ? data.height.value : this.height,
       foundationType: data.foundationType.present
@@ -1135,8 +1135,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           ..write('id: $id, ')
           ..write('powerLineId: $powerLineId, ')
           ..write('poleNumber: $poleNumber, ')
-          ..write('latitude: $latitude, ')
-          ..write('longitude: $longitude, ')
+          ..write('xPosition: $xPosition, ')
+          ..write('yPosition: $yPosition, ')
           ..write('poleType: $poleType, ')
           ..write('height: $height, ')
           ..write('foundationType: $foundationType, ')
@@ -1158,8 +1158,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       id,
       powerLineId,
       poleNumber,
-      latitude,
-      longitude,
+      xPosition,
+      yPosition,
       poleType,
       height,
       foundationType,
@@ -1179,8 +1179,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           other.id == this.id &&
           other.powerLineId == this.powerLineId &&
           other.poleNumber == this.poleNumber &&
-          other.latitude == this.latitude &&
-          other.longitude == this.longitude &&
+          other.xPosition == this.xPosition &&
+          other.yPosition == this.yPosition &&
           other.poleType == this.poleType &&
           other.height == this.height &&
           other.foundationType == this.foundationType &&
@@ -1199,8 +1199,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<int> id;
   final Value<int> powerLineId;
   final Value<String> poleNumber;
-  final Value<double> latitude;
-  final Value<double> longitude;
+  final Value<double> xPosition;
+  final Value<double> yPosition;
   final Value<String> poleType;
   final Value<double?> height;
   final Value<String?> foundationType;
@@ -1217,8 +1217,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.id = const Value.absent(),
     this.powerLineId = const Value.absent(),
     this.poleNumber = const Value.absent(),
-    this.latitude = const Value.absent(),
-    this.longitude = const Value.absent(),
+    this.xPosition = const Value.absent(),
+    this.yPosition = const Value.absent(),
     this.poleType = const Value.absent(),
     this.height = const Value.absent(),
     this.foundationType = const Value.absent(),
@@ -1236,8 +1236,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.id = const Value.absent(),
     required int powerLineId,
     required String poleNumber,
-    required double latitude,
-    required double longitude,
+    required double xPosition,
+    required double yPosition,
     required String poleType,
     this.height = const Value.absent(),
     this.foundationType = const Value.absent(),
@@ -1252,8 +1252,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.needsSync = const Value.absent(),
   })  : powerLineId = Value(powerLineId),
         poleNumber = Value(poleNumber),
-        latitude = Value(latitude),
-        longitude = Value(longitude),
+        xPosition = Value(xPosition),
+        yPosition = Value(yPosition),
         poleType = Value(poleType),
         condition = Value(condition),
         createdBy = Value(createdBy),
@@ -1262,8 +1262,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Expression<int>? id,
     Expression<int>? powerLineId,
     Expression<String>? poleNumber,
-    Expression<double>? latitude,
-    Expression<double>? longitude,
+    Expression<double>? xPosition,
+    Expression<double>? yPosition,
     Expression<String>? poleType,
     Expression<double>? height,
     Expression<String>? foundationType,
@@ -1281,8 +1281,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       if (id != null) 'id': id,
       if (powerLineId != null) 'power_line_id': powerLineId,
       if (poleNumber != null) 'pole_number': poleNumber,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
+      if (xPosition != null) 'x_position': xPosition,
+      if (yPosition != null) 'y_position': yPosition,
       if (poleType != null) 'pole_type': poleType,
       if (height != null) 'height': height,
       if (foundationType != null) 'foundation_type': foundationType,
@@ -1302,8 +1302,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       {Value<int>? id,
       Value<int>? powerLineId,
       Value<String>? poleNumber,
-      Value<double>? latitude,
-      Value<double>? longitude,
+      Value<double>? xPosition,
+      Value<double>? yPosition,
       Value<String>? poleType,
       Value<double?>? height,
       Value<String?>? foundationType,
@@ -1320,8 +1320,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
       poleNumber: poleNumber ?? this.poleNumber,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      xPosition: xPosition ?? this.xPosition,
+      yPosition: yPosition ?? this.yPosition,
       poleType: poleType ?? this.poleType,
       height: height ?? this.height,
       foundationType: foundationType ?? this.foundationType,
@@ -1349,11 +1349,11 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     if (poleNumber.present) {
       map['pole_number'] = Variable<String>(poleNumber.value);
     }
-    if (latitude.present) {
-      map['latitude'] = Variable<double>(latitude.value);
+    if (xPosition.present) {
+      map['x_position'] = Variable<double>(xPosition.value);
     }
-    if (longitude.present) {
-      map['longitude'] = Variable<double>(longitude.value);
+    if (yPosition.present) {
+      map['y_position'] = Variable<double>(yPosition.value);
     }
     if (poleType.present) {
       map['pole_type'] = Variable<String>(poleType.value);
@@ -1400,8 +1400,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
           ..write('id: $id, ')
           ..write('powerLineId: $powerLineId, ')
           ..write('poleNumber: $poleNumber, ')
-          ..write('latitude: $latitude, ')
-          ..write('longitude: $longitude, ')
+          ..write('xPosition: $xPosition, ')
+          ..write('yPosition: $yPosition, ')
           ..write('poleType: $poleType, ')
           ..write('height: $height, ')
           ..write('foundationType: $foundationType, ')
@@ -3371,8 +3371,8 @@ typedef $$PolesTableCreateCompanionBuilder = PolesCompanion Function({
   Value<int> id,
   required int powerLineId,
   required String poleNumber,
-  required double latitude,
-  required double longitude,
+  required double xPosition,
+  required double yPosition,
   required String poleType,
   Value<double?> height,
   Value<String?> foundationType,
@@ -3390,8 +3390,8 @@ typedef $$PolesTableUpdateCompanionBuilder = PolesCompanion Function({
   Value<int> id,
   Value<int> powerLineId,
   Value<String> poleNumber,
-  Value<double> latitude,
-  Value<double> longitude,
+  Value<double> xPosition,
+  Value<double> yPosition,
   Value<String> poleType,
   Value<double?> height,
   Value<String?> foundationType,
@@ -3423,11 +3423,11 @@ class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
   ColumnFilters<String> get poleNumber => $composableBuilder(
       column: $table.poleNumber, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<double> get latitude => $composableBuilder(
-      column: $table.latitude, builder: (column) => ColumnFilters(column));
+  ColumnFilters<double> get xPosition => $composableBuilder(
+      column: $table.xPosition, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<double> get longitude => $composableBuilder(
-      column: $table.longitude, builder: (column) => ColumnFilters(column));
+  ColumnFilters<double> get yPosition => $composableBuilder(
+      column: $table.yPosition, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get poleType => $composableBuilder(
       column: $table.poleType, builder: (column) => ColumnFilters(column));
@@ -3485,11 +3485,11 @@ class $$PolesTableOrderingComposer
   ColumnOrderings<String> get poleNumber => $composableBuilder(
       column: $table.poleNumber, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<double> get latitude => $composableBuilder(
-      column: $table.latitude, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<double> get xPosition => $composableBuilder(
+      column: $table.xPosition, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<double> get longitude => $composableBuilder(
-      column: $table.longitude, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<double> get yPosition => $composableBuilder(
+      column: $table.yPosition, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get poleType => $composableBuilder(
       column: $table.poleType, builder: (column) => ColumnOrderings(column));
@@ -3548,11 +3548,11 @@ class $$PolesTableAnnotationComposer
   GeneratedColumn<String> get poleNumber => $composableBuilder(
       column: $table.poleNumber, builder: (column) => column);
 
-  GeneratedColumn<double> get latitude =>
-      $composableBuilder(column: $table.latitude, builder: (column) => column);
+  GeneratedColumn<double> get xPosition =>
+      $composableBuilder(column: $table.xPosition, builder: (column) => column);
 
-  GeneratedColumn<double> get longitude =>
-      $composableBuilder(column: $table.longitude, builder: (column) => column);
+  GeneratedColumn<double> get yPosition =>
+      $composableBuilder(column: $table.yPosition, builder: (column) => column);
 
   GeneratedColumn<String> get poleType =>
       $composableBuilder(column: $table.poleType, builder: (column) => column);
@@ -3617,8 +3617,8 @@ class $$PolesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<int> powerLineId = const Value.absent(),
             Value<String> poleNumber = const Value.absent(),
-            Value<double> latitude = const Value.absent(),
-            Value<double> longitude = const Value.absent(),
+            Value<double> xPosition = const Value.absent(),
+            Value<double> yPosition = const Value.absent(),
             Value<String> poleType = const Value.absent(),
             Value<double?> height = const Value.absent(),
             Value<String?> foundationType = const Value.absent(),
@@ -3636,8 +3636,8 @@ class $$PolesTableTableManager extends RootTableManager<
             id: id,
             powerLineId: powerLineId,
             poleNumber: poleNumber,
-            latitude: latitude,
-            longitude: longitude,
+            xPosition: xPosition,
+            yPosition: yPosition,
             poleType: poleType,
             height: height,
             foundationType: foundationType,
@@ -3655,8 +3655,8 @@ class $$PolesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             required int powerLineId,
             required String poleNumber,
-            required double latitude,
-            required double longitude,
+            required double xPosition,
+            required double yPosition,
             required String poleType,
             Value<double?> height = const Value.absent(),
             Value<String?> foundationType = const Value.absent(),
@@ -3674,8 +3674,8 @@ class $$PolesTableTableManager extends RootTableManager<
             id: id,
             powerLineId: powerLineId,
             poleNumber: poleNumber,
-            latitude: latitude,
-            longitude: longitude,
+            xPosition: xPosition,
+            yPosition: yPosition,
             poleType: poleType,
             height: height,
             foundationType: foundationType,

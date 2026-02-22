@@ -10,8 +10,8 @@ from datetime import datetime
 
 class ConnectivityNodeBase(BaseModel):
     name: str
-    latitude: float
-    longitude: float
+    x_position: float  # долгота (longitude)
+    y_position: float  # широта (latitude)
     description: Optional[str] = None
 
 

@@ -2,7 +2,6 @@ export interface PowerLine {
   id: number;
   mrid: string;
   name: string;
-  code: string;
   voltage_level: number;
   length?: number;
   region_id?: number;

@@ -9,20 +9,12 @@
 - AClineSegment содержит множество LineSection (секций с одинаковыми параметрами провода)
 - LineSection содержит множество Span (пролётов от опоры до опоры)
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Table, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.models.base import generate_mrid
 from app.models.cim_base import ConductingEquipment
-
-# Промежуточная таблица для связи many-to-many между PowerLine и AClineSegment
-line_segments = Table(
-    'line_segments',
-    Base.metadata,
-    Column('line_id', Integer, ForeignKey('line.id'), primary_key=True),
-    Column('acline_segment_id', Integer, ForeignKey('acline_segment.id'), primary_key=True),
-)
 
 
 class AClineSegment(Base, ConductingEquipment):
@@ -94,9 +86,6 @@ class AClineSegment(Base, ConductingEquipment):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Связи
-    # Связь с линией (для обратной совместимости - many-to-many)
-    power_lines = relationship("PowerLine", secondary=line_segments, back_populates="segments")
-    # Прямая связь с линией (для отпаек)
     line = relationship("PowerLine", foreign_keys=[line_id], back_populates="acline_segments")
     
     # Связь с узлами соединения (ConnectivityNode)

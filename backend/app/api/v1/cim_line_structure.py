@@ -59,8 +59,8 @@ async def create_connectivity_node(
         mrid=mrid,
         name=node_data.name,
         pole_id=node_data.pole_id,
-        latitude=node_data.latitude,
-        longitude=node_data.longitude,
+        x_position=node_data.x_position,
+        y_position=node_data.y_position,
         description=node_data.description
     )
     
@@ -108,8 +108,8 @@ async def update_connectivity_node(
     
     # Обновляем поля
     node.name = node_data.name
-    node.latitude = node_data.latitude
-    node.longitude = node_data.longitude
+    node.x_position = node_data.x_position
+    node.y_position = node_data.y_position
     node.description = node_data.description
     
     await db.commit()
@@ -188,8 +188,8 @@ async def create_connectivity_node_for_pole(
         mrid=generate_mrid(),
         name=f"Узел {pole.pole_number}",
         pole_id=pole_id,
-        latitude=pole.latitude,
-        longitude=pole.longitude,
+        y_position=pole.y_position,
+        x_position=pole.x_position,
         description=f"Узел для опоры {pole.pole_number}"
     )
     

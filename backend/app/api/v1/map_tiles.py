@@ -69,7 +69,26 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
             "map/power-lines/geojson: ЛЭП id=%d name=%r опор=%d с координатами=%d",
             power_line.id, power_line.name, len(power_line.poles), poles_with_coords
         )
-        # Создаем LineString из координат опор, если есть минимум 2 опоры
+
+        def _default_properties():
+            return {
+                "id": int(power_line.id),
+                "name": str(power_line.name) if power_line.name else "",
+                "status": str(power_line.status) if power_line.status else "active",
+                "pole_count": int(len(power_line.poles)),
+            }
+
+        def _default_point_feature():
+            props = _default_properties()
+            if power_line.voltage_level is not None:
+                props["voltage_level"] = float(power_line.voltage_level)
+            return {
+                "type": "Feature",
+                "properties": props,
+                "geometry": {"type": "Point", "coordinates": [27.5615, 53.9045]},
+            }
+
+        # Создаем LineString из координат опор, если есть минимум 2 опоры с валидными координатами
         if len(power_line.poles) >= 2:
             coordinates = []
             for pole in sorted(power_line.poles, key=lambda t: t.pole_number):
@@ -118,13 +137,12 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                     except (TypeError, ValueError):
                         continue  # Пропускаем опоры с невалидными координатами
             
-            # Включаем только если есть валидные координаты
+            # Включаем только если есть минимум 2 точки с валидными координатами; иначе — в дереве показываем как Point по умолчанию
             if len(coordinates) >= 2:
                 # Создаем properties, исключая None значения для числовых полей
                 properties = {
                     "id": int(power_line.id),
                     "name": str(power_line.name) if power_line.name else "",
-                    "code": str(power_line.code) if power_line.code else "",
                     "status": str(power_line.status) if power_line.status else "active",
                     "pole_count": int(len(power_line.poles))
                 }
@@ -141,6 +159,9 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                     }
                 }
                 features.append(feature)
+            else:
+                # Мало точек с координатами — ЛЭП всё равно показываем в дереве (геометрия по умолчанию)
+                features.append(_default_point_feature())
         elif len(power_line.poles) == 1:
             # Если есть только одна опора, создаем Point
             pole = power_line.poles[0]
@@ -186,7 +207,6 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                     properties = {
                         "id": int(power_line.id),
                         "name": str(power_line.name) if power_line.name else "",
-                        "code": str(power_line.code) if power_line.code else "",
                         "status": str(power_line.status) if power_line.status else "active",
                         "pole_count": int(len(power_line.poles))
                     }
@@ -205,6 +225,9 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                     features.append(feature)
                 except (TypeError, ValueError):
                     pass  # Пропускаем объекты с невалидными координатами
+            # Одна опора без валидных координат — всё равно показываем ЛЭП в дереве
+            if not features or features[-1].get("properties", {}).get("id") != int(power_line.id):
+                features.append(_default_point_feature())
         else:
             # Если опор нет, создаем пустую геометрию (но все равно возвращаем ЛЭП)
             # Используем координаты по умолчанию (центр Минска) для отображения в дереве
@@ -213,7 +236,6 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
             properties = {
                 "id": int(power_line.id),
                 "name": str(power_line.name) if power_line.name else "",
-                "code": str(power_line.code) if power_line.code else "",
                 "status": str(power_line.status) if power_line.status else "active",
                 "pole_count": 0
             }
@@ -558,10 +580,10 @@ async def get_data_bounds(
     # Получаем границы опор
     result = await db.execute(
         select(
-            func.min(Pole.latitude).label('min_lat'),
-            func.max(Pole.latitude).label('max_lat'),
-            func.min(Pole.longitude).label('min_lng'),
-            func.max(Pole.longitude).label('max_lng')
+            func.min(Pole.y_position).label('min_lat'),
+            func.max(Pole.y_position).label('max_lat'),
+            func.min(Pole.x_position).label('min_lng'),
+            func.max(Pole.x_position).label('max_lng')
         )
     )
     bounds = result.first()

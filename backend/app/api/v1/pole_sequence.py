@@ -49,8 +49,8 @@ def find_nearest_pole(poles: List[Pole], current_pole: Pole, visited: set) -> Op
             continue
         
         distance = calculate_distance(
-            current_pole.latitude, current_pole.longitude,
-            pole.latitude, pole.longitude
+            current_pole.y_position, current_pole.x_position,
+            pole.y_position, pole.x_position
         )
         
         if distance < min_distance:

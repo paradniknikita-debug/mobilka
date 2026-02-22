@@ -119,8 +119,8 @@ async def create_test_data():
                     name="Подстанция 110/10 кВ №1",
                     code="SUB_110_1",
                     voltage_level=110.0,
-                    latitude=53.9045,
-                    longitude=27.5615,
+                    y_position=53.9045,
+                    x_position=27.5615,
                     address="г. Минск, ул. Подстанционная, 1",
                     region_id=res_region.id,
                     branch_id=branch.id if branch else None,
@@ -132,12 +132,13 @@ async def create_test_data():
                 print("✅ Создана подстанция: Подстанция 110/10 кВ №1")
             
             # 5. Создаем линию электропередачи
-            result = await session.execute(select(PowerLine).where(PowerLine.code == "LINE_110_1"))
+            result = await session.execute(select(PowerLine).where(PowerLine.name == "ЛЭП 110 кВ Минск-Западная"))
             power_line = result.scalar_one_or_none()
             if not power_line:
+                from app.models.base import generate_mrid
                 power_line = PowerLine(
+                    mrid=generate_mrid(),
                     name="ЛЭП 110 кВ Минск-Западная",
-                    code="LINE_110_1",
                     voltage_level=110.0,
                     length=25.5,  # км
                     region_id=res_region.id,
@@ -154,29 +155,29 @@ async def create_test_data():
             poles_data = [
                 {
                     "pole_number": "001",
-                    "latitude": 53.9045,
-                    "longitude": 27.5615,
+                    "y_position": 53.9045,
+                    "x_position": 27.5615,
                     "pole_type": "анкерная",
                     "height": 25.0
                 },
                 {
                     "pole_number": "002",
-                    "latitude": 53.9100,
-                    "longitude": 27.5700,
+                    "y_position": 53.9100,
+                    "x_position": 27.5700,
                     "pole_type": "промежуточная",
                     "height": 23.0
                 },
                 {
                     "pole_number": "003",
-                    "latitude": 53.9150,
-                    "longitude": 27.5800,
+                    "y_position": 53.9150,
+                    "x_position": 27.5800,
                     "pole_type": "промежуточная",
                     "height": 23.0
                 },
                 {
                     "pole_number": "004",
-                    "latitude": 53.9200,
-                    "longitude": 27.5900,
+                    "y_position": 53.9200,
+                    "x_position": 27.5900,
                     "pole_type": "анкерная",
                     "height": 25.0
                 },
@@ -195,8 +196,8 @@ async def create_test_data():
                     pole = pole(
                         power_line_id=power_line.id,
                         pole_number=pole_data["pole_number"],
-                        latitude=pole_data["latitude"],
-                        longitude=pole_data["longitude"],
+                        y_position=pole_data["y_position"],
+                        x_position=pole_data["x_position"],
                         pole_type=pole_data["pole_type"],
                         height=pole_data["height"],
                         material="металл",
@@ -219,26 +220,18 @@ async def create_test_data():
                     segment1 = AClineSegment(
                         name="Сегмент 1: T001-T002",
                         code="SEG_110_1",
+                        line_id=power_line.id,
                         voltage_level=110.0,
                         length=5.2,  # км
                         conductor_type="АС-150",
                         conductor_material="алюминий",
                         conductor_section="150",
-                        start_pole_id=poles[0].id,
-                        end_pole_id=poles[1].id,
                         r=0.21,  # Ом/км
                         x=0.42,  # Ом/км
                         description="Первый сегмент линии",
                         created_by=user.id
                     )
                     session.add(segment1)
-                    await session.flush()
-                    
-                    # Связываем сегмент с линией (many-to-many) через прямой SQL
-                    await session.execute(
-                        sa_text("INSERT INTO line_segments (power_line_id, acline_segment_id) VALUES (:line_id, :seg_id) ON CONFLICT DO NOTHING"),
-                        {"line_id": power_line.id, "seg_id": segment1.id}
-                    )
                     await session.flush()
                     print("✅ Создан сегмент: Сегмент 1: T001-T002")
                 
@@ -249,26 +242,18 @@ async def create_test_data():
                         segment2 = AClineSegment(
                             name="Сегмент 2: T002-T003",
                             code="SEG_110_2",
+                            line_id=power_line.id,
                             voltage_level=110.0,
                             length=4.8,  # км
                             conductor_type="АС-150",
                             conductor_material="алюминий",
                             conductor_section="150",
-                            start_pole_id=poles[1].id,
-                            end_pole_id=poles[2].id,
                             r=0.21,
                             x=0.42,
                             description="Второй сегмент линии",
                             created_by=user.id
                         )
                         session.add(segment2)
-                        await session.flush()
-                        
-                        # Связываем сегмент с линией (many-to-many) через прямой SQL
-                        await session.execute(
-                            sa_text("INSERT INTO line_segments (power_line_id, acline_segment_id) VALUES (:line_id, :seg_id) ON CONFLICT DO NOTHING"),
-                            {"line_id": power_line.id, "seg_id": segment2.id}
-                        )
                         await session.flush()
                         print("✅ Создан сегмент: Сегмент 2: T002-T003")
             

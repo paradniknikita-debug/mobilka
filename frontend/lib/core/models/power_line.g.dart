@@ -9,7 +9,6 @@ part of 'power_line.dart';
 PowerLine _$PowerLineFromJson(Map<String, dynamic> json) => PowerLine(
       id: _intFromJson(json['id']),
       name: _stringFromJson(json['name']),
-      code: _stringFromJson(json['code']),
       voltageLevel: _doubleFromJsonNullable(json['voltage_level']),
       length: _doubleFromJsonNullable(json['length']),
       branchId: _intFromJsonNullable(json['branch_id']),
@@ -29,7 +28,6 @@ Map<String, dynamic> _$PowerLineToJson(PowerLine instance) {
   final val = <String, dynamic>{
     'id': instance.id,
     'name': instance.name,
-    'code': instance.code,
   };
 
   void writeNotNull(String key, dynamic value) {
@@ -54,10 +52,9 @@ Map<String, dynamic> _$PowerLineToJson(PowerLine instance) {
 PowerLineCreate _$PowerLineCreateFromJson(Map<String, dynamic> json) =>
     PowerLineCreate(
       name: json['name'] as String,
-      code: json['code'] as String,
-      voltageLevel: _doubleFromJson(json['voltageLevel']),
+      voltageLevel: _doubleFromJson(json['voltage_level']),
       length: (json['length'] as num?)?.toDouble(),
-      branchId: _intFromJson(json['branchId']),
+      branchId: _intFromJson(json['branch_id']),
       status: json['status'] as String? ?? 'active',
       description: json['description'] as String?,
     );
@@ -65,7 +62,6 @@ PowerLineCreate _$PowerLineCreateFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
     <String, dynamic>{
       'name': instance.name,
-      'code': instance.code,
       'voltage_level': instance.voltageLevel,
       'length': instance.length,
       'branch_id': instance.branchId,

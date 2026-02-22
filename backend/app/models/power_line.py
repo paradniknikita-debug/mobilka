@@ -14,8 +14,7 @@ class PowerLine(Base, ConnectivityNodeContainer):
     # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
-    code = Column(String(20), unique=True, index=True, nullable=False)  # Внутренний код (не CIM)
-    
+
     # Связь с BaseVoltage (CIM стандарт) - временно закомментировано до применения миграции
     # base_voltage_id = Column(Integer, ForeignKey("base_voltage.id"), nullable=True)
     
@@ -37,10 +36,7 @@ class PowerLine(Base, ConnectivityNodeContainer):
     # base_voltage = relationship("BaseVoltage", back_populates="power_lines")
     
     # CIM-структура: Line (EquipmentContainer) содержит множество AClineSegment (Equipment)
-    # EquipmentContainer.Equipments - связь с ACLineSegment
     acline_segments = relationship("AClineSegment", foreign_keys="[AClineSegment.line_id]", back_populates="line", cascade="all, delete-orphan")
-    # Many-to-many связь с сегментами (для обратной совместимости)
-    segments = relationship("AClineSegment", secondary="line_segments", back_populates="power_lines")
     
     # CIM-структура: ConnectivityNodeContainer содержит множество ConnectivityNode
     # ConnectivityNodeContainer.ConnectivityNodes - связь с ConnectivityNode
@@ -80,9 +76,9 @@ class Pole(Base):
     # CIM Location - связь с Location для координат
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
     
-    # Старые поля для обратной совместимости (будут удалены после миграции)
-    latitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
-    longitude = Column(Float, nullable=True)  # Изменено на nullable для миграции
+    # Координаты (CIM: x_position = долгота, y_position = широта); дублируются в Location/PositionPoint
+    y_position = Column(Float, nullable=True)  # широта (latitude)
+    x_position = Column(Float, nullable=True)  # долгота (longitude)
     
     pole_type = Column(String(50), nullable=False)  # анкерная, промежуточная, угловая и т.д.
     height = Column(Float, nullable=True)  # м
@@ -169,22 +165,28 @@ class Pole(Base):
         return None
     
     def get_latitude(self) -> float:
-        """Получить широту из Location/PositionPoint или из старого поля"""
+        """Получить широту из Location/PositionPoint или из колонки"""
         if self.location and self.location.position_points:
-            # Берем первую точку (для точечных объектов обычно одна)
             return self.location.position_points[0].y_position
-        # Fallback на старое поле для обратной совместимости
-        # Используем прямое обращение к колонке через __dict__
-        return self.__dict__.get('latitude')
+        return self.__dict__.get('y_position')
     
     def get_longitude(self) -> float:
-        """Получить долготу из Location/PositionPoint или из старого поля"""
+        """Получить долготу из Location/PositionPoint или из колонки"""
         if self.location and self.location.position_points:
-            # Берем первую точку (для точечных объектов обычно одна)
             return self.location.position_points[0].x_position
-        # Fallback на старое поле для обратной совместимости
-        # Используем прямое обращение к колонке через __dict__
-        return self.__dict__.get('longitude')
+        return self.__dict__.get('x_position')
+
+    @property
+    def x_position(self) -> float:
+        """Долгота (CIM x_position). Единый интерфейс координат."""
+        val = self.get_longitude()
+        return float(val) if val is not None else 0.0
+
+    @property
+    def y_position(self) -> float:
+        """Широта (CIM y_position). Единый интерфейс координат."""
+        val = self.get_latitude()
+        return float(val) if val is not None else 0.0
 
 class Span(Base):
     """
@@ -259,9 +261,9 @@ class Tap(Base):
     # CIM Location - связь с Location для координат
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
     
-    # Старые поля для обратной совместимости (будут удалены после миграции)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
+    # Координаты (CIM: x_position = долгота, y_position = широта)
+    y_position = Column(Float, nullable=True)
+    x_position = Column(Float, nullable=True)
     
     description = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -274,16 +276,28 @@ class Tap(Base):
     location = relationship("Location", foreign_keys=[location_id])
     
     def get_latitude(self) -> float:
-        """Получить широту из Location/PositionPoint или из старого поля"""
+        """Получить широту из Location/PositionPoint или из колонки"""
         if self.location and self.location.position_points:
             return self.location.position_points[0].y_position
-        return self.__dict__.get('latitude')
+        return self.__dict__.get('y_position')
     
     def get_longitude(self) -> float:
-        """Получить долготу из Location/PositionPoint или из старого поля"""
+        """Получить долготу из Location/PositionPoint или из колонки"""
         if self.location and self.location.position_points:
             return self.location.position_points[0].x_position
-        return self.__dict__.get('longitude')
+        return self.__dict__.get('x_position')
+
+    @property
+    def x_position(self) -> float:
+        """Долгота (CIM x_position)."""
+        val = self.get_longitude()
+        return float(val) if val is not None else 0.0
+
+    @property
+    def y_position(self) -> float:
+        """Широта (CIM y_position)."""
+        val = self.get_latitude()
+        return float(val) if val is not None else 0.0
 
 class Equipment(Base):
     __tablename__ = "equipment"
