@@ -168,12 +168,15 @@ def upgrade() -> None:
         except Exception as e:
             print(f"Warning: Could not make location_id nullable: {e}")
         
-        # Создаём индексы для новых колонок
+        # Создаём индексы для новых колонок (IF NOT EXISTS — идемпотентно)
         try:
-            op.create_index('ix_position_point_pole_id', 'position_point', ['pole_id'])
-            op.create_index('ix_position_point_substation_id', 'position_point', ['substation_id'])
-            op.create_index('ix_position_point_tap_id', 'position_point', ['tap_id'])
-            op.create_index('ix_position_point_span_id', 'position_point', ['span_id'])
+            for idx_name, col in [
+                ('ix_position_point_pole_id', 'pole_id'),
+                ('ix_position_point_substation_id', 'substation_id'),
+                ('ix_position_point_tap_id', 'tap_id'),
+                ('ix_position_point_span_id', 'span_id'),
+            ]:
+                conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON position_point ({col})"))
             print("Created indexes for position_point foreign keys")
         except Exception as e:
             print(f"Warning: Could not create indexes: {e}")
