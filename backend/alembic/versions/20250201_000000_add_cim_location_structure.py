@@ -45,25 +45,26 @@ def upgrade() -> None:
     """))
     op.execute(sa.text("CREATE UNIQUE INDEX IF NOT EXISTS ix_locations_mrid ON locations (mrid)"))
 
-    # Создаем таблицу position_points
-    op.create_table(
-        'position_points',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('mrid', sa.String(length=36), nullable=False),
-        sa.Column('location_id', sa.Integer(), nullable=False),
-        sa.Column('x_position', sa.Float(), nullable=False),
-        sa.Column('y_position', sa.Float(), nullable=False),
-        sa.Column('z_position', sa.Float(), nullable=True),
-        sa.Column('sequence_number', sa.Integer(), nullable=True, server_default='1'),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['location_id'], ['locations.id'], ),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('mrid')
-    )
-    op.create_index(op.f('ix_position_points_mrid'), 'position_points', ['mrid'], unique=True)
-    op.create_index(op.f('ix_position_points_location_id'), 'position_points', ['location_id'], unique=False)
+    # Создаем таблицу position_points через IF NOT EXISTS (идемпотентно при любом порядке применения веток)
+    op.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS position_points (
+            id SERIAL NOT NULL,
+            mrid VARCHAR(36) NOT NULL,
+            location_id INTEGER NOT NULL,
+            x_position FLOAT NOT NULL,
+            y_position FLOAT NOT NULL,
+            z_position FLOAT,
+            sequence_number INTEGER DEFAULT 1,
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE,
+            PRIMARY KEY (id),
+            FOREIGN KEY (location_id) REFERENCES locations (id),
+            UNIQUE (mrid)
+        )
+    """))
+    op.execute(sa.text("CREATE UNIQUE INDEX IF NOT EXISTS ix_position_points_mrid ON position_points (mrid)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_position_points_location_id ON position_points (location_id)"))
 
     def _has_column(tbl, col):
         return col in [c['name'] for c in inspector.get_columns(tbl)]
@@ -141,10 +142,13 @@ def downgrade() -> None:
         op.alter_column(pole_t, 'longitude', existing_type=sa.Float(), nullable=False)
         op.alter_column(pole_t, 'latitude', existing_type=sa.Float(), nullable=False)
 
-    op.drop_index(op.f('ix_position_points_location_id'), table_name='position_points')
-    op.drop_index(op.f('ix_position_points_mrid'), table_name='position_points')
-    op.drop_table('position_points')
-    op.drop_index(op.f('ix_locations_mrid'), table_name='locations')
-    op.drop_table('locations')
+    existing_tables_d = inspector.get_table_names()
+    if 'position_points' in existing_tables_d:
+        op.drop_index(op.f('ix_position_points_location_id'), table_name='position_points')
+        op.drop_index(op.f('ix_position_points_mrid'), table_name='position_points')
+        op.drop_table('position_points')
+    if 'locations' in existing_tables_d:
+        op.drop_index(op.f('ix_locations_mrid'), table_name='locations')
+        op.drop_table('locations')
     op.execute('DROP TYPE IF EXISTS locationtype')
 
