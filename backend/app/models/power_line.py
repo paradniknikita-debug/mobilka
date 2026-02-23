@@ -46,7 +46,6 @@ class PowerLine(Base, ConnectivityNodeContainer):
     poles = relationship("Pole", back_populates="line", cascade="all, delete-orphan")
     spans = relationship("Span", back_populates="line", cascade="all, delete-orphan")
     taps = relationship("Tap", back_populates="line", cascade="all, delete-orphan")
-    connections = relationship("Connection", back_populates="line", cascade="all, delete-orphan")
 
 class Pole(Base):
     """
@@ -73,13 +72,9 @@ class Pole(Base):
     pole_number = Column(String(20), nullable=False)
     sequence_number = Column(Integer, nullable=True)  # Порядковый номер опоры в линии (для контроля последовательности)
     
-    # CIM Location - связь с Location для координат
+    # CIM Location - связь с Location для координат (координаты только в Location/PositionPoint по CIM)
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
-    
-    # Координаты (CIM: x_position = долгота, y_position = широта); дублируются в Location/PositionPoint
-    y_position = Column(Float, nullable=True)  # широта (latitude)
-    x_position = Column(Float, nullable=True)  # долгота (longitude)
-    
+
     pole_type = Column(String(50), nullable=False)  # анкерная, промежуточная, угловая и т.д.
     height = Column(Float, nullable=True)  # м
     foundation_type = Column(String(50), nullable=True)
@@ -164,29 +159,35 @@ class Pole(Base):
                 return cn
         return None
     
-    def get_latitude(self) -> float:
-        """Получить широту из Location/PositionPoint или из колонки"""
-        if self.location and self.location.position_points:
-            return self.location.position_points[0].y_position
-        return self.__dict__.get('y_position')
-    
-    def get_longitude(self) -> float:
-        """Получить долготу из Location/PositionPoint или из колонки"""
-        if self.location and self.location.position_points:
-            return self.location.position_points[0].x_position
-        return self.__dict__.get('x_position')
+    def get_latitude(self):
+        """Получить широту по CIM: только из Location/PositionPoint или PositionPoint (pole_id)."""
+        pts = getattr(self, "position_points", None)
+        if pts and len(pts) > 0:
+            return getattr(pts[0], "y_position", None)
+        loc = getattr(self, "location", None)
+        if loc and getattr(loc, "position_points", None) and len(loc.position_points) > 0:
+            return loc.position_points[0].y_position
+        return None
+
+    def get_longitude(self):
+        """Получить долготу по CIM: только из Location/PositionPoint или PositionPoint (pole_id)."""
+        pts = getattr(self, "position_points", None)
+        if pts and len(pts) > 0:
+            return getattr(pts[0], "x_position", None)
+        loc = getattr(self, "location", None)
+        if loc and getattr(loc, "position_points", None) and len(loc.position_points) > 0:
+            return loc.position_points[0].x_position
+        return None
 
     @property
-    def x_position(self) -> float:
-        """Долгота (CIM x_position). Единый интерфейс координат."""
-        val = self.get_longitude()
-        return float(val) if val is not None else 0.0
+    def x_position(self):
+        """Долгота по CIM (из PositionPoint). Для сериализации и обратной совместимости."""
+        return self.get_longitude()
 
     @property
-    def y_position(self) -> float:
-        """Широта (CIM y_position). Единый интерфейс координат."""
-        val = self.get_latitude()
-        return float(val) if val is not None else 0.0
+    def y_position(self):
+        """Широта по CIM (из PositionPoint). Для сериализации и обратной совместимости."""
+        return self.get_latitude()
 
 class Span(Base):
     """

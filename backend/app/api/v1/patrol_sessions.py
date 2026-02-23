@@ -27,7 +27,7 @@ def _session_to_response_with_names(
     return PatrolSessionWithNamesResponse(
         id=session.id,
         user_id=session.user_id,
-        power_line_id=session.power_line_id,
+        line_id=session.line_id,
         note=session.note,
         started_at=session.started_at,
         ended_at=session.ended_at,
@@ -41,7 +41,7 @@ async def list_patrol_sessions(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
     user_id: Optional[int] = Query(None, description="Фильтр по пользователю (только для admin)"),
-    power_line_id: Optional[int] = Query(None, description="Фильтр по ЛЭП"),
+    line_id: Optional[int] = Query(None, description="Фильтр по ЛЭП (id линии)"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -54,26 +54,26 @@ async def list_patrol_sessions(
         q = q.where(PatrolSession.user_id == current_user.id)
     elif user_id is not None:
         q = q.where(PatrolSession.user_id == user_id)
-    if power_line_id is not None:
-        q = q.where(PatrolSession.power_line_id == power_line_id)
+    if line_id is not None:
+        q = q.where(PatrolSession.line_id == line_id)
     q = q.order_by(PatrolSession.started_at.desc()).offset(offset).limit(limit)
     result = await db.execute(q)
     sessions = result.scalars().all()
 
     # Подгружаем имена пользователей и ЛЭП
     user_ids = {s.user_id for s in sessions}
-    power_line_ids = {s.power_line_id for s in sessions}
+    line_ids = {s.line_id for s in sessions}
 
     users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
     users = {u.id: u.full_name or u.username for u in users_result.scalars().all()}
-    pl_result = await db.execute(select(PowerLine).where(PowerLine.id.in_(power_line_ids)))
+    pl_result = await db.execute(select(PowerLine).where(PowerLine.id.in_(line_ids)))
     power_lines = {pl.id: pl.name for pl in pl_result.scalars().all()}
 
     return [
         _session_to_response_with_names(
             s,
             users.get(s.user_id, ""),
-            power_lines.get(s.power_line_id, ""),
+            power_lines.get(s.line_id, ""),
         )
         for s in sessions
     ]
@@ -87,15 +87,15 @@ async def create_patrol_session(
 ):
     """Создать сессию обхода (начало обхода)."""
     # Проверяем, что ЛЭП существует (избегаем ForeignKeyViolation)
-    pl_result = await db.execute(select(PowerLine).where(PowerLine.id == body.power_line_id))
+    pl_result = await db.execute(select(PowerLine).where(PowerLine.id == body.line_id))
     if pl_result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"ЛЭП с id={body.power_line_id} не найдена. Возможно, она удалена на сервере или ещё не синхронизирована.",
+            detail=f"ЛЭП с id={body.line_id} не найдена. Возможно, она удалена на сервере или ещё не синхронизирована.",
         )
     session = PatrolSession(
         user_id=current_user.id,
-        power_line_id=body.power_line_id,
+        line_id=body.line_id,
         note=body.note,
     )
     db.add(session)
@@ -147,7 +147,7 @@ async def get_patrol_session(
 
     user_result = await db.execute(select(User).where(User.id == session.user_id))
     user = user_result.scalar_one_or_none()
-    pl_result = await db.execute(select(PowerLine).where(PowerLine.id == session.power_line_id))
+    pl_result = await db.execute(select(PowerLine).where(PowerLine.id == session.line_id))
     pl = pl_result.scalar_one_or_none()
     return _session_to_response_with_names(
         session,

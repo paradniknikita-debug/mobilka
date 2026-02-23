@@ -50,24 +50,37 @@ async def get_power_lines_geojson(
         ) from e
 
 
+def _pole_coords_from_position_point(pole):
+    """Координаты опоры по CIM: только из PositionPoint (location/position_points или position_points)."""
+    pts = getattr(pole, "position_points", None)
+    if pts and len(pts) > 0:
+        return getattr(pts[0], "x_position", None), getattr(pts[0], "y_position", None)
+    loc = getattr(pole, "location", None)
+    if loc and getattr(loc, "position_points", None) and len(loc.position_points) > 0:
+        p = loc.position_points[0]
+        return getattr(p, "x_position", None), getattr(p, "y_position", None)
+    return None, None
+
+
 async def _get_power_lines_geojson_impl(db: AsyncSession):
     result = await db.execute(
         select(PowerLine).options(
             selectinload(PowerLine.poles).selectinload(Pole.position_points),
-            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points)
+            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
         )
     )
     power_lines = result.scalars().all()
-    
+
     features = []
     for power_line in power_lines:
+        poles_list = list(power_line.poles or [])
         poles_with_coords = sum(
-            1 for p in power_line.poles
-            if getattr(p, 'longitude', None) is not None and getattr(p, 'latitude', None) is not None
+            1 for p in poles_list
+            if _pole_coords_from_position_point(p)[0] is not None
         )
         logger.info(
             "map/power-lines/geojson: ЛЭП id=%d name=%r опор=%d с координатами=%d",
-            power_line.id, power_line.name, len(power_line.poles), poles_with_coords
+            power_line.id, power_line.name, len(poles_list), poles_with_coords
         )
 
         def _default_properties():
@@ -75,7 +88,7 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                 "id": int(power_line.id),
                 "name": str(power_line.name) if power_line.name else "",
                 "status": str(power_line.status) if power_line.status else "active",
-                "pole_count": int(len(power_line.poles)),
+                "pole_count": len(poles_list),
             }
 
         def _default_point_feature():
@@ -88,42 +101,12 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                 "geometry": {"type": "Point", "coordinates": [27.5615, 53.9045]},
             }
 
-        # Создаем LineString из координат опор, если есть минимум 2 опоры с валидными координатами
-        if len(power_line.poles) >= 2:
+        # Создаем LineString из координат опор по CIM (только Location/PositionPoint)
+        if len(poles_list) >= 2:
             coordinates = []
-            for pole in sorted(power_line.poles, key=lambda t: t.pole_number):
-                # Получаем координаты из position_point (новая структура)
-                longitude = None
-                latitude = None
-                
-                # Пытаемся получить из position_points напрямую
-                try:
-                    if hasattr(pole, 'position_points') and pole.position_points:
-                        point = pole.position_points[0]
-                        longitude = point.x_position
-                        latitude = point.y_position
-                except (AttributeError, IndexError):
-                    pass
-                
-                # Fallback: пытаемся получить из старого поля или Location
-                if longitude is None or latitude is None:
-                    longitude = getattr(pole, 'longitude', None)
-                    latitude = getattr(pole, 'latitude', None)
-                    
-                    # Пытаемся получить из Location, если доступно (уже загружено через selectinload)
-                    if longitude is None or latitude is None:
-                        try:
-                            location = getattr(pole, 'location', None)
-                            if location:
-                                position_points = getattr(location, 'position_points', None)
-                                if position_points and len(position_points) > 0:
-                                    point = position_points[0]
-                                    longitude = getattr(point, 'x_position', None)
-                                    latitude = getattr(point, 'y_position', None)
-                        except (AttributeError, IndexError, TypeError):
-                            pass
-                
-                # Убеждаемся, что координаты - это числа
+            for pole in sorted(poles_list, key=lambda t: (t.pole_number or "") or str(getattr(t, "sequence_number", "") or "")):
+                longitude, latitude = _pole_coords_from_position_point(pole)
+
                 if longitude is not None and latitude is not None:
                     try:
                         longitude = float(longitude)
@@ -144,7 +127,7 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                     "id": int(power_line.id),
                     "name": str(power_line.name) if power_line.name else "",
                     "status": str(power_line.status) if power_line.status else "active",
-                    "pole_count": int(len(power_line.poles))
+                    "pole_count": len(poles_list)
                 }
                 # Добавляем voltage_level только если он не None
                 if power_line.voltage_level is not None:
@@ -162,37 +145,10 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
             else:
                 # Мало точек с координатами — ЛЭП всё равно показываем в дереве (геометрия по умолчанию)
                 features.append(_default_point_feature())
-        elif len(power_line.poles) == 1:
-            # Если есть только одна опора, создаем Point
-            pole = power_line.poles[0]
-            # Получаем координаты из position_point (новая структура)
-            longitude = None
-            latitude = None
-            
-            # Пытаемся получить из position_points напрямую
-            try:
-                if hasattr(pole, 'position_points') and pole.position_points:
-                    point = pole.position_points[0]
-                    longitude = point.x_position
-                    latitude = point.y_position
-            except (AttributeError, IndexError):
-                pass
-            
-            # Fallback: пытаемся получить из старого поля или Location
-            if longitude is None or latitude is None:
-                longitude = getattr(pole, 'longitude', None)
-                latitude = getattr(pole, 'latitude', None)
-                
-                # Пытаемся получить из Location, если доступно
-                try:
-                    if hasattr(pole, 'location') and pole.location:
-                        if hasattr(pole.location, 'position_points') and pole.location.position_points:
-                            point = pole.location.position_points[0]
-                            longitude = point.x_position
-                            latitude = point.y_position
-                except (AttributeError, IndexError):
-                    pass
-            
+        elif len(poles_list) == 1:
+            pole = poles_list[0]
+            longitude, latitude = _pole_coords_from_position_point(pole)
+
             if longitude is not None and latitude is not None:
                 try:
                     longitude = float(longitude)
@@ -208,7 +164,7 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                         "id": int(power_line.id),
                         "name": str(power_line.name) if power_line.name else "",
                         "status": str(power_line.status) if power_line.status else "active",
-                        "pole_count": int(len(power_line.poles))
+                        "pole_count": len(poles_list)
                     }
                     # Добавляем voltage_level только если он не None
                     if power_line.voltage_level is not None:
@@ -288,39 +244,9 @@ async def _get_poles_geojson_impl(db: AsyncSession):
     
     features = []
     for pole in poles:
-        # Получаем координаты из position_point (новая структура)
-        longitude = None
-        latitude = None
-        
-        # Пытаемся получить из position_points напрямую
-        try:
-            if hasattr(pole, 'position_points') and pole.position_points:
-                point = pole.position_points[0]
-                longitude = point.x_position
-                latitude = point.y_position
-        except (AttributeError, IndexError):
-            pass
-        
-        # Fallback: пытаемся получить из старого поля или Location
-        if longitude is None or latitude is None:
-            longitude = getattr(pole, 'longitude', None)
-            latitude = getattr(pole, 'latitude', None)
-            
-            # Пытаемся получить из Location, если доступно (уже загружено через selectinload)
-            if longitude is None or latitude is None:
-                try:
-                    # Используем getattr для безопасного доступа
-                    location = getattr(pole, 'location', None)
-                    if location:
-                        position_points = getattr(location, 'position_points', None)
-                        if position_points and len(position_points) > 0:
-                            point = position_points[0]
-                            longitude = getattr(point, 'x_position', None)
-                            latitude = getattr(point, 'y_position', None)
-                except (AttributeError, IndexError, TypeError):
-                    pass
-        
-        # Включаем только объекты с валидными координатами
+        # CIM: координаты только из Location/PositionPoint
+        longitude, latitude = _pole_coords_from_position_point(pole)
+
         if longitude is not None and latitude is not None:
             # Убеждаемся, что координаты - это числа, а не None
             try:
@@ -575,16 +501,14 @@ async def get_data_bounds(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Получение границ всех данных для настройки карты"""
-    
-    # Получаем границы опор
+    """Получение границ всех данных для настройки карты (по CIM: из position_point)."""
     result = await db.execute(
         select(
-            func.min(Pole.y_position).label('min_lat'),
-            func.max(Pole.y_position).label('max_lat'),
-            func.min(Pole.x_position).label('min_lng'),
-            func.max(Pole.x_position).label('max_lng')
-        )
+            func.min(PositionPoint.y_position).label('min_lat'),
+            func.max(PositionPoint.y_position).label('max_lat'),
+            func.min(PositionPoint.x_position).label('min_lng'),
+            func.max(PositionPoint.x_position).label('max_lng')
+        ).select_from(PositionPoint)
     )
     bounds = result.first()
     

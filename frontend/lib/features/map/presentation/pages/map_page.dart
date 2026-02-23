@@ -1367,8 +1367,21 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         });
       }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404 && mounted) {
+        // ЛЭП нет на сервере (удалена или только локальная) — показываем пустые участки без ошибки
+        setState(() {
+          final index = _powerLinesList?.indexWhere((pl) => pl.id == powerLineId);
+          if (index != null && index >= 0 && _powerLinesList != null) {
+            final pl = _powerLinesList![index];
+            _powerLinesList![index] = pl.copyWith(poles: [], aclineSegments: []);
+          }
+        });
+      } else if (kDebugMode) {
+        print('Ошибка загрузки деталей ЛЭП: $e');
+      }
     } catch (e) {
-      print('Ошибка загрузки деталей ЛЭП: $e');
+      if (kDebugMode) print('Ошибка загрузки деталей ЛЭП: $e');
     }
   }
 

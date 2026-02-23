@@ -10,8 +10,6 @@
 BEGIN;
 
 -- Удаляем в порядке зависимостей (сначала те, кто ссылается на другие, потом родительские)
-DROP TABLE IF EXISTS acline_segments CASCADE;
-DROP TABLE IF EXISTS line_segments CASCADE;
 DROP TABLE IF EXISTS line_sections CASCADE;
 DROP TABLE IF EXISTS terminals CASCADE;
 DROP TABLE IF EXISTS spans CASCADE;

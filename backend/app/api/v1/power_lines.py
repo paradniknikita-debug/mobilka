@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import ProgrammingError
 
 from app.database import get_db
 from app.core.security import get_current_active_user
@@ -210,25 +211,39 @@ async def get_power_line(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Получение ЛЭП по ID"""
-    result = await db.execute(
-        select(PowerLine)
-        .options(
-            selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
-            selectinload(PowerLine.poles).selectinload(Pole.position_points),
-            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals),
-            selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line)
-        )
-        .where(PowerLine.id == power_line_id)
-    )
-    power_line = result.scalar_one_or_none()
+    """Получение ЛЭП по ID. Возвращает линию с пустыми списками опор/сегментов, если их нет."""
+    # Сначала проверяем существование по PK — так линия без опор всегда найдётся
+    power_line = await db.get(PowerLine, power_line_id)
     if not power_line:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Power line not found"
         )
+    # Подгружаем связи (для линий без опор получим пустые списки)
+    try:
+        result = await db.execute(
+            select(PowerLine)
+            .options(
+                selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
+                selectinload(PowerLine.poles).selectinload(Pole.position_points),
+                selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
+                selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
+                selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals),
+                selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line)
+            )
+            .where(PowerLine.id == power_line_id)
+        )
+        loaded = result.scalar_one_or_none()
+        if loaded is not None:
+            power_line = loaded
+    except Exception:
+        # При любой ошибке загрузки связей возвращаем линию с пустыми списками
+        await db.refresh(power_line)
+    # Чтобы сериализация не падала на None: пустые списки для линий без опор/сегментов
+    if getattr(power_line, "poles", None) is None:
+        object.__setattr__(power_line, "poles", [])
+    if getattr(power_line, "acline_segments", None) is None:
+        object.__setattr__(power_line, "acline_segments", [])
     return power_line
 
 
@@ -331,89 +346,91 @@ async def create_pole(
                 detail=f"Pole with mrid '{pole_data.mrid}' already exists"
             )
     
-    # Создаем словарь данных, исключая mrid, is_tap, x_position и y_position
-    # x_position и y_position будут сохранены в PositionPoint
-    # Параметры кабеля теперь сохраняются в опоре
-    # Также исключаем id, если он случайно передан
+    # CIM: координаты только в PositionPoint, не в таблице pole
     pole_dict = pole_data.dict(exclude={'mrid', 'is_tap', 'x_position', 'y_position', 'id'})
     if pole_data.mrid:
         pole_dict['mrid'] = pole_data.mrid
-    
-    # Убеждаемся, что id не передан (должен генерироваться автоматически)
     pole_dict.pop('id', None)
-    
-    # Координаты в БД: x_position = долгота, y_position = широта
+
     lon_val = getattr(pole_data, 'x_position', None)
     lat_val = getattr(pole_data, 'y_position', None)
-    if lon_val is not None:
-        pole_dict['x_position'] = float(lon_val)
-    if lat_val is not None:
-        pole_dict['y_position'] = float(lat_val)
 
-    db_pole = Pole(
-        **pole_dict,
-        line_id=power_line_id,
-        created_by=current_user.id
-    )
-    db_pole.is_tap_pole = getattr(pole_data, "is_tap", False)
-    db.add(db_pole)
-    await db.flush()  # Получаем ID опоры
-    
-    # Создаем PositionPoint для координат опоры (x_position=долгота, y_position=широта)
-    if lon_val is not None and lat_val is not None:
-        from app.models.base import generate_mrid
-        
-        position_point = PositionPoint(
-            mrid=generate_mrid(),
-            x_position=float(lon_val),
-            y_position=float(lat_val),
-            pole_id=db_pole.id
-        )
-        db.add(position_point)
-        await db.flush()
-    
-    # ConnectivityNode создаётся только для отпаечных опор (и для подстанций при привязке).
-    # Для остальных опор узел создаётся по требованию при создании пролёта в auto_create_span.
-    from app.models.cim_line_structure import ConnectivityNode
-    from app.models.base import generate_mrid
+    def _is_schema_mismatch(err: Exception) -> bool:
+        s = str(getattr(err, "orig", err)).lower()
+        return "column" in s and ("does not exist" in s or "power_line_id" in s or "latitude" in s or "longitude" in s)
 
-    connectivity_node = None
-    if pole_data.is_tap:
-        connectivity_node = ConnectivityNode(
-            mrid=generate_mrid(),
-            name=f"Узел {pole_data.pole_number}",
-            pole_id=db_pole.id,
-            line_id=power_line_id,
-            y_position=float(lat_val) if lat_val is not None else 0.0,
-            x_position=float(lon_val) if lon_val is not None else 0.0,
-            description=f"Узел отпаечной опоры {pole_data.pole_number} линии {power_line_id}",
-        )
-        db.add(connectivity_node)
-        await db.flush()
-        db_pole.connectivity_node_id = connectivity_node.id
-
-    # Автоматическое создание пролёта от предыдущей опоры к новой (узлы создаются по требованию)
     try:
-        from app.core.line_auto_assembly import auto_create_span
-
-        await auto_create_span(
-            db=db,
-            power_line_id=power_line_id,
-            new_pole=db_pole,
-            new_connectivity_node=connectivity_node,
-            conductor_type=pole_data.conductor_type,
-            conductor_material=pole_data.conductor_material,
-            conductor_section=pole_data.conductor_section,
-            is_tap=pole_data.is_tap,
-            current_user_id=current_user.id
+        db_pole = Pole(
+            **pole_dict,
+            line_id=power_line_id,
+            created_by=current_user.id
         )
-    except Exception as e:
-        # Логируем ошибку, но не прерываем создание опоры
-        import traceback
-        print(f"Ошибка автоматического создания пролёта: {e}")
-        print(traceback.format_exc())
-    
-    await db.commit()
+        db_pole.is_tap_pole = getattr(pole_data, "is_tap", False)
+        db.add(db_pole)
+        await db.flush()  # Получаем ID опоры
+
+        # CIM: координаты только в PositionPoint
+        if lon_val is not None and lat_val is not None:
+            from app.models.base import generate_mrid
+            position_point = PositionPoint(
+                mrid=generate_mrid(),
+                x_position=float(lon_val),
+                y_position=float(lat_val),
+                pole_id=db_pole.id
+            )
+            db.add(position_point)
+            await db.flush()
+
+        from app.models.cim_line_structure import ConnectivityNode
+        from app.models.base import generate_mrid
+
+        connectivity_node = None
+        if pole_data.is_tap:
+            connectivity_node = ConnectivityNode(
+                mrid=generate_mrid(),
+                name=f"Узел {pole_data.pole_number}",
+                pole_id=db_pole.id,
+                line_id=power_line_id,
+                y_position=float(lat_val) if lat_val is not None else 0.0,
+                x_position=float(lon_val) if lon_val is not None else 0.0,
+                description=f"Узел отпаечной опоры {pole_data.pole_number} линии {power_line_id}",
+            )
+            db.add(connectivity_node)
+            await db.flush()
+            db_pole.connectivity_node_id = connectivity_node.id
+
+        # Автоматическое создание пролёта от предыдущей опоры к новой (узлы создаются по требованию)
+        try:
+            from app.core.line_auto_assembly import auto_create_span
+
+            await auto_create_span(
+                db=db,
+                power_line_id=power_line_id,
+                new_pole=db_pole,
+                new_connectivity_node=connectivity_node,
+                conductor_type=pole_data.conductor_type,
+                conductor_material=pole_data.conductor_material,
+                conductor_section=pole_data.conductor_section,
+                is_tap=pole_data.is_tap,
+                current_user_id=current_user.id
+            )
+        except Exception as e:
+            import traceback
+            print(f"Ошибка автоматического создания пролёта: {e}")
+            print(traceback.format_exc())
+
+        await db.commit()
+    except ProgrammingError as e:
+        await db.rollback()
+        if _is_schema_mismatch(e):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Схема БД не совпадает с приложением. Выполните на сервере один раз: "
+                    "backend/scripts/align_schema_to_git.sql (см. backend/docs/ALEMBIC_HEADS.md)."
+                ),
+            ) from e
+        raise
     
     # Загружаем опору с relationships для корректной сериализации ответа
     result = await db.execute(
@@ -552,18 +569,11 @@ async def update_pole(
     
     # Обновляем поля опоры (исключаем mrid, power_line_id, created_by, x_position, y_position)
     # x_position и y_position будут обновлены в PositionPoint
+    # CIM: координаты только в PositionPoint, не в pole
     pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid', 'x_position', 'y_position'})
-    
-    # Координаты в БД: x_position = долгота, y_position = широта
-    x_position = None
-    y_position = None
-    if 'x_position' in pole_data.dict(exclude_unset=True):
-        x_position = pole_data.x_position
-        pole_dict['x_position'] = x_position
-    if 'y_position' in pole_data.dict(exclude_unset=True):
-        y_position = pole_data.y_position
-        pole_dict['y_position'] = y_position
-    
+    x_position = getattr(pole_data, 'x_position', None) if 'x_position' in pole_data.dict(exclude_unset=True) else None
+    y_position = getattr(pole_data, 'y_position', None) if 'y_position' in pole_data.dict(exclude_unset=True) else None
+
     if "is_tap" in pole_data.dict(exclude_unset=True):
         pole.is_tap_pole = pole_data.is_tap
     for key, value in pole_dict.items():
@@ -602,8 +612,8 @@ async def update_pole(
                         to_name = await _connectivity_node_display_name(db, pole_cn.id)
                         seg.name = f"{from_name} - {to_name}"
                         dist = __import__("app.core.line_auto_assembly", fromlist=["calculate_distance"]).calculate_distance(
-                            prev_pole.y_position or 0, prev_pole.x_position or 0,
-                            pole.y_position or 0, pole.x_position or 0,
+                            prev_pole.get_latitude() or 0, prev_pole.get_longitude() or 0,
+                            pole.get_latitude() or 0, pole.get_longitude() or 0,
                         )
                         ct = getattr(prev_pole, "conductor_type", None) or "AC-70"
                         cm = getattr(prev_pole, "conductor_material", None) or "алюминий"
@@ -734,10 +744,26 @@ async def create_span(
             detail="Power line not found"
         )
     
-    # Получаем опоры
-    from_pole = await db.get(Pole, span_data.from_pole_id)
-    to_pole = await db.get(Pole, span_data.to_pole_id)
-    
+    # Получаем опоры с координатами (CIM: position_points)
+    r_from = await db.execute(
+        select(Pole)
+        .options(
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
+        .where(Pole.id == span_data.from_pole_id)
+    )
+    r_to = await db.execute(
+        select(Pole)
+        .options(
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
+        .where(Pole.id == span_data.to_pole_id)
+    )
+    from_pole = r_from.scalar_one_or_none()
+    to_pole = r_to.scalar_one_or_none()
+
     if not from_pole or not to_pole:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -773,8 +799,8 @@ async def create_span(
             name=f"Узел {from_pole.pole_number}",
             pole_id=from_pole.id,
             line_id=power_line_id,
-            y_position=from_pole.y_position,
-            x_position=from_pole.x_position,
+            y_position=from_pole.get_latitude() or 0.0,
+            x_position=from_pole.get_longitude() or 0.0,
             description=f"Узел для опоры {from_pole.pole_number} линии {power_line_id}"
         )
         db.add(from_connectivity_node)
@@ -796,8 +822,8 @@ async def create_span(
             name=f"Узел {to_pole.pole_number}",
             pole_id=to_pole.id,
             line_id=power_line_id,
-            y_position=to_pole.y_position,
-            x_position=to_pole.x_position,
+            y_position=to_pole.get_latitude() or 0.0,
+            x_position=to_pole.get_longitude() or 0.0,
             description=f"Узел для опоры {to_pole.pole_number} линии {power_line_id}"
         )
         db.add(to_connectivity_node)
@@ -995,7 +1021,15 @@ async def update_span(
     from app.models.cim_line_structure import ConnectivityNode
     
     if span_data.from_pole_id:
-        from_pole = await db.get(Pole, span_data.from_pole_id)
+        r_f = await db.execute(
+            select(Pole)
+            .options(
+                selectinload(Pole.position_points),
+                selectinload(Pole.location).selectinload(Location.position_points),
+            )
+            .where(Pole.id == span_data.from_pole_id)
+        )
+        from_pole = r_f.scalar_one_or_none()
         if not from_pole:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1018,8 +1052,8 @@ async def update_span(
                 name=f"Узел {from_pole.pole_number}",
                 pole_id=from_pole.id,
                 line_id=power_line_id,
-                y_position=from_pole.y_position,
-                x_position=from_pole.x_position,
+                y_position=from_pole.get_latitude() or 0.0,
+                x_position=from_pole.get_longitude() or 0.0,
                 description=f"Узел для опоры {from_pole.pole_number} линии {power_line_id}"
             )
             db.add(from_connectivity_node)
@@ -1029,7 +1063,15 @@ async def update_span(
         span.from_pole_id = from_pole.id
     
     if span_data.to_pole_id:
-        to_pole = await db.get(Pole, span_data.to_pole_id)
+        r_t = await db.execute(
+            select(Pole)
+            .options(
+                selectinload(Pole.position_points),
+                selectinload(Pole.location).selectinload(Location.position_points),
+            )
+            .where(Pole.id == span_data.to_pole_id)
+        )
+        to_pole = r_t.scalar_one_or_none()
         if not to_pole:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1052,8 +1094,8 @@ async def update_span(
                 name=f"Узел {to_pole.pole_number}",
                 pole_id=to_pole.id,
                 line_id=power_line_id,
-                y_position=to_pole.y_position,
-                x_position=to_pole.x_position,
+                y_position=to_pole.get_latitude() or 0.0,
+                x_position=to_pole.get_longitude() or 0.0,
                 description=f"Узел для опоры {to_pole.pole_number} линии {power_line_id}"
             )
             db.add(to_connectivity_node)
@@ -1063,7 +1105,7 @@ async def update_span(
         span.to_pole_id = to_pole.id
     
     # Обновляем остальные поля пролёта
-    span_dict = span_data.dict(exclude_unset=True, exclude={'from_pole_id', 'to_pole_id', 'power_line_id'})
+    span_dict = span_data.dict(exclude_unset=True, exclude={'from_pole_id', 'to_pole_id', 'line_id'})
     
     for key, value in span_dict.items():
         if hasattr(span, key) and value is not None:
@@ -1200,8 +1242,8 @@ async def auto_create_spans(
                 name=f"Узел {pole.pole_number}",
                 pole_id=pole.id,
                 line_id=power_line_id,
-                y_position=pole.y_position,
-                x_position=pole.x_position,
+                y_position=pole.get_latitude(),
+                x_position=pole.get_longitude(),
                 description=f"Автоматически созданный узел для опоры {pole.pole_number} линии {power_line_id}"
             )
             db.add(connectivity_node)
@@ -1272,11 +1314,10 @@ async def create_tap(
             detail="Power line not found"
         )
     
-    db_tap = Tap(
-        **tap_data.dict(),
-        power_line_id=power_line_id,
-        created_by=current_user.id
-    )
+    tap_dict = tap_data.dict()
+    tap_dict["line_id"] = power_line_id
+    tap_dict["created_by"] = current_user.id
+    db_tap = Tap(**tap_dict)
     db.add(db_tap)
     await db.commit()
     await db.refresh(db_tap)
@@ -1329,16 +1370,6 @@ async def delete_power_line(
         
         print(f"DEBUG: Связанные объекты - Опоры: {poles_count.scalar()}, Пролёты: {spans_count.scalar()}, Сегменты: {segments_count.scalar()}")
         
-        # Удаляем связанные Connection вручную (если они есть)
-        from app.models.substation import Connection
-        connections_result = await db.execute(
-            select(Connection).where(Connection.line_id == power_line_id)
-        )
-        connections = connections_result.scalars().all()
-        for conn in connections:
-            await db.delete(conn)
-            print(f"DEBUG: Удалено соединение {conn.id}")
-        
         # Удаляем ConnectivityNode, связанные с опорами этой ЛЭП
         # Это нужно сделать перед удалением опор, чтобы избежать ошибки NOT NULL constraint
         connectivity_nodes_result = await db.execute(
@@ -1386,10 +1417,17 @@ async def delete_power_line(
         await db.execute(connectivity_node_stmt)
         print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
         
-        # Удаляем сессии обхода, привязанные к этой ЛЭП (power_line_id NOT NULL — обнулить нельзя)
-        patrol_sessions_stmt = delete(PatrolSession).where(PatrolSession.power_line_id == power_line_id)
+        # Удаляем сессии обхода, привязанные к этой ЛЭП (line_id NOT NULL — обнулить нельзя)
+        patrol_sessions_stmt = delete(PatrolSession).where(PatrolSession.line_id == power_line_id)
         await db.execute(patrol_sessions_stmt)
         print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
+        
+        # Убираем эту линию из connected_line_ids у всех подстанций (связь хранится в таблице подстанции)
+        from app.models.substation import Substation
+        substations_result = await db.execute(select(Substation).where(Substation.connected_line_ids.isnot(None)))
+        for substation in substations_result.scalars().all():
+            if substation.connected_line_ids and power_line_id in substation.connected_line_ids:
+                substation.connected_line_ids = [lid for lid in substation.connected_line_ids if lid != power_line_id]
         
         # Удаляем ЛЭП (каскадное удаление опор, пролётов, отпаек и сегментов настроено в модели)
         # Используем delete через сессию для правильной работы каскадов

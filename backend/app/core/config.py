@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     
     # Окружение (development/production)
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+
+    # Пересоздать БД при старте: удалить все таблицы и создать заново по моделям (данные теряются).
+    # Использовать только для разработки: RECREATE_DB=1
+    RECREATE_DB: bool = os.getenv("RECREATE_DB", "0").lower() in ("1", "true", "yes")
     
     class Config:
         env_file = ".env"

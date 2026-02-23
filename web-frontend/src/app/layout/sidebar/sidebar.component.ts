@@ -90,7 +90,10 @@ export class SidebarComponent implements OnInit, OnDestroy {
           this.isLoading = false;
         },
         error: (error) => {
+          const detail = error?.error?.detail || error?.message || String(error);
           console.error('Ошибка загрузки данных для sidebar:', error);
+          if (typeof detail === 'string') console.error('Детали:', detail);
+          else if (detail) console.error('Детали:', JSON.stringify(detail));
           this.isLoading = false;
         }
       });

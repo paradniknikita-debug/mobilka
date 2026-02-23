@@ -12,6 +12,8 @@ class SubstationBase(BaseModel):
     address: Optional[str] = None
     branch_id: Optional[int] = None
     description: Optional[str] = None
+    # id линий, подключённых к подстанции (хранится в таблице подстанции)
+    connected_line_ids: Optional[List[int]] = None
 
 class SubstationCreate(SubstationBase):
     pass
@@ -24,24 +26,6 @@ class SubstationResponse(SubstationBase):
 
     class Config:
         from_attributes = True
-
-class ConnectionBase(BaseModel):
-    substation_id: int
-    line_id: int
-    connection_type: str
-    voltage_level: float
-    description: Optional[str] = None
-
-class ConnectionCreate(ConnectionBase):
-    pass
-
-class ConnectionResponse(ConnectionBase):
-    id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 # Схемы для VoltageLevel
 class VoltageLevelBase(BaseModel):

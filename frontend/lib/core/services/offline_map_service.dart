@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../config/app_config.dart';
 
 /// Сервис офлайн-карты: инициализация FMTC, загрузка тайлов Беларуси при старте.
+/// На web (и других платформах без FFI) FMTC не поддерживается — используется только сетевой слой тайлов.
 class OfflineMapService {
   OfflineMapService._();
   static final OfflineMapService _instance = OfflineMapService._();
@@ -24,7 +25,14 @@ class OfflineMapService {
 
   /// Вызвать при старте приложения (main). Инициализирует FMTC и при первом запуске
   /// создаёт хранилище и запускает фоновую загрузку тайлов Беларуси.
+  /// На web FMTC не инициализируется (нет FFI) — карта работает только по сети.
   static Future<void> init() async {
+    if (kIsWeb) {
+      if (kDebugMode) {
+        print('OfflineMapService: на web FMTC недоступен, используется только сетевой слой тайлов.');
+      }
+      return;
+    }
     try {
       await FMTCObjectBoxBackend().initialise();
       _instance._initialized = true;

@@ -4,9 +4,8 @@ Flutter мобильное приложение для системы управ
 
 ## Технологии
 
-- **Flutter 3.0+**
-- **Dart 3.0+**
-- **Riverpod** - управление состоянием
+- **Flutter** (stable), **Dart ^3.8.0**
+- **Riverpod** — управление состоянием
 - **Go Router** - навигация
 - **Drift** - локальная база данных (SQLite)
 - **Dio** - HTTP клиент
@@ -27,9 +26,14 @@ flutter pub get
 
 ### 3. Генерация кода
 
+Версии пакетов (freezed 3, retrofit 4.9, retrofit_generator 10) зафиксированы в `pubspec.yaml` — те же используются в CI для единообразия.
+
 ```bash
-flutter packages pub run build_runner build
+dart run build_runner build --delete-conflicting-outputs
+dart tool/fix_retrofit_map.dart
 ```
+
+Скрипт `tool/fix_retrofit_map.dart` исправляет известную генерацию retrofit для `Future<Map<String, dynamic>>`; в CI он вызывается автоматически после build_runner.
 
 ### 4. Запуск приложения
 
@@ -48,9 +52,10 @@ flutter run --release
   ```bash
   flutter clean
   flutter pub get
+  dart run build_runner build --delete-conflicting-outputs
+  dart tool/fix_retrofit_map.dart
   flutter run
   ```
-  Или запустите скрипт `clean_and_build.bat` в папке frontend.
 
 - **Проект на диске D:, pub cache на C:**  
   В `android/gradle.properties` включено `kotlin.incremental=false`, чтобы избежать сбоя Kotlin-кэша из-за разных корней дисков. Если ошибки сохраняются, перенесите pub cache на тот же диск, что и проект:

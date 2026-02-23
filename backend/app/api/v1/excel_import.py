@@ -12,10 +12,12 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
-from app.models.substation import Substation, Connection
+from app.models.location import PositionPoint
+from app.models.base import generate_mrid
+from app.models.substation import Substation
 from app.models.geographic_region import GeographicRegion
 from app.schemas.power_line import PowerLineCreate, PoleCreate, SpanCreate, TapCreate, EquipmentCreate
-from app.schemas.substation import SubstationCreate, ConnectionCreate
+from app.schemas.substation import SubstationCreate
 
 router = APIRouter(prefix="/import", tags=["import"])
 
@@ -208,12 +210,10 @@ async def import_poles(
                     errors.append(f"Строка {idx + 2}: ЛЭП с названием '{row['power_line_code']}' не найдена")
                     continue
                 
-                # Создаём опору
+                # Создаём опору (CIM: координаты в PositionPoint)
                 pole = Pole(
                     line_id=power_line.id,
                     pole_number=str(row['pole_number']),
-                    y_position=float(row['latitude']),
-                    x_position=float(row['longitude']),
                     pole_type=str(row['pole_type']),
                     height=float(row['height']) if pd.notna(row.get('height')) else None,
                     foundation_type=str(row['foundation_type']) if pd.notna(row.get('foundation_type')) else None,
@@ -224,6 +224,14 @@ async def import_poles(
                     created_by=current_user.id
                 )
                 db.add(pole)
+                await db.flush()
+                pp = PositionPoint(
+                    mrid=generate_mrid(),
+                    y_position=float(row['latitude']),
+                    x_position=float(row['longitude']),
+                    pole_id=pole.id
+                )
+                db.add(pp)
                 created += 1
                 
             except Exception as e:

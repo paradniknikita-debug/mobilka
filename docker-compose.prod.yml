@@ -32,11 +32,9 @@ services:
     networks:
       - lepm_network
 
-  # Backend API сервер
+  # Backend API сервер (образ из GHCR, задаётся в .env как BACKEND_IMAGE)
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE}
     container_name: lepm_backend
     depends_on:
       postgres:

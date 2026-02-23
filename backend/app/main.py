@@ -20,7 +20,7 @@ from app.core.redis_client import set_redis_client, get_redis_client
 # Это необходимо для создания таблиц через Base.metadata.create_all
 from app.models import (
     User, PowerLine, Pole, Span, Tap, Equipment,
-    Branch, Substation, Connection, GeographicRegion, AClineSegment,
+    Branch, Substation, GeographicRegion, AClineSegment,
     ConnectivityNode, Terminal, LineSection, PatrolSession
 )
 

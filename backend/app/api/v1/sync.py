@@ -11,6 +11,7 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.branch import Branch
 from app.models.power_line import PowerLine, Pole, Equipment
+from app.models.location import Location, PositionPoint
 from app.models.substation import Substation, VoltageLevel, Bay, ConductingEquipment, ProtectionEquipment
 from app.schemas.sync import SyncBatch, SyncResponse, SyncRecord, SyncStatus, SyncAction, ENTITY_SCHEMAS
 from app.schemas.power_line import PowerLineCreate, PoleCreate, EquipmentCreate
@@ -184,9 +185,13 @@ async def _download_sync_data_impl(
             "timestamp": (pl.updated_at or pl.created_at).isoformat() if (pl.updated_at or pl.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     
-    # Получаем измененные опоры
+    # Получаем измененные опоры (с координатами из PositionPoint по CIM)
     poles_result = await db.execute(
         select(Pole)
+        .options(
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
         .where(
             or_(
                 Pole.created_at >= last_sync_dt,
@@ -388,8 +393,6 @@ async def process_sync_record(
                     mrid=mrid,
                     line_id=int(data['power_line_id']),
                     pole_number=data.get('pole_number') or '0',
-                    y_position=y_pos,
-                    x_position=x_pos,
                     pole_type=data.get('pole_type') or 'unknown',
                     height=float(data['height']) if data.get('height') is not None else None,
                     foundation_type=data.get('foundation_type'),
@@ -401,6 +404,15 @@ async def process_sync_record(
                 )
                 db.add(db_pole)
                 await db.flush()
+                if x_pos is not None and y_pos is not None:
+                    pp = PositionPoint(
+                        mrid=generate_mrid(),
+                        x_position=x_pos,
+                        y_position=y_pos,
+                        pole_id=db_pole.id
+                    )
+                    db.add(pp)
+                    await db.flush()
                 if isinstance(client_id, int) and client_id < 0:
                     id_mapping["pole"][client_id] = db_pole.id
         
@@ -415,7 +427,6 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
-                # Нормализация координат: в БД только x_position, y_position
                 upd = dict(data)
                 if 'latitude' in upd and 'y_position' not in upd:
                     upd['y_position'] = upd['latitude']
@@ -423,9 +434,22 @@ async def process_sync_record(
                     upd['x_position'] = upd['longitude']
                 for key in ['latitude', 'longitude']:
                     upd.pop(key, None)
+                x_pos = upd.pop('x_position', None)
+                y_pos = upd.pop('y_position', None)
                 for key, value in upd.items():
-                    if hasattr(pole, key) and key not in ['id', 'mrid', 'created_at', 'created_by']:
+                    if hasattr(pole, key) and key not in ['id', 'mrid', 'created_at', 'created_by'] and not (key == 'x_position' or key == 'y_position'):
                         setattr(pole, key, value)
+                if x_pos is not None or y_pos is not None:
+                    pp_res = await db.execute(select(PositionPoint).where(PositionPoint.pole_id == pole.id).limit(1))
+                    pp = pp_res.scalar_one_or_none()
+                    if pp:
+                        if x_pos is not None:
+                            pp.x_position = float(x_pos)
+                        if y_pos is not None:
+                            pp.y_position = float(y_pos)
+                    elif x_pos is not None and y_pos is not None:
+                        pp = PositionPoint(mrid=generate_mrid(), x_position=float(x_pos), y_position=float(y_pos), pole_id=pole.id)
+                        db.add(pp)
         
         elif record.action == SyncAction.DELETE:
             result = await db.execute(

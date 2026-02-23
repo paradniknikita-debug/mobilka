@@ -25,7 +25,7 @@ from sqlalchemy.orm import selectinload
 from app.models.power_line import Pole, Span
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.models.acline_segment import AClineSegment
-from app.models.substation import Substation, Connection
+from app.models.substation import Substation
 from app.models.base import generate_mrid
 
 
@@ -234,14 +234,7 @@ async def find_or_create_acline_segment(
     is_branching = await is_branching_pole(db, from_node.pole_id, power_line_id)
     
     # Если опора является ветвлением или начало линии (подстанция), создаём новый сегмент
-    # Ищем подключение к подстанции
-    is_substation_start = False
-    result = await db.execute(
-        select(Connection).where(Connection.line_id == power_line_id)
-    )
-    connections = result.scalars().all()
-    
-    # Проверяем, подключена ли линия к подстанции через эту опору
+    # Проверяем, является ли опора началом линии (первая по sequence_number)
     # (упрощённо: если это первая опора в линии или опора с sequence_number = 1)
     result = await db.execute(
         select(func.min(Pole.sequence_number)).where(Pole.line_id == power_line_id)
@@ -660,24 +653,6 @@ async def link_line_to_substation(
     line_section.total_length = distance / 1000.0
     segment.length = distance / 1000.0
     await db.flush()
-
-    # Связь линии с подстанцией (если ещё нет)
-    conn_result = await db.execute(
-        select(Connection).where(
-            Connection.line_id == power_line_id,
-            Connection.substation_id == substation_id,
-        )
-    )
-    if conn_result.scalar_one_or_none() is None:
-        from app.models.base import generate_mrid
-        conn = Connection(
-            mrid=generate_mrid(),
-            substation_id=substation_id,
-            line_id=power_line_id,
-            connection_type="output",
-            voltage_level=power_line.voltage_level or 10.0,
-        )
-        db.add(conn)
 
     return segment
 

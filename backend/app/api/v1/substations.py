@@ -8,21 +8,18 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.substation import (
-    Substation, 
-    Connection, 
-    VoltageLevel, 
-    Bay, 
-    BusbarSection, 
-    ConductingEquipment, 
+    Substation,
+    VoltageLevel,
+    Bay,
+    BusbarSection,
+    ConductingEquipment,
     ProtectionEquipment
 )
 from app.models.location import Location, PositionPoint, LocationType
 from app.schemas.substation import (
-    SubstationCreate, 
-    SubstationResponse, 
+    SubstationCreate,
+    SubstationResponse,
     SubstationResponseWithStructure,
-    ConnectionCreate, 
-    ConnectionResponse,
     VoltageLevelCreate,
     VoltageLevelResponse,
     BayCreate,
@@ -134,9 +131,7 @@ async def get_substation(
     """Получение подстанции по ID"""
     
     result = await db.execute(
-        select(Substation)
-        .options(selectinload(Substation.connections))
-        .where(Substation.id == substation_id)
+        select(Substation).where(Substation.id == substation_id)
     )
     substation = result.scalar_one_or_none()
     
@@ -213,51 +208,6 @@ async def delete_substation(
     await db.commit()
     
     return {"message": "Substation deactivated successfully"}
-
-# ===== ENDPOINTS ДЛЯ ПОДКЛЮЧЕНИЙ =====
-
-@router.post("/{substation_id}/connections", response_model=ConnectionResponse)
-async def create_connection(
-    substation_id: int,
-    connection_data: ConnectionCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Создание подключения ЛЭП к подстанции"""
-    
-    # Проверяем существование подстанции
-    substation = await db.get(Substation, substation_id)
-    if not substation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Substation not found"
-        )
-    
-    # Создаем подключение
-    db_connection = Connection(
-        **connection_data.dict(),
-        substation_id=substation_id
-    )
-    db.add(db_connection)
-    await db.commit()
-    await db.refresh(db_connection)
-    
-    return db_connection
-
-@router.get("/{substation_id}/connections", response_model=List[ConnectionResponse])
-async def get_substation_connections(
-    substation_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Получение подключений подстанции"""
-    
-    result = await db.execute(
-        select(Connection).where(Connection.substation_id == substation_id)
-    )
-    connections = result.scalars().all()
-    
-    return connections
 
 # ===== ENDPOINTS ДЛЯ УРОВНЕЙ НАПРЯЖЕНИЯ =====
 

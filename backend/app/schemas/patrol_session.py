@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class PatrolSessionCreate(BaseModel):
-    power_line_id: int
+    line_id: int  # id линии (ЛЭП)
     note: Optional[str] = None
 
 
@@ -15,7 +15,7 @@ class PatrolSessionUpdate(BaseModel):
 class PatrolSessionResponse(BaseModel):
     id: int
     user_id: int
-    power_line_id: int
+    line_id: int  # id линии (ЛЭП)
     note: Optional[str]
     started_at: datetime
     ended_at: Optional[datetime]

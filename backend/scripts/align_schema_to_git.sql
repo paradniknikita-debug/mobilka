@@ -3,9 +3,8 @@
 -- Идемпотентно: можно запускать повторно.
 --
 -- Делает:
--- 1) power_line_id -> line_id в pole, span, tap, connections, line_section, acline_segment, connectivity_node
+-- 1) power_line_id -> line_id в pole, span, tap, line_section, acline_segment, connectivity_node
 -- 2) latitude -> y_position, longitude -> x_position в pole, tap, substation, connectivity_node
--- 3) DROP TABLE line_segments если есть
 --
 -- Перед запуском: pg_dump бэкап. Запуск: psql -U postgres -d lepm_db -f align_schema_to_git.sql
 
@@ -18,7 +17,7 @@ DECLARE
   has_old BOOLEAN;
   has_new BOOLEAN;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['pole', 'span', 'tap', 'connections', 'line_section', 'acline_segment', 'connectivity_node']
+  FOREACH t IN ARRAY ARRAY['pole', 'span', 'tap', 'line_section', 'acline_segment', 'connectivity_node']
   LOOP
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = t) THEN
       SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = t AND column_name = 'power_line_id') INTO has_old;
@@ -49,8 +48,5 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
-
--- 3. Удалить таблицу line_segments (дублирует связь по AClineSegment.line_id)
-DROP TABLE IF EXISTS line_segments CASCADE;
 
 COMMIT;

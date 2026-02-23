@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text as sa_text
 from app.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
-from app.models import (User, GeographicRegion, PowerLine,Pole, AClineSegment,Substation, Branch)
+from app.models import (User, GeographicRegion, PowerLine, Pole, AClineSegment, Substation, Branch)
+from app.models.location import PositionPoint
+from app.models.base import generate_mrid
 
 
 
@@ -186,18 +188,16 @@ async def create_test_data():
             poles = []
             for pole_data in poles_data:
                 result = await session.execute(
-                    select(pole).where(
-                        pole.power_line_id == power_line.id,
-                        pole.pole_number == pole_data["pole_number"]
+                    select(Pole).where(
+                        Pole.line_id == power_line.id,
+                        Pole.pole_number == pole_data["pole_number"]
                     )
                 )
                 existing_pole = result.scalar_one_or_none()
                 if not existing_pole:
-                    pole = pole(
-                        power_line_id=power_line.id,
+                    pole = Pole(
+                        line_id=power_line.id,
                         pole_number=pole_data["pole_number"],
-                        y_position=pole_data["y_position"],
-                        x_position=pole_data["x_position"],
                         pole_type=pole_data["pole_type"],
                         height=pole_data["height"],
                         material="металл",
@@ -207,6 +207,14 @@ async def create_test_data():
                         created_by=user.id
                     )
                     session.add(pole)
+                    await session.flush()
+                    pp = PositionPoint(
+                        mrid=generate_mrid(),
+                        y_position=pole_data["y_position"],
+                        x_position=pole_data["x_position"],
+                        pole_id=pole.id
+                    )
+                    session.add(pp)
                     poles.append(pole)
             
             await session.flush()

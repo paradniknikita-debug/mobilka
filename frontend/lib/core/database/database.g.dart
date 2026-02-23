@@ -12,108 +12,170 @@ class $PowerLinesTable extends PowerLines
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
-      'name', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _codeMeta = const VerificationMeta('code');
   @override
   late final GeneratedColumn<String> code = GeneratedColumn<String>(
-      'code', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _voltageLevelMeta =
-      const VerificationMeta('voltageLevel');
+    'code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _voltageLevelMeta = const VerificationMeta(
+    'voltageLevel',
+  );
   @override
   late final GeneratedColumn<double> voltageLevel = GeneratedColumn<double>(
-      'voltage_level', aliasedName, false,
-      type: DriftSqlType.double, requiredDuringInsert: true);
+    'voltage_level',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _lengthMeta = const VerificationMeta('length');
   @override
   late final GeneratedColumn<double> length = GeneratedColumn<double>(
-      'length', aliasedName, true,
-      type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _branchIdMeta =
-      const VerificationMeta('branchId');
+    'length',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _branchIdMeta = const VerificationMeta(
+    'branchId',
+  );
   @override
   late final GeneratedColumn<int> branchId = GeneratedColumn<int>(
-      'branch_id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _createdByMeta =
-      const VerificationMeta('createdBy');
+    'branch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdByMeta = const VerificationMeta(
+    'createdBy',
+  );
   @override
   late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
-      'created_by', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
-      'status', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _descriptionMeta =
-      const VerificationMeta('description');
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
   @override
   late final GeneratedColumn<String> description = GeneratedColumn<String>(
-      'description', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _createdAtMeta =
-      const VerificationMeta('createdAt');
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
   @override
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-      'created_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _updatedAtMeta =
-      const VerificationMeta('updatedAt');
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-      'updated_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
-  static const VerificationMeta _isLocalMeta =
-      const VerificationMeta('isLocal');
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isLocalMeta = const VerificationMeta(
+    'isLocal',
+  );
   @override
   late final GeneratedColumn<bool> isLocal = GeneratedColumn<bool>(
-      'is_local', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("is_local" IN (0, 1))'),
-      defaultValue: const Constant(false));
-  static const VerificationMeta _needsSyncMeta =
-      const VerificationMeta('needsSync');
+    'is_local',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_local" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _needsSyncMeta = const VerificationMeta(
+    'needsSync',
+  );
   @override
   late final GeneratedColumn<bool> needsSync = GeneratedColumn<bool>(
-      'needs_sync', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("needs_sync" IN (0, 1))'),
-      defaultValue: const Constant(false));
+    'needs_sync',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("needs_sync" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        name,
-        code,
-        voltageLevel,
-        length,
-        branchId,
-        createdBy,
-        status,
-        description,
-        createdAt,
-        updatedAt,
-        isLocal,
-        needsSync
-      ];
+    id,
+    name,
+    code,
+    voltageLevel,
+    length,
+    branchId,
+    createdBy,
+    status,
+    description,
+    createdAt,
+    updatedAt,
+    isLocal,
+    needsSync,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'power_lines';
   @override
-  VerificationContext validateIntegrity(Insertable<PowerLine> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PowerLine> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -121,69 +183,95 @@ class $PowerLinesTable extends PowerLines
     }
     if (data.containsKey('name')) {
       context.handle(
-          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
     if (data.containsKey('code')) {
       context.handle(
-          _codeMeta, code.isAcceptableOrUnknown(data['code']!, _codeMeta));
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
     } else if (isInserting) {
       context.missing(_codeMeta);
     }
     if (data.containsKey('voltage_level')) {
       context.handle(
+        _voltageLevelMeta,
+        voltageLevel.isAcceptableOrUnknown(
+          data['voltage_level']!,
           _voltageLevelMeta,
-          voltageLevel.isAcceptableOrUnknown(
-              data['voltage_level']!, _voltageLevelMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_voltageLevelMeta);
     }
     if (data.containsKey('length')) {
-      context.handle(_lengthMeta,
-          length.isAcceptableOrUnknown(data['length']!, _lengthMeta));
+      context.handle(
+        _lengthMeta,
+        length.isAcceptableOrUnknown(data['length']!, _lengthMeta),
+      );
     }
     if (data.containsKey('branch_id')) {
-      context.handle(_branchIdMeta,
-          branchId.isAcceptableOrUnknown(data['branch_id']!, _branchIdMeta));
+      context.handle(
+        _branchIdMeta,
+        branchId.isAcceptableOrUnknown(data['branch_id']!, _branchIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_branchIdMeta);
     }
     if (data.containsKey('created_by')) {
-      context.handle(_createdByMeta,
-          createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta));
+      context.handle(
+        _createdByMeta,
+        createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdByMeta);
     }
     if (data.containsKey('status')) {
-      context.handle(_statusMeta,
-          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
     } else if (isInserting) {
       context.missing(_statusMeta);
     }
     if (data.containsKey('description')) {
       context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
           _descriptionMeta,
-          description.isAcceptableOrUnknown(
-              data['description']!, _descriptionMeta));
+        ),
+      );
     }
     if (data.containsKey('created_at')) {
-      context.handle(_createdAtMeta,
-          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
     if (data.containsKey('updated_at')) {
-      context.handle(_updatedAtMeta,
-          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
     }
     if (data.containsKey('is_local')) {
-      context.handle(_isLocalMeta,
-          isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta));
+      context.handle(
+        _isLocalMeta,
+        isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta),
+      );
     }
     if (data.containsKey('needs_sync')) {
-      context.handle(_needsSyncMeta,
-          needsSync.isAcceptableOrUnknown(data['needs_sync']!, _needsSyncMeta));
+      context.handle(
+        _needsSyncMeta,
+        needsSync.isAcceptableOrUnknown(data['needs_sync']!, _needsSyncMeta),
+      );
     }
     return context;
   }
@@ -194,32 +282,58 @@ class $PowerLinesTable extends PowerLines
   PowerLine map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PowerLine(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      name: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
-      code: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}code'])!,
-      voltageLevel: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}voltage_level'])!,
-      length: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}length']),
-      branchId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}branch_id'])!,
-      createdBy: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}created_by'])!,
-      status: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
-      description: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}description']),
-      createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
-      isLocal: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_local'])!,
-      needsSync: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}needs_sync'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      )!,
+      voltageLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}voltage_level'],
+      )!,
+      length: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}length'],
+      ),
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}branch_id'],
+      )!,
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      isLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_local'],
+      )!,
+      needsSync: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}needs_sync'],
+      )!,
     );
   }
 
@@ -243,20 +357,21 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
   final DateTime? updatedAt;
   final bool isLocal;
   final bool needsSync;
-  const PowerLine(
-      {required this.id,
-      required this.name,
-      required this.code,
-      required this.voltageLevel,
-      this.length,
-      required this.branchId,
-      required this.createdBy,
-      required this.status,
-      this.description,
-      required this.createdAt,
-      this.updatedAt,
-      required this.isLocal,
-      required this.needsSync});
+  const PowerLine({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.voltageLevel,
+    this.length,
+    required this.branchId,
+    required this.createdBy,
+    required this.status,
+    this.description,
+    required this.createdAt,
+    this.updatedAt,
+    required this.isLocal,
+    required this.needsSync,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -288,8 +403,9 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       name: Value(name),
       code: Value(code),
       voltageLevel: Value(voltageLevel),
-      length:
-          length == null && nullToAbsent ? const Value.absent() : Value(length),
+      length: length == null && nullToAbsent
+          ? const Value.absent()
+          : Value(length),
       branchId: Value(branchId),
       createdBy: Value(createdBy),
       status: Value(status),
@@ -305,8 +421,10 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
     );
   }
 
-  factory PowerLine.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PowerLine.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PowerLine(
       id: serializer.fromJson<int>(json['id']),
@@ -344,35 +462,35 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
     };
   }
 
-  PowerLine copyWith(
-          {int? id,
-          String? name,
-          String? code,
-          double? voltageLevel,
-          Value<double?> length = const Value.absent(),
-          int? branchId,
-          int? createdBy,
-          String? status,
-          Value<String?> description = const Value.absent(),
-          DateTime? createdAt,
-          Value<DateTime?> updatedAt = const Value.absent(),
-          bool? isLocal,
-          bool? needsSync}) =>
-      PowerLine(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        code: code ?? this.code,
-        voltageLevel: voltageLevel ?? this.voltageLevel,
-        length: length.present ? length.value : this.length,
-        branchId: branchId ?? this.branchId,
-        createdBy: createdBy ?? this.createdBy,
-        status: status ?? this.status,
-        description: description.present ? description.value : this.description,
-        createdAt: createdAt ?? this.createdAt,
-        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
-        isLocal: isLocal ?? this.isLocal,
-        needsSync: needsSync ?? this.needsSync,
-      );
+  PowerLine copyWith({
+    int? id,
+    String? name,
+    String? code,
+    double? voltageLevel,
+    Value<double?> length = const Value.absent(),
+    int? branchId,
+    int? createdBy,
+    String? status,
+    Value<String?> description = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+    bool? isLocal,
+    bool? needsSync,
+  }) => PowerLine(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    code: code ?? this.code,
+    voltageLevel: voltageLevel ?? this.voltageLevel,
+    length: length.present ? length.value : this.length,
+    branchId: branchId ?? this.branchId,
+    createdBy: createdBy ?? this.createdBy,
+    status: status ?? this.status,
+    description: description.present ? description.value : this.description,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    isLocal: isLocal ?? this.isLocal,
+    needsSync: needsSync ?? this.needsSync,
+  );
   PowerLine copyWithCompanion(PowerLinesCompanion data) {
     return PowerLine(
       id: data.id.present ? data.id.value : this.id,
@@ -385,8 +503,9 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       branchId: data.branchId.present ? data.branchId.value : this.branchId,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
       status: data.status.present ? data.status.value : this.status,
-      description:
-          data.description.present ? data.description.value : this.description,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isLocal: data.isLocal.present ? data.isLocal.value : this.isLocal,
@@ -416,19 +535,20 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
 
   @override
   int get hashCode => Object.hash(
-      id,
-      name,
-      code,
-      voltageLevel,
-      length,
-      branchId,
-      createdBy,
-      status,
-      description,
-      createdAt,
-      updatedAt,
-      isLocal,
-      needsSync);
+    id,
+    name,
+    code,
+    voltageLevel,
+    length,
+    branchId,
+    createdBy,
+    status,
+    description,
+    createdAt,
+    updatedAt,
+    isLocal,
+    needsSync,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -491,13 +611,13 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
     this.updatedAt = const Value.absent(),
     this.isLocal = const Value.absent(),
     this.needsSync = const Value.absent(),
-  })  : name = Value(name),
-        code = Value(code),
-        voltageLevel = Value(voltageLevel),
-        branchId = Value(branchId),
-        createdBy = Value(createdBy),
-        status = Value(status),
-        createdAt = Value(createdAt);
+  }) : name = Value(name),
+       code = Value(code),
+       voltageLevel = Value(voltageLevel),
+       branchId = Value(branchId),
+       createdBy = Value(createdBy),
+       status = Value(status),
+       createdAt = Value(createdAt);
   static Insertable<PowerLine> custom({
     Expression<int>? id,
     Expression<String>? name,
@@ -530,20 +650,21 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
     });
   }
 
-  PowerLinesCompanion copyWith(
-      {Value<int>? id,
-      Value<String>? name,
-      Value<String>? code,
-      Value<double>? voltageLevel,
-      Value<double?>? length,
-      Value<int>? branchId,
-      Value<int>? createdBy,
-      Value<String>? status,
-      Value<String?>? description,
-      Value<DateTime>? createdAt,
-      Value<DateTime?>? updatedAt,
-      Value<bool>? isLocal,
-      Value<bool>? needsSync}) {
+  PowerLinesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? code,
+    Value<double>? voltageLevel,
+    Value<double?>? length,
+    Value<int>? branchId,
+    Value<int>? createdBy,
+    Value<String>? status,
+    Value<String?>? description,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+    Value<bool>? isLocal,
+    Value<bool>? needsSync,
+  }) {
     return PowerLinesCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -635,138 +756,222 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _powerLineIdMeta =
-      const VerificationMeta('powerLineId');
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _powerLineIdMeta = const VerificationMeta(
+    'powerLineId',
+  );
   @override
   late final GeneratedColumn<int> powerLineId = GeneratedColumn<int>(
-      'power_line_id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _poleNumberMeta =
-      const VerificationMeta('poleNumber');
+    'power_line_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _poleNumberMeta = const VerificationMeta(
+    'poleNumber',
+  );
   @override
   late final GeneratedColumn<String> poleNumber = GeneratedColumn<String>(
-      'pole_number', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _xPositionMeta =
-      const VerificationMeta('xPosition');
+    'pole_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _xPositionMeta = const VerificationMeta(
+    'xPosition',
+  );
   @override
   late final GeneratedColumn<double> xPosition = GeneratedColumn<double>(
-      'x_position', aliasedName, false,
-      type: DriftSqlType.double, requiredDuringInsert: true);
-  static const VerificationMeta _yPositionMeta =
-      const VerificationMeta('yPosition');
+    'x_position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _yPositionMeta = const VerificationMeta(
+    'yPosition',
+  );
   @override
   late final GeneratedColumn<double> yPosition = GeneratedColumn<double>(
-      'y_position', aliasedName, false,
-      type: DriftSqlType.double, requiredDuringInsert: true);
-  static const VerificationMeta _poleTypeMeta =
-      const VerificationMeta('poleType');
+    'y_position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _poleTypeMeta = const VerificationMeta(
+    'poleType',
+  );
   @override
   late final GeneratedColumn<String> poleType = GeneratedColumn<String>(
-      'pole_type', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'pole_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _heightMeta = const VerificationMeta('height');
   @override
   late final GeneratedColumn<double> height = GeneratedColumn<double>(
-      'height', aliasedName, true,
-      type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _foundationTypeMeta =
-      const VerificationMeta('foundationType');
+    'height',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _foundationTypeMeta = const VerificationMeta(
+    'foundationType',
+  );
   @override
   late final GeneratedColumn<String> foundationType = GeneratedColumn<String>(
-      'foundation_type', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _materialMeta =
-      const VerificationMeta('material');
+    'foundation_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _materialMeta = const VerificationMeta(
+    'material',
+  );
   @override
   late final GeneratedColumn<String> material = GeneratedColumn<String>(
-      'material', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _yearInstalledMeta =
-      const VerificationMeta('yearInstalled');
+    'material',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _yearInstalledMeta = const VerificationMeta(
+    'yearInstalled',
+  );
   @override
   late final GeneratedColumn<int> yearInstalled = GeneratedColumn<int>(
-      'year_installed', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _conditionMeta =
-      const VerificationMeta('condition');
+    'year_installed',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _conditionMeta = const VerificationMeta(
+    'condition',
+  );
   @override
   late final GeneratedColumn<String> condition = GeneratedColumn<String>(
-      'condition', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'condition',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-      'notes', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _createdByMeta =
-      const VerificationMeta('createdBy');
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdByMeta = const VerificationMeta(
+    'createdBy',
+  );
   @override
   late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
-      'created_by', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _createdAtMeta =
-      const VerificationMeta('createdAt');
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
   @override
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-      'created_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _updatedAtMeta =
-      const VerificationMeta('updatedAt');
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-      'updated_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
-  static const VerificationMeta _isLocalMeta =
-      const VerificationMeta('isLocal');
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isLocalMeta = const VerificationMeta(
+    'isLocal',
+  );
   @override
   late final GeneratedColumn<bool> isLocal = GeneratedColumn<bool>(
-      'is_local', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("is_local" IN (0, 1))'),
-      defaultValue: const Constant(false));
-  static const VerificationMeta _needsSyncMeta =
-      const VerificationMeta('needsSync');
+    'is_local',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_local" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _needsSyncMeta = const VerificationMeta(
+    'needsSync',
+  );
   @override
   late final GeneratedColumn<bool> needsSync = GeneratedColumn<bool>(
-      'needs_sync', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("needs_sync" IN (0, 1))'),
-      defaultValue: const Constant(false));
+    'needs_sync',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("needs_sync" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        powerLineId,
-        poleNumber,
-        xPosition,
-        yPosition,
-        poleType,
-        height,
-        foundationType,
-        material,
-        yearInstalled,
-        condition,
-        notes,
-        createdBy,
-        createdAt,
-        updatedAt,
-        isLocal,
-        needsSync
-      ];
+    id,
+    powerLineId,
+    poleNumber,
+    xPosition,
+    yPosition,
+    poleType,
+    height,
+    foundationType,
+    material,
+    yearInstalled,
+    condition,
+    notes,
+    createdBy,
+    createdAt,
+    updatedAt,
+    isLocal,
+    needsSync,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'poles';
   @override
-  VerificationContext validateIntegrity(Insertable<Pole> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<Pole> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -774,91 +979,124 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     }
     if (data.containsKey('power_line_id')) {
       context.handle(
+        _powerLineIdMeta,
+        powerLineId.isAcceptableOrUnknown(
+          data['power_line_id']!,
           _powerLineIdMeta,
-          powerLineId.isAcceptableOrUnknown(
-              data['power_line_id']!, _powerLineIdMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_powerLineIdMeta);
     }
     if (data.containsKey('pole_number')) {
       context.handle(
-          _poleNumberMeta,
-          poleNumber.isAcceptableOrUnknown(
-              data['pole_number']!, _poleNumberMeta));
+        _poleNumberMeta,
+        poleNumber.isAcceptableOrUnknown(data['pole_number']!, _poleNumberMeta),
+      );
     } else if (isInserting) {
       context.missing(_poleNumberMeta);
     }
     if (data.containsKey('x_position')) {
-      context.handle(_xPositionMeta,
-          xPosition.isAcceptableOrUnknown(data['x_position']!, _xPositionMeta));
+      context.handle(
+        _xPositionMeta,
+        xPosition.isAcceptableOrUnknown(data['x_position']!, _xPositionMeta),
+      );
     } else if (isInserting) {
       context.missing(_xPositionMeta);
     }
     if (data.containsKey('y_position')) {
-      context.handle(_yPositionMeta,
-          yPosition.isAcceptableOrUnknown(data['y_position']!, _yPositionMeta));
+      context.handle(
+        _yPositionMeta,
+        yPosition.isAcceptableOrUnknown(data['y_position']!, _yPositionMeta),
+      );
     } else if (isInserting) {
       context.missing(_yPositionMeta);
     }
     if (data.containsKey('pole_type')) {
-      context.handle(_poleTypeMeta,
-          poleType.isAcceptableOrUnknown(data['pole_type']!, _poleTypeMeta));
+      context.handle(
+        _poleTypeMeta,
+        poleType.isAcceptableOrUnknown(data['pole_type']!, _poleTypeMeta),
+      );
     } else if (isInserting) {
       context.missing(_poleTypeMeta);
     }
     if (data.containsKey('height')) {
-      context.handle(_heightMeta,
-          height.isAcceptableOrUnknown(data['height']!, _heightMeta));
+      context.handle(
+        _heightMeta,
+        height.isAcceptableOrUnknown(data['height']!, _heightMeta),
+      );
     }
     if (data.containsKey('foundation_type')) {
       context.handle(
+        _foundationTypeMeta,
+        foundationType.isAcceptableOrUnknown(
+          data['foundation_type']!,
           _foundationTypeMeta,
-          foundationType.isAcceptableOrUnknown(
-              data['foundation_type']!, _foundationTypeMeta));
+        ),
+      );
     }
     if (data.containsKey('material')) {
-      context.handle(_materialMeta,
-          material.isAcceptableOrUnknown(data['material']!, _materialMeta));
+      context.handle(
+        _materialMeta,
+        material.isAcceptableOrUnknown(data['material']!, _materialMeta),
+      );
     }
     if (data.containsKey('year_installed')) {
       context.handle(
+        _yearInstalledMeta,
+        yearInstalled.isAcceptableOrUnknown(
+          data['year_installed']!,
           _yearInstalledMeta,
-          yearInstalled.isAcceptableOrUnknown(
-              data['year_installed']!, _yearInstalledMeta));
+        ),
+      );
     }
     if (data.containsKey('condition')) {
-      context.handle(_conditionMeta,
-          condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta));
+      context.handle(
+        _conditionMeta,
+        condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta),
+      );
     } else if (isInserting) {
       context.missing(_conditionMeta);
     }
     if (data.containsKey('notes')) {
       context.handle(
-          _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
     }
     if (data.containsKey('created_by')) {
-      context.handle(_createdByMeta,
-          createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta));
+      context.handle(
+        _createdByMeta,
+        createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdByMeta);
     }
     if (data.containsKey('created_at')) {
-      context.handle(_createdAtMeta,
-          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
     if (data.containsKey('updated_at')) {
-      context.handle(_updatedAtMeta,
-          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
     }
     if (data.containsKey('is_local')) {
-      context.handle(_isLocalMeta,
-          isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta));
+      context.handle(
+        _isLocalMeta,
+        isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta),
+      );
     }
     if (data.containsKey('needs_sync')) {
-      context.handle(_needsSyncMeta,
-          needsSync.isAcceptableOrUnknown(data['needs_sync']!, _needsSyncMeta));
+      context.handle(
+        _needsSyncMeta,
+        needsSync.isAcceptableOrUnknown(data['needs_sync']!, _needsSyncMeta),
+      );
     }
     return context;
   }
@@ -869,40 +1107,74 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   Pole map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Pole(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      powerLineId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}power_line_id'])!,
-      poleNumber: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}pole_number'])!,
-      xPosition: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}x_position'])!,
-      yPosition: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}y_position'])!,
-      poleType: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}pole_type'])!,
-      height: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}height']),
-      foundationType: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}foundation_type']),
-      material: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}material']),
-      yearInstalled: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}year_installed']),
-      condition: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}condition'])!,
-      notes: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}notes']),
-      createdBy: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}created_by'])!,
-      createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
-      isLocal: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_local'])!,
-      needsSync: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}needs_sync'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      powerLineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}power_line_id'],
+      )!,
+      poleNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pole_number'],
+      )!,
+      xPosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}x_position'],
+      )!,
+      yPosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}y_position'],
+      )!,
+      poleType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pole_type'],
+      )!,
+      height: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}height'],
+      ),
+      foundationType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}foundation_type'],
+      ),
+      material: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}material'],
+      ),
+      yearInstalled: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}year_installed'],
+      ),
+      condition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}condition'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      isLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_local'],
+      )!,
+      needsSync: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}needs_sync'],
+      )!,
     );
   }
 
@@ -916,7 +1188,11 @@ class Pole extends DataClass implements Insertable<Pole> {
   final int id;
   final int powerLineId;
   final String poleNumber;
+
+  /// Долгота (longitude), CIM x_position
   final double xPosition;
+
+  /// Широта (latitude), CIM y_position
   final double yPosition;
   final String poleType;
   final double? height;
@@ -930,24 +1206,25 @@ class Pole extends DataClass implements Insertable<Pole> {
   final DateTime? updatedAt;
   final bool isLocal;
   final bool needsSync;
-  const Pole(
-      {required this.id,
-      required this.powerLineId,
-      required this.poleNumber,
-      required this.xPosition,
-      required this.yPosition,
-      required this.poleType,
-      this.height,
-      this.foundationType,
-      this.material,
-      this.yearInstalled,
-      required this.condition,
-      this.notes,
-      required this.createdBy,
-      required this.createdAt,
-      this.updatedAt,
-      required this.isLocal,
-      required this.needsSync});
+  const Pole({
+    required this.id,
+    required this.powerLineId,
+    required this.poleNumber,
+    required this.xPosition,
+    required this.yPosition,
+    required this.poleType,
+    this.height,
+    this.foundationType,
+    this.material,
+    this.yearInstalled,
+    required this.condition,
+    this.notes,
+    required this.createdBy,
+    required this.createdAt,
+    this.updatedAt,
+    required this.isLocal,
+    required this.needsSync,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -991,8 +1268,9 @@ class Pole extends DataClass implements Insertable<Pole> {
       xPosition: Value(xPosition),
       yPosition: Value(yPosition),
       poleType: Value(poleType),
-      height:
-          height == null && nullToAbsent ? const Value.absent() : Value(height),
+      height: height == null && nullToAbsent
+          ? const Value.absent()
+          : Value(height),
       foundationType: foundationType == null && nullToAbsent
           ? const Value.absent()
           : Value(foundationType),
@@ -1003,8 +1281,9 @@ class Pole extends DataClass implements Insertable<Pole> {
           ? const Value.absent()
           : Value(yearInstalled),
       condition: Value(condition),
-      notes:
-          notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
       createdBy: Value(createdBy),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
@@ -1015,15 +1294,17 @@ class Pole extends DataClass implements Insertable<Pole> {
     );
   }
 
-  factory Pole.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory Pole.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Pole(
       id: serializer.fromJson<int>(json['id']),
       powerLineId: serializer.fromJson<int>(json['powerLineId']),
       poleNumber: serializer.fromJson<String>(json['poleNumber']),
-      xPosition: serializer.fromJson<double>(json['x_position']),
-      yPosition: serializer.fromJson<double>(json['y_position']),
+      xPosition: serializer.fromJson<double>(json['xPosition']),
+      yPosition: serializer.fromJson<double>(json['yPosition']),
       poleType: serializer.fromJson<String>(json['poleType']),
       height: serializer.fromJson<double?>(json['height']),
       foundationType: serializer.fromJson<String?>(json['foundationType']),
@@ -1045,8 +1326,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       'id': serializer.toJson<int>(id),
       'powerLineId': serializer.toJson<int>(powerLineId),
       'poleNumber': serializer.toJson<String>(poleNumber),
-      'x_position': serializer.toJson<double>(xPosition),
-      'y_position': serializer.toJson<double>(yPosition),
+      'xPosition': serializer.toJson<double>(xPosition),
+      'yPosition': serializer.toJson<double>(yPosition),
       'poleType': serializer.toJson<String>(poleType),
       'height': serializer.toJson<double?>(height),
       'foundationType': serializer.toJson<String?>(foundationType),
@@ -1062,52 +1343,56 @@ class Pole extends DataClass implements Insertable<Pole> {
     };
   }
 
-  Pole copyWith(
-          {int? id,
-          int? powerLineId,
-          String? poleNumber,
-          double? xPosition,
-          double? yPosition,
-          String? poleType,
-          Value<double?> height = const Value.absent(),
-          Value<String?> foundationType = const Value.absent(),
-          Value<String?> material = const Value.absent(),
-          Value<int?> yearInstalled = const Value.absent(),
-          String? condition,
-          Value<String?> notes = const Value.absent(),
-          int? createdBy,
-          DateTime? createdAt,
-          Value<DateTime?> updatedAt = const Value.absent(),
-          bool? isLocal,
-          bool? needsSync}) =>
-      Pole(
-        id: id ?? this.id,
-        powerLineId: powerLineId ?? this.powerLineId,
-        poleNumber: poleNumber ?? this.poleNumber,
-        xPosition: xPosition ?? this.xPosition,
-        yPosition: yPosition ?? this.yPosition,
-        poleType: poleType ?? this.poleType,
-        height: height.present ? height.value : this.height,
-        foundationType:
-            foundationType.present ? foundationType.value : this.foundationType,
-        material: material.present ? material.value : this.material,
-        yearInstalled:
-            yearInstalled.present ? yearInstalled.value : this.yearInstalled,
-        condition: condition ?? this.condition,
-        notes: notes.present ? notes.value : this.notes,
-        createdBy: createdBy ?? this.createdBy,
-        createdAt: createdAt ?? this.createdAt,
-        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
-        isLocal: isLocal ?? this.isLocal,
-        needsSync: needsSync ?? this.needsSync,
-      );
+  Pole copyWith({
+    int? id,
+    int? powerLineId,
+    String? poleNumber,
+    double? xPosition,
+    double? yPosition,
+    String? poleType,
+    Value<double?> height = const Value.absent(),
+    Value<String?> foundationType = const Value.absent(),
+    Value<String?> material = const Value.absent(),
+    Value<int?> yearInstalled = const Value.absent(),
+    String? condition,
+    Value<String?> notes = const Value.absent(),
+    int? createdBy,
+    DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+    bool? isLocal,
+    bool? needsSync,
+  }) => Pole(
+    id: id ?? this.id,
+    powerLineId: powerLineId ?? this.powerLineId,
+    poleNumber: poleNumber ?? this.poleNumber,
+    xPosition: xPosition ?? this.xPosition,
+    yPosition: yPosition ?? this.yPosition,
+    poleType: poleType ?? this.poleType,
+    height: height.present ? height.value : this.height,
+    foundationType: foundationType.present
+        ? foundationType.value
+        : this.foundationType,
+    material: material.present ? material.value : this.material,
+    yearInstalled: yearInstalled.present
+        ? yearInstalled.value
+        : this.yearInstalled,
+    condition: condition ?? this.condition,
+    notes: notes.present ? notes.value : this.notes,
+    createdBy: createdBy ?? this.createdBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    isLocal: isLocal ?? this.isLocal,
+    needsSync: needsSync ?? this.needsSync,
+  );
   Pole copyWithCompanion(PolesCompanion data) {
     return Pole(
       id: data.id.present ? data.id.value : this.id,
-      powerLineId:
-          data.powerLineId.present ? data.powerLineId.value : this.powerLineId,
-      poleNumber:
-          data.poleNumber.present ? data.poleNumber.value : this.poleNumber,
+      powerLineId: data.powerLineId.present
+          ? data.powerLineId.value
+          : this.powerLineId,
+      poleNumber: data.poleNumber.present
+          ? data.poleNumber.value
+          : this.poleNumber,
       xPosition: data.xPosition.present ? data.xPosition.value : this.xPosition,
       yPosition: data.yPosition.present ? data.yPosition.value : this.yPosition,
       poleType: data.poleType.present ? data.poleType.value : this.poleType,
@@ -1155,23 +1440,24 @@ class Pole extends DataClass implements Insertable<Pole> {
 
   @override
   int get hashCode => Object.hash(
-      id,
-      powerLineId,
-      poleNumber,
-      xPosition,
-      yPosition,
-      poleType,
-      height,
-      foundationType,
-      material,
-      yearInstalled,
-      condition,
-      notes,
-      createdBy,
-      createdAt,
-      updatedAt,
-      isLocal,
-      needsSync);
+    id,
+    powerLineId,
+    poleNumber,
+    xPosition,
+    yPosition,
+    poleType,
+    height,
+    foundationType,
+    material,
+    yearInstalled,
+    condition,
+    notes,
+    createdBy,
+    createdAt,
+    updatedAt,
+    isLocal,
+    needsSync,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1250,14 +1536,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.updatedAt = const Value.absent(),
     this.isLocal = const Value.absent(),
     this.needsSync = const Value.absent(),
-  })  : powerLineId = Value(powerLineId),
-        poleNumber = Value(poleNumber),
-        xPosition = Value(xPosition),
-        yPosition = Value(yPosition),
-        poleType = Value(poleType),
-        condition = Value(condition),
-        createdBy = Value(createdBy),
-        createdAt = Value(createdAt);
+  }) : powerLineId = Value(powerLineId),
+       poleNumber = Value(poleNumber),
+       xPosition = Value(xPosition),
+       yPosition = Value(yPosition),
+       poleType = Value(poleType),
+       condition = Value(condition),
+       createdBy = Value(createdBy),
+       createdAt = Value(createdAt);
   static Insertable<Pole> custom({
     Expression<int>? id,
     Expression<int>? powerLineId,
@@ -1298,24 +1584,25 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     });
   }
 
-  PolesCompanion copyWith(
-      {Value<int>? id,
-      Value<int>? powerLineId,
-      Value<String>? poleNumber,
-      Value<double>? xPosition,
-      Value<double>? yPosition,
-      Value<String>? poleType,
-      Value<double?>? height,
-      Value<String?>? foundationType,
-      Value<String?>? material,
-      Value<int?>? yearInstalled,
-      Value<String>? condition,
-      Value<String?>? notes,
-      Value<int>? createdBy,
-      Value<DateTime>? createdAt,
-      Value<DateTime?>? updatedAt,
-      Value<bool>? isLocal,
-      Value<bool>? needsSync}) {
+  PolesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? powerLineId,
+    Value<String>? poleNumber,
+    Value<double>? xPosition,
+    Value<double>? yPosition,
+    Value<String>? poleType,
+    Value<double?>? height,
+    Value<String?>? foundationType,
+    Value<String?>? material,
+    Value<int?>? yearInstalled,
+    Value<String>? condition,
+    Value<String?>? notes,
+    Value<int>? createdBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+    Value<bool>? isLocal,
+    Value<bool>? needsSync,
+  }) {
     return PolesCompanion(
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
@@ -1428,215 +1715,328 @@ class $EquipmentTable extends Equipment
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _poleIdMeta = const VerificationMeta('poleId');
   @override
   late final GeneratedColumn<int> poleId = GeneratedColumn<int>(
-      'pole_id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _equipmentTypeMeta =
-      const VerificationMeta('equipmentType');
+    'pole_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _equipmentTypeMeta = const VerificationMeta(
+    'equipmentType',
+  );
   @override
   late final GeneratedColumn<String> equipmentType = GeneratedColumn<String>(
-      'equipment_type', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'equipment_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
-      'name', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _manufacturerMeta =
-      const VerificationMeta('manufacturer');
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _manufacturerMeta = const VerificationMeta(
+    'manufacturer',
+  );
   @override
   late final GeneratedColumn<String> manufacturer = GeneratedColumn<String>(
-      'manufacturer', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
+    'manufacturer',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _modelMeta = const VerificationMeta('model');
   @override
   late final GeneratedColumn<String> model = GeneratedColumn<String>(
-      'model', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _serialNumberMeta =
-      const VerificationMeta('serialNumber');
+    'model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _serialNumberMeta = const VerificationMeta(
+    'serialNumber',
+  );
   @override
   late final GeneratedColumn<String> serialNumber = GeneratedColumn<String>(
-      'serial_number', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _yearManufacturedMeta =
-      const VerificationMeta('yearManufactured');
+    'serial_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _yearManufacturedMeta = const VerificationMeta(
+    'yearManufactured',
+  );
   @override
   late final GeneratedColumn<int> yearManufactured = GeneratedColumn<int>(
-      'year_manufactured', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _installationDateMeta =
-      const VerificationMeta('installationDate');
+    'year_manufactured',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _installationDateMeta = const VerificationMeta(
+    'installationDate',
+  );
   @override
   late final GeneratedColumn<DateTime> installationDate =
-      GeneratedColumn<DateTime>('installation_date', aliasedName, true,
-          type: DriftSqlType.dateTime, requiredDuringInsert: false);
-  static const VerificationMeta _conditionMeta =
-      const VerificationMeta('condition');
+      GeneratedColumn<DateTime>(
+        'installation_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _conditionMeta = const VerificationMeta(
+    'condition',
+  );
   @override
   late final GeneratedColumn<String> condition = GeneratedColumn<String>(
-      'condition', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'condition',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-      'notes', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _createdByMeta =
-      const VerificationMeta('createdBy');
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdByMeta = const VerificationMeta(
+    'createdBy',
+  );
   @override
   late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
-      'created_by', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _createdAtMeta =
-      const VerificationMeta('createdAt');
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
   @override
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-      'created_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _updatedAtMeta =
-      const VerificationMeta('updatedAt');
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-      'updated_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
-  static const VerificationMeta _isLocalMeta =
-      const VerificationMeta('isLocal');
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isLocalMeta = const VerificationMeta(
+    'isLocal',
+  );
   @override
   late final GeneratedColumn<bool> isLocal = GeneratedColumn<bool>(
-      'is_local', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("is_local" IN (0, 1))'),
-      defaultValue: const Constant(false));
-  static const VerificationMeta _needsSyncMeta =
-      const VerificationMeta('needsSync');
+    'is_local',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_local" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _needsSyncMeta = const VerificationMeta(
+    'needsSync',
+  );
   @override
   late final GeneratedColumn<bool> needsSync = GeneratedColumn<bool>(
-      'needs_sync', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("needs_sync" IN (0, 1))'),
-      defaultValue: const Constant(false));
+    'needs_sync',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("needs_sync" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        poleId,
-        equipmentType,
-        name,
-        manufacturer,
-        model,
-        serialNumber,
-        yearManufactured,
-        installationDate,
-        condition,
-        notes,
-        createdBy,
-        createdAt,
-        updatedAt,
-        isLocal,
-        needsSync
-      ];
+    id,
+    poleId,
+    equipmentType,
+    name,
+    manufacturer,
+    model,
+    serialNumber,
+    yearManufactured,
+    installationDate,
+    condition,
+    notes,
+    createdBy,
+    createdAt,
+    updatedAt,
+    isLocal,
+    needsSync,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'equipment';
   @override
-  VerificationContext validateIntegrity(Insertable<EquipmentData> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<EquipmentData> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
     if (data.containsKey('pole_id')) {
-      context.handle(_poleIdMeta,
-          poleId.isAcceptableOrUnknown(data['pole_id']!, _poleIdMeta));
+      context.handle(
+        _poleIdMeta,
+        poleId.isAcceptableOrUnknown(data['pole_id']!, _poleIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_poleIdMeta);
     }
     if (data.containsKey('equipment_type')) {
       context.handle(
+        _equipmentTypeMeta,
+        equipmentType.isAcceptableOrUnknown(
+          data['equipment_type']!,
           _equipmentTypeMeta,
-          equipmentType.isAcceptableOrUnknown(
-              data['equipment_type']!, _equipmentTypeMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_equipmentTypeMeta);
     }
     if (data.containsKey('name')) {
       context.handle(
-          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
     if (data.containsKey('manufacturer')) {
       context.handle(
+        _manufacturerMeta,
+        manufacturer.isAcceptableOrUnknown(
+          data['manufacturer']!,
           _manufacturerMeta,
-          manufacturer.isAcceptableOrUnknown(
-              data['manufacturer']!, _manufacturerMeta));
+        ),
+      );
     }
     if (data.containsKey('model')) {
       context.handle(
-          _modelMeta, model.isAcceptableOrUnknown(data['model']!, _modelMeta));
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
     }
     if (data.containsKey('serial_number')) {
       context.handle(
+        _serialNumberMeta,
+        serialNumber.isAcceptableOrUnknown(
+          data['serial_number']!,
           _serialNumberMeta,
-          serialNumber.isAcceptableOrUnknown(
-              data['serial_number']!, _serialNumberMeta));
+        ),
+      );
     }
     if (data.containsKey('year_manufactured')) {
       context.handle(
+        _yearManufacturedMeta,
+        yearManufactured.isAcceptableOrUnknown(
+          data['year_manufactured']!,
           _yearManufacturedMeta,
-          yearManufactured.isAcceptableOrUnknown(
-              data['year_manufactured']!, _yearManufacturedMeta));
+        ),
+      );
     }
     if (data.containsKey('installation_date')) {
       context.handle(
+        _installationDateMeta,
+        installationDate.isAcceptableOrUnknown(
+          data['installation_date']!,
           _installationDateMeta,
-          installationDate.isAcceptableOrUnknown(
-              data['installation_date']!, _installationDateMeta));
+        ),
+      );
     }
     if (data.containsKey('condition')) {
-      context.handle(_conditionMeta,
-          condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta));
+      context.handle(
+        _conditionMeta,
+        condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta),
+      );
     } else if (isInserting) {
       context.missing(_conditionMeta);
     }
     if (data.containsKey('notes')) {
       context.handle(
-          _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
     }
     if (data.containsKey('created_by')) {
-      context.handle(_createdByMeta,
-          createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta));
+      context.handle(
+        _createdByMeta,
+        createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdByMeta);
     }
     if (data.containsKey('created_at')) {
-      context.handle(_createdAtMeta,
-          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
     if (data.containsKey('updated_at')) {
-      context.handle(_updatedAtMeta,
-          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
     }
     if (data.containsKey('is_local')) {
-      context.handle(_isLocalMeta,
-          isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta));
+      context.handle(
+        _isLocalMeta,
+        isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta),
+      );
     }
     if (data.containsKey('needs_sync')) {
-      context.handle(_needsSyncMeta,
-          needsSync.isAcceptableOrUnknown(data['needs_sync']!, _needsSyncMeta));
+      context.handle(
+        _needsSyncMeta,
+        needsSync.isAcceptableOrUnknown(data['needs_sync']!, _needsSyncMeta),
+      );
     }
     return context;
   }
@@ -1647,38 +2047,70 @@ class $EquipmentTable extends Equipment
   EquipmentData map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return EquipmentData(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      poleId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}pole_id'])!,
-      equipmentType: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}equipment_type'])!,
-      name: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
-      manufacturer: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}manufacturer']),
-      model: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}model']),
-      serialNumber: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}serial_number']),
-      yearManufactured: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}year_manufactured']),
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      poleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pole_id'],
+      )!,
+      equipmentType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}equipment_type'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      manufacturer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer'],
+      ),
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      ),
+      serialNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}serial_number'],
+      ),
+      yearManufactured: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}year_manufactured'],
+      ),
       installationDate: attachedDatabase.typeMapping.read(
-          DriftSqlType.dateTime, data['${effectivePrefix}installation_date']),
-      condition: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}condition'])!,
-      notes: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}notes']),
-      createdBy: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}created_by'])!,
-      createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
-      isLocal: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_local'])!,
-      needsSync: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}needs_sync'])!,
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}installation_date'],
+      ),
+      condition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}condition'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      isLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_local'],
+      )!,
+      needsSync: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}needs_sync'],
+      )!,
     );
   }
 
@@ -1705,23 +2137,24 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   final DateTime? updatedAt;
   final bool isLocal;
   final bool needsSync;
-  const EquipmentData(
-      {required this.id,
-      required this.poleId,
-      required this.equipmentType,
-      required this.name,
-      this.manufacturer,
-      this.model,
-      this.serialNumber,
-      this.yearManufactured,
-      this.installationDate,
-      required this.condition,
-      this.notes,
-      required this.createdBy,
-      required this.createdAt,
-      this.updatedAt,
-      required this.isLocal,
-      required this.needsSync});
+  const EquipmentData({
+    required this.id,
+    required this.poleId,
+    required this.equipmentType,
+    required this.name,
+    this.manufacturer,
+    this.model,
+    this.serialNumber,
+    this.yearManufactured,
+    this.installationDate,
+    required this.condition,
+    this.notes,
+    required this.createdBy,
+    required this.createdAt,
+    this.updatedAt,
+    required this.isLocal,
+    required this.needsSync,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1767,8 +2200,9 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       manufacturer: manufacturer == null && nullToAbsent
           ? const Value.absent()
           : Value(manufacturer),
-      model:
-          model == null && nullToAbsent ? const Value.absent() : Value(model),
+      model: model == null && nullToAbsent
+          ? const Value.absent()
+          : Value(model),
       serialNumber: serialNumber == null && nullToAbsent
           ? const Value.absent()
           : Value(serialNumber),
@@ -1779,8 +2213,9 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           ? const Value.absent()
           : Value(installationDate),
       condition: Value(condition),
-      notes:
-          notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
       createdBy: Value(createdBy),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
@@ -1791,8 +2226,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     );
   }
 
-  factory EquipmentData.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory EquipmentData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return EquipmentData(
       id: serializer.fromJson<int>(json['id']),
@@ -1803,8 +2240,9 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       model: serializer.fromJson<String?>(json['model']),
       serialNumber: serializer.fromJson<String?>(json['serialNumber']),
       yearManufactured: serializer.fromJson<int?>(json['yearManufactured']),
-      installationDate:
-          serializer.fromJson<DateTime?>(json['installationDate']),
+      installationDate: serializer.fromJson<DateTime?>(
+        json['installationDate'],
+      ),
       condition: serializer.fromJson<String>(json['condition']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdBy: serializer.fromJson<int>(json['createdBy']),
@@ -1837,47 +2275,45 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     };
   }
 
-  EquipmentData copyWith(
-          {int? id,
-          int? poleId,
-          String? equipmentType,
-          String? name,
-          Value<String?> manufacturer = const Value.absent(),
-          Value<String?> model = const Value.absent(),
-          Value<String?> serialNumber = const Value.absent(),
-          Value<int?> yearManufactured = const Value.absent(),
-          Value<DateTime?> installationDate = const Value.absent(),
-          String? condition,
-          Value<String?> notes = const Value.absent(),
-          int? createdBy,
-          DateTime? createdAt,
-          Value<DateTime?> updatedAt = const Value.absent(),
-          bool? isLocal,
-          bool? needsSync}) =>
-      EquipmentData(
-        id: id ?? this.id,
-        poleId: poleId ?? this.poleId,
-        equipmentType: equipmentType ?? this.equipmentType,
-        name: name ?? this.name,
-        manufacturer:
-            manufacturer.present ? manufacturer.value : this.manufacturer,
-        model: model.present ? model.value : this.model,
-        serialNumber:
-            serialNumber.present ? serialNumber.value : this.serialNumber,
-        yearManufactured: yearManufactured.present
-            ? yearManufactured.value
-            : this.yearManufactured,
-        installationDate: installationDate.present
-            ? installationDate.value
-            : this.installationDate,
-        condition: condition ?? this.condition,
-        notes: notes.present ? notes.value : this.notes,
-        createdBy: createdBy ?? this.createdBy,
-        createdAt: createdAt ?? this.createdAt,
-        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
-        isLocal: isLocal ?? this.isLocal,
-        needsSync: needsSync ?? this.needsSync,
-      );
+  EquipmentData copyWith({
+    int? id,
+    int? poleId,
+    String? equipmentType,
+    String? name,
+    Value<String?> manufacturer = const Value.absent(),
+    Value<String?> model = const Value.absent(),
+    Value<String?> serialNumber = const Value.absent(),
+    Value<int?> yearManufactured = const Value.absent(),
+    Value<DateTime?> installationDate = const Value.absent(),
+    String? condition,
+    Value<String?> notes = const Value.absent(),
+    int? createdBy,
+    DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+    bool? isLocal,
+    bool? needsSync,
+  }) => EquipmentData(
+    id: id ?? this.id,
+    poleId: poleId ?? this.poleId,
+    equipmentType: equipmentType ?? this.equipmentType,
+    name: name ?? this.name,
+    manufacturer: manufacturer.present ? manufacturer.value : this.manufacturer,
+    model: model.present ? model.value : this.model,
+    serialNumber: serialNumber.present ? serialNumber.value : this.serialNumber,
+    yearManufactured: yearManufactured.present
+        ? yearManufactured.value
+        : this.yearManufactured,
+    installationDate: installationDate.present
+        ? installationDate.value
+        : this.installationDate,
+    condition: condition ?? this.condition,
+    notes: notes.present ? notes.value : this.notes,
+    createdBy: createdBy ?? this.createdBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    isLocal: isLocal ?? this.isLocal,
+    needsSync: needsSync ?? this.needsSync,
+  );
   EquipmentData copyWithCompanion(EquipmentCompanion data) {
     return EquipmentData(
       id: data.id.present ? data.id.value : this.id,
@@ -1934,22 +2370,23 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
 
   @override
   int get hashCode => Object.hash(
-      id,
-      poleId,
-      equipmentType,
-      name,
-      manufacturer,
-      model,
-      serialNumber,
-      yearManufactured,
-      installationDate,
-      condition,
-      notes,
-      createdBy,
-      createdAt,
-      updatedAt,
-      isLocal,
-      needsSync);
+    id,
+    poleId,
+    equipmentType,
+    name,
+    manufacturer,
+    model,
+    serialNumber,
+    yearManufactured,
+    installationDate,
+    condition,
+    notes,
+    createdBy,
+    createdAt,
+    updatedAt,
+    isLocal,
+    needsSync,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2024,12 +2461,12 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.updatedAt = const Value.absent(),
     this.isLocal = const Value.absent(),
     this.needsSync = const Value.absent(),
-  })  : poleId = Value(poleId),
-        equipmentType = Value(equipmentType),
-        name = Value(name),
-        condition = Value(condition),
-        createdBy = Value(createdBy),
-        createdAt = Value(createdAt);
+  }) : poleId = Value(poleId),
+       equipmentType = Value(equipmentType),
+       name = Value(name),
+       condition = Value(condition),
+       createdBy = Value(createdBy),
+       createdAt = Value(createdAt);
   static Insertable<EquipmentData> custom({
     Expression<int>? id,
     Expression<int>? poleId,
@@ -2068,23 +2505,24 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     });
   }
 
-  EquipmentCompanion copyWith(
-      {Value<int>? id,
-      Value<int>? poleId,
-      Value<String>? equipmentType,
-      Value<String>? name,
-      Value<String?>? manufacturer,
-      Value<String?>? model,
-      Value<String?>? serialNumber,
-      Value<int?>? yearManufactured,
-      Value<DateTime?>? installationDate,
-      Value<String>? condition,
-      Value<String?>? notes,
-      Value<int>? createdBy,
-      Value<DateTime>? createdAt,
-      Value<DateTime?>? updatedAt,
-      Value<bool>? isLocal,
-      Value<bool>? needsSync}) {
+  EquipmentCompanion copyWith({
+    Value<int>? id,
+    Value<int>? poleId,
+    Value<String>? equipmentType,
+    Value<String>? name,
+    Value<String?>? manufacturer,
+    Value<String?>? model,
+    Value<String?>? serialNumber,
+    Value<int?>? yearManufactured,
+    Value<DateTime?>? installationDate,
+    Value<String>? condition,
+    Value<String?>? notes,
+    Value<int>? createdBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+    Value<bool>? isLocal,
+    Value<bool>? needsSync,
+  }) {
     return EquipmentCompanion(
       id: id ?? this.id,
       poleId: poleId ?? this.poleId,
@@ -2192,72 +2630,114 @@ class $SyncRecordsTable extends SyncRecords
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
-      'id', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _entityTypeMeta =
-      const VerificationMeta('entityType');
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
   @override
   late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
-      'entity_type', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'entity_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _actionMeta = const VerificationMeta('action');
   @override
   late final GeneratedColumn<String> action = GeneratedColumn<String>(
-      'action', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'action',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _dataMeta = const VerificationMeta('data');
   @override
   late final GeneratedColumn<String> data = GeneratedColumn<String>(
-      'data', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _timestampMeta =
-      const VerificationMeta('timestamp');
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _timestampMeta = const VerificationMeta(
+    'timestamp',
+  );
   @override
   late final GeneratedColumn<DateTime> timestamp = GeneratedColumn<DateTime>(
-      'timestamp', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+    'timestamp',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
   @override
   late final GeneratedColumn<int> userId = GeneratedColumn<int>(
-      'user_id', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'device_id', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
+    'device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
-      'status', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _errorMessageMeta =
-      const VerificationMeta('errorMessage');
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _errorMessageMeta = const VerificationMeta(
+    'errorMessage',
+  );
   @override
   late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
-      'error_message', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
+    'error_message',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        entityType,
-        action,
-        data,
-        timestamp,
-        userId,
-        deviceId,
-        status,
-        errorMessage
-      ];
+    id,
+    entityType,
+    action,
+    data,
+    timestamp,
+    userId,
+    deviceId,
+    status,
+    errorMessage,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'sync_records';
   @override
-  VerificationContext validateIntegrity(Insertable<SyncRecord> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<SyncRecord> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -2267,49 +2747,64 @@ class $SyncRecordsTable extends SyncRecords
     }
     if (data.containsKey('entity_type')) {
       context.handle(
-          _entityTypeMeta,
-          entityType.isAcceptableOrUnknown(
-              data['entity_type']!, _entityTypeMeta));
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
+      );
     } else if (isInserting) {
       context.missing(_entityTypeMeta);
     }
     if (data.containsKey('action')) {
-      context.handle(_actionMeta,
-          action.isAcceptableOrUnknown(data['action']!, _actionMeta));
+      context.handle(
+        _actionMeta,
+        action.isAcceptableOrUnknown(data['action']!, _actionMeta),
+      );
     } else if (isInserting) {
       context.missing(_actionMeta);
     }
     if (data.containsKey('data')) {
       context.handle(
-          _dataMeta, this.data.isAcceptableOrUnknown(data['data']!, _dataMeta));
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
     } else if (isInserting) {
       context.missing(_dataMeta);
     }
     if (data.containsKey('timestamp')) {
-      context.handle(_timestampMeta,
-          timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta));
+      context.handle(
+        _timestampMeta,
+        timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta),
+      );
     } else if (isInserting) {
       context.missing(_timestampMeta);
     }
     if (data.containsKey('user_id')) {
-      context.handle(_userIdMeta,
-          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
     }
     if (data.containsKey('device_id')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
     }
     if (data.containsKey('status')) {
-      context.handle(_statusMeta,
-          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
     } else if (isInserting) {
       context.missing(_statusMeta);
     }
     if (data.containsKey('error_message')) {
       context.handle(
+        _errorMessageMeta,
+        errorMessage.isAcceptableOrUnknown(
+          data['error_message']!,
           _errorMessageMeta,
-          errorMessage.isAcceptableOrUnknown(
-              data['error_message']!, _errorMessageMeta));
+        ),
+      );
     }
     return context;
   }
@@ -2320,24 +2815,42 @@ class $SyncRecordsTable extends SyncRecords
   SyncRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SyncRecord(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
-      entityType: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}entity_type'])!,
-      action: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}action'])!,
-      data: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}data'])!,
-      timestamp: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}timestamp'])!,
-      userId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}user_id']),
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}device_id']),
-      status: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
-      errorMessage: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}error_message']),
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      entityType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_type'],
+      )!,
+      action: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}action'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+      timestamp: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}timestamp'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      ),
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      errorMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_message'],
+      ),
     );
   }
 
@@ -2357,16 +2870,17 @@ class SyncRecord extends DataClass implements Insertable<SyncRecord> {
   final String? deviceId;
   final String status;
   final String? errorMessage;
-  const SyncRecord(
-      {required this.id,
-      required this.entityType,
-      required this.action,
-      required this.data,
-      required this.timestamp,
-      this.userId,
-      this.deviceId,
-      required this.status,
-      this.errorMessage});
+  const SyncRecord({
+    required this.id,
+    required this.entityType,
+    required this.action,
+    required this.data,
+    required this.timestamp,
+    this.userId,
+    this.deviceId,
+    required this.status,
+    this.errorMessage,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2395,8 +2909,9 @@ class SyncRecord extends DataClass implements Insertable<SyncRecord> {
       action: Value(action),
       data: Value(data),
       timestamp: Value(timestamp),
-      userId:
-          userId == null && nullToAbsent ? const Value.absent() : Value(userId),
+      userId: userId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userId),
       deviceId: deviceId == null && nullToAbsent
           ? const Value.absent()
           : Value(deviceId),
@@ -2407,8 +2922,10 @@ class SyncRecord extends DataClass implements Insertable<SyncRecord> {
     );
   }
 
-  factory SyncRecord.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory SyncRecord.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncRecord(
       id: serializer.fromJson<String>(json['id']),
@@ -2438,33 +2955,33 @@ class SyncRecord extends DataClass implements Insertable<SyncRecord> {
     };
   }
 
-  SyncRecord copyWith(
-          {String? id,
-          String? entityType,
-          String? action,
-          String? data,
-          DateTime? timestamp,
-          Value<int?> userId = const Value.absent(),
-          Value<String?> deviceId = const Value.absent(),
-          String? status,
-          Value<String?> errorMessage = const Value.absent()}) =>
-      SyncRecord(
-        id: id ?? this.id,
-        entityType: entityType ?? this.entityType,
-        action: action ?? this.action,
-        data: data ?? this.data,
-        timestamp: timestamp ?? this.timestamp,
-        userId: userId.present ? userId.value : this.userId,
-        deviceId: deviceId.present ? deviceId.value : this.deviceId,
-        status: status ?? this.status,
-        errorMessage:
-            errorMessage.present ? errorMessage.value : this.errorMessage,
-      );
+  SyncRecord copyWith({
+    String? id,
+    String? entityType,
+    String? action,
+    String? data,
+    DateTime? timestamp,
+    Value<int?> userId = const Value.absent(),
+    Value<String?> deviceId = const Value.absent(),
+    String? status,
+    Value<String?> errorMessage = const Value.absent(),
+  }) => SyncRecord(
+    id: id ?? this.id,
+    entityType: entityType ?? this.entityType,
+    action: action ?? this.action,
+    data: data ?? this.data,
+    timestamp: timestamp ?? this.timestamp,
+    userId: userId.present ? userId.value : this.userId,
+    deviceId: deviceId.present ? deviceId.value : this.deviceId,
+    status: status ?? this.status,
+    errorMessage: errorMessage.present ? errorMessage.value : this.errorMessage,
+  );
   SyncRecord copyWithCompanion(SyncRecordsCompanion data) {
     return SyncRecord(
       id: data.id.present ? data.id.value : this.id,
-      entityType:
-          data.entityType.present ? data.entityType.value : this.entityType,
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
       action: data.action.present ? data.action.value : this.action,
       data: data.data.present ? data.data.value : this.data,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
@@ -2494,8 +3011,17 @@ class SyncRecord extends DataClass implements Insertable<SyncRecord> {
   }
 
   @override
-  int get hashCode => Object.hash(id, entityType, action, data, timestamp,
-      userId, deviceId, status, errorMessage);
+  int get hashCode => Object.hash(
+    id,
+    entityType,
+    action,
+    data,
+    timestamp,
+    userId,
+    deviceId,
+    status,
+    errorMessage,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2545,12 +3071,12 @@ class SyncRecordsCompanion extends UpdateCompanion<SyncRecord> {
     required String status,
     this.errorMessage = const Value.absent(),
     this.rowid = const Value.absent(),
-  })  : id = Value(id),
-        entityType = Value(entityType),
-        action = Value(action),
-        data = Value(data),
-        timestamp = Value(timestamp),
-        status = Value(status);
+  }) : id = Value(id),
+       entityType = Value(entityType),
+       action = Value(action),
+       data = Value(data),
+       timestamp = Value(timestamp),
+       status = Value(status);
   static Insertable<SyncRecord> custom({
     Expression<String>? id,
     Expression<String>? entityType,
@@ -2577,17 +3103,18 @@ class SyncRecordsCompanion extends UpdateCompanion<SyncRecord> {
     });
   }
 
-  SyncRecordsCompanion copyWith(
-      {Value<String>? id,
-      Value<String>? entityType,
-      Value<String>? action,
-      Value<String>? data,
-      Value<DateTime>? timestamp,
-      Value<int?>? userId,
-      Value<String?>? deviceId,
-      Value<String>? status,
-      Value<String?>? errorMessage,
-      Value<int>? rowid}) {
+  SyncRecordsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? entityType,
+    Value<String>? action,
+    Value<String>? data,
+    Value<DateTime>? timestamp,
+    Value<int?>? userId,
+    Value<String?>? deviceId,
+    Value<String>? status,
+    Value<String?>? errorMessage,
+    Value<int>? rowid,
+  }) {
     return SyncRecordsCompanion(
       id: id ?? this.id,
       entityType: entityType ?? this.entityType,
@@ -2665,105 +3192,164 @@ class $PatrolSessionsTable extends PatrolSessions
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _serverIdMeta =
-      const VerificationMeta('serverId');
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _serverIdMeta = const VerificationMeta(
+    'serverId',
+  );
   @override
   late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
-      'server_id', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _powerLineIdMeta =
-      const VerificationMeta('powerLineId');
+    'server_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _powerLineIdMeta = const VerificationMeta(
+    'powerLineId',
+  );
   @override
   late final GeneratedColumn<int> powerLineId = GeneratedColumn<int>(
-      'power_line_id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'power_line_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _noteMeta = const VerificationMeta('note');
   @override
   late final GeneratedColumn<String> note = GeneratedColumn<String>(
-      'note', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _startedAtMeta =
-      const VerificationMeta('startedAt');
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
   @override
   late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
-      'started_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _endedAtMeta =
-      const VerificationMeta('endedAt');
+    'started_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endedAtMeta = const VerificationMeta(
+    'endedAt',
+  );
   @override
   late final GeneratedColumn<DateTime> endedAt = GeneratedColumn<DateTime>(
-      'ended_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
-  static const VerificationMeta _syncStatusMeta =
-      const VerificationMeta('syncStatus');
+    'ended_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncStatusMeta = const VerificationMeta(
+    'syncStatus',
+  );
   @override
   late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
-      'sync_status', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant('pending'));
+    'sync_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
   static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
   @override
   late final GeneratedColumn<int> userId = GeneratedColumn<int>(
-      'user_id', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, serverId, powerLineId, note, startedAt, endedAt, syncStatus, userId];
+  List<GeneratedColumn> get $columns => [
+    id,
+    serverId,
+    powerLineId,
+    note,
+    startedAt,
+    endedAt,
+    syncStatus,
+    userId,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'patrol_sessions';
   @override
-  VerificationContext validateIntegrity(Insertable<PatrolSession> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PatrolSession> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
     if (data.containsKey('server_id')) {
-      context.handle(_serverIdMeta,
-          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
+      context.handle(
+        _serverIdMeta,
+        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
+      );
     }
     if (data.containsKey('power_line_id')) {
       context.handle(
+        _powerLineIdMeta,
+        powerLineId.isAcceptableOrUnknown(
+          data['power_line_id']!,
           _powerLineIdMeta,
-          powerLineId.isAcceptableOrUnknown(
-              data['power_line_id']!, _powerLineIdMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_powerLineIdMeta);
     }
     if (data.containsKey('note')) {
       context.handle(
-          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
     }
     if (data.containsKey('started_at')) {
-      context.handle(_startedAtMeta,
-          startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta));
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_startedAtMeta);
     }
     if (data.containsKey('ended_at')) {
-      context.handle(_endedAtMeta,
-          endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta));
+      context.handle(
+        _endedAtMeta,
+        endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta),
+      );
     }
     if (data.containsKey('sync_status')) {
       context.handle(
-          _syncStatusMeta,
-          syncStatus.isAcceptableOrUnknown(
-              data['sync_status']!, _syncStatusMeta));
+        _syncStatusMeta,
+        syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
+      );
     }
     if (data.containsKey('user_id')) {
-      context.handle(_userIdMeta,
-          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
     }
     return context;
   }
@@ -2774,22 +3360,38 @@ class $PatrolSessionsTable extends PatrolSessions
   PatrolSession map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PatrolSession(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      serverId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}server_id']),
-      powerLineId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}power_line_id'])!,
-      note: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}note']),
-      startedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}started_at'])!,
-      endedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}ended_at']),
-      syncStatus: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}sync_status'])!,
-      userId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}user_id']),
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      serverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_id'],
+      ),
+      powerLineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}power_line_id'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      )!,
+      endedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ended_at'],
+      ),
+      syncStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_status'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      ),
     );
   }
 
@@ -2808,15 +3410,16 @@ class PatrolSession extends DataClass implements Insertable<PatrolSession> {
   final DateTime? endedAt;
   final String syncStatus;
   final int? userId;
-  const PatrolSession(
-      {required this.id,
-      this.serverId,
-      required this.powerLineId,
-      this.note,
-      required this.startedAt,
-      this.endedAt,
-      required this.syncStatus,
-      this.userId});
+  const PatrolSession({
+    required this.id,
+    this.serverId,
+    required this.powerLineId,
+    this.note,
+    required this.startedAt,
+    this.endedAt,
+    required this.syncStatus,
+    this.userId,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2852,13 +3455,16 @@ class PatrolSession extends DataClass implements Insertable<PatrolSession> {
           ? const Value.absent()
           : Value(endedAt),
       syncStatus: Value(syncStatus),
-      userId:
-          userId == null && nullToAbsent ? const Value.absent() : Value(userId),
+      userId: userId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userId),
     );
   }
 
-  factory PatrolSession.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PatrolSession.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PatrolSession(
       id: serializer.fromJson<int>(json['id']),
@@ -2886,36 +3492,38 @@ class PatrolSession extends DataClass implements Insertable<PatrolSession> {
     };
   }
 
-  PatrolSession copyWith(
-          {int? id,
-          Value<int?> serverId = const Value.absent(),
-          int? powerLineId,
-          Value<String?> note = const Value.absent(),
-          DateTime? startedAt,
-          Value<DateTime?> endedAt = const Value.absent(),
-          String? syncStatus,
-          Value<int?> userId = const Value.absent()}) =>
-      PatrolSession(
-        id: id ?? this.id,
-        serverId: serverId.present ? serverId.value : this.serverId,
-        powerLineId: powerLineId ?? this.powerLineId,
-        note: note.present ? note.value : this.note,
-        startedAt: startedAt ?? this.startedAt,
-        endedAt: endedAt.present ? endedAt.value : this.endedAt,
-        syncStatus: syncStatus ?? this.syncStatus,
-        userId: userId.present ? userId.value : this.userId,
-      );
+  PatrolSession copyWith({
+    int? id,
+    Value<int?> serverId = const Value.absent(),
+    int? powerLineId,
+    Value<String?> note = const Value.absent(),
+    DateTime? startedAt,
+    Value<DateTime?> endedAt = const Value.absent(),
+    String? syncStatus,
+    Value<int?> userId = const Value.absent(),
+  }) => PatrolSession(
+    id: id ?? this.id,
+    serverId: serverId.present ? serverId.value : this.serverId,
+    powerLineId: powerLineId ?? this.powerLineId,
+    note: note.present ? note.value : this.note,
+    startedAt: startedAt ?? this.startedAt,
+    endedAt: endedAt.present ? endedAt.value : this.endedAt,
+    syncStatus: syncStatus ?? this.syncStatus,
+    userId: userId.present ? userId.value : this.userId,
+  );
   PatrolSession copyWithCompanion(PatrolSessionsCompanion data) {
     return PatrolSession(
       id: data.id.present ? data.id.value : this.id,
       serverId: data.serverId.present ? data.serverId.value : this.serverId,
-      powerLineId:
-          data.powerLineId.present ? data.powerLineId.value : this.powerLineId,
+      powerLineId: data.powerLineId.present
+          ? data.powerLineId.value
+          : this.powerLineId,
       note: data.note.present ? data.note.value : this.note,
       startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
       endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
-      syncStatus:
-          data.syncStatus.present ? data.syncStatus.value : this.syncStatus,
+      syncStatus: data.syncStatus.present
+          ? data.syncStatus.value
+          : this.syncStatus,
       userId: data.userId.present ? data.userId.value : this.userId,
     );
   }
@@ -2937,7 +3545,15 @@ class PatrolSession extends DataClass implements Insertable<PatrolSession> {
 
   @override
   int get hashCode => Object.hash(
-      id, serverId, powerLineId, note, startedAt, endedAt, syncStatus, userId);
+    id,
+    serverId,
+    powerLineId,
+    note,
+    startedAt,
+    endedAt,
+    syncStatus,
+    userId,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2980,8 +3596,8 @@ class PatrolSessionsCompanion extends UpdateCompanion<PatrolSession> {
     this.endedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.userId = const Value.absent(),
-  })  : powerLineId = Value(powerLineId),
-        startedAt = Value(startedAt);
+  }) : powerLineId = Value(powerLineId),
+       startedAt = Value(startedAt);
   static Insertable<PatrolSession> custom({
     Expression<int>? id,
     Expression<int>? serverId,
@@ -3004,15 +3620,16 @@ class PatrolSessionsCompanion extends UpdateCompanion<PatrolSession> {
     });
   }
 
-  PatrolSessionsCompanion copyWith(
-      {Value<int>? id,
-      Value<int?>? serverId,
-      Value<int>? powerLineId,
-      Value<String?>? note,
-      Value<DateTime>? startedAt,
-      Value<DateTime?>? endedAt,
-      Value<String>? syncStatus,
-      Value<int?>? userId}) {
+  PatrolSessionsCompanion copyWith({
+    Value<int>? id,
+    Value<int?>? serverId,
+    Value<int>? powerLineId,
+    Value<String?>? note,
+    Value<DateTime>? startedAt,
+    Value<DateTime?>? endedAt,
+    Value<String>? syncStatus,
+    Value<int?>? userId,
+  }) {
     return PatrolSessionsCompanion(
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
@@ -3083,40 +3700,47 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [powerLines, poles, equipment, syncRecords, patrolSessions];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    powerLines,
+    poles,
+    equipment,
+    syncRecords,
+    patrolSessions,
+  ];
 }
 
-typedef $$PowerLinesTableCreateCompanionBuilder = PowerLinesCompanion Function({
-  Value<int> id,
-  required String name,
-  required String code,
-  required double voltageLevel,
-  Value<double?> length,
-  required int branchId,
-  required int createdBy,
-  required String status,
-  Value<String?> description,
-  required DateTime createdAt,
-  Value<DateTime?> updatedAt,
-  Value<bool> isLocal,
-  Value<bool> needsSync,
-});
-typedef $$PowerLinesTableUpdateCompanionBuilder = PowerLinesCompanion Function({
-  Value<int> id,
-  Value<String> name,
-  Value<String> code,
-  Value<double> voltageLevel,
-  Value<double?> length,
-  Value<int> branchId,
-  Value<int> createdBy,
-  Value<String> status,
-  Value<String?> description,
-  Value<DateTime> createdAt,
-  Value<DateTime?> updatedAt,
-  Value<bool> isLocal,
-  Value<bool> needsSync,
-});
+typedef $$PowerLinesTableCreateCompanionBuilder =
+    PowerLinesCompanion Function({
+      Value<int> id,
+      required String name,
+      required String code,
+      required double voltageLevel,
+      Value<double?> length,
+      required int branchId,
+      required int createdBy,
+      required String status,
+      Value<String?> description,
+      required DateTime createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isLocal,
+      Value<bool> needsSync,
+    });
+typedef $$PowerLinesTableUpdateCompanionBuilder =
+    PowerLinesCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> code,
+      Value<double> voltageLevel,
+      Value<double?> length,
+      Value<int> branchId,
+      Value<int> createdBy,
+      Value<String> status,
+      Value<String?> description,
+      Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isLocal,
+      Value<bool> needsSync,
+    });
 
 class $$PowerLinesTableFilterComposer
     extends Composer<_$AppDatabase, $PowerLinesTable> {
@@ -3128,43 +3752,69 @@ class $$PowerLinesTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnFilters(column));
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get code => $composableBuilder(
-      column: $table.code, builder: (column) => ColumnFilters(column));
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<double> get voltageLevel => $composableBuilder(
-      column: $table.voltageLevel, builder: (column) => ColumnFilters(column));
+    column: $table.voltageLevel,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<double> get length => $composableBuilder(
-      column: $table.length, builder: (column) => ColumnFilters(column));
+    column: $table.length,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get branchId => $composableBuilder(
-      column: $table.branchId, builder: (column) => ColumnFilters(column));
+    column: $table.branchId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get createdBy => $composableBuilder(
-      column: $table.createdBy, builder: (column) => ColumnFilters(column));
+    column: $table.createdBy,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get status => $composableBuilder(
-      column: $table.status, builder: (column) => ColumnFilters(column));
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get description => $composableBuilder(
-      column: $table.description, builder: (column) => ColumnFilters(column));
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get isLocal => $composableBuilder(
-      column: $table.isLocal, builder: (column) => ColumnFilters(column));
+    column: $table.isLocal,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get needsSync => $composableBuilder(
-      column: $table.needsSync, builder: (column) => ColumnFilters(column));
+    column: $table.needsSync,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PowerLinesTableOrderingComposer
@@ -3177,44 +3827,69 @@ class $$PowerLinesTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnOrderings(column));
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get code => $composableBuilder(
-      column: $table.code, builder: (column) => ColumnOrderings(column));
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<double> get voltageLevel => $composableBuilder(
-      column: $table.voltageLevel,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.voltageLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<double> get length => $composableBuilder(
-      column: $table.length, builder: (column) => ColumnOrderings(column));
+    column: $table.length,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get branchId => $composableBuilder(
-      column: $table.branchId, builder: (column) => ColumnOrderings(column));
+    column: $table.branchId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get createdBy => $composableBuilder(
-      column: $table.createdBy, builder: (column) => ColumnOrderings(column));
+    column: $table.createdBy,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get status => $composableBuilder(
-      column: $table.status, builder: (column) => ColumnOrderings(column));
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get description => $composableBuilder(
-      column: $table.description, builder: (column) => ColumnOrderings(column));
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get isLocal => $composableBuilder(
-      column: $table.isLocal, builder: (column) => ColumnOrderings(column));
+    column: $table.isLocal,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get needsSync => $composableBuilder(
-      column: $table.needsSync, builder: (column) => ColumnOrderings(column));
+    column: $table.needsSync,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PowerLinesTableAnnotationComposer
@@ -3236,7 +3911,9 @@ class $$PowerLinesTableAnnotationComposer
       $composableBuilder(column: $table.code, builder: (column) => column);
 
   GeneratedColumn<double> get voltageLevel => $composableBuilder(
-      column: $table.voltageLevel, builder: (column) => column);
+    column: $table.voltageLevel,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<double> get length =>
       $composableBuilder(column: $table.length, builder: (column) => column);
@@ -3251,7 +3928,9 @@ class $$PowerLinesTableAnnotationComposer
       $composableBuilder(column: $table.status, builder: (column) => column);
 
   GeneratedColumn<String> get description => $composableBuilder(
-      column: $table.description, builder: (column) => column);
+    column: $table.description,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -3266,20 +3945,27 @@ class $$PowerLinesTableAnnotationComposer
       $composableBuilder(column: $table.needsSync, builder: (column) => column);
 }
 
-class $$PowerLinesTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $PowerLinesTable,
-    PowerLine,
-    $$PowerLinesTableFilterComposer,
-    $$PowerLinesTableOrderingComposer,
-    $$PowerLinesTableAnnotationComposer,
-    $$PowerLinesTableCreateCompanionBuilder,
-    $$PowerLinesTableUpdateCompanionBuilder,
-    (PowerLine, BaseReferences<_$AppDatabase, $PowerLinesTable, PowerLine>),
-    PowerLine,
-    PrefetchHooks Function()> {
+class $$PowerLinesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PowerLinesTable,
+          PowerLine,
+          $$PowerLinesTableFilterComposer,
+          $$PowerLinesTableOrderingComposer,
+          $$PowerLinesTableAnnotationComposer,
+          $$PowerLinesTableCreateCompanionBuilder,
+          $$PowerLinesTableUpdateCompanionBuilder,
+          (
+            PowerLine,
+            BaseReferences<_$AppDatabase, $PowerLinesTable, PowerLine>,
+          ),
+          PowerLine,
+          PrefetchHooks Function()
+        > {
   $$PowerLinesTableTableManager(_$AppDatabase db, $PowerLinesTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -3288,123 +3974,128 @@ class $$PowerLinesTableTableManager extends RootTableManager<
               $$PowerLinesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PowerLinesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> name = const Value.absent(),
-            Value<String> code = const Value.absent(),
-            Value<double> voltageLevel = const Value.absent(),
-            Value<double?> length = const Value.absent(),
-            Value<int> branchId = const Value.absent(),
-            Value<int> createdBy = const Value.absent(),
-            Value<String> status = const Value.absent(),
-            Value<String?> description = const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime?> updatedAt = const Value.absent(),
-            Value<bool> isLocal = const Value.absent(),
-            Value<bool> needsSync = const Value.absent(),
-          }) =>
-              PowerLinesCompanion(
-            id: id,
-            name: name,
-            code: code,
-            voltageLevel: voltageLevel,
-            length: length,
-            branchId: branchId,
-            createdBy: createdBy,
-            status: status,
-            description: description,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isLocal: isLocal,
-            needsSync: needsSync,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String name,
-            required String code,
-            required double voltageLevel,
-            Value<double?> length = const Value.absent(),
-            required int branchId,
-            required int createdBy,
-            required String status,
-            Value<String?> description = const Value.absent(),
-            required DateTime createdAt,
-            Value<DateTime?> updatedAt = const Value.absent(),
-            Value<bool> isLocal = const Value.absent(),
-            Value<bool> needsSync = const Value.absent(),
-          }) =>
-              PowerLinesCompanion.insert(
-            id: id,
-            name: name,
-            code: code,
-            voltageLevel: voltageLevel,
-            length: length,
-            branchId: branchId,
-            createdBy: createdBy,
-            status: status,
-            description: description,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isLocal: isLocal,
-            needsSync: needsSync,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> code = const Value.absent(),
+                Value<double> voltageLevel = const Value.absent(),
+                Value<double?> length = const Value.absent(),
+                Value<int> branchId = const Value.absent(),
+                Value<int> createdBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
+                Value<bool> needsSync = const Value.absent(),
+              }) => PowerLinesCompanion(
+                id: id,
+                name: name,
+                code: code,
+                voltageLevel: voltageLevel,
+                length: length,
+                branchId: branchId,
+                createdBy: createdBy,
+                status: status,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isLocal: isLocal,
+                needsSync: needsSync,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required String code,
+                required double voltageLevel,
+                Value<double?> length = const Value.absent(),
+                required int branchId,
+                required int createdBy,
+                required String status,
+                Value<String?> description = const Value.absent(),
+                required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
+                Value<bool> needsSync = const Value.absent(),
+              }) => PowerLinesCompanion.insert(
+                id: id,
+                name: name,
+                code: code,
+                voltageLevel: voltageLevel,
+                length: length,
+                branchId: branchId,
+                createdBy: createdBy,
+                status: status,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isLocal: isLocal,
+                needsSync: needsSync,
+              ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PowerLinesTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $PowerLinesTable,
-    PowerLine,
-    $$PowerLinesTableFilterComposer,
-    $$PowerLinesTableOrderingComposer,
-    $$PowerLinesTableAnnotationComposer,
-    $$PowerLinesTableCreateCompanionBuilder,
-    $$PowerLinesTableUpdateCompanionBuilder,
-    (PowerLine, BaseReferences<_$AppDatabase, $PowerLinesTable, PowerLine>),
-    PowerLine,
-    PrefetchHooks Function()>;
-typedef $$PolesTableCreateCompanionBuilder = PolesCompanion Function({
-  Value<int> id,
-  required int powerLineId,
-  required String poleNumber,
-  required double xPosition,
-  required double yPosition,
-  required String poleType,
-  Value<double?> height,
-  Value<String?> foundationType,
-  Value<String?> material,
-  Value<int?> yearInstalled,
-  required String condition,
-  Value<String?> notes,
-  required int createdBy,
-  required DateTime createdAt,
-  Value<DateTime?> updatedAt,
-  Value<bool> isLocal,
-  Value<bool> needsSync,
-});
-typedef $$PolesTableUpdateCompanionBuilder = PolesCompanion Function({
-  Value<int> id,
-  Value<int> powerLineId,
-  Value<String> poleNumber,
-  Value<double> xPosition,
-  Value<double> yPosition,
-  Value<String> poleType,
-  Value<double?> height,
-  Value<String?> foundationType,
-  Value<String?> material,
-  Value<int?> yearInstalled,
-  Value<String> condition,
-  Value<String?> notes,
-  Value<int> createdBy,
-  Value<DateTime> createdAt,
-  Value<DateTime?> updatedAt,
-  Value<bool> isLocal,
-  Value<bool> needsSync,
-});
+typedef $$PowerLinesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PowerLinesTable,
+      PowerLine,
+      $$PowerLinesTableFilterComposer,
+      $$PowerLinesTableOrderingComposer,
+      $$PowerLinesTableAnnotationComposer,
+      $$PowerLinesTableCreateCompanionBuilder,
+      $$PowerLinesTableUpdateCompanionBuilder,
+      (PowerLine, BaseReferences<_$AppDatabase, $PowerLinesTable, PowerLine>),
+      PowerLine,
+      PrefetchHooks Function()
+    >;
+typedef $$PolesTableCreateCompanionBuilder =
+    PolesCompanion Function({
+      Value<int> id,
+      required int powerLineId,
+      required String poleNumber,
+      required double xPosition,
+      required double yPosition,
+      required String poleType,
+      Value<double?> height,
+      Value<String?> foundationType,
+      Value<String?> material,
+      Value<int?> yearInstalled,
+      required String condition,
+      Value<String?> notes,
+      required int createdBy,
+      required DateTime createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isLocal,
+      Value<bool> needsSync,
+    });
+typedef $$PolesTableUpdateCompanionBuilder =
+    PolesCompanion Function({
+      Value<int> id,
+      Value<int> powerLineId,
+      Value<String> poleNumber,
+      Value<double> xPosition,
+      Value<double> yPosition,
+      Value<String> poleType,
+      Value<double?> height,
+      Value<String?> foundationType,
+      Value<String?> material,
+      Value<int?> yearInstalled,
+      Value<String> condition,
+      Value<String?> notes,
+      Value<int> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isLocal,
+      Value<bool> needsSync,
+    });
 
 class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
   $$PolesTableFilterComposer({
@@ -3415,56 +4106,89 @@ class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get powerLineId => $composableBuilder(
-      column: $table.powerLineId, builder: (column) => ColumnFilters(column));
+    column: $table.powerLineId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get poleNumber => $composableBuilder(
-      column: $table.poleNumber, builder: (column) => ColumnFilters(column));
+    column: $table.poleNumber,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<double> get xPosition => $composableBuilder(
-      column: $table.xPosition, builder: (column) => ColumnFilters(column));
+    column: $table.xPosition,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<double> get yPosition => $composableBuilder(
-      column: $table.yPosition, builder: (column) => ColumnFilters(column));
+    column: $table.yPosition,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get poleType => $composableBuilder(
-      column: $table.poleType, builder: (column) => ColumnFilters(column));
+    column: $table.poleType,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<double> get height => $composableBuilder(
-      column: $table.height, builder: (column) => ColumnFilters(column));
+    column: $table.height,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get foundationType => $composableBuilder(
-      column: $table.foundationType,
-      builder: (column) => ColumnFilters(column));
+    column: $table.foundationType,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get material => $composableBuilder(
-      column: $table.material, builder: (column) => ColumnFilters(column));
+    column: $table.material,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get yearInstalled => $composableBuilder(
-      column: $table.yearInstalled, builder: (column) => ColumnFilters(column));
+    column: $table.yearInstalled,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get condition => $composableBuilder(
-      column: $table.condition, builder: (column) => ColumnFilters(column));
+    column: $table.condition,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get notes => $composableBuilder(
-      column: $table.notes, builder: (column) => ColumnFilters(column));
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get createdBy => $composableBuilder(
-      column: $table.createdBy, builder: (column) => ColumnFilters(column));
+    column: $table.createdBy,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get isLocal => $composableBuilder(
-      column: $table.isLocal, builder: (column) => ColumnFilters(column));
+    column: $table.isLocal,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get needsSync => $composableBuilder(
-      column: $table.needsSync, builder: (column) => ColumnFilters(column));
+    column: $table.needsSync,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PolesTableOrderingComposer
@@ -3477,57 +4201,89 @@ class $$PolesTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get powerLineId => $composableBuilder(
-      column: $table.powerLineId, builder: (column) => ColumnOrderings(column));
+    column: $table.powerLineId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get poleNumber => $composableBuilder(
-      column: $table.poleNumber, builder: (column) => ColumnOrderings(column));
+    column: $table.poleNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<double> get xPosition => $composableBuilder(
-      column: $table.xPosition, builder: (column) => ColumnOrderings(column));
+    column: $table.xPosition,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<double> get yPosition => $composableBuilder(
-      column: $table.yPosition, builder: (column) => ColumnOrderings(column));
+    column: $table.yPosition,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get poleType => $composableBuilder(
-      column: $table.poleType, builder: (column) => ColumnOrderings(column));
+    column: $table.poleType,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<double> get height => $composableBuilder(
-      column: $table.height, builder: (column) => ColumnOrderings(column));
+    column: $table.height,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get foundationType => $composableBuilder(
-      column: $table.foundationType,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.foundationType,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get material => $composableBuilder(
-      column: $table.material, builder: (column) => ColumnOrderings(column));
+    column: $table.material,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get yearInstalled => $composableBuilder(
-      column: $table.yearInstalled,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.yearInstalled,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get condition => $composableBuilder(
-      column: $table.condition, builder: (column) => ColumnOrderings(column));
+    column: $table.condition,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get notes => $composableBuilder(
-      column: $table.notes, builder: (column) => ColumnOrderings(column));
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get createdBy => $composableBuilder(
-      column: $table.createdBy, builder: (column) => ColumnOrderings(column));
+    column: $table.createdBy,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get isLocal => $composableBuilder(
-      column: $table.isLocal, builder: (column) => ColumnOrderings(column));
+    column: $table.isLocal,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get needsSync => $composableBuilder(
-      column: $table.needsSync, builder: (column) => ColumnOrderings(column));
+    column: $table.needsSync,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PolesTableAnnotationComposer
@@ -3543,10 +4299,14 @@ class $$PolesTableAnnotationComposer
       $composableBuilder(column: $table.id, builder: (column) => column);
 
   GeneratedColumn<int> get powerLineId => $composableBuilder(
-      column: $table.powerLineId, builder: (column) => column);
+    column: $table.powerLineId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get poleNumber => $composableBuilder(
-      column: $table.poleNumber, builder: (column) => column);
+    column: $table.poleNumber,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<double> get xPosition =>
       $composableBuilder(column: $table.xPosition, builder: (column) => column);
@@ -3561,13 +4321,17 @@ class $$PolesTableAnnotationComposer
       $composableBuilder(column: $table.height, builder: (column) => column);
 
   GeneratedColumn<String> get foundationType => $composableBuilder(
-      column: $table.foundationType, builder: (column) => column);
+    column: $table.foundationType,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get material =>
       $composableBuilder(column: $table.material, builder: (column) => column);
 
   GeneratedColumn<int> get yearInstalled => $composableBuilder(
-      column: $table.yearInstalled, builder: (column) => column);
+    column: $table.yearInstalled,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get condition =>
       $composableBuilder(column: $table.condition, builder: (column) => column);
@@ -3591,20 +4355,24 @@ class $$PolesTableAnnotationComposer
       $composableBuilder(column: $table.needsSync, builder: (column) => column);
 }
 
-class $$PolesTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $PolesTable,
-    Pole,
-    $$PolesTableFilterComposer,
-    $$PolesTableOrderingComposer,
-    $$PolesTableAnnotationComposer,
-    $$PolesTableCreateCompanionBuilder,
-    $$PolesTableUpdateCompanionBuilder,
-    (Pole, BaseReferences<_$AppDatabase, $PolesTable, Pole>),
-    Pole,
-    PrefetchHooks Function()> {
+class $$PolesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PolesTable,
+          Pole,
+          $$PolesTableFilterComposer,
+          $$PolesTableOrderingComposer,
+          $$PolesTableAnnotationComposer,
+          $$PolesTableCreateCompanionBuilder,
+          $$PolesTableUpdateCompanionBuilder,
+          (Pole, BaseReferences<_$AppDatabase, $PolesTable, Pole>),
+          Pole,
+          PrefetchHooks Function()
+        > {
   $$PolesTableTableManager(_$AppDatabase db, $PolesTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -3613,137 +4381,142 @@ class $$PolesTableTableManager extends RootTableManager<
               $$PolesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PolesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int> powerLineId = const Value.absent(),
-            Value<String> poleNumber = const Value.absent(),
-            Value<double> xPosition = const Value.absent(),
-            Value<double> yPosition = const Value.absent(),
-            Value<String> poleType = const Value.absent(),
-            Value<double?> height = const Value.absent(),
-            Value<String?> foundationType = const Value.absent(),
-            Value<String?> material = const Value.absent(),
-            Value<int?> yearInstalled = const Value.absent(),
-            Value<String> condition = const Value.absent(),
-            Value<String?> notes = const Value.absent(),
-            Value<int> createdBy = const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime?> updatedAt = const Value.absent(),
-            Value<bool> isLocal = const Value.absent(),
-            Value<bool> needsSync = const Value.absent(),
-          }) =>
-              PolesCompanion(
-            id: id,
-            powerLineId: powerLineId,
-            poleNumber: poleNumber,
-            xPosition: xPosition,
-            yPosition: yPosition,
-            poleType: poleType,
-            height: height,
-            foundationType: foundationType,
-            material: material,
-            yearInstalled: yearInstalled,
-            condition: condition,
-            notes: notes,
-            createdBy: createdBy,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isLocal: isLocal,
-            needsSync: needsSync,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required int powerLineId,
-            required String poleNumber,
-            required double xPosition,
-            required double yPosition,
-            required String poleType,
-            Value<double?> height = const Value.absent(),
-            Value<String?> foundationType = const Value.absent(),
-            Value<String?> material = const Value.absent(),
-            Value<int?> yearInstalled = const Value.absent(),
-            required String condition,
-            Value<String?> notes = const Value.absent(),
-            required int createdBy,
-            required DateTime createdAt,
-            Value<DateTime?> updatedAt = const Value.absent(),
-            Value<bool> isLocal = const Value.absent(),
-            Value<bool> needsSync = const Value.absent(),
-          }) =>
-              PolesCompanion.insert(
-            id: id,
-            powerLineId: powerLineId,
-            poleNumber: poleNumber,
-            xPosition: xPosition,
-            yPosition: yPosition,
-            poleType: poleType,
-            height: height,
-            foundationType: foundationType,
-            material: material,
-            yearInstalled: yearInstalled,
-            condition: condition,
-            notes: notes,
-            createdBy: createdBy,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isLocal: isLocal,
-            needsSync: needsSync,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> powerLineId = const Value.absent(),
+                Value<String> poleNumber = const Value.absent(),
+                Value<double> xPosition = const Value.absent(),
+                Value<double> yPosition = const Value.absent(),
+                Value<String> poleType = const Value.absent(),
+                Value<double?> height = const Value.absent(),
+                Value<String?> foundationType = const Value.absent(),
+                Value<String?> material = const Value.absent(),
+                Value<int?> yearInstalled = const Value.absent(),
+                Value<String> condition = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<int> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
+                Value<bool> needsSync = const Value.absent(),
+              }) => PolesCompanion(
+                id: id,
+                powerLineId: powerLineId,
+                poleNumber: poleNumber,
+                xPosition: xPosition,
+                yPosition: yPosition,
+                poleType: poleType,
+                height: height,
+                foundationType: foundationType,
+                material: material,
+                yearInstalled: yearInstalled,
+                condition: condition,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isLocal: isLocal,
+                needsSync: needsSync,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int powerLineId,
+                required String poleNumber,
+                required double xPosition,
+                required double yPosition,
+                required String poleType,
+                Value<double?> height = const Value.absent(),
+                Value<String?> foundationType = const Value.absent(),
+                Value<String?> material = const Value.absent(),
+                Value<int?> yearInstalled = const Value.absent(),
+                required String condition,
+                Value<String?> notes = const Value.absent(),
+                required int createdBy,
+                required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
+                Value<bool> needsSync = const Value.absent(),
+              }) => PolesCompanion.insert(
+                id: id,
+                powerLineId: powerLineId,
+                poleNumber: poleNumber,
+                xPosition: xPosition,
+                yPosition: yPosition,
+                poleType: poleType,
+                height: height,
+                foundationType: foundationType,
+                material: material,
+                yearInstalled: yearInstalled,
+                condition: condition,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isLocal: isLocal,
+                needsSync: needsSync,
+              ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PolesTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $PolesTable,
-    Pole,
-    $$PolesTableFilterComposer,
-    $$PolesTableOrderingComposer,
-    $$PolesTableAnnotationComposer,
-    $$PolesTableCreateCompanionBuilder,
-    $$PolesTableUpdateCompanionBuilder,
-    (Pole, BaseReferences<_$AppDatabase, $PolesTable, Pole>),
-    Pole,
-    PrefetchHooks Function()>;
-typedef $$EquipmentTableCreateCompanionBuilder = EquipmentCompanion Function({
-  Value<int> id,
-  required int poleId,
-  required String equipmentType,
-  required String name,
-  Value<String?> manufacturer,
-  Value<String?> model,
-  Value<String?> serialNumber,
-  Value<int?> yearManufactured,
-  Value<DateTime?> installationDate,
-  required String condition,
-  Value<String?> notes,
-  required int createdBy,
-  required DateTime createdAt,
-  Value<DateTime?> updatedAt,
-  Value<bool> isLocal,
-  Value<bool> needsSync,
-});
-typedef $$EquipmentTableUpdateCompanionBuilder = EquipmentCompanion Function({
-  Value<int> id,
-  Value<int> poleId,
-  Value<String> equipmentType,
-  Value<String> name,
-  Value<String?> manufacturer,
-  Value<String?> model,
-  Value<String?> serialNumber,
-  Value<int?> yearManufactured,
-  Value<DateTime?> installationDate,
-  Value<String> condition,
-  Value<String?> notes,
-  Value<int> createdBy,
-  Value<DateTime> createdAt,
-  Value<DateTime?> updatedAt,
-  Value<bool> isLocal,
-  Value<bool> needsSync,
-});
+typedef $$PolesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PolesTable,
+      Pole,
+      $$PolesTableFilterComposer,
+      $$PolesTableOrderingComposer,
+      $$PolesTableAnnotationComposer,
+      $$PolesTableCreateCompanionBuilder,
+      $$PolesTableUpdateCompanionBuilder,
+      (Pole, BaseReferences<_$AppDatabase, $PolesTable, Pole>),
+      Pole,
+      PrefetchHooks Function()
+    >;
+typedef $$EquipmentTableCreateCompanionBuilder =
+    EquipmentCompanion Function({
+      Value<int> id,
+      required int poleId,
+      required String equipmentType,
+      required String name,
+      Value<String?> manufacturer,
+      Value<String?> model,
+      Value<String?> serialNumber,
+      Value<int?> yearManufactured,
+      Value<DateTime?> installationDate,
+      required String condition,
+      Value<String?> notes,
+      required int createdBy,
+      required DateTime createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isLocal,
+      Value<bool> needsSync,
+    });
+typedef $$EquipmentTableUpdateCompanionBuilder =
+    EquipmentCompanion Function({
+      Value<int> id,
+      Value<int> poleId,
+      Value<String> equipmentType,
+      Value<String> name,
+      Value<String?> manufacturer,
+      Value<String?> model,
+      Value<String?> serialNumber,
+      Value<int?> yearManufactured,
+      Value<DateTime?> installationDate,
+      Value<String> condition,
+      Value<String?> notes,
+      Value<int> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isLocal,
+      Value<bool> needsSync,
+    });
 
 class $$EquipmentTableFilterComposer
     extends Composer<_$AppDatabase, $EquipmentTable> {
@@ -3755,54 +4528,84 @@ class $$EquipmentTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get poleId => $composableBuilder(
-      column: $table.poleId, builder: (column) => ColumnFilters(column));
+    column: $table.poleId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get equipmentType => $composableBuilder(
-      column: $table.equipmentType, builder: (column) => ColumnFilters(column));
+    column: $table.equipmentType,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnFilters(column));
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get manufacturer => $composableBuilder(
-      column: $table.manufacturer, builder: (column) => ColumnFilters(column));
+    column: $table.manufacturer,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get model => $composableBuilder(
-      column: $table.model, builder: (column) => ColumnFilters(column));
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get serialNumber => $composableBuilder(
-      column: $table.serialNumber, builder: (column) => ColumnFilters(column));
+    column: $table.serialNumber,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get yearManufactured => $composableBuilder(
-      column: $table.yearManufactured,
-      builder: (column) => ColumnFilters(column));
+    column: $table.yearManufactured,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get installationDate => $composableBuilder(
-      column: $table.installationDate,
-      builder: (column) => ColumnFilters(column));
+    column: $table.installationDate,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get condition => $composableBuilder(
-      column: $table.condition, builder: (column) => ColumnFilters(column));
+    column: $table.condition,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get notes => $composableBuilder(
-      column: $table.notes, builder: (column) => ColumnFilters(column));
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get createdBy => $composableBuilder(
-      column: $table.createdBy, builder: (column) => ColumnFilters(column));
+    column: $table.createdBy,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get isLocal => $composableBuilder(
-      column: $table.isLocal, builder: (column) => ColumnFilters(column));
+    column: $table.isLocal,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get needsSync => $composableBuilder(
-      column: $table.needsSync, builder: (column) => ColumnFilters(column));
+    column: $table.needsSync,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$EquipmentTableOrderingComposer
@@ -3815,57 +4618,84 @@ class $$EquipmentTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get poleId => $composableBuilder(
-      column: $table.poleId, builder: (column) => ColumnOrderings(column));
+    column: $table.poleId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get equipmentType => $composableBuilder(
-      column: $table.equipmentType,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.equipmentType,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnOrderings(column));
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get manufacturer => $composableBuilder(
-      column: $table.manufacturer,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.manufacturer,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get model => $composableBuilder(
-      column: $table.model, builder: (column) => ColumnOrderings(column));
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get serialNumber => $composableBuilder(
-      column: $table.serialNumber,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.serialNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get yearManufactured => $composableBuilder(
-      column: $table.yearManufactured,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.yearManufactured,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get installationDate => $composableBuilder(
-      column: $table.installationDate,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.installationDate,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get condition => $composableBuilder(
-      column: $table.condition, builder: (column) => ColumnOrderings(column));
+    column: $table.condition,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get notes => $composableBuilder(
-      column: $table.notes, builder: (column) => ColumnOrderings(column));
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get createdBy => $composableBuilder(
-      column: $table.createdBy, builder: (column) => ColumnOrderings(column));
+    column: $table.createdBy,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get isLocal => $composableBuilder(
-      column: $table.isLocal, builder: (column) => ColumnOrderings(column));
+    column: $table.isLocal,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get needsSync => $composableBuilder(
-      column: $table.needsSync, builder: (column) => ColumnOrderings(column));
+    column: $table.needsSync,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$EquipmentTableAnnotationComposer
@@ -3884,25 +4714,35 @@ class $$EquipmentTableAnnotationComposer
       $composableBuilder(column: $table.poleId, builder: (column) => column);
 
   GeneratedColumn<String> get equipmentType => $composableBuilder(
-      column: $table.equipmentType, builder: (column) => column);
+    column: $table.equipmentType,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
   GeneratedColumn<String> get manufacturer => $composableBuilder(
-      column: $table.manufacturer, builder: (column) => column);
+    column: $table.manufacturer,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get model =>
       $composableBuilder(column: $table.model, builder: (column) => column);
 
   GeneratedColumn<String> get serialNumber => $composableBuilder(
-      column: $table.serialNumber, builder: (column) => column);
+    column: $table.serialNumber,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get yearManufactured => $composableBuilder(
-      column: $table.yearManufactured, builder: (column) => column);
+    column: $table.yearManufactured,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get installationDate => $composableBuilder(
-      column: $table.installationDate, builder: (column) => column);
+    column: $table.installationDate,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get condition =>
       $composableBuilder(column: $table.condition, builder: (column) => column);
@@ -3926,23 +4766,27 @@ class $$EquipmentTableAnnotationComposer
       $composableBuilder(column: $table.needsSync, builder: (column) => column);
 }
 
-class $$EquipmentTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $EquipmentTable,
-    EquipmentData,
-    $$EquipmentTableFilterComposer,
-    $$EquipmentTableOrderingComposer,
-    $$EquipmentTableAnnotationComposer,
-    $$EquipmentTableCreateCompanionBuilder,
-    $$EquipmentTableUpdateCompanionBuilder,
-    (
-      EquipmentData,
-      BaseReferences<_$AppDatabase, $EquipmentTable, EquipmentData>
-    ),
-    EquipmentData,
-    PrefetchHooks Function()> {
+class $$EquipmentTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EquipmentTable,
+          EquipmentData,
+          $$EquipmentTableFilterComposer,
+          $$EquipmentTableOrderingComposer,
+          $$EquipmentTableAnnotationComposer,
+          $$EquipmentTableCreateCompanionBuilder,
+          $$EquipmentTableUpdateCompanionBuilder,
+          (
+            EquipmentData,
+            BaseReferences<_$AppDatabase, $EquipmentTable, EquipmentData>,
+          ),
+          EquipmentData,
+          PrefetchHooks Function()
+        > {
   $$EquipmentTableTableManager(_$AppDatabase db, $EquipmentTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -3951,126 +4795,129 @@ class $$EquipmentTableTableManager extends RootTableManager<
               $$EquipmentTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$EquipmentTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int> poleId = const Value.absent(),
-            Value<String> equipmentType = const Value.absent(),
-            Value<String> name = const Value.absent(),
-            Value<String?> manufacturer = const Value.absent(),
-            Value<String?> model = const Value.absent(),
-            Value<String?> serialNumber = const Value.absent(),
-            Value<int?> yearManufactured = const Value.absent(),
-            Value<DateTime?> installationDate = const Value.absent(),
-            Value<String> condition = const Value.absent(),
-            Value<String?> notes = const Value.absent(),
-            Value<int> createdBy = const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime?> updatedAt = const Value.absent(),
-            Value<bool> isLocal = const Value.absent(),
-            Value<bool> needsSync = const Value.absent(),
-          }) =>
-              EquipmentCompanion(
-            id: id,
-            poleId: poleId,
-            equipmentType: equipmentType,
-            name: name,
-            manufacturer: manufacturer,
-            model: model,
-            serialNumber: serialNumber,
-            yearManufactured: yearManufactured,
-            installationDate: installationDate,
-            condition: condition,
-            notes: notes,
-            createdBy: createdBy,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isLocal: isLocal,
-            needsSync: needsSync,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required int poleId,
-            required String equipmentType,
-            required String name,
-            Value<String?> manufacturer = const Value.absent(),
-            Value<String?> model = const Value.absent(),
-            Value<String?> serialNumber = const Value.absent(),
-            Value<int?> yearManufactured = const Value.absent(),
-            Value<DateTime?> installationDate = const Value.absent(),
-            required String condition,
-            Value<String?> notes = const Value.absent(),
-            required int createdBy,
-            required DateTime createdAt,
-            Value<DateTime?> updatedAt = const Value.absent(),
-            Value<bool> isLocal = const Value.absent(),
-            Value<bool> needsSync = const Value.absent(),
-          }) =>
-              EquipmentCompanion.insert(
-            id: id,
-            poleId: poleId,
-            equipmentType: equipmentType,
-            name: name,
-            manufacturer: manufacturer,
-            model: model,
-            serialNumber: serialNumber,
-            yearManufactured: yearManufactured,
-            installationDate: installationDate,
-            condition: condition,
-            notes: notes,
-            createdBy: createdBy,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            isLocal: isLocal,
-            needsSync: needsSync,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> poleId = const Value.absent(),
+                Value<String> equipmentType = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> manufacturer = const Value.absent(),
+                Value<String?> model = const Value.absent(),
+                Value<String?> serialNumber = const Value.absent(),
+                Value<int?> yearManufactured = const Value.absent(),
+                Value<DateTime?> installationDate = const Value.absent(),
+                Value<String> condition = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<int> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
+                Value<bool> needsSync = const Value.absent(),
+              }) => EquipmentCompanion(
+                id: id,
+                poleId: poleId,
+                equipmentType: equipmentType,
+                name: name,
+                manufacturer: manufacturer,
+                model: model,
+                serialNumber: serialNumber,
+                yearManufactured: yearManufactured,
+                installationDate: installationDate,
+                condition: condition,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isLocal: isLocal,
+                needsSync: needsSync,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int poleId,
+                required String equipmentType,
+                required String name,
+                Value<String?> manufacturer = const Value.absent(),
+                Value<String?> model = const Value.absent(),
+                Value<String?> serialNumber = const Value.absent(),
+                Value<int?> yearManufactured = const Value.absent(),
+                Value<DateTime?> installationDate = const Value.absent(),
+                required String condition,
+                Value<String?> notes = const Value.absent(),
+                required int createdBy,
+                required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
+                Value<bool> needsSync = const Value.absent(),
+              }) => EquipmentCompanion.insert(
+                id: id,
+                poleId: poleId,
+                equipmentType: equipmentType,
+                name: name,
+                manufacturer: manufacturer,
+                model: model,
+                serialNumber: serialNumber,
+                yearManufactured: yearManufactured,
+                installationDate: installationDate,
+                condition: condition,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isLocal: isLocal,
+                needsSync: needsSync,
+              ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$EquipmentTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $EquipmentTable,
-    EquipmentData,
-    $$EquipmentTableFilterComposer,
-    $$EquipmentTableOrderingComposer,
-    $$EquipmentTableAnnotationComposer,
-    $$EquipmentTableCreateCompanionBuilder,
-    $$EquipmentTableUpdateCompanionBuilder,
-    (
+typedef $$EquipmentTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EquipmentTable,
       EquipmentData,
-      BaseReferences<_$AppDatabase, $EquipmentTable, EquipmentData>
-    ),
-    EquipmentData,
-    PrefetchHooks Function()>;
-typedef $$SyncRecordsTableCreateCompanionBuilder = SyncRecordsCompanion
-    Function({
-  required String id,
-  required String entityType,
-  required String action,
-  required String data,
-  required DateTime timestamp,
-  Value<int?> userId,
-  Value<String?> deviceId,
-  required String status,
-  Value<String?> errorMessage,
-  Value<int> rowid,
-});
-typedef $$SyncRecordsTableUpdateCompanionBuilder = SyncRecordsCompanion
-    Function({
-  Value<String> id,
-  Value<String> entityType,
-  Value<String> action,
-  Value<String> data,
-  Value<DateTime> timestamp,
-  Value<int?> userId,
-  Value<String?> deviceId,
-  Value<String> status,
-  Value<String?> errorMessage,
-  Value<int> rowid,
-});
+      $$EquipmentTableFilterComposer,
+      $$EquipmentTableOrderingComposer,
+      $$EquipmentTableAnnotationComposer,
+      $$EquipmentTableCreateCompanionBuilder,
+      $$EquipmentTableUpdateCompanionBuilder,
+      (
+        EquipmentData,
+        BaseReferences<_$AppDatabase, $EquipmentTable, EquipmentData>,
+      ),
+      EquipmentData,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncRecordsTableCreateCompanionBuilder =
+    SyncRecordsCompanion Function({
+      required String id,
+      required String entityType,
+      required String action,
+      required String data,
+      required DateTime timestamp,
+      Value<int?> userId,
+      Value<String?> deviceId,
+      required String status,
+      Value<String?> errorMessage,
+      Value<int> rowid,
+    });
+typedef $$SyncRecordsTableUpdateCompanionBuilder =
+    SyncRecordsCompanion Function({
+      Value<String> id,
+      Value<String> entityType,
+      Value<String> action,
+      Value<String> data,
+      Value<DateTime> timestamp,
+      Value<int?> userId,
+      Value<String?> deviceId,
+      Value<String> status,
+      Value<String?> errorMessage,
+      Value<int> rowid,
+    });
 
 class $$SyncRecordsTableFilterComposer
     extends Composer<_$AppDatabase, $SyncRecordsTable> {
@@ -4082,31 +4929,49 @@ class $$SyncRecordsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get entityType => $composableBuilder(
-      column: $table.entityType, builder: (column) => ColumnFilters(column));
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get action => $composableBuilder(
-      column: $table.action, builder: (column) => ColumnFilters(column));
+    column: $table.action,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get data => $composableBuilder(
-      column: $table.data, builder: (column) => ColumnFilters(column));
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get timestamp => $composableBuilder(
-      column: $table.timestamp, builder: (column) => ColumnFilters(column));
+    column: $table.timestamp,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get userId => $composableBuilder(
-      column: $table.userId, builder: (column) => ColumnFilters(column));
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get status => $composableBuilder(
-      column: $table.status, builder: (column) => ColumnFilters(column));
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get errorMessage => $composableBuilder(
-      column: $table.errorMessage, builder: (column) => ColumnFilters(column));
+    column: $table.errorMessage,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SyncRecordsTableOrderingComposer
@@ -4119,32 +4984,49 @@ class $$SyncRecordsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get entityType => $composableBuilder(
-      column: $table.entityType, builder: (column) => ColumnOrderings(column));
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get action => $composableBuilder(
-      column: $table.action, builder: (column) => ColumnOrderings(column));
+    column: $table.action,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get data => $composableBuilder(
-      column: $table.data, builder: (column) => ColumnOrderings(column));
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get timestamp => $composableBuilder(
-      column: $table.timestamp, builder: (column) => ColumnOrderings(column));
+    column: $table.timestamp,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get userId => $composableBuilder(
-      column: $table.userId, builder: (column) => ColumnOrderings(column));
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get status => $composableBuilder(
-      column: $table.status, builder: (column) => ColumnOrderings(column));
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get errorMessage => $composableBuilder(
-      column: $table.errorMessage,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.errorMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncRecordsTableAnnotationComposer
@@ -4160,7 +5042,9 @@ class $$SyncRecordsTableAnnotationComposer
       $composableBuilder(column: $table.id, builder: (column) => column);
 
   GeneratedColumn<String> get entityType => $composableBuilder(
-      column: $table.entityType, builder: (column) => column);
+    column: $table.entityType,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get action =>
       $composableBuilder(column: $table.action, builder: (column) => column);
@@ -4181,23 +5065,32 @@ class $$SyncRecordsTableAnnotationComposer
       $composableBuilder(column: $table.status, builder: (column) => column);
 
   GeneratedColumn<String> get errorMessage => $composableBuilder(
-      column: $table.errorMessage, builder: (column) => column);
+    column: $table.errorMessage,
+    builder: (column) => column,
+  );
 }
 
-class $$SyncRecordsTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $SyncRecordsTable,
-    SyncRecord,
-    $$SyncRecordsTableFilterComposer,
-    $$SyncRecordsTableOrderingComposer,
-    $$SyncRecordsTableAnnotationComposer,
-    $$SyncRecordsTableCreateCompanionBuilder,
-    $$SyncRecordsTableUpdateCompanionBuilder,
-    (SyncRecord, BaseReferences<_$AppDatabase, $SyncRecordsTable, SyncRecord>),
-    SyncRecord,
-    PrefetchHooks Function()> {
+class $$SyncRecordsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncRecordsTable,
+          SyncRecord,
+          $$SyncRecordsTableFilterComposer,
+          $$SyncRecordsTableOrderingComposer,
+          $$SyncRecordsTableAnnotationComposer,
+          $$SyncRecordsTableCreateCompanionBuilder,
+          $$SyncRecordsTableUpdateCompanionBuilder,
+          (
+            SyncRecord,
+            BaseReferences<_$AppDatabase, $SyncRecordsTable, SyncRecord>,
+          ),
+          SyncRecord,
+          PrefetchHooks Function()
+        > {
   $$SyncRecordsTableTableManager(_$AppDatabase db, $SyncRecordsTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -4206,95 +5099,101 @@ class $$SyncRecordsTableTableManager extends RootTableManager<
               $$SyncRecordsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$SyncRecordsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<String> id = const Value.absent(),
-            Value<String> entityType = const Value.absent(),
-            Value<String> action = const Value.absent(),
-            Value<String> data = const Value.absent(),
-            Value<DateTime> timestamp = const Value.absent(),
-            Value<int?> userId = const Value.absent(),
-            Value<String?> deviceId = const Value.absent(),
-            Value<String> status = const Value.absent(),
-            Value<String?> errorMessage = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              SyncRecordsCompanion(
-            id: id,
-            entityType: entityType,
-            action: action,
-            data: data,
-            timestamp: timestamp,
-            userId: userId,
-            deviceId: deviceId,
-            status: status,
-            errorMessage: errorMessage,
-            rowid: rowid,
-          ),
-          createCompanionCallback: ({
-            required String id,
-            required String entityType,
-            required String action,
-            required String data,
-            required DateTime timestamp,
-            Value<int?> userId = const Value.absent(),
-            Value<String?> deviceId = const Value.absent(),
-            required String status,
-            Value<String?> errorMessage = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              SyncRecordsCompanion.insert(
-            id: id,
-            entityType: entityType,
-            action: action,
-            data: data,
-            timestamp: timestamp,
-            userId: userId,
-            deviceId: deviceId,
-            status: status,
-            errorMessage: errorMessage,
-            rowid: rowid,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> entityType = const Value.absent(),
+                Value<String> action = const Value.absent(),
+                Value<String> data = const Value.absent(),
+                Value<DateTime> timestamp = const Value.absent(),
+                Value<int?> userId = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncRecordsCompanion(
+                id: id,
+                entityType: entityType,
+                action: action,
+                data: data,
+                timestamp: timestamp,
+                userId: userId,
+                deviceId: deviceId,
+                status: status,
+                errorMessage: errorMessage,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String entityType,
+                required String action,
+                required String data,
+                required DateTime timestamp,
+                Value<int?> userId = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                required String status,
+                Value<String?> errorMessage = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncRecordsCompanion.insert(
+                id: id,
+                entityType: entityType,
+                action: action,
+                data: data,
+                timestamp: timestamp,
+                userId: userId,
+                deviceId: deviceId,
+                status: status,
+                errorMessage: errorMessage,
+                rowid: rowid,
+              ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$SyncRecordsTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $SyncRecordsTable,
-    SyncRecord,
-    $$SyncRecordsTableFilterComposer,
-    $$SyncRecordsTableOrderingComposer,
-    $$SyncRecordsTableAnnotationComposer,
-    $$SyncRecordsTableCreateCompanionBuilder,
-    $$SyncRecordsTableUpdateCompanionBuilder,
-    (SyncRecord, BaseReferences<_$AppDatabase, $SyncRecordsTable, SyncRecord>),
-    SyncRecord,
-    PrefetchHooks Function()>;
-typedef $$PatrolSessionsTableCreateCompanionBuilder = PatrolSessionsCompanion
-    Function({
-  Value<int> id,
-  Value<int?> serverId,
-  required int powerLineId,
-  Value<String?> note,
-  required DateTime startedAt,
-  Value<DateTime?> endedAt,
-  Value<String> syncStatus,
-  Value<int?> userId,
-});
-typedef $$PatrolSessionsTableUpdateCompanionBuilder = PatrolSessionsCompanion
-    Function({
-  Value<int> id,
-  Value<int?> serverId,
-  Value<int> powerLineId,
-  Value<String?> note,
-  Value<DateTime> startedAt,
-  Value<DateTime?> endedAt,
-  Value<String> syncStatus,
-  Value<int?> userId,
-});
+typedef $$SyncRecordsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncRecordsTable,
+      SyncRecord,
+      $$SyncRecordsTableFilterComposer,
+      $$SyncRecordsTableOrderingComposer,
+      $$SyncRecordsTableAnnotationComposer,
+      $$SyncRecordsTableCreateCompanionBuilder,
+      $$SyncRecordsTableUpdateCompanionBuilder,
+      (
+        SyncRecord,
+        BaseReferences<_$AppDatabase, $SyncRecordsTable, SyncRecord>,
+      ),
+      SyncRecord,
+      PrefetchHooks Function()
+    >;
+typedef $$PatrolSessionsTableCreateCompanionBuilder =
+    PatrolSessionsCompanion Function({
+      Value<int> id,
+      Value<int?> serverId,
+      required int powerLineId,
+      Value<String?> note,
+      required DateTime startedAt,
+      Value<DateTime?> endedAt,
+      Value<String> syncStatus,
+      Value<int?> userId,
+    });
+typedef $$PatrolSessionsTableUpdateCompanionBuilder =
+    PatrolSessionsCompanion Function({
+      Value<int> id,
+      Value<int?> serverId,
+      Value<int> powerLineId,
+      Value<String?> note,
+      Value<DateTime> startedAt,
+      Value<DateTime?> endedAt,
+      Value<String> syncStatus,
+      Value<int?> userId,
+    });
 
 class $$PatrolSessionsTableFilterComposer
     extends Composer<_$AppDatabase, $PatrolSessionsTable> {
@@ -4306,28 +5205,44 @@ class $$PatrolSessionsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get serverId => $composableBuilder(
-      column: $table.serverId, builder: (column) => ColumnFilters(column));
+    column: $table.serverId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get powerLineId => $composableBuilder(
-      column: $table.powerLineId, builder: (column) => ColumnFilters(column));
+    column: $table.powerLineId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get note => $composableBuilder(
-      column: $table.note, builder: (column) => ColumnFilters(column));
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get startedAt => $composableBuilder(
-      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get endedAt => $composableBuilder(
-      column: $table.endedAt, builder: (column) => ColumnFilters(column));
+    column: $table.endedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get syncStatus => $composableBuilder(
-      column: $table.syncStatus, builder: (column) => ColumnFilters(column));
+    column: $table.syncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get userId => $composableBuilder(
-      column: $table.userId, builder: (column) => ColumnFilters(column));
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PatrolSessionsTableOrderingComposer
@@ -4340,28 +5255,44 @@ class $$PatrolSessionsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get serverId => $composableBuilder(
-      column: $table.serverId, builder: (column) => ColumnOrderings(column));
+    column: $table.serverId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get powerLineId => $composableBuilder(
-      column: $table.powerLineId, builder: (column) => ColumnOrderings(column));
+    column: $table.powerLineId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get note => $composableBuilder(
-      column: $table.note, builder: (column) => ColumnOrderings(column));
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get startedAt => $composableBuilder(
-      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<DateTime> get endedAt => $composableBuilder(
-      column: $table.endedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.endedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get syncStatus => $composableBuilder(
-      column: $table.syncStatus, builder: (column) => ColumnOrderings(column));
+    column: $table.syncStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get userId => $composableBuilder(
-      column: $table.userId, builder: (column) => ColumnOrderings(column));
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PatrolSessionsTableAnnotationComposer
@@ -4380,7 +5311,9 @@ class $$PatrolSessionsTableAnnotationComposer
       $composableBuilder(column: $table.serverId, builder: (column) => column);
 
   GeneratedColumn<int> get powerLineId => $composableBuilder(
-      column: $table.powerLineId, builder: (column) => column);
+    column: $table.powerLineId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
@@ -4392,30 +5325,37 @@ class $$PatrolSessionsTableAnnotationComposer
       $composableBuilder(column: $table.endedAt, builder: (column) => column);
 
   GeneratedColumn<String> get syncStatus => $composableBuilder(
-      column: $table.syncStatus, builder: (column) => column);
+    column: $table.syncStatus,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get userId =>
       $composableBuilder(column: $table.userId, builder: (column) => column);
 }
 
-class $$PatrolSessionsTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $PatrolSessionsTable,
-    PatrolSession,
-    $$PatrolSessionsTableFilterComposer,
-    $$PatrolSessionsTableOrderingComposer,
-    $$PatrolSessionsTableAnnotationComposer,
-    $$PatrolSessionsTableCreateCompanionBuilder,
-    $$PatrolSessionsTableUpdateCompanionBuilder,
-    (
-      PatrolSession,
-      BaseReferences<_$AppDatabase, $PatrolSessionsTable, PatrolSession>
-    ),
-    PatrolSession,
-    PrefetchHooks Function()> {
+class $$PatrolSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PatrolSessionsTable,
+          PatrolSession,
+          $$PatrolSessionsTableFilterComposer,
+          $$PatrolSessionsTableOrderingComposer,
+          $$PatrolSessionsTableAnnotationComposer,
+          $$PatrolSessionsTableCreateCompanionBuilder,
+          $$PatrolSessionsTableUpdateCompanionBuilder,
+          (
+            PatrolSession,
+            BaseReferences<_$AppDatabase, $PatrolSessionsTable, PatrolSession>,
+          ),
+          PatrolSession,
+          PrefetchHooks Function()
+        > {
   $$PatrolSessionsTableTableManager(
-      _$AppDatabase db, $PatrolSessionsTable table)
-      : super(TableManagerState(
+    _$AppDatabase db,
+    $PatrolSessionsTable table,
+  ) : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -4424,68 +5364,71 @@ class $$PatrolSessionsTableTableManager extends RootTableManager<
               $$PatrolSessionsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PatrolSessionsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int?> serverId = const Value.absent(),
-            Value<int> powerLineId = const Value.absent(),
-            Value<String?> note = const Value.absent(),
-            Value<DateTime> startedAt = const Value.absent(),
-            Value<DateTime?> endedAt = const Value.absent(),
-            Value<String> syncStatus = const Value.absent(),
-            Value<int?> userId = const Value.absent(),
-          }) =>
-              PatrolSessionsCompanion(
-            id: id,
-            serverId: serverId,
-            powerLineId: powerLineId,
-            note: note,
-            startedAt: startedAt,
-            endedAt: endedAt,
-            syncStatus: syncStatus,
-            userId: userId,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int?> serverId = const Value.absent(),
-            required int powerLineId,
-            Value<String?> note = const Value.absent(),
-            required DateTime startedAt,
-            Value<DateTime?> endedAt = const Value.absent(),
-            Value<String> syncStatus = const Value.absent(),
-            Value<int?> userId = const Value.absent(),
-          }) =>
-              PatrolSessionsCompanion.insert(
-            id: id,
-            serverId: serverId,
-            powerLineId: powerLineId,
-            note: note,
-            startedAt: startedAt,
-            endedAt: endedAt,
-            syncStatus: syncStatus,
-            userId: userId,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> serverId = const Value.absent(),
+                Value<int> powerLineId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> startedAt = const Value.absent(),
+                Value<DateTime?> endedAt = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<int?> userId = const Value.absent(),
+              }) => PatrolSessionsCompanion(
+                id: id,
+                serverId: serverId,
+                powerLineId: powerLineId,
+                note: note,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                syncStatus: syncStatus,
+                userId: userId,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> serverId = const Value.absent(),
+                required int powerLineId,
+                Value<String?> note = const Value.absent(),
+                required DateTime startedAt,
+                Value<DateTime?> endedAt = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<int?> userId = const Value.absent(),
+              }) => PatrolSessionsCompanion.insert(
+                id: id,
+                serverId: serverId,
+                powerLineId: powerLineId,
+                note: note,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                syncStatus: syncStatus,
+                userId: userId,
+              ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PatrolSessionsTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $PatrolSessionsTable,
-    PatrolSession,
-    $$PatrolSessionsTableFilterComposer,
-    $$PatrolSessionsTableOrderingComposer,
-    $$PatrolSessionsTableAnnotationComposer,
-    $$PatrolSessionsTableCreateCompanionBuilder,
-    $$PatrolSessionsTableUpdateCompanionBuilder,
-    (
+typedef $$PatrolSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PatrolSessionsTable,
       PatrolSession,
-      BaseReferences<_$AppDatabase, $PatrolSessionsTable, PatrolSession>
-    ),
-    PatrolSession,
-    PrefetchHooks Function()>;
+      $$PatrolSessionsTableFilterComposer,
+      $$PatrolSessionsTableOrderingComposer,
+      $$PatrolSessionsTableAnnotationComposer,
+      $$PatrolSessionsTableCreateCompanionBuilder,
+      $$PatrolSessionsTableUpdateCompanionBuilder,
+      (
+        PatrolSession,
+        BaseReferences<_$AppDatabase, $PatrolSessionsTable, PatrolSession>,
+      ),
+      PatrolSession,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;

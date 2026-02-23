@@ -7,6 +7,10 @@ import logging
 
 from app.core.config import settings
 
+# Импорт всех моделей, чтобы они попали в Base.metadata до create_all/drop_all
+def _import_models():
+    from app import models  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 # Создание движка базы данных
@@ -132,21 +136,44 @@ async def init_db():
             # Закрываем прямое подключение
             await conn.close()
             
+            # Подтягиваем все модели в метаданные (для drop_all/create_all)
+            _import_models()
+
             # Теперь используем SQLAlchemy для создания таблиц
-            # Используем более простой подход - синхронное создание через sync_engine
             async with engine.begin() as conn:
+                if getattr(settings, "RECREATE_DB", False):
+                    logger.warning("RECREATE_DB=1: удаляем все таблицы и создаём заново по моделям.")
+                    print("WARNING: RECREATE_DB=1 — пересоздаём все таблицы (данные будут удалены).")
+                    print("         После первого запуска снимите RECREATE_DB (или поставьте 0), чтобы не сносить БД при каждом старте.")
+                    # Циклы FK (pole ↔ connectivity_node и др.) не дают drop_all — дропаем через CASCADE
+                    for table in Base.metadata.tables.values():
+                        await conn.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE'))
+                    for legacy in ("line_segments", "line_segment", "acline_segments", "connections"):
+                        await conn.execute(text(f'DROP TABLE IF EXISTS "{legacy}" CASCADE'))
                 await conn.run_sync(Base.metadata.create_all)
-                # Обеспечиваем наличие колонки is_tap_pole в pole (на случай БД без миграций)
-                await conn.execute(text("""
-                    DO $$
-                    BEGIN
-                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
-                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'is_tap_pole')
-                        THEN
-                            ALTER TABLE pole ADD COLUMN is_tap_pole BOOLEAN NOT NULL DEFAULT false;
-                        END IF;
-                    END $$;
-                """))
+                # Обеспечиваем наличие колонок при донакатке схемы (только если не пересоздавали)
+                if not getattr(settings, "RECREATE_DB", False):
+                    await conn.execute(text("""
+                        DO $$
+                        BEGIN
+                            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                               AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'is_tap_pole')
+                            THEN
+                                ALTER TABLE pole ADD COLUMN is_tap_pole BOOLEAN NOT NULL DEFAULT false;
+                            END IF;
+                            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'substation')
+                               AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'substation' AND column_name = 'connected_line_ids')
+                            THEN
+                                ALTER TABLE substation ADD COLUMN connected_line_ids INTEGER[];
+                            END IF;
+                            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'patrol_sessions')
+                               AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patrol_sessions' AND column_name = 'power_line_id')
+                               AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patrol_sessions' AND column_name = 'line_id')
+                            THEN
+                                ALTER TABLE patrol_sessions RENAME COLUMN power_line_id TO line_id;
+                            END IF;
+                        END $$;
+                    """))
             
             logger.info("База данных успешно инициализирована")
             print("OK: База данных успешно инициализирована")

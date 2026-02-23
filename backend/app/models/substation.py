@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -33,10 +33,12 @@ class Substation(Base, ConnectivityNodeContainer):
     # description, created_at, updated_at - наследуются от IdentifiedObject
     is_active = Column(Boolean, default=True)  # Дополнительное поле для soft delete
 
+    # Связь с линиями: список id линий, подключённых к этой подстанции (хранится в таблице подстанции)
+    connected_line_ids = Column(ARRAY(Integer), nullable=True)  # id линий, подключённых к подстанции
+
     # Связи
     region = relationship("GeographicRegion", back_populates="substations")
     branch = relationship("Branch", back_populates="substations")  # Для обратной совместимости
-    connections = relationship("Connection", back_populates="substation")
     # CIM-структура: Substation (EquipmentContainer) содержит множество VoltageLevel (EquipmentContainer)
     voltage_levels = relationship("VoltageLevel", back_populates="substation", cascade="all, delete-orphan")
     location = relationship("Location", foreign_keys=[location_id])
@@ -68,24 +70,6 @@ class Substation(Base, ConnectivityNodeContainer):
         """Широта (CIM y_position)."""
         val = self.get_latitude()
         return float(val) if val is not None else 0.0
-
-class Connection(Base):
-    __tablename__ = "connections"
-
-    id = Column(Integer, primary_key=True, index=True)
-    # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016
-    mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
-    substation_id = Column(Integer, ForeignKey("substation.id"), nullable=False)
-    line_id = Column(Integer, ForeignKey("line.id"), nullable=False)
-    connection_type = Column(String(20), nullable=False)  # input, output
-    voltage_level = Column(Float, nullable=False)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # Связи
-    substation = relationship("Substation", back_populates="connections")
-    line = relationship("PowerLine", foreign_keys=[line_id], back_populates="connections")
-
 
 class VoltageLevel(Base):
     """

@@ -2,12 +2,11 @@ from .user import User
 from .power_line import PowerLine, Pole, Span, Tap, Equipment
 from .branch import Branch
 from .substation import (
-    Substation, 
-    Connection, 
-    VoltageLevel, 
-    Bay, 
-    BusbarSection, 
-    ConductingEquipment, 
+    Substation,
+    VoltageLevel,
+    Bay,
+    BusbarSection,
+    ConductingEquipment,
     ProtectionEquipment
 )
 from .geographic_region import GeographicRegion
@@ -28,7 +27,6 @@ __all__ = [
     "Equipment",
     "Branch",
     "Substation",
-    "Connection",
     "VoltageLevel",
     "Bay",
     "BusbarSection",

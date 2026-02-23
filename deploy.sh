@@ -49,12 +49,10 @@ docker compose -f docker-compose.prod.yml up -d
 echo "⏳ Ожидание готовности базы данных..."
 sleep 10
 
-# Применение миграций
-echo "📦 Применение миграций базы данных..."
-docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head || {
-    echo "⚠️  Предупреждение: не удалось применить миграции автоматически"
-    echo "Выполните вручную: docker compose -f docker-compose.prod.yml exec backend alembic upgrade head"
-}
+# Схема БД создаётся при старте backend (create_all). Миграции не используются.
+# Чтобы пересоздать БД на сервере (дроп всех таблиц и создание по моделям), выполните один раз:
+#   docker compose -f docker-compose.prod.yml exec backend python recreate_db.py
+# Или: ./scripts/server_recreate_db.sh
 
 # Проверка статуса
 echo "📊 Проверка статуса сервисов..."
@@ -77,5 +75,9 @@ echo "   1. Проверьте логи: docker compose -f docker-compose.prod.y
 echo "   2. Откройте приложение: http://localhost (или https://your-domain.com)"
 echo "   3. Создайте первого пользователя через API: POST /api/v1/auth/register"
 echo "   4. Настройте SSL сертификаты (если используете домен)"
+echo ""
+echo "   Чтобы пересоздать БД на сервере (дроп + создание по моделям):"
+echo "   ./scripts/server_recreate_db.sh"
+echo "   или: docker compose -f docker-compose.prod.yml exec backend python recreate_db.py"
 echo ""
 

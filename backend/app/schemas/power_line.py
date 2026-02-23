@@ -127,8 +127,8 @@ class TapBase(BaseModel):
     tap_type: str
     voltage_level: float
     power_rating: Optional[float] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    x_position: Optional[float] = None  # Долгота (CIM)
+    y_position: Optional[float] = None  # Широта (CIM)
     description: Optional[str] = None
 
 class TapCreate(TapBase):
@@ -141,6 +141,8 @@ class TapResponse(TapBase):
     pole_id: int
     created_by: int
     created_at: datetime
+    x_position: Optional[float] = None
+    y_position: Optional[float] = None
 
     class Config:
         from_attributes = True
