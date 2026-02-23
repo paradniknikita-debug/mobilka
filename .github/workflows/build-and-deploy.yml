@@ -168,7 +168,13 @@ jobs:
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
         run: |
-          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          if [ -z "$P" ] || [ "${P#/}" = "$P" ]; then
+            echo "::error::DEPLOY_PATH must be an absolute path (e.g. /root/mobilka). Check Secrets: paste only the path, not the whole env file."
+            exit 1
+          fi
           if [ "$DEPLOY_AUTH" = "password" ]; then
             RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
@@ -181,7 +187,9 @@ jobs:
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
         run: |
-          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
@@ -194,7 +202,9 @@ jobs:
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
         run: |
-          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             SCP_SSH="sshpass -f /tmp/sshpass.txt scp -o StrictHostKeyChecking=no"
             RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
@@ -214,7 +224,9 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
-          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             SSH_CMD="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
