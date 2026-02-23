@@ -147,68 +147,62 @@ jobs:
 
       - name: Setup SSH (key or password)
         env:
-          # Явно: переменная DEPLOY_AUTH = "password" или "key" (в настройках репо Variables)
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           if [ "$DEPLOY_AUTH" = "password" ]; then
             sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+            python3 -c "import os; open('/tmp/sshpass.txt', 'w').write(os.environ.get('DEPLOY_SSH_PASSWORD', ''))"
+            chmod 600 /tmp/sshpass.txt
           else
-            printf '%s' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+            python3 -c "import os; open(os.path.expanduser('~/.ssh/deploy_key'), 'w').write(os.environ.get('DEPLOY_SSH_KEY', ''))"
             chmod 600 ~/.ssh/deploy_key
           fi
 
       - name: Copy Flutter web to server
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
-          DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
-            export SSHPASS="$DEPLOY_SSH_PASSWORD"
-            RSYNC_SSH="sshpass -e ssh -o StrictHostKeyChecking=no"
+            RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
           rsync -avz --delete -e "$RSYNC_SSH" \
-            flutter-web/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/frontend/build/web/"
+            flutter-web/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/frontend/build/web/"
 
       - name: Copy Angular to server
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
-          DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
-            export SSHPASS="$DEPLOY_SSH_PASSWORD"
-            RSYNC_SSH="sshpass -e ssh -o StrictHostKeyChecking=no"
+            RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
           rsync -avz --delete -e "$RSYNC_SSH" \
-            angular-web/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/web-frontend/dist/lepm-web-frontend/"
+            angular-web/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/web-frontend/dist/lepm-web-frontend/"
 
       - name: Copy compose and nginx to server
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
-          DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
-            export SSHPASS="$DEPLOY_SSH_PASSWORD"
-            SCP_SSH="sshpass -e scp -o StrictHostKeyChecking=no"
-            RSYNC_SSH="sshpass -e ssh -o StrictHostKeyChecking=no"
+            SCP_SSH="sshpass -f /tmp/sshpass.txt scp -o StrictHostKeyChecking=no"
+            RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             SCP_SSH="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
-          $SCP_SSH docker-compose.prod.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
-          rsync -avz -e "$RSYNC_SSH" nginx/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/nginx/"
+          $SCP_SSH docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+          rsync -avz -e "$RSYNC_SSH" nginx/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/nginx/"
 
       - name: Login to GHCR and deploy on server
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
-          DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -216,8 +210,7 @@ jobs:
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
-            export SSHPASS="$DEPLOY_SSH_PASSWORD"
-            SSH_CMD="sshpass -e ssh -o StrictHostKeyChecking=no"
+            SSH_CMD="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
