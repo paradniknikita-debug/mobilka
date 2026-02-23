@@ -56,18 +56,28 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Restore Flutter web build cache
+        uses: actions/cache@v4
+        id: flutter-cache
+        with:
+          path: frontend/build/web
+          key: flutter-web-${{ hashFiles('frontend/pubspec.lock', 'frontend/pubspec.yaml', 'frontend/lib/**', 'frontend/tool/**') }}
+
       - name: Install dependencies
+        if: steps.flutter-cache.outputs.cache-hit != 'true'
         run: |
           cd frontend
           flutter pub get
 
       - name: Generate code (freezed, json_serializable, etc.)
+        if: steps.flutter-cache.outputs.cache-hit != 'true'
         run: |
           cd frontend
           dart run build_runner build --delete-conflicting-outputs
           dart tool/fix_retrofit_map.dart
 
       - name: Build web
+        if: steps.flutter-cache.outputs.cache-hit != 'true'
         run: |
           cd frontend
           flutter build web --release
@@ -137,7 +147,8 @@ jobs:
 
       - name: Setup SSH (key or password)
         env:
-          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH }}
+          # Явно: переменная DEPLOY_AUTH = "password" или "key" (в настройках репо Variables)
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
@@ -152,7 +163,7 @@ jobs:
 
       - name: Copy Flutter web to server
         env:
-          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH }}
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
           DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
@@ -166,7 +177,7 @@ jobs:
 
       - name: Copy Angular to server
         env:
-          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH }}
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
           DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
@@ -180,7 +191,7 @@ jobs:
 
       - name: Copy compose and nginx to server
         env:
-          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH }}
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
           DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
@@ -196,8 +207,13 @@ jobs:
 
       - name: Login to GHCR and deploy on server
         env:
-          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH }}
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
           DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
           if [ "$DEPLOY_AUTH" = "password" ]; then
             export SSHPASS="$DEPLOY_SSH_PASSWORD"
@@ -205,12 +221,12 @@ jobs:
           else
             SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
-          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-          PATH_ON_SERVER="${{ secrets.DEPLOY_PATH }}"
-          if [ -n "${{ secrets.GHCR_PAT }}" ]; then
-            $SSH_CMD $TARGET "cd $PATH_ON_SERVER && echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin"
+          TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
+          PATH_ON_SERVER="${DEPLOY_PATH}"
+          if [ -n "${GHCR_PAT}" ]; then
+            printf '%s' "${GHCR_PAT}" | $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && docker login ghcr.io -u $REPO_OWNER --password-stdin"
           fi
-          $SSH_CMD $TARGET "cd $PATH_ON_SERVER && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d"
+          $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d && docker image prune -f"
 
   summary:
     name: Summary
