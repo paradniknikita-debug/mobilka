@@ -139,11 +139,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: flutter-web
+          path: flutter-web
 
       - name: Download Angular artifact
         uses: actions/download-artifact@v4
         with:
           name: angular-web
+          path: angular-web
 
       - name: Setup SSH (key or password)
         env:
@@ -166,30 +168,33 @@ jobs:
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
         run: |
+          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
           rsync -avz --delete -e "$RSYNC_SSH" \
-            flutter-web/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/frontend/build/web/"
+            flutter-web/ "$U@$H:$P/frontend/build/web/"
 
       - name: Copy Angular to server
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
         run: |
+          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
           rsync -avz --delete -e "$RSYNC_SSH" \
-            angular-web/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/web-frontend/dist/lepm-web-frontend/"
+            angular-web/ "$U@$H:$P/web-frontend/dist/lepm-web-frontend/"
 
       - name: Copy compose and nginx to server
         env:
           DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
         run: |
+          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             SCP_SSH="sshpass -f /tmp/sshpass.txt scp -o StrictHostKeyChecking=no"
             RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
@@ -197,8 +202,8 @@ jobs:
             SCP_SSH="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
-          $SCP_SSH docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
-          rsync -avz -e "$RSYNC_SSH" nginx/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/nginx/"
+          $SCP_SSH docker-compose.prod.yml "$U@$H:$P/"
+          rsync -avz -e "$RSYNC_SSH" nginx/ "$U@$H:$P/nginx/"
 
       - name: Login to GHCR and deploy on server
         env:
@@ -209,13 +214,14 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
+          U="${DEPLOY_USER//[$'\r\n']}"; H="${DEPLOY_HOST//[$'\r\n']}"; P="${DEPLOY_PATH//[$'\r\n']}"
           if [ "$DEPLOY_AUTH" = "password" ]; then
             SSH_CMD="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
           else
             SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
-          TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
-          PATH_ON_SERVER="${DEPLOY_PATH}"
+          TARGET="$U@$H"
+          PATH_ON_SERVER="$P"
           if [ -n "${GHCR_PAT}" ]; then
             printf '%s' "${GHCR_PAT}" | $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && docker login ghcr.io -u $REPO_OWNER --password-stdin"
           fi
