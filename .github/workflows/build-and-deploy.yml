@@ -65,6 +65,7 @@ jobs:
         run: |
           cd frontend
           dart run build_runner build --delete-conflicting-outputs
+          dart tool/fix_retrofit_map.dart
 
       - name: Build web
         run: |
