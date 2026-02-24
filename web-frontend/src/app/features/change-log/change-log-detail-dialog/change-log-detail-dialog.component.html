@@ -1,0 +1,50 @@
+<div class="detail-dialog">
+  <h2 mat-dialog-title>Детали изменения</h2>
+  <mat-dialog-content>
+    <div class="meta">
+      <div class="meta-row"><span class="label">Дата и время:</span> {{ formatDate(entry.created_at) }}</div>
+      <div class="meta-row"><span class="label">Действие:</span> {{ actionLabel(entry.action) }}</div>
+      <div class="meta-row"><span class="label">Тип объекта:</span> {{ entityTypeLabel(entry.entity_type) }}</div>
+      <div class="meta-row"><span class="label">ID сущности:</span> {{ entry.entity_id ?? '—' }}</div>
+      <div class="meta-row"><span class="label">Кто изменил (user_id):</span> {{ entry.user_id ?? '—' }}</div>
+      <div class="meta-row"><span class="label">Источник:</span> {{ entry.source === 'web' ? 'Веб' : entry.source === 'flutter' ? 'Flutter' : entry.source }}</div>
+    </div>
+
+    <div class="payload-section" *ngIf="entry.payload">
+      <div class="meta-row" *ngIf="entry.payload.name"><span class="label">Наименование:</span> {{ entry.payload.name }}</div>
+      <div class="meta-row" *ngIf="entry.payload.mrid || entry.payload['uid']"><span class="label">UID:</span> {{ entry.payload.mrid || entry.payload['uid'] }}</div>
+    </div>
+
+    <div class="before-after" *ngIf="hasPayload">
+      <h3>Было / Стало</h3>
+      <mat-checkbox [(ngModel)]="onlyChanges">Отобразить только изменения</mat-checkbox>
+      <div class="table-wrap">
+        <table class="diff-table">
+          <thead>
+            <tr>
+              <th>Поле</th>
+              <th>Было</th>
+              <th>Стало</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of displayedRows" [class.changed]="row.changed">
+              <td class="key">{{ row.key }}</td>
+              <td class="before">{{ row.before }}</td>
+              <td class="after">{{ row.after }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p *ngIf="onlyChanges && displayedRows.length === 0" class="no-changes">Нет изменённых полей</p>
+    </div>
+
+    <div class="full-payload" *ngIf="entry.payload && !hasPayload">
+      <h3>Данные (payload)</h3>
+      <pre class="payload-json">{{ entry.payload | json }}</pre>
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Закрыть</button>
+  </mat-dialog-actions>
+</div>

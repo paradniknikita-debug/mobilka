@@ -95,5 +95,16 @@ export class MapService {
   }> {
     return this.requestSelectPoleInTreeSubject$.asObservable();
   }
+
+  /** Запрос пересборки топологии линии (пролёты/сегменты по порядку опор) */
+  private requestRebuildTopologySubject$ = new Subject<number>();
+
+  requestRebuildTopology(powerLineId: number): void {
+    this.requestRebuildTopologySubject$.next(powerLineId);
+  }
+
+  get requestRebuildTopology$(): Observable<number> {
+    return this.requestRebuildTopologySubject$.asObservable();
+  }
 }
 

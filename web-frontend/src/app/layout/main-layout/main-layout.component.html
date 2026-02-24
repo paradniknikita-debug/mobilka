@@ -1,7 +1,9 @@
 <div class="main-container">
   <!-- Toolbar поверх карты -->
   <mat-toolbar color="primary" class="top-toolbar">
-    <span>ЛЭП Management System</span>
+    <span class="app-title">ЛЭП Management System</span>
+    <a mat-button routerLink="/map" routerLinkActive="active-tab" class="nav-tab">Карта</a>
+    <a mat-button routerLink="/change-log" routerLinkActive="active-tab" class="nav-tab">Журнал изменений</a>
     <span class="spacer"></span>
     <button mat-icon-button [matMenuTriggerFor]="userMenu">
       <mat-icon>account_circle</mat-icon>
@@ -25,11 +27,12 @@
     <app-sidebar></app-sidebar>
   </div>
   
-  <!-- Кнопка для показа/скрытия sidebar -->
-  <button mat-fab class="sidebar-toggle" 
+  <!-- Кнопка для показа/скрытия sidebar (компактная) -->
+  <button mat-icon-button class="sidebar-toggle" 
           (click)="toggleSidebar()" 
           [class.sidebar-open]="sidebarVisible"
-          [style.left.px]="sidebarVisible ? sidebarWidth + 16 : 16">
+          [style.left.px]="sidebarVisible ? sidebarWidth + 8 : 8"
+          matTooltip="{{ sidebarVisible ? 'Скрыть дерево объектов' : 'Показать дерево объектов' }}">
     <mat-icon>{{ sidebarVisible ? 'chevron_left' : 'chevron_right' }}</mat-icon>
   </button>
 </div>

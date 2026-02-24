@@ -45,16 +45,17 @@ async def create_substation(
 ):
     """Создание новой подстанции"""
     
-    # Проверяем уникальность диспетчерского наименования подстанции
-    existing_dispatcher_name = await db.execute(
-        select(Substation).where(Substation.dispatcher_name == substation_data.dispatcher_name)
-    )
-    if existing_dispatcher_name.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Substation dispatcher name already exists"
+    # Проверяем уникальность диспетчерского наименования, если указано
+    if substation_data.dispatcher_name and substation_data.dispatcher_name.strip():
+        existing_dispatcher_name = await db.execute(
+            select(Substation).where(Substation.dispatcher_name == substation_data.dispatcher_name.strip())
         )
-    
+        if existing_dispatcher_name.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Substation dispatcher name already exists"
+            )
+
     # Создаем Location и PositionPoint если указаны координаты
     location_id = None
     if substation_data.latitude is not None and substation_data.longitude is not None:
@@ -88,6 +89,12 @@ async def create_substation(
         substation_dict['x_position'] = substation_data.longitude
     substation_dict.pop('latitude', None)
     substation_dict.pop('longitude', None)
+    # UID (mrid): передаём только если указан клиентом, иначе сработает default=generate_mrid
+    if not substation_dict.get('mrid'):
+        substation_dict.pop('mrid', None)
+    # dispatcher_name может быть None
+    if substation_dict.get('dispatcher_name') is not None and not str(substation_dict['dispatcher_name']).strip():
+        substation_dict['dispatcher_name'] = None
 
     db_substation = Substation(**substation_dict)
     db.add(db_substation)

@@ -1,4 +1,5 @@
 from typing import List, Optional
+import re
 import uuid
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -21,6 +22,60 @@ from app.schemas.power_line import (
 )
 
 router = APIRouter()
+
+
+def normalize_pole_number(s: Optional[str]) -> str:
+    """
+    Нормализация наименования опоры: «1» -> «Опора 1»; опечатки «опооа», «опрора», «опра», «оп.» и т.п. -> «Опора»/«Опора N».
+    """
+    if not s or not isinstance(s, str):
+        return (s or "").strip()
+    s = s.strip()
+    if not s:
+        return s
+    if re.match(r"^\d+$", s):
+        return f"Опора {s}"
+    low = s.lower()
+    # Сокращение «оп.» (с точкой и пробелами)
+    if re.match(r"^оп\.\s*", low) or low == "оп.":
+        rest = re.sub(r"^оп\.\s*", "", low, flags=re.I).strip()
+        if not rest:
+            return "Опора"
+        if re.match(r"^\d+$", rest):
+            return f"Опора {rest}"
+        return f"Опора {rest}"
+    # Точные префиксы с опечатками (опора, опооа, опра, опрора и т.д.)
+    for prefix in ("опрора", "опра", "опора", "опооа", "опораа", "опорра", "опоро"):
+        if low.startswith(prefix) or low == prefix:
+            rest = s[len(prefix):].strip()
+            if not rest:
+                return "Опора"
+            if re.match(r"^\d+$", rest):
+                return f"Опора {rest}"
+            return f"Опора {rest}"
+    return s
+
+
+def fill_pole_coordinates(pole) -> None:
+    """Заполняет на объекте опоры x_position, y_position для PoleResponse (из PositionPoint/Location)."""
+    lon = getattr(pole, "get_longitude", None) and pole.get_longitude()
+    lat = getattr(pole, "get_latitude", None) and pole.get_latitude()
+    if lon is None:
+        lon = 0.0
+    if lat is None:
+        lat = 0.0
+    object.__setattr__(pole, "x_position", float(lon))
+    object.__setattr__(pole, "y_position", float(lat))
+
+
+async def _recompute_power_line_length(db: AsyncSession, power_line_id: int) -> float:
+    """Сумма длин всех пролётов линии (м) -> длина в км. Используется для авторасчёта."""
+    from sqlalchemy import func as sql_func
+    r = await db.execute(
+        select(sql_func.coalesce(sql_func.sum(Span.length), 0)).where(Span.line_id == power_line_id)
+    )
+    total_m = r.scalar() or 0
+    return round(float(total_m) / 1000.0, 6)
 
 
 class LinkLineToSubstationBody(BaseModel):
@@ -201,8 +256,10 @@ async def get_power_lines(
             # Предзагружаем connectivity_node через безопасный метод
             if hasattr(pole, '_get_connectivity_node_safe'):
                 _ = pole._get_connectivity_node_safe()
-            
-    
+        # Длина линии — всегда по сумме пролётов (авторасчёт)
+        computed_length = await _recompute_power_line_length(db, power_line.id)
+        object.__setattr__(power_line, "length", computed_length)
+
     return power_lines
 
 @router.get("/{power_line_id}", response_model=PowerLineResponse)
@@ -244,6 +301,9 @@ async def get_power_line(
         object.__setattr__(power_line, "poles", [])
     if getattr(power_line, "acline_segments", None) is None:
         object.__setattr__(power_line, "acline_segments", [])
+    # Длина линии — всегда по сумме пролётов (авторасчёт)
+    computed_length = await _recompute_power_line_length(db, power_line_id)
+    object.__setattr__(power_line, "length", computed_length)
     return power_line
 
 
@@ -351,6 +411,8 @@ async def create_pole(
     if pole_data.mrid:
         pole_dict['mrid'] = pole_data.mrid
     pole_dict.pop('id', None)
+    if pole_dict.get('pole_number') is not None:
+        pole_dict['pole_number'] = normalize_pole_number(pole_dict['pole_number'])
 
     lon_val = getattr(pole_data, 'x_position', None)
     lat_val = getattr(pole_data, 'y_position', None)
@@ -368,6 +430,15 @@ async def create_pole(
         db_pole.is_tap_pole = getattr(pole_data, "is_tap", False)
         db.add(db_pole)
         await db.flush()  # Получаем ID опоры
+
+        # Порядок опоры: если не передан — назначаем следующий по линии (для автосборки пролётов)
+        if db_pole.sequence_number is None:
+            from sqlalchemy import func as sql_func
+            max_seq = await db.execute(
+                select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(Pole.line_id == power_line_id)
+            )
+            db_pole.sequence_number = (max_seq.scalar() or 0) + 1
+            await db.flush()
 
         # CIM: координаты только в PositionPoint
         if lon_val is not None and lat_val is not None:
@@ -576,6 +647,8 @@ async def update_pole(
 
     if "is_tap" in pole_data.dict(exclude_unset=True):
         pole.is_tap_pole = pole_data.is_tap
+    if "pole_number" in pole_dict and pole_dict["pole_number"] is not None:
+        pole_dict["pole_number"] = normalize_pole_number(pole_dict["pole_number"])
     for key, value in pole_dict.items():
         if hasattr(pole, key) and key != "is_tap" and value is not None:
             setattr(pole, key, value)
@@ -1273,19 +1346,29 @@ async def auto_create_spans(
         )
         if existing_span.scalar_one_or_none():
             continue
+        new_cn = getattr(to_pole, "_connectivity_node", None)
+        is_tap = getattr(to_pole, "is_tap_pole", False)
         span = await auto_create_span(
             db,
             power_line_id,
             to_pole,
+            new_connectivity_node=new_cn,
             conductor_type=getattr(from_pole, "conductor_type", None),
             conductor_material=getattr(from_pole, "conductor_material", None),
             conductor_section=getattr(from_pole, "conductor_section", None),
+            is_tap=is_tap,
             current_user_id=current_user.id,
         )
         if span:
             created_spans.append(span)
 
     await db.commit()
+
+    # Обновляем длину ЛЭП по сумме пролётов (авторасчёт)
+    power_line = await db.get(PowerLine, power_line_id)
+    if power_line:
+        power_line.length = await _recompute_power_line_length(db, power_line_id)
+        await db.commit()
     
     # Обновляем объекты для возврата
     for span in created_spans:

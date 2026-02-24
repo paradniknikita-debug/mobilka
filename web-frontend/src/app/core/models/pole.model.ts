@@ -26,6 +26,8 @@ export interface PoleCreate {
   power_line_id: number;
   segment_id?: number;
   pole_number: string;
+  /** Порядок опоры в линии (1, 2, 3…). Если не задан — назначается автоматически. */
+  sequence_number?: number;
   /** Долгота (longitude) */
   x_position: number;
   /** Широта (latitude) */
@@ -39,5 +41,11 @@ export interface PoleCreate {
   condition?: string;
   notes?: string;
   is_tap?: boolean;
+  /** Марка провода (AC-70 и т.д.) — для автосоздания пролёта */
+  conductor_type?: string;
+  /** Материал провода (алюминий, медь) */
+  conductor_material?: string;
+  /** Сечение провода, мм² */
+  conductor_section?: string;
 }
 

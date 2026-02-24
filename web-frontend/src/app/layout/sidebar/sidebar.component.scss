@@ -10,9 +10,73 @@
 .sidebar-header {
   background: #f5f5f5;
   color: rgba(0, 0, 0, 0.87);
-  padding: 24px 16px;
-  text-align: center;
+  padding: 8px 16px;
+  text-align: left;
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-header-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.02em;
+}
+
+.sidebar-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+  flex-wrap: wrap;
+
+  button.mat-mdc-icon-button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    line-height: 28px;
+
+    .mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  .tree-search-field {
+    flex: 1;
+    min-width: 120px;
+    font-size: 11px;
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      display: none;
+    }
+    ::ng-deep .mat-mdc-form-field-flex {
+      align-items: center;
+      height: 24px;
+      min-height: 24px;
+    }
+    ::ng-deep .mat-mdc-form-field-infix {
+      padding-top: 0;
+      padding-bottom: 0;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+    }
+    ::ng-deep input.mat-mdc-input-element {
+      font-size: 11px;
+      line-height: 1.2;
+      padding: 0;
+      height: 18px;
+      margin: 0;
+    }
+    button.mat-mdc-icon-button .mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+  }
 }
 
 .header-icon {
@@ -48,9 +112,9 @@
   height: 200px;
 }
 
-// Иерархичное дерево на белом фоне
+// Иерархичное дерево — компактный вид
 .tree-item {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   
   &:last-child {
     border-bottom: none;
@@ -60,10 +124,29 @@
 .tree-node {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 4px 10px;
   cursor: pointer;
   transition: background-color 0.2s ease;
   user-select: none;
+  font-size: 12px;
+  min-height: 28px;
+
+  .node-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+  }
+
+  .node-label {
+    font-size: 12px;
+  }
+
+  .node-description {
+    font-size: 10px;
+    color: rgba(0, 0, 0, 0.5);
+    margin-left: auto;
+  }
   
   &:hover {
     background-color: rgba(0, 0, 0, 0.04);
@@ -78,10 +161,35 @@
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 8px 16px;
+  padding: 4px 10px;
   cursor: pointer;
   transition: background-color 0.2s ease;
   user-select: none;
+  font-size: 12px;
+  min-height: 28px;
+
+  .expand-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .node-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+  }
+
+  .node-label {
+    font-size: 12px;
+  }
+
+  .node-description {
+    font-size: 10px;
+    color: rgba(0, 0, 0, 0.5);
+    margin-left: auto;
+  }
   
   &:hover {
     background-color: rgba(0, 0, 0, 0.04);
@@ -99,30 +207,30 @@
 }
 
 .expand-icon {
-  width: 20px;
-  height: 20px;
-  font-size: 20px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
   margin-right: 4px;
   color: rgba(0, 0, 0, 0.54);
   transition: transform 0.2s ease;
 }
 
 .node-icon {
-  width: 20px;
-  height: 20px;
-  font-size: 20px;
-  margin-right: 8px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  margin-right: 6px;
 }
 
 .node-label {
   flex: 1;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   color: rgba(0, 0, 0, 0.87);
 }
 
 .node-description {
-  font-size: 12px;
+  font-size: 10px;
   color: rgba(0, 0, 0, 0.6);
   margin-left: auto;
 }
@@ -134,7 +242,7 @@
 }
 
 .segment-node {
-  padding-left: 32px;
+  padding-left: 24px;
   background-color: transparent;
   display: block;
   width: 100%;
@@ -145,7 +253,7 @@
 }
 
 .poles-folder-wrapper {
-  padding-left: 48px;
+  padding-left: 24px;
   background-color: transparent;
   display: block;
   width: 100%;
@@ -168,7 +276,7 @@
 }
 
 .pole-node {
-  padding-left: 32px;
+  padding-left: 24px;
   font-weight: 400;
   display: flex;
   width: 100%;
@@ -190,12 +298,27 @@
 }
 
 .context-menu {
-  // Стили для контекстного меню
+  // Компактное контекстное меню в стиле дерева
 }
 
-// Увеличиваем z-index для контекстного меню, чтобы оно отображалось поверх дерева
+// Компактный вид контекстного меню (как элементы дерева)
 ::ng-deep .mat-mdc-menu-panel.context-menu {
   z-index: 10000 !important;
+  min-width: 180px;
+
+  .mat-mdc-menu-item {
+    font-size: 12px;
+    min-height: 32px;
+    line-height: 32px;
+    padding: 0 10px;
+
+    .mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+    }
+  }
 }
 
 ::ng-deep .cdk-overlay-container {

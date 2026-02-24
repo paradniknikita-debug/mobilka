@@ -322,10 +322,18 @@ async def get_acline_segment(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Получение сегмента линии по ID"""
+    """Получение сегмента линии по ID (с секциями и терминалами, без ленивой загрузки)."""
     result = await db.execute(
         select(AClineSegment)
-        .options(selectinload(AClineSegment.line_sections))
+        .options(
+            selectinload(AClineSegment.line_sections)
+            .selectinload(LineSection.spans)
+            .selectinload(Span.from_connectivity_node),
+            selectinload(AClineSegment.line_sections)
+            .selectinload(LineSection.spans)
+            .selectinload(Span.to_connectivity_node),
+            selectinload(AClineSegment.terminals),
+        )
         .where(AClineSegment.id == segment_id)
     )
     segment = result.scalar_one_or_none()

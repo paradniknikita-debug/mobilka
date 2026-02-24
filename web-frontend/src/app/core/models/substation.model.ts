@@ -2,7 +2,9 @@ export interface Substation {
   id: number;
   mrid: string;
   name: string;
-  code: string;
+  /** Диспетчерское наименование (в UI показываем как UID) */
+  dispatcher_name?: string;
+  code?: string; // устаревшее, для обратной совместимости
   voltage_level: number;
   latitude: number;
   longitude: number;
@@ -16,7 +18,10 @@ export interface Substation {
 
 export interface SubstationCreate {
   name: string;
-  code: string;
+  /** UID в формате системы (как у остальных сущностей); если не передан — генерируется на бэкенде */
+  mrid?: string;
+  /** Диспетчерское наименование (по желанию пользователя) */
+  dispatcher_name?: string;
   voltage_level: number;
   latitude: number;
   longitude: number;

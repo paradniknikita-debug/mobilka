@@ -91,7 +91,9 @@ export interface AClineSegment {
   mrid: string;
   name: string;
   code: string;
-  power_line_id: number;
+  /** ID линии (ЛЭП); бэкенд возвращает line_id */
+  power_line_id?: number;
+  line_id?: number;
   voltage_level: number;
   length: number;
   is_tap: boolean;

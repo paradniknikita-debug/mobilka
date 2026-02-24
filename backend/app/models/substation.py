@@ -15,7 +15,7 @@ class Substation(Base, ConnectivityNodeContainer):
     # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
-    dispatcher_name = Column(String(100), nullable=False)  # Диспетчерское наименование (заменяет code)
+    dispatcher_name = Column(String(100), nullable=True)  # Диспетчерское наименование (по желанию пользователя)
     voltage_level = Column(Float, nullable=False)  # кВ
     
     # CIM Location - связь с Location для координат

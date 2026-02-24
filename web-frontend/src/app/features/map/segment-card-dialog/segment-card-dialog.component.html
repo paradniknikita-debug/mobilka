@@ -1,0 +1,57 @@
+<div class="segment-card-dialog">
+  <h2 mat-dialog-title class="dialog-title">
+    <mat-icon class="title-icon">linear_scale</mat-icon>
+    Карточка участка линии
+  </h2>
+
+  <mat-dialog-content *ngIf="loading" class="loading">
+    <mat-spinner diameter="36"></mat-spinner>
+    <p>Загрузка данных участка…</p>
+  </mat-dialog-content>
+
+  <mat-dialog-content *ngIf="error" class="error">
+    <mat-icon color="warn">error</mat-icon>
+    <p>{{ error }}</p>
+  </mat-dialog-content>
+
+  <mat-dialog-content *ngIf="!loading && !error && segment" class="content">
+    <div class="field">
+      <span class="label">Наименование</span>
+      <span class="value">{{ segment.name }}</span>
+    </div>
+    <div class="field">
+      <span class="label">Длина (по пролётам)</span>
+      <span class="value">{{ lengthKm() | number:'1.2-2' }} км</span>
+    </div>
+
+    <h3 class="sections-title">Секции линии (по марке провода)</h3>
+    <div class="sections-table-wrap" *ngIf="lineSections.length; else noSections">
+      <table class="sections-table">
+        <thead>
+          <tr>
+            <th>Марка провода</th>
+            <th>Материал</th>
+            <th>Сечение</th>
+            <th>Длина</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let sec of lineSections">
+            <td>{{ sec.conductor_type || '—' }}</td>
+            <td>{{ sec.conductor_material || '—' }}</td>
+            <td>{{ sec.conductor_section || '—' }}</td>
+            <td>{{ sectionLengthDisplay(sec) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noSections>
+      <p class="no-sections">Секции не заданы.</p>
+    </ng-template>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Закрыть</button>
+  </mat-dialog-actions>
+  <div class="resize-handle" (mousedown)="startResize($event)" title="Тяните для изменения размера"></div>
+</div>

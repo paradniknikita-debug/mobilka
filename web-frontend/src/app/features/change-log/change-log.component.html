@@ -1,0 +1,71 @@
+<div class="change-log-page">
+  <div class="toolbar">
+    <h1>Журнал изменений</h1>
+    <button mat-raised-button color="primary" (click)="load()" [disabled]="loading">
+      <mat-icon>refresh</mat-icon>
+      Обновить
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Загрузка журнала…</p>
+  </div>
+
+  <div *ngIf="error" class="error">
+    <mat-icon color="warn">error</mat-icon>
+    <p>{{ error }}</p>
+  </div>
+
+  <div *ngIf="!loading && !error" class="table-wrap">
+    <table mat-table [dataSource]="entries" class="log-table">
+      <ng-container matColumnDef="created_at">
+        <th mat-header-cell *matHeaderCellDef>Дата и время</th>
+        <td mat-cell *matCellDef="let row">{{ formatDate(row.created_at) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="source">
+        <th mat-header-cell *matHeaderCellDef>Источник</th>
+        <td mat-cell *matCellDef="let row">{{ sourceLabel(row.source) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="action">
+        <th mat-header-cell *matHeaderCellDef>Действие</th>
+        <td mat-cell *matCellDef="let row">{{ actionLabel(row.action) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="entity_type">
+        <th mat-header-cell *matHeaderCellDef>Объект</th>
+        <td mat-cell *matCellDef="let row">{{ entityTypeLabel(row.entity_type) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>Наименование</th>
+        <td mat-cell *matCellDef="let row">{{ getName(row) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="uid">
+        <th mat-header-cell *matHeaderCellDef>UID</th>
+        <td mat-cell *matCellDef="let row">{{ getUid(row) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="entity_id">
+        <th mat-header-cell *matHeaderCellDef>ID</th>
+        <td mat-cell *matCellDef="let row">{{ row.entity_id ?? '—' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="user_id">
+        <th mat-header-cell *matHeaderCellDef>Кто изменил</th>
+        <td mat-cell *matCellDef="let row">{{ row.user_id ?? '—' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="detail">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-icon-button (click)="openDetail(row)" matTooltip="Детали (было / стало)">
+            <mat-icon>info</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell" [attr.colspan]="displayedColumns.length">Записей нет</td>
+      </tr>
+    </table>
+  </div>
+</div>

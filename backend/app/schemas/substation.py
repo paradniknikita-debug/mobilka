@@ -4,7 +4,7 @@ from datetime import datetime
 
 class SubstationBase(BaseModel):
     name: str
-    dispatcher_name: str  # Диспетчерское наименование (заменяет code)
+    dispatcher_name: Optional[str] = None  # Диспетчерское наименование (по желанию пользователя)
     voltage_level: float
     # Координаты (для обратной совместимости и удобства)
     latitude: Optional[float] = None
@@ -16,10 +16,11 @@ class SubstationBase(BaseModel):
     connected_line_ids: Optional[List[int]] = None
 
 class SubstationCreate(SubstationBase):
-    pass
+    mrid: Optional[str] = None  # UID в формате системы (как у остальных сущностей); если не передан — генерируется
 
 class SubstationResponse(SubstationBase):
     id: int
+    mrid: str  # UID в формате системы
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]

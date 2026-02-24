@@ -217,6 +217,16 @@ export class CreateSpanDialogComponent implements OnInit {
     }
   }
 
+  /** Короткая подпись для наименования пролёта: из «Опора 1» -> «1» */
+  private shortPoleLabel(poleNumber: string): string {
+    const s = (poleNumber || '').trim();
+    if (s.toLowerCase().startsWith('опора')) {
+      const rest = s.slice(5).trim();
+      return rest || s;
+    }
+    return s;
+  }
+
   updateSpanName(): void {
     const fromPoleId = this.spanForm.get('from_pole_id')?.value;
     const toPoleId = this.spanForm.get('to_pole_id')?.value;
@@ -230,10 +240,61 @@ export class CreateSpanDialogComponent implements OnInit {
     const toPole = this.poles.find(p => p.id === toPoleId);
 
     if (fromPole && toPole) {
-      // Формируем наименование по шаблону: "Пролёт *начальная опора* - *конечная опора*"
-      const spanName = `Пролёт ${fromPole.pole_number} - ${toPole.pole_number}`;
-      this.spanForm.patchValue({ span_number: spanName });
+      const fromShort = this.shortPoleLabel(fromPole.pole_number);
+      const toShort = this.shortPoleLabel(toPole.pole_number);
+      this.spanForm.patchValue({ span_number: `Пролёт ${fromShort}-${toShort}` });
     }
+  }
+
+  getFromPoleName(): string {
+    const id = this.spanForm.get('from_pole_id')?.value;
+    const pole = id ? this.poles.find(p => p.id === id) : null;
+    return pole ? pole.pole_number : '—';
+  }
+
+  getToPoleName(): string {
+    const id = this.spanForm.get('to_pole_id')?.value;
+    const pole = id ? this.poles.find(p => p.id === id) : null;
+    return pole ? pole.pole_number : '—';
+  }
+
+  getFromPoleMrid(): string | null {
+    const id = this.spanForm.get('from_pole_id')?.value;
+    const pole = id ? this.poles.find(p => p.id === id) : null;
+    return pole && (pole as any).mrid ? (pole as any).mrid : null;
+  }
+
+  getToPoleMrid(): string | null {
+    const id = this.spanForm.get('to_pole_id')?.value;
+    const pole = id ? this.poles.find(p => p.id === id) : null;
+    return pole && (pole as any).mrid ? (pole as any).mrid : null;
+  }
+
+  copyPoleUid(uid: string | null): void {
+    if (!uid) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(uid).then(() => {
+        this.snackBar.open('UID скопирован в буфер обмена', 'Закрыть', { duration: 2000 });
+      }).catch(() => this.fallbackCopy(uid));
+    } else {
+      this.fallbackCopy(uid);
+    }
+  }
+
+  private fallbackCopy(text: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      this.snackBar.open('UID скопирован в буфер обмена', 'Закрыть', { duration: 2000 });
+    } catch (e) {
+      this.snackBar.open('Не удалось скопировать', 'Закрыть', { duration: 2000 });
+    }
+    document.body.removeChild(ta);
   }
 
   calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -285,10 +346,12 @@ export class CreateSpanDialogComponent implements OnInit {
       return isNaN(num) ? undefined : num;
     };
 
-    // Автоматически формируем наименование, если оно не заполнено
+    // Автоматически формируем наименование в формате «Пролёт 1-2»
     let spanNumber = formValue.span_number?.trim();
     if (!spanNumber && fromPole && toPole) {
-      spanNumber = `Пролёт ${fromPole.pole_number} - ${toPole.pole_number}`;
+      const fromShort = this.shortPoleLabel(fromPole.pole_number);
+      const toShort = this.shortPoleLabel(toPole.pole_number);
+      spanNumber = `Пролёт ${fromShort}-${toShort}`;
     }
 
     // Используем старый API для создания пролёта (обратная совместимость)
@@ -297,7 +360,7 @@ export class CreateSpanDialogComponent implements OnInit {
       power_line_id: this.powerLineId,
       from_pole_id: fromPoleId,
       to_pole_id: toPoleId,
-      span_number: spanNumber || `Пролёт ${fromPole?.pole_number || fromPoleId} - ${toPole?.pole_number || toPoleId}`,
+      span_number: spanNumber || (fromPole && toPole ? `Пролёт ${this.shortPoleLabel(fromPole.pole_number)}-${this.shortPoleLabel(toPole.pole_number)}` : ''),
       length: normalizeNumber(formValue.length),
       conductor_type: formValue.conductor_type?.trim() || undefined,
       conductor_material: formValue.conductor_material?.trim() || undefined,

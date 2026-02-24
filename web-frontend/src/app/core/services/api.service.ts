@@ -16,6 +16,7 @@ import {
   Span, SpanCreate,
   PoleSequenceResponse
 } from '../models/cim.model';
+import { ChangeLogEntry } from '../models/change-log.model';
 
 @Injectable({
   providedIn: 'root'
@@ -287,6 +288,17 @@ export class ApiService {
 
   getPolesSequence(powerLineId: number): Observable<Pole[]> {
     return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${powerLineId}/poles/sequence`);
+  }
+
+  // ========== Журнал изменений ==========
+  getChangeLog(params?: { source?: string; action?: string; entity_type?: string; limit?: number; offset?: number }): Observable<ChangeLogEntry[]> {
+    let httpParams = new HttpParams();
+    if (params?.source) httpParams = httpParams.set('source', params.source);
+    if (params?.action) httpParams = httpParams.set('action', params.action);
+    if (params?.entity_type) httpParams = httpParams.set('entity_type', params.entity_type);
+    if (params?.limit != null) httpParams = httpParams.set('limit', params.limit.toString());
+    if (params?.offset != null) httpParams = httpParams.set('offset', params.offset.toString());
+    return this.http.get<ChangeLogEntry[]>(`${this.apiUrl}/change-log`, { params: httpParams });
   }
 }
 

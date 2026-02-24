@@ -81,8 +81,19 @@ async def _connectivity_node_display_name(
     if getattr(node, "substation_id", None) and node.substation:
         return (node.substation.name or node.substation.dispatcher_name or "ПС")[:50]
     if node.pole:
-        return f"оп. {node.pole.pole_number}"
+        return (node.pole.pole_number or "").strip() or f"Опора {node.pole.id}"
     return f"Узел {connectivity_node_id}"
+
+
+def _short_label_for_span(display_name: str) -> str:
+    """Из «Опора 1» или «ПС Название» извлекаем короткую подпись для наименования пролёта: «1» или оставляем как есть."""
+    s = (display_name or "").strip()
+    if not s:
+        return s
+    if s.lower().startswith("опора"):
+        rest = s[5:].strip()
+        return rest if rest else s
+    return s
 
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -205,17 +216,34 @@ async def find_or_create_acline_segment(
     power_line_id: int,
     from_connectivity_node_id: int,
     voltage_level: float,
-    current_user_id: int
+    current_user_id: int,
+    to_connectivity_node_id_if_tap: Optional[int] = None
 ) -> AClineSegment:
     """
-    Найти или создать AClineSegment от данной опоры
+    Найти или создать AClineSegment от данной опоры.
     
-    Логика:
-    - Если опора является ветвлением, создаётся новый AClineSegment от неё
-    - Если опора не является ветвлением, ищем существующий незавершённый AClineSegment
-    - AClineSegment создаётся от подстанции/ветвления до следующего ветвления/подстанции
+    Если to_connectivity_node_id_if_tap задан (новая опора — отпаечная), закрываем
+    текущий незавершённый сегмент на этой опоре (участок «от начала до отпаечной» — один).
     """
     from app.models.power_line import PowerLine
+    
+    # Отпаечная опора: продлеваем сегмент, заканчивающийся на предыдущей опоре, до отпаечной (один участок от начала до отпайки)
+    if to_connectivity_node_id_if_tap is not None:
+        result = await db.execute(
+            select(AClineSegment).where(
+                AClineSegment.line_id == power_line_id,
+                AClineSegment.to_connectivity_node_id == from_connectivity_node_id,
+                AClineSegment.is_tap == False
+            ).order_by(AClineSegment.sequence_number.desc())
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.to_connectivity_node_id = to_connectivity_node_id_if_tap
+            from_name = await _connectivity_node_display_name(db, existing.from_connectivity_node_id)
+            to_name = await _connectivity_node_display_name(db, to_connectivity_node_id_if_tap)
+            existing.name = f"{from_name} - {to_name}"
+            await db.flush()
+            return existing
     
     # Получаем информацию о линии
     power_line = await db.get(PowerLine, power_line_id)
@@ -235,7 +263,7 @@ async def find_or_create_acline_segment(
     
     # Если опора является ветвлением или начало линии (подстанция), создаём новый сегмент
     # Проверяем, является ли опора началом линии (первая по sequence_number)
-    # (упрощённо: если это первая опора в линии или опора с sequence_number = 1)
+    is_substation_start = False
     result = await db.execute(
         select(func.min(Pole.sequence_number)).where(Pole.line_id == power_line_id)
     )
@@ -447,14 +475,15 @@ async def auto_create_span(
     power_line = await db.get(PowerLine, power_line_id)
     voltage_level = power_line.voltage_level if power_line else 10.0
     
-    # Находим или создаём AClineSegment
+    # Находим или создаём AClineSegment (если новая опора отпаечная — закрываем текущий участок на ней)
     acline_segment = await find_or_create_acline_segment(
-        db, power_line_id, previous_cn.id, voltage_level, current_user_id
+        db, power_line_id, previous_cn.id, voltage_level, current_user_id,
+        to_connectivity_node_id_if_tap=new_connectivity_node.id if is_tap else None
     )
     
-    # Обновляем to_connectivity_node_id текущего сегмента на новую опору
+    # Обновляем to_connectivity_node_id текущего сегмента на новую опору (если ещё не закрыт)
     is_new_pole_branching = await is_branching_pole(db, new_pole.id, power_line_id)
-    if not is_new_pole_branching or is_tap:
+    if (not is_new_pole_branching or is_tap) and acline_segment.to_connectivity_node_id is None:
         acline_segment.to_connectivity_node_id = new_connectivity_node.id
         # Именование сегмента при закрытии: «ПС X - оп. N» или «оп. N - оп. M»
         from_name = await _connectivity_node_display_name(db, acline_segment.from_connectivity_node_id)
@@ -475,10 +504,12 @@ async def auto_create_span(
     )
     span_count = result.scalar_one() or 0
     
-    # Имена для наименования пролёта: «Пролёт X - Y»
-    from_span_name = await _connectivity_node_display_name(db, previous_cn.id)
-    to_span_name = await _connectivity_node_display_name(db, new_connectivity_node.id)
-    span_number = f"Пролёт {from_span_name} - {to_span_name}"
+    # Наименование пролёта: «Пролёт 1-2» (без слова «Опора»)
+    from_display = await _connectivity_node_display_name(db, previous_cn.id)
+    to_display = await _connectivity_node_display_name(db, new_connectivity_node.id)
+    from_short = _short_label_for_span(from_display)
+    to_short = _short_label_for_span(to_display)
+    span_number = f"Пролёт {from_short}-{to_short}"
 
     # Создаём пролёт
     span = Span(

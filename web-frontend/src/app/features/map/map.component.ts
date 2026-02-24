@@ -132,6 +132,11 @@ export class MapComponent implements OnInit, OnDestroy {
     // Инициализируем состояние sidebar
     this.isSidebarOpen = this.sidebarService.isSidebarOpen();
     this.sidebarWidth = this.sidebarService.getCurrentSidebarWidth();
+
+    // Пересборка топологии по запросу из дерева (ПКМ по ЛЭП)
+    this.mapService.requestRebuildTopology$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(powerLineId => this.autoCreateSpans(powerLineId));
   }
 
   ngOnDestroy(): void {
@@ -309,7 +314,8 @@ export class MapComponent implements OnInit, OnDestroy {
             className: 'pole-marker',
             html: markerHtml,
             iconSize: sequenceNumber ? [20, 30] : [8, 8],
-            iconAnchor: sequenceNumber ? [10, 30] : [4, 4]
+            // Точка привязки — центр кружка опоры, чтобы линия ЛЭП проходила через маркер
+            iconAnchor: sequenceNumber ? [10, 4] : [4, 4]
           })
         }).bindPopup(`
           <strong>Опора ${feature.properties['pole_number'] || 'N/A'}</strong><br>
@@ -587,14 +593,12 @@ export class MapComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        // Обновляем данные карты после создания объекта
-        // Используем setTimeout для небольшой задержки, чтобы сервер успел обработать запрос
+      if (result?.success) {
+        // Обновляем карту и дерево после создания/редактирования (пролёты, сегменты, опоры)
         setTimeout(() => {
           this.loadMapData();
-          // Уведомляем сервис об обновлении для sidebar
           this.mapService.refreshData();
-        }, 500);
+        }, 400);
       }
     });
   }
@@ -689,28 +693,30 @@ export class MapComponent implements OnInit, OnDestroy {
     });
   }
 
-  autoCreateSpans(): void {
-    if (!this.selectedPole || !this.selectedPole.power_line_id) {
-      this.snackBar.open('Выберите опору, принадлежащую линии', 'Закрыть', { duration: 2000 });
+  autoCreateSpans(powerLineId?: number): void {
+    const lineId = powerLineId ?? this.selectedPole?.power_line_id;
+    if (!lineId) {
+      this.snackBar.open('Укажите линию или выберите опору на карте', 'Закрыть', { duration: 2000 });
       return;
     }
 
-    if (!confirm('Создать пролёты автоматически между всеми опорами в порядке их последовательности?')) {
+    if (!confirm('Пересобрать топологию линии: создать/обновить пролёты между опорами по порядку последовательности?')) {
       return;
     }
 
-    this.apiService.autoCreateSpans(this.selectedPole.power_line_id).subscribe({
+    this.apiService.autoCreateSpans(lineId).subscribe({
       next: (response) => {
         this.snackBar.open(
-          `Создано пролётов: ${response.created_count || response.spans?.length || 0}`,
+          `Топология обновлена. Пролётов: ${response.created_count ?? response.spans?.length ?? 0}`,
           'Закрыть',
           { duration: 3000 }
         );
         this.loadMapData();
+        this.mapService.refreshData();
       },
       error: (error) => {
-        console.error('Ошибка автоматического создания пролётов:', error);
-        let errorMessage = 'Ошибка создания пролётов';
+        console.error('Ошибка пересборки топологии:', error);
+        let errorMessage = 'Ошибка пересборки топологии';
         
         if (error.error?.detail) {
           errorMessage = typeof error.error.detail === 'string' 

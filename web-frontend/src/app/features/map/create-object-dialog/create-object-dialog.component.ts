@@ -62,6 +62,11 @@ export class CreateObjectDialogComponent implements OnInit {
     'poor'
   ];
 
+  // Марки провода для автосоздания пролёта
+  conductorTypes = ['AC-70', 'AC-95', 'AC-120', 'AC-150', 'AC-185', 'AC-240', 'AC-300', 'AC-400', 'СИП-2', 'СИП-4', 'А'];
+  // Материал провода
+  conductorMaterials = ['алюминий', 'медь', 'сталь', 'алмаг'];
+
   // Стандартные значения напряжения для подстанций (кВ)
   voltageLevels = [
     0.4,
@@ -109,7 +114,12 @@ export class CreateObjectDialogComponent implements OnInit {
       latitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       pole_type: ['', Validators.required],
+      sequence_number: [null], // Порядок в линии (1, 2, 3…). Пусто — авто.
       mrid: ['', CreateObjectDialogComponent.uuidValidator], // Опциональный UID с валидацией формата
+      is_tap: [false],
+      conductor_type: [''],
+      conductor_material: [''],
+      conductor_section: [''],
       height: [null],
       foundation_type: [''],
       material: [''],
@@ -144,7 +154,8 @@ export class CreateObjectDialogComponent implements OnInit {
 
     this.substationForm = this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(100)]],
-      code: ['', [Validators.required, Validators.maxLength(20)]],
+      uid: [''], // UID в формате системы (как у опор и др.); пусто = автогенерация на бэкенде
+      dispatcher_name: [''], // Диспетчерское наименование (по желанию)
       voltage_level: [null, [Validators.required, this.voltageValidator.bind(this)]],
       latitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
@@ -152,6 +163,7 @@ export class CreateObjectDialogComponent implements OnInit {
       branch_id: [1, Validators.required], // TODO: Получить реальный branch_id
       description: ['']
     });
+    this.generateSubstationUID();
   }
 
   ngOnInit(): void {
@@ -267,7 +279,12 @@ export class CreateObjectDialogComponent implements OnInit {
           latitude: (pole as any).y_position ?? (pole as any).latitude ?? '',
           longitude: (pole as any).x_position ?? (pole as any).longitude ?? '',
           pole_type: pole.pole_type || '',
+          sequence_number: pole.sequence_number ?? null,
           mrid: pole.mrid || '',
+          is_tap: (pole as any).is_tap_pole ?? false,
+          conductor_type: (pole as any).conductor_type ?? '',
+          conductor_material: (pole as any).conductor_material ?? '',
+          conductor_section: (pole as any).conductor_section ?? '',
           height: pole.height || null,
           foundation_type: (pole as any).foundation_type || '',
           material: pole.material || '',
@@ -296,13 +313,22 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   generatePowerLineMRID(): void {
-    // Генерация UUID v4
     const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
     this.powerLineForm.patchValue({ mrid: uuid });
+  }
+
+  /** Генерирует UID в том же формате, что и для остальных сущностей (UUID) */
+  generateSubstationUID(): void {
+    const s = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+    this.substationForm?.patchValue({ uid: s });
   }
 
   displayPowerLine(powerLine: PowerLine): string {
@@ -377,14 +403,27 @@ export class CreateObjectDialogComponent implements OnInit {
       return;
     }
 
+    const seqNum = formValue.sequence_number != null && formValue.sequence_number !== ''
+      ? parseInt(String(formValue.sequence_number), 10) : undefined;
+    if (seqNum !== undefined && (isNaN(seqNum) || seqNum < 1)) {
+      this.snackBar.open('Порядок опоры должен быть целым числом ≥ 1', 'Закрыть', { duration: 5000 });
+      this.isSubmitting = false;
+      return;
+    }
+
     // CIM: x_position = долгота, y_position = широта (форма ввода — широта/долгота)
     const poleData: PoleCreate = {
       power_line_id: powerLineId,
       pole_number: formValue.pole_number.trim(),
+      sequence_number: seqNum,
       x_position: longitude,
       y_position: latitude,
       pole_type: formValue.pole_type,
       mrid: formValue.mrid && formValue.mrid.trim() ? formValue.mrid.trim() : undefined,
+      is_tap: !!formValue.is_tap,
+      conductor_type: formValue.conductor_type?.trim() || undefined,
+      conductor_material: formValue.conductor_material?.trim() || undefined,
+      conductor_section: formValue.conductor_section != null && String(formValue.conductor_section).trim() !== '' ? String(formValue.conductor_section).trim() : undefined,
       height: (() => {
         const height = normalizeNumber(formValue.height);
         return height !== undefined && height >= 0 ? height : undefined;
@@ -629,10 +668,7 @@ export class CreateObjectDialogComponent implements OnInit {
     if (normalizedVoltage !== undefined && normalizedVoltage !== null) {
       powerLineData.voltage_level = normalizedVoltage;
     }
-    const normalizedLength = normalizeNumber(formValue.length);
-    if (normalizedLength !== undefined && normalizedLength !== null) {
-      powerLineData.length = normalizedLength;
-    }
+    // Длина линии не задаётся вручную — рассчитывается автоматически по пролётам
     if (formValue.branch_name?.trim()) {
       powerLineData.branch_name = formValue.branch_name.trim();
     }
@@ -816,7 +852,6 @@ export class CreateObjectDialogComponent implements OnInit {
 
     const substationData: SubstationCreate = {
       name: formValue.name.trim(),
-      code: formValue.code.trim(),
       voltage_level: parseFloat(formValue.voltage_level) || 0,
       latitude: parseFloat(formValue.latitude) || 0,
       longitude: parseFloat(formValue.longitude) || 0,
@@ -824,6 +859,12 @@ export class CreateObjectDialogComponent implements OnInit {
       branch_id: formValue.branch_id || 1,
       description: formValue.description?.trim() || undefined
     };
+    if (formValue.uid && String(formValue.uid).trim()) {
+      substationData.mrid = String(formValue.uid).trim();
+    }
+    if (formValue.dispatcher_name != null && String(formValue.dispatcher_name).trim()) {
+      substationData.dispatcher_name = String(formValue.dispatcher_name).trim();
+    }
 
     this.apiService.createSubstation(substationData).subscribe({
       next: (createdSubstation) => {

@@ -5,6 +5,7 @@ import { AuthGuard } from './core/guards/auth.guard';
 import { LoginComponent } from './features/auth/login/login.component';
 import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
 import { MapComponent } from './features/map/map.component';
+import { ChangeLogComponent } from './features/change-log/change-log.component';
 
 const routes: Routes = [
   {
@@ -24,6 +25,10 @@ const routes: Routes = [
       {
         path: 'map',
         component: MapComponent
+      },
+      {
+        path: 'change-log',
+        component: ChangeLogComponent
       },
       {
         path: 'power-lines',

@@ -53,7 +53,10 @@ import { PoleConnectivityDialogComponent } from './features/map/pole-connectivit
 import { PoleSequenceDialogComponent } from './features/map/pole-sequence-dialog/pole-sequence-dialog.component';
 import { CreateSpanDialogComponent } from './features/map/create-span-dialog/create-span-dialog.component';
 import { CreateSegmentDialogComponent } from './features/map/create-segment-dialog/create-segment-dialog.component';
+import { SegmentCardDialogComponent } from './features/map/segment-card-dialog/segment-card-dialog.component';
 import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dialog/edit-power-line-dialog.component';
+import { ChangeLogComponent } from './features/change-log/change-log.component';
+import { ChangeLogDetailDialogComponent } from './features/change-log/change-log-detail-dialog/change-log-detail-dialog.component';
 
 @NgModule({
   declarations: [
@@ -68,7 +71,10 @@ import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dia
     PoleSequenceDialogComponent,
     CreateSpanDialogComponent,
     CreateSegmentDialogComponent,
-    EditPowerLineDialogComponent
+    SegmentCardDialogComponent,
+    EditPowerLineDialogComponent,
+    ChangeLogComponent,
+    ChangeLogDetailDialogComponent
   ],
   imports: [
     BrowserModule,

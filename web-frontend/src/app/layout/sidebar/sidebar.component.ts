@@ -5,12 +5,14 @@ import { GeoJSONFeature } from '../../core/models/geojson.model';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
 import { Overlay } from '@angular/cdk/overlay';
 import { DeleteObjectDialogComponent, DeleteObjectData } from '../../features/map/delete-object-dialog/delete-object-dialog.component';
 import { CreateObjectDialogComponent } from '../../features/map/create-object-dialog/create-object-dialog.component';
 import { CreateSpanDialogComponent } from '../../features/map/create-span-dialog/create-span-dialog.component';
 import { CreateSegmentDialogComponent } from '../../features/map/create-segment-dialog/create-segment-dialog.component';
+import { SegmentCardDialogComponent, SegmentCardDialogData } from '../../features/map/segment-card-dialog/segment-card-dialog.component';
 import { EditPowerLineDialogComponent } from '../../features/map/edit-power-line-dialog/edit-power-line-dialog.component';
 import { ApiService } from '../../core/services/api.service';
 import { PowerLine } from '../../core/models/power-line.model';
@@ -24,6 +26,7 @@ interface PowerLineTreeItem {
     poles: GeoJSONFeature[];
     spans: GeoJSONFeature[];
   }>;
+  allPoles: GeoJSONFeature[];
   polesWithoutSegment: GeoJSONFeature[];
   spansWithoutSegment: GeoJSONFeature[];
 }
@@ -44,7 +47,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
   constructor(
     private mapService: MapService,
     private dialog: MatDialog,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private snackBar: MatSnackBar
   ) {}
 
   ngOnInit(): void {
@@ -64,10 +68,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
         this.expandedPowerLines.add(powerLineId);
         if (segmentId != null) {
           this.expandedSegments.add(`${powerLineId}-${segmentId}`);
-          this.expandedPolesFolders.add(`${powerLineId}-segment-${segmentId}`);
-        } else {
-          this.expandedPolesFolders.add(`${powerLineId}-no-segment`);
         }
+        this.expandedPolesFolders.add(`${powerLineId}-all-poles`);
         this.selectedPoleIdFromMap = poleId;
         this.cdr.detectChanges();
       });
@@ -163,7 +165,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
     for (const pl of list) {
       const powerLineId = pl.id;
       const powerLine = this.powerLineToTreeFeature(pl);
-      const allPoles = this.getPolesByPowerLine(powerLineId);
+      const linePoles = this.getPolesByPowerLine(powerLineId);
       const allSpans = this.spansFeatures.filter(f =>
         f.properties['power_line_id'] === powerLineId
       );
@@ -172,7 +174,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const polesWithoutSegment: GeoJSONFeature[] = [];
       const spansWithoutSegment: GeoJSONFeature[] = [];
 
-      allPoles.forEach(pole => {
+      linePoles.forEach(pole => {
         const segmentId = pole.properties['segment_id'];
         if (segmentId != null) {
           const key = segmentId;
@@ -220,9 +222,14 @@ export class SidebarComponent implements OnInit, OnDestroy {
         return a.segmentId - b.segmentId;
       });
 
+      const allPoles = [
+        ...segments.flatMap(s => s.poles),
+        ...polesWithoutSegment
+      ];
       result.push({
         powerLine,
         segments,
+        allPoles,
         polesWithoutSegment,
         spansWithoutSegment
       });
@@ -251,7 +258,131 @@ export class SidebarComponent implements OnInit, OnDestroy {
   /** ID опоры, выбранной по клику на карте (для подсветки в дереве) */
   selectedPoleIdFromMap: number | null = null;
 
+  /**
+   * История для кнопок «Назад»/«Вперёд».
+   * Сейчас сохраняется только состояние раскрытия дерева (какие линии/участки/папки развёрнуты).
+   * Отмена созданий/удалений/редактирований (например, «создал опору → Назад → опора удалилась»)
+   * не реализована: для этого нужен журнал действий (create/update/delete с типом и id сущности)
+   * и при «Назад» — выполнять обратное действие (delete созданного, restore для update, re-create для delete),
+   * желательно с кэшем данных и согласованием с бэкендом.
+   */
+  private treeUndoStack: Array<{ lines: Set<number>; segments: Set<string>; folders: Set<string> }> = [];
+  private treeRedoStack: Array<{ lines: Set<number>; segments: Set<string>; folders: Set<string> }> = [];
+  treeSearchQuery = '';
+
+  private saveTreeStateForUndo(): void {
+    this.treeRedoStack = [];
+    this.treeUndoStack.push({
+      lines: new Set(this.expandedPowerLines),
+      segments: new Set(this.expandedSegments),
+      folders: new Set(this.expandedPolesFolders)
+    });
+    if (this.treeUndoStack.length > 50) this.treeUndoStack.shift();
+  }
+
+  treeUndo(): void {
+    if (!this.canTreeUndo()) return;
+    this.treeRedoStack.push({
+      lines: new Set(this.expandedPowerLines),
+      segments: new Set(this.expandedSegments),
+      folders: new Set(this.expandedPolesFolders)
+    });
+    const prev = this.treeUndoStack.pop()!;
+    this.expandedPowerLines = prev.lines;
+    this.expandedSegments = prev.segments;
+    this.expandedPolesFolders = prev.folders;
+    this.cdr.detectChanges();
+  }
+
+  treeRedo(): void {
+    if (!this.canTreeRedo()) return;
+    this.treeUndoStack.push({
+      lines: new Set(this.expandedPowerLines),
+      segments: new Set(this.expandedSegments),
+      folders: new Set(this.expandedPolesFolders)
+    });
+    const next = this.treeRedoStack.pop()!;
+    this.expandedPowerLines = next.lines;
+    this.expandedSegments = next.segments;
+    this.expandedPolesFolders = next.folders;
+    this.cdr.detectChanges();
+  }
+
+  canTreeUndo(): boolean {
+    return this.treeUndoStack.length > 0;
+  }
+
+  canTreeRedo(): boolean {
+    return this.treeRedoStack.length > 0;
+  }
+
+  treeCollapseAll(): void {
+    this.saveTreeStateForUndo();
+    this.expandedPowerLines.clear();
+    this.expandedSegments.clear();
+    this.expandedPolesFolders.clear();
+    this.cdr.detectChanges();
+  }
+
+  treeSearch(): void {
+    const q = (this.treeSearchQuery || '').trim().toLowerCase();
+    if (!q) return;
+    const items = this.getPowerLinesWithSegmentsAndPoles();
+    for (const item of items) {
+      const plId = item.powerLine.properties['id'];
+      const name = (item.powerLine.properties['name'] || '').toString().toLowerCase();
+      const mrid = (item.powerLine.properties['mrid'] || '').toString().toLowerCase();
+      if (name.includes(q) || mrid.includes(q)) {
+        this.expandedPowerLines.add(plId);
+        this.cdr.detectChanges();
+        return;
+      }
+      for (const seg of item.segments) {
+        const segName = (seg.segmentName || '').toString().toLowerCase();
+        if (segName.includes(q)) {
+          this.expandedPowerLines.add(plId);
+          this.expandedSegments.add(`${plId}-${seg.segmentId}`);
+          this.cdr.detectChanges();
+          return;
+        }
+        for (const pole of seg.poles) {
+          const pName = (pole.properties['pole_number'] || '').toString().toLowerCase();
+          const pMrid = (pole.properties['mrid'] || '').toString().toLowerCase();
+          if (pName.includes(q) || pMrid.includes(q)) {
+            this.expandedPowerLines.add(plId);
+            this.expandedSegments.add(`${plId}-${seg.segmentId}`);
+            this.expandedPolesFolders.add(`${plId}-all-poles`);
+            this.cdr.detectChanges();
+            return;
+          }
+        }
+        for (const span of seg.spans) {
+          const sName = (span.properties['span_number'] || '').toString().toLowerCase();
+          const sMrid = (span.properties['mrid'] || '').toString().toLowerCase();
+          if (sName.includes(q) || sMrid.includes(q)) {
+            this.expandedPowerLines.add(plId);
+            this.expandedSegments.add(`${plId}-${seg.segmentId}`);
+            this.cdr.detectChanges();
+            return;
+          }
+        }
+      }
+      for (const pole of item.allPoles) {
+        const pName = (pole.properties['pole_number'] || '').toString().toLowerCase();
+        const pMrid = (pole.properties['mrid'] || '').toString().toLowerCase();
+        if (pName.includes(q) || pMrid.includes(q)) {
+          this.expandedPowerLines.add(plId);
+          this.expandedPolesFolders.add(`${plId}-all-poles`);
+          this.cdr.detectChanges();
+          return;
+        }
+      }
+    }
+    this.snackBar.open('Ничего не найдено', 'Закрыть', { duration: 2000 });
+  }
+
   togglePowerLine(powerLineId: number): void {
+    this.saveTreeStateForUndo();
     if (this.expandedPowerLines.has(powerLineId)) {
       this.expandedPowerLines.delete(powerLineId);
     } else {
@@ -264,6 +395,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
   toggleSegment(powerLineId: number, segmentId: number | null): void {
+    this.saveTreeStateForUndo();
     const key = `${powerLineId}-${segmentId}`;
     if (this.expandedSegments.has(key)) {
       this.expandedSegments.delete(key);
@@ -278,6 +410,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
   togglePolesFolder(powerLineId: number, folderKey: string): void {
+    this.saveTreeStateForUndo();
     const key = `${powerLineId}-${folderKey}`;
     if (this.expandedPolesFolders.has(key)) {
       this.expandedPolesFolders.delete(key);
@@ -599,6 +732,12 @@ export class SidebarComponent implements OnInit, OnDestroy {
     }
   }
 
+  onRebuildTopology(): void {
+    if (this.contextMenuType === 'powerLine' && this.contextMenuPowerLineId != null) {
+      this.mapService.requestRebuildTopology(this.contextMenuPowerLineId);
+    }
+  }
+
   onEditObject(): void {
     // Для участков contextMenuFeature может быть null, проверяем contextMenuSegmentId
     if (!this.contextMenuFeature && !(this.contextMenuType === 'segment' && this.contextMenuSegmentId)) return;
@@ -663,6 +802,23 @@ export class SidebarComponent implements OnInit, OnDestroy {
         });
       }
     }
+  }
+
+  openSegmentCard(segmentId: number, powerLineId: number, segmentName?: string | null): void {
+    if (segmentId == null) return;
+    const data: SegmentCardDialogData = {
+      segmentId,
+      powerLineId,
+      segmentName: segmentName ?? undefined
+    };
+    this.dialog.open(SegmentCardDialogComponent, {
+      width: '620px',
+      height: '520px',
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      panelClass: 'segment-card-dialog-panel',
+      data
+    });
   }
 
   onDeleteObject(): void {

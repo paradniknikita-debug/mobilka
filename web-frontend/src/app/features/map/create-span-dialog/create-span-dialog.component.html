@@ -10,11 +10,6 @@
         <span>Загрузка опор...</span>
       </div>
       
-      <div *ngIf="!isLoading && poles.length === 0" class="warning-box">
-        <mat-icon>warning</mat-icon>
-        <span>В этой линии нет опор. Сначала создайте опоры для линии.</span>
-      </div>
-      
       <mat-form-field appearance="outline" class="full-width" *ngIf="!isLoading && poles.length > 0">
         <mat-label>Начальная опора *</mat-label>
         <mat-select formControlName="from_pole_id" (selectionChange)="calculateDistance()">
@@ -34,10 +29,21 @@
         </mat-select>
         <mat-error>{{ getFieldError('to_pole_id') }}</mat-error>
       </mat-form-field>
+    </div>
 
-      <div class="info-box" *ngIf="spanForm.get('from_pole_id')?.value && spanForm.get('to_pole_id')?.value">
-        <mat-icon>info</mat-icon>
-        <span>Пролёт соединит выбранные опоры. Расстояние и наименование будут рассчитаны автоматически.</span>
+    <div class="form-section" *ngIf="(spanForm.get('from_pole_id')?.value && spanForm.get('to_pole_id')?.value) || isEditMode">
+      <h3>Соединяет опоры</h3>
+      <div class="pole-connect-row">
+        <span class="pole-label">{{ getFromPoleName() }}</span>
+        <button mat-icon-button type="button" (click)="copyPoleUid(getFromPoleMrid())" [disabled]="!getFromPoleMrid()" matTooltip="Скопировать UID опоры">
+          <mat-icon>content_copy</mat-icon>
+        </button>
+      </div>
+      <div class="pole-connect-row">
+        <span class="pole-label">{{ getToPoleName() }}</span>
+        <button mat-icon-button type="button" (click)="copyPoleUid(getToPoleMrid())" [disabled]="!getToPoleMrid()" matTooltip="Скопировать UID опоры">
+          <mat-icon>content_copy</mat-icon>
+        </button>
       </div>
     </div>
 

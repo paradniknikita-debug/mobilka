@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Tap, Span
 from app.models.substation import Substation
 from app.models.location import Location, PositionPoint
-from app.models.cim_line_structure import ConnectivityNode
+from app.models.cim_line_structure import ConnectivityNode, LineSection
 import logging
 
 logger = logging.getLogger(__name__)
@@ -102,9 +102,15 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
             }
 
         # Создаем LineString из координат опор по CIM (только Location/PositionPoint)
+        # Сортировка: сначала по sequence_number, затем по pole_number — чтобы линия совпадала с порядком опор
         if len(poles_list) >= 2:
             coordinates = []
-            for pole in sorted(poles_list, key=lambda t: (t.pole_number or "") or str(getattr(t, "sequence_number", "") or "")):
+            def _line_sort_key(p):
+                sn = getattr(p, "sequence_number", None)
+                if sn is not None:
+                    return (0, sn, (p.pole_number or ""))
+                return (1, 0, (p.pole_number or ""))
+            for pole in sorted(poles_list, key=_line_sort_key):
                 longitude, latitude = _pole_coords_from_position_point(pole)
 
                 if longitude is not None and latitude is not None:
@@ -235,7 +241,8 @@ async def _get_poles_geojson_impl(db: AsyncSession):
     result = await db.execute(
         select(Pole).options(
             selectinload(Pole.line),
-            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.connectivity_nodes).selectinload(ConnectivityNode.from_segments),
+            selectinload(Pole.connectivity_nodes).selectinload(ConnectivityNode.to_segments),
             selectinload(Pole.position_points),
             selectinload(Pole.location).selectinload(Location.position_points)
         )
@@ -283,6 +290,22 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["connectivity_node_id"] = int(pole.connectivity_node_id)
             if pole.sequence_number is not None:
                 properties["sequence_number"] = int(pole.sequence_number)
+            # segment_id и segment_name для дерева: из ConnectivityNode -> AClineSegment (from/to)
+            segment_id = None
+            segment_name = None
+            for cn in (pole.connectivity_nodes or []):
+                for seg in (getattr(cn, "from_segments", None) or []) + (getattr(cn, "to_segments", None) or []):
+                    if seg and getattr(seg, "id", None) is not None:
+                        segment_id = int(seg.id)
+                        segment_name = getattr(seg, "name", None)
+                        break
+                if segment_id is not None:
+                    break
+            if segment_id is not None:
+                properties["segment_id"] = segment_id
+                properties["acline_segment_id"] = segment_id
+            if segment_name:
+                properties["segment_name"] = str(segment_name)
             if pole.material:
                 properties["material"] = str(pole.material)
             if pole.year_installed is not None:
@@ -540,16 +563,14 @@ async def get_spans_geojson(
     """Получение пролётов в формате GeoJSON"""
     from app.models.power_line import Span
     from app.models.cim_line_structure import ConnectivityNode
-    
-    from app.models.cim_line_structure import LineSection
-    
+
     result = await db.execute(
         select(Span)
         .options(
             selectinload(Span.from_connectivity_node).selectinload(ConnectivityNode.pole).selectinload(Pole.position_points),
             selectinload(Span.to_connectivity_node).selectinload(ConnectivityNode.pole).selectinload(Pole.position_points),
             selectinload(Span.line),
-            selectinload(Span.line_section)
+            selectinload(Span.line_section).selectinload(LineSection.acline_segment)
         )
     )
     spans = result.scalars().all()
@@ -621,10 +642,12 @@ async def get_spans_geojson(
                     [float(to_longitude), float(to_latitude)]
                 ]
                 
-                # Получаем acline_segment_id через line_section
+                # Получаем acline_segment_id и название участка через line_section
                 acline_segment_id = None
-                if span.line_section:
+                segment_name = None
+                if span.line_section and span.line_section.acline_segment:
                     acline_segment_id = span.line_section.acline_segment_id
+                    segment_name = getattr(span.line_section.acline_segment, "name", None)
                 
                 feature = {
                     "type": "Feature",
@@ -632,6 +655,7 @@ async def get_spans_geojson(
                         "id": int(span.id),
                         "mrid": str(span.mrid),
                         "span_number": str(span.span_number),
+                        "segment_name": str(segment_name) if segment_name else None,
                         "length": float(span.length) if span.length is not None else None,
                         "conductor_type": str(span.conductor_type) if span.conductor_type else None,
                         "conductor_material": str(span.conductor_material) if span.conductor_material else None,

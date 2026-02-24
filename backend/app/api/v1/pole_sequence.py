@@ -199,6 +199,7 @@ async def get_poles_sequence(
     )
     poles = result.scalars().all()
 
+    from datetime import datetime, timezone
     for pole in poles:
         # Координаты для PoleResponse (x_position, y_position)
         fill_pole_coordinates(pole)
@@ -209,6 +210,10 @@ async def get_poles_sequence(
             setattr(pole, "pole_number", "")
         if getattr(pole, "pole_type", None) is None:
             setattr(pole, "pole_type", "")
+        if getattr(pole, "created_by", None) is None:
+            setattr(pole, "created_by", 0)
+        if getattr(pole, "created_at", None) is None:
+            setattr(pole, "created_at", datetime.now(timezone.utc))
         # connectivity_node: подставляем только если узел сериализуется в ConnectivityNodeResponse
         cn = pole.get_connectivity_node_for_line(power_line_id)
         if cn is not None:

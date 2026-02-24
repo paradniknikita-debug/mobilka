@@ -2,21 +2,20 @@
   <div id="map" class="map"></div>
   
   <div class="map-controls">
-    <button mat-fab color="primary" (click)="openCreateDialog()" matTooltip="Создать объект">
+    <button mat-icon-button color="primary" (click)="openCreateDialog()" matTooltip="Создать объект" class="map-control-btn">
       <mat-icon>add</mat-icon>
     </button>
-    <button mat-fab color="accent" (click)="refreshData()" matTooltip="Обновить данные">
+    <button mat-icon-button color="accent" (click)="refreshData()" matTooltip="Обновить данные" class="map-control-btn">
       <mat-icon>refresh</mat-icon>
     </button>
   </div>
 
-  <!-- Индикатор уровня зума (левый нижний угол) -->
+  <!-- Индикатор уровня зума (левый нижний угол), компактный -->
   <div class="zoom-indicator" [class.sidebar-open]="isSidebarOpen" [style.left.px]="isSidebarOpen ? sidebarWidth + 16 : 16">
     <button mat-icon-button (click)="zoomIn()" class="zoom-button" matTooltip="Увеличить зум">
       <mat-icon>add</mat-icon>
     </button>
-    <mat-icon class="zoom-icon">zoom_in</mat-icon>
-    <span>{{ invertedZoom }}</span>
+    <span class="zoom-value">{{ invertedZoom }}</span>
     <span class="zoom-distance">{{ zoomDistance }}</span>
     <button mat-icon-button (click)="zoomOut()" class="zoom-button" matTooltip="Уменьшить зум">
       <mat-icon>remove</mat-icon>
@@ -97,9 +96,10 @@
         (click)="autoCreateSpans()" 
         class="action-button"
         *ngIf="selectedPole.power_line_id"
+        matTooltip="Пересоздать пролёты и сегменты по порядку опор"
       >
         <mat-icon>auto_fix_high</mat-icon>
-        Создать пролёты автоматически
+        Пересобрать топологию линии
       </button>
     </div>
   </div>

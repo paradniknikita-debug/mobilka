@@ -76,6 +76,12 @@
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Порядок в линии</mat-label>
+            <input matInput type="number" formControlName="sequence_number" min="1" placeholder="Пусто — авто">
+            <mat-hint>1, 2, 3… Для автосборки пролётов. Не задано — следующий по линии.</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
             <mat-label>Уникальный UID (MRID)</mat-label>
             <input matInput formControlName="mrid" placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx">
             <mat-hint>Генерируется автоматически. Можно изменить вручную (формат UUID).</mat-hint>
@@ -84,6 +90,38 @@
               <mat-icon>refresh</mat-icon>
             </button>
           </mat-form-field>
+        </div>
+
+        <!-- Параметры кабеля и отпаечная опора -->
+        <div class="form-section">
+          <h3>Параметры кабеля (для автоматического создания пролёта)</h3>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Марка провода</mat-label>
+            <mat-select formControlName="conductor_type">
+              <mat-option value="">— не указана</mat-option>
+              <mat-option *ngFor="let t of conductorTypes" [value]="t">{{ t }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Материал провода</mat-label>
+            <mat-select formControlName="conductor_material">
+              <mat-option value="">— не указан</mat-option>
+              <mat-option *ngFor="let m of conductorMaterials" [value]="m">{{ m }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Сечение провода, мм²</mat-label>
+            <input matInput type="text" formControlName="conductor_section" placeholder="Например: 70">
+          </mat-form-field>
+
+          <div class="tap-checkbox-row">
+            <span class="tap-label">Отпаечная опора:</span>
+            <p class="tap-hint">Укажите, если это точка отпайки (завершит текущий сегмент линии)</p>
+            <mat-checkbox formControlName="is_tap">Отпаечная опора</mat-checkbox>
+          </div>
         </div>
 
         <!-- Дополнительные поля -->
@@ -179,12 +217,7 @@
             <mat-error>{{ getFieldError('voltage_level') }}</mat-error>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Длина (км)</mat-label>
-            <input matInput type="number" formControlName="length" step="0.1" placeholder="Например: 25.5" min="0">
-            <mat-hint>Длина линии в километрах (не может быть отрицательной)</mat-hint>
-            <mat-error>{{ getFieldError('length') }}</mat-error>
-          </mat-form-field>
+          <p class="auto-calc-hint">Длина линии рассчитывается автоматически по сумме пролётов.</p>
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Диспетчерское наименование</mat-label>
@@ -239,11 +272,15 @@
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Код *</mat-label>
-          <input matInput formControlName="code" maxlength="20">
-          <mat-error *ngIf="substationForm.get('code')?.hasError('required')">
-            Код обязателен
-          </mat-error>
+          <mat-label>UID</mat-label>
+          <input matInput formControlName="uid" maxlength="36" placeholder="Пусто — автогенерация (как у опор)">
+          <button mat-icon-button matSuffix (click)="generateSubstationUID()" type="button" matTooltip="Сгенерировать UID">
+            <mat-icon>refresh</mat-icon>
+          </button>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Диспетчерское наименование</mat-label>
+          <input matInput formControlName="dispatcher_name" maxlength="100" placeholder="По желанию">
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
