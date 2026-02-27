@@ -43,7 +43,7 @@
               placeholder="Выберите или введите название ЛЭП">
             <mat-autocomplete #autoPowerLine="matAutocomplete" [displayWith]="displayPowerLine">
               <mat-option *ngFor="let line of filteredPowerLines | async" [value]="line">
-                {{ line.name }} ({{ line.code }})
+                {{ line.name }}
               </mat-option>
             </mat-autocomplete>
             <mat-error>{{ getFieldError('power_line_id') }}</mat-error>

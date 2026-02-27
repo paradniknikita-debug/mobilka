@@ -15,6 +15,7 @@ dependencies:
   # UI
   cupertino_icons: ^1.0.6
   material_design_icons_flutter: ^7.0.7296
+  flutter_svg: ^2.2.3
   
   # State management
   provider: ^6.1.1
@@ -54,6 +55,7 @@ dependencies:
   
   # Image handling
   image_picker: ^1.0.4
+  record: ^5.0.4
   
   # Utils
   intl: ^0.19.0
@@ -81,4 +83,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/equipment/breaker/
+    - assets/equipment/disconnector/
+    - assets/equipment/recloser/
+    - assets/equipment/arrester/
+    - assets/equipment/zn/
 

@@ -233,3 +233,212 @@ class ConnectivityNodeCIMObject(CIMObject):
         
         return result
 
+
+class LineSectionCIMObject(CIMObject):
+    """CIM представление секции линии (группа пролётов с одинаковыми параметрами провода)"""
+    
+    def __init__(
+        self,
+        mrid: str,
+        name: str,
+        conductor_type: Optional[str] = None,
+        conductor_material: Optional[str] = None,
+        conductor_section: Optional[str] = None,
+        r: Optional[float] = None,
+        x: Optional[float] = None,
+        b: Optional[float] = None,
+        g: Optional[float] = None,
+        total_length: Optional[float] = None,
+        wire_info: Optional[Dict] = None,
+        spans: List[Any] = None
+    ):
+        super().__init__(mrid, name)
+        self.conductor_type = conductor_type
+        self.conductor_material = conductor_material
+        self.conductor_section = conductor_section
+        self.r = r
+        self.x = x
+        self.b = b
+        self.g = g
+        self.total_length = total_length
+        self.wire_info = wire_info
+        self.spans = spans or []
+    
+    def get_cim_class(self) -> str:
+        return "LineSection"
+    
+    def to_cim_dict(self) -> Dict[str, Any]:
+        result = {
+            "mRID": self.mrid,
+            "name": self.name
+        }
+        
+        if self.conductor_type:
+            result["conductorType"] = self.conductor_type
+        if self.conductor_material:
+            result["conductorMaterial"] = self.conductor_material
+        if self.conductor_section:
+            result["conductorSection"] = self.conductor_section
+        if self.r is not None:
+            result["r"] = self.r
+        if self.x is not None:
+            result["x"] = self.x
+        if self.b is not None:
+            result["b"] = self.b
+        if self.g is not None:
+            result["g"] = self.g
+        if self.total_length is not None:
+            result["totalLength"] = self.total_length
+        if self.wire_info:
+            result["WireInfo"] = self.wire_info
+        if self.spans:
+            result["Span"] = [
+                span.to_cim_dict() if hasattr(span, 'to_cim_dict') else span
+                for span in self.spans
+            ]
+        
+        return result
+
+
+class SpanCIMObject(CIMObject):
+    """CIM представление пролёта (соединение между двумя опорами)"""
+    
+    def __init__(
+        self,
+        mrid: str,
+        name: str,
+        length: float,
+        from_node: Optional[Dict] = None,
+        to_node: Optional[Dict] = None,
+        tension: Optional[float] = None,
+        sag: Optional[float] = None,
+        conductor_type: Optional[str] = None,
+        conductor_material: Optional[str] = None,
+        conductor_section: Optional[str] = None
+    ):
+        super().__init__(mrid, name)
+        self.length = length
+        self.from_node = from_node
+        self.to_node = to_node
+        self.tension = tension
+        self.sag = sag
+        self.conductor_type = conductor_type
+        self.conductor_material = conductor_material
+        self.conductor_section = conductor_section
+    
+    def get_cim_class(self) -> str:
+        return "Span"
+    
+    def to_cim_dict(self) -> Dict[str, Any]:
+        result = {
+            "mRID": self.mrid,
+            "name": self.name,
+            "length": self.length
+        }
+        
+        if self.from_node:
+            result["fromConnectivityNode"] = self.from_node
+        if self.to_node:
+            result["toConnectivityNode"] = self.to_node
+        if self.tension is not None:
+            result["tension"] = self.tension
+        if self.sag is not None:
+            result["sag"] = self.sag
+        if self.conductor_type:
+            result["conductorType"] = self.conductor_type
+        if self.conductor_material:
+            result["conductorMaterial"] = self.conductor_material
+        if self.conductor_section:
+            result["conductorSection"] = self.conductor_section
+        
+        return result
+
+
+class WireInfoCIMObject(CIMObject):
+    """CIM представление информации о проводе"""
+    
+    def __init__(
+        self,
+        mrid: str,
+        name: str,
+        material: str,
+        section: float,
+        r: Optional[float] = None,
+        x: Optional[float] = None,
+        b: Optional[float] = None,
+        g: Optional[float] = None,
+        diameter: Optional[float] = None,
+        breaking_load: Optional[float] = None,
+        weight_per_length: Optional[float] = None
+    ):
+        super().__init__(mrid, name)
+        self.material = material
+        self.section = section
+        self.r = r
+        self.x = x
+        self.b = b
+        self.g = g
+        self.diameter = diameter
+        self.breaking_load = breaking_load
+        self.weight_per_length = weight_per_length
+    
+    def get_cim_class(self) -> str:
+        return "WireInfo"
+    
+    def to_cim_dict(self) -> Dict[str, Any]:
+        result = {
+            "mRID": self.mrid,
+            "name": self.name,
+            "material": self.material,
+            "section": self.section
+        }
+        
+        if self.r is not None:
+            result["r"] = self.r
+        if self.x is not None:
+            result["x"] = self.x
+        if self.b is not None:
+            result["b"] = self.b
+        if self.g is not None:
+            result["g"] = self.g
+        if self.diameter is not None:
+            result["diameter"] = self.diameter
+        if self.breaking_load is not None:
+            result["breakingLoad"] = self.breaking_load
+        if self.weight_per_length is not None:
+            result["weightPerLength"] = self.weight_per_length
+        
+        return result
+
+
+class TerminalCIMObject(CIMObject):
+    """CIM представление терминала (точка подключения оборудования)"""
+    
+    def __init__(
+        self,
+        mrid: str,
+        name: Optional[str] = None,
+        connectivity_node: Optional[Dict] = None,
+        sequence_number: Optional[int] = None
+    ):
+        super().__init__(mrid, name)
+        self.connectivity_node = connectivity_node
+        self.sequence_number = sequence_number
+    
+    def get_cim_class(self) -> str:
+        return "Terminal"
+    
+    def to_cim_dict(self) -> Dict[str, Any]:
+        result = {
+            "mRID": self.mrid
+        }
+        
+        if self.name:
+            result["name"] = self.name
+        if self.connectivity_node:
+            result["ConnectivityNode"] = self.connectivity_node
+        if self.sequence_number is not None:
+            result["sequenceNumber"] = self.sequence_number
+        
+        return result
+

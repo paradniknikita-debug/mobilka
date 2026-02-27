@@ -24,6 +24,11 @@ class $PowerLinesTable extends PowerLines
   late final GeneratedColumn<String> code = GeneratedColumn<String>(
       'code', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _mridMeta = const VerificationMeta('mrid');
+  @override
+  late final GeneratedColumn<String> mrid = GeneratedColumn<String>(
+      'mrid', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _voltageLevelMeta =
       const VerificationMeta('voltageLevel');
   @override
@@ -95,6 +100,7 @@ class $PowerLinesTable extends PowerLines
         id,
         name,
         code,
+        mrid,
         voltageLevel,
         length,
         branchId,
@@ -130,6 +136,10 @@ class $PowerLinesTable extends PowerLines
           _codeMeta, code.isAcceptableOrUnknown(data['code']!, _codeMeta));
     } else if (isInserting) {
       context.missing(_codeMeta);
+    }
+    if (data.containsKey('mrid')) {
+      context.handle(
+          _mridMeta, mrid.isAcceptableOrUnknown(data['mrid']!, _mridMeta));
     }
     if (data.containsKey('voltage_level')) {
       context.handle(
@@ -200,6 +210,8 @@ class $PowerLinesTable extends PowerLines
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       code: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}code'])!,
+      mrid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mrid']),
       voltageLevel: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}voltage_level'])!,
       length: attachedDatabase.typeMapping
@@ -233,6 +245,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
   final int id;
   final String name;
   final String code;
+  final String? mrid;
   final double voltageLevel;
   final double? length;
   final int branchId;
@@ -247,6 +260,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       {required this.id,
       required this.name,
       required this.code,
+      this.mrid,
       required this.voltageLevel,
       this.length,
       required this.branchId,
@@ -263,6 +277,9 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
     map['code'] = Variable<String>(code);
+    if (!nullToAbsent || mrid != null) {
+      map['mrid'] = Variable<String>(mrid);
+    }
     map['voltage_level'] = Variable<double>(voltageLevel);
     if (!nullToAbsent || length != null) {
       map['length'] = Variable<double>(length);
@@ -287,6 +304,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       id: Value(id),
       name: Value(name),
       code: Value(code),
+      mrid: mrid == null && nullToAbsent ? const Value.absent() : Value(mrid),
       voltageLevel: Value(voltageLevel),
       length:
           length == null && nullToAbsent ? const Value.absent() : Value(length),
@@ -312,6 +330,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       code: serializer.fromJson<String>(json['code']),
+      mrid: serializer.fromJson<String?>(json['mrid']),
       voltageLevel: serializer.fromJson<double>(json['voltageLevel']),
       length: serializer.fromJson<double?>(json['length']),
       branchId: serializer.fromJson<int>(json['branchId']),
@@ -331,6 +350,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'code': serializer.toJson<String>(code),
+      'mrid': serializer.toJson<String?>(mrid),
       'voltageLevel': serializer.toJson<double>(voltageLevel),
       'length': serializer.toJson<double?>(length),
       'branchId': serializer.toJson<int>(branchId),
@@ -348,6 +368,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
           {int? id,
           String? name,
           String? code,
+          Value<String?> mrid = const Value.absent(),
           double? voltageLevel,
           Value<double?> length = const Value.absent(),
           int? branchId,
@@ -362,6 +383,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
         id: id ?? this.id,
         name: name ?? this.name,
         code: code ?? this.code,
+        mrid: mrid.present ? mrid.value : this.mrid,
         voltageLevel: voltageLevel ?? this.voltageLevel,
         length: length.present ? length.value : this.length,
         branchId: branchId ?? this.branchId,
@@ -378,6 +400,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       code: data.code.present ? data.code.value : this.code,
+      mrid: data.mrid.present ? data.mrid.value : this.mrid,
       voltageLevel: data.voltageLevel.present
           ? data.voltageLevel.value
           : this.voltageLevel,
@@ -400,6 +423,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('code: $code, ')
+          ..write('mrid: $mrid, ')
           ..write('voltageLevel: $voltageLevel, ')
           ..write('length: $length, ')
           ..write('branchId: $branchId, ')
@@ -419,6 +443,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
       id,
       name,
       code,
+      mrid,
       voltageLevel,
       length,
       branchId,
@@ -436,6 +461,7 @@ class PowerLine extends DataClass implements Insertable<PowerLine> {
           other.id == this.id &&
           other.name == this.name &&
           other.code == this.code &&
+          other.mrid == this.mrid &&
           other.voltageLevel == this.voltageLevel &&
           other.length == this.length &&
           other.branchId == this.branchId &&
@@ -452,6 +478,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
   final Value<int> id;
   final Value<String> name;
   final Value<String> code;
+  final Value<String?> mrid;
   final Value<double> voltageLevel;
   final Value<double?> length;
   final Value<int> branchId;
@@ -466,6 +493,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.code = const Value.absent(),
+    this.mrid = const Value.absent(),
     this.voltageLevel = const Value.absent(),
     this.length = const Value.absent(),
     this.branchId = const Value.absent(),
@@ -481,6 +509,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
     this.id = const Value.absent(),
     required String name,
     required String code,
+    this.mrid = const Value.absent(),
     required double voltageLevel,
     this.length = const Value.absent(),
     required int branchId,
@@ -502,6 +531,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
     Expression<int>? id,
     Expression<String>? name,
     Expression<String>? code,
+    Expression<String>? mrid,
     Expression<double>? voltageLevel,
     Expression<double>? length,
     Expression<int>? branchId,
@@ -517,6 +547,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (code != null) 'code': code,
+      if (mrid != null) 'mrid': mrid,
       if (voltageLevel != null) 'voltage_level': voltageLevel,
       if (length != null) 'length': length,
       if (branchId != null) 'branch_id': branchId,
@@ -534,6 +565,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
       {Value<int>? id,
       Value<String>? name,
       Value<String>? code,
+      Value<String?>? mrid,
       Value<double>? voltageLevel,
       Value<double?>? length,
       Value<int>? branchId,
@@ -548,6 +580,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
       id: id ?? this.id,
       name: name ?? this.name,
       code: code ?? this.code,
+      mrid: mrid ?? this.mrid,
       voltageLevel: voltageLevel ?? this.voltageLevel,
       length: length ?? this.length,
       branchId: branchId ?? this.branchId,
@@ -572,6 +605,9 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
     }
     if (code.present) {
       map['code'] = Variable<String>(code.value);
+    }
+    if (mrid.present) {
+      map['mrid'] = Variable<String>(mrid.value);
     }
     if (voltageLevel.present) {
       map['voltage_level'] = Variable<double>(voltageLevel.value);
@@ -612,6 +648,7 @@ class PowerLinesCompanion extends UpdateCompanion<PowerLine> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('code: $code, ')
+          ..write('mrid: $mrid, ')
           ..write('voltageLevel: $voltageLevel, ')
           ..write('length: $length, ')
           ..write('branchId: $branchId, ')
@@ -649,17 +686,17 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   late final GeneratedColumn<String> poleNumber = GeneratedColumn<String>(
       'pole_number', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _latitudeMeta =
-      const VerificationMeta('latitude');
+  static const VerificationMeta _xPositionMeta =
+      const VerificationMeta('xPosition');
   @override
-  late final GeneratedColumn<double> latitude = GeneratedColumn<double>(
-      'latitude', aliasedName, false,
+  late final GeneratedColumn<double> xPosition = GeneratedColumn<double>(
+      'x_position', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
-  static const VerificationMeta _longitudeMeta =
-      const VerificationMeta('longitude');
+  static const VerificationMeta _yPositionMeta =
+      const VerificationMeta('yPosition');
   @override
-  late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
-      'longitude', aliasedName, false,
+  late final GeneratedColumn<double> yPosition = GeneratedColumn<double>(
+      'y_position', aliasedName, false,
       type: DriftSqlType.double, requiredDuringInsert: true);
   static const VerificationMeta _poleTypeMeta =
       const VerificationMeta('poleType');
@@ -701,6 +738,19 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
       'notes', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _cardCommentMeta =
+      const VerificationMeta('cardComment');
+  @override
+  late final GeneratedColumn<String> cardComment = GeneratedColumn<String>(
+      'card_comment', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _cardCommentAttachmentMeta =
+      const VerificationMeta('cardCommentAttachment');
+  @override
+  late final GeneratedColumn<String> cardCommentAttachment =
+      GeneratedColumn<String>(
+          'card_comment_attachment', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdByMeta =
       const VerificationMeta('createdBy');
   @override
@@ -744,8 +794,8 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         id,
         powerLineId,
         poleNumber,
-        latitude,
-        longitude,
+        xPosition,
+        yPosition,
         poleType,
         height,
         foundationType,
@@ -753,6 +803,8 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         yearInstalled,
         condition,
         notes,
+        cardComment,
+        cardCommentAttachment,
         createdBy,
         createdAt,
         updatedAt,
@@ -788,17 +840,17 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     } else if (isInserting) {
       context.missing(_poleNumberMeta);
     }
-    if (data.containsKey('latitude')) {
-      context.handle(_latitudeMeta,
-          latitude.isAcceptableOrUnknown(data['latitude']!, _latitudeMeta));
+    if (data.containsKey('x_position')) {
+      context.handle(_xPositionMeta,
+          xPosition.isAcceptableOrUnknown(data['x_position']!, _xPositionMeta));
     } else if (isInserting) {
-      context.missing(_latitudeMeta);
+      context.missing(_xPositionMeta);
     }
-    if (data.containsKey('longitude')) {
-      context.handle(_longitudeMeta,
-          longitude.isAcceptableOrUnknown(data['longitude']!, _longitudeMeta));
+    if (data.containsKey('y_position')) {
+      context.handle(_yPositionMeta,
+          yPosition.isAcceptableOrUnknown(data['y_position']!, _yPositionMeta));
     } else if (isInserting) {
-      context.missing(_longitudeMeta);
+      context.missing(_yPositionMeta);
     }
     if (data.containsKey('pole_type')) {
       context.handle(_poleTypeMeta,
@@ -835,6 +887,18 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     if (data.containsKey('notes')) {
       context.handle(
           _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
+    }
+    if (data.containsKey('card_comment')) {
+      context.handle(
+          _cardCommentMeta,
+          cardComment.isAcceptableOrUnknown(
+              data['card_comment']!, _cardCommentMeta));
+    }
+    if (data.containsKey('card_comment_attachment')) {
+      context.handle(
+          _cardCommentAttachmentMeta,
+          cardCommentAttachment.isAcceptableOrUnknown(
+              data['card_comment_attachment']!, _cardCommentAttachmentMeta));
     }
     if (data.containsKey('created_by')) {
       context.handle(_createdByMeta,
@@ -875,10 +939,10 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
           .read(DriftSqlType.int, data['${effectivePrefix}power_line_id'])!,
       poleNumber: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}pole_number'])!,
-      latitude: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}latitude'])!,
-      longitude: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}longitude'])!,
+      xPosition: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}x_position'])!,
+      yPosition: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}y_position'])!,
       poleType: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}pole_type'])!,
       height: attachedDatabase.typeMapping
@@ -893,6 +957,10 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
           .read(DriftSqlType.string, data['${effectivePrefix}condition'])!,
       notes: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      cardComment: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}card_comment']),
+      cardCommentAttachment: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}card_comment_attachment']),
       createdBy: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}created_by'])!,
       createdAt: attachedDatabase.typeMapping
@@ -916,8 +984,8 @@ class Pole extends DataClass implements Insertable<Pole> {
   final int id;
   final int powerLineId;
   final String poleNumber;
-  final double latitude;
-  final double longitude;
+  final double xPosition;
+  final double yPosition;
   final String poleType;
   final double? height;
   final String? foundationType;
@@ -925,6 +993,8 @@ class Pole extends DataClass implements Insertable<Pole> {
   final int? yearInstalled;
   final String condition;
   final String? notes;
+  final String? cardComment;
+  final String? cardCommentAttachment;
   final int createdBy;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -934,8 +1004,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       {required this.id,
       required this.powerLineId,
       required this.poleNumber,
-      required this.latitude,
-      required this.longitude,
+      required this.xPosition,
+      required this.yPosition,
       required this.poleType,
       this.height,
       this.foundationType,
@@ -943,6 +1013,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       this.yearInstalled,
       required this.condition,
       this.notes,
+      this.cardComment,
+      this.cardCommentAttachment,
       required this.createdBy,
       required this.createdAt,
       this.updatedAt,
@@ -954,8 +1026,8 @@ class Pole extends DataClass implements Insertable<Pole> {
     map['id'] = Variable<int>(id);
     map['power_line_id'] = Variable<int>(powerLineId);
     map['pole_number'] = Variable<String>(poleNumber);
-    map['latitude'] = Variable<double>(latitude);
-    map['longitude'] = Variable<double>(longitude);
+    map['x_position'] = Variable<double>(xPosition);
+    map['y_position'] = Variable<double>(yPosition);
     map['pole_type'] = Variable<String>(poleType);
     if (!nullToAbsent || height != null) {
       map['height'] = Variable<double>(height);
@@ -973,6 +1045,12 @@ class Pole extends DataClass implements Insertable<Pole> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
+    if (!nullToAbsent || cardComment != null) {
+      map['card_comment'] = Variable<String>(cardComment);
+    }
+    if (!nullToAbsent || cardCommentAttachment != null) {
+      map['card_comment_attachment'] = Variable<String>(cardCommentAttachment);
+    }
     map['created_by'] = Variable<int>(createdBy);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || updatedAt != null) {
@@ -988,8 +1066,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       id: Value(id),
       powerLineId: Value(powerLineId),
       poleNumber: Value(poleNumber),
-      latitude: Value(latitude),
-      longitude: Value(longitude),
+      xPosition: Value(xPosition),
+      yPosition: Value(yPosition),
       poleType: Value(poleType),
       height:
           height == null && nullToAbsent ? const Value.absent() : Value(height),
@@ -1005,6 +1083,12 @@ class Pole extends DataClass implements Insertable<Pole> {
       condition: Value(condition),
       notes:
           notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      cardComment: cardComment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardComment),
+      cardCommentAttachment: cardCommentAttachment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardCommentAttachment),
       createdBy: Value(createdBy),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
@@ -1022,8 +1106,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       id: serializer.fromJson<int>(json['id']),
       powerLineId: serializer.fromJson<int>(json['powerLineId']),
       poleNumber: serializer.fromJson<String>(json['poleNumber']),
-      latitude: serializer.fromJson<double>(json['latitude']),
-      longitude: serializer.fromJson<double>(json['longitude']),
+      xPosition: serializer.fromJson<double>(json['x_position']),
+      yPosition: serializer.fromJson<double>(json['y_position']),
       poleType: serializer.fromJson<String>(json['poleType']),
       height: serializer.fromJson<double?>(json['height']),
       foundationType: serializer.fromJson<String?>(json['foundationType']),
@@ -1031,6 +1115,9 @@ class Pole extends DataClass implements Insertable<Pole> {
       yearInstalled: serializer.fromJson<int?>(json['yearInstalled']),
       condition: serializer.fromJson<String>(json['condition']),
       notes: serializer.fromJson<String?>(json['notes']),
+      cardComment: serializer.fromJson<String?>(json['cardComment']),
+      cardCommentAttachment:
+          serializer.fromJson<String?>(json['cardCommentAttachment']),
       createdBy: serializer.fromJson<int>(json['createdBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
@@ -1045,8 +1132,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       'id': serializer.toJson<int>(id),
       'powerLineId': serializer.toJson<int>(powerLineId),
       'poleNumber': serializer.toJson<String>(poleNumber),
-      'latitude': serializer.toJson<double>(latitude),
-      'longitude': serializer.toJson<double>(longitude),
+      'x_position': serializer.toJson<double>(xPosition),
+      'y_position': serializer.toJson<double>(yPosition),
       'poleType': serializer.toJson<String>(poleType),
       'height': serializer.toJson<double?>(height),
       'foundationType': serializer.toJson<String?>(foundationType),
@@ -1054,6 +1141,9 @@ class Pole extends DataClass implements Insertable<Pole> {
       'yearInstalled': serializer.toJson<int?>(yearInstalled),
       'condition': serializer.toJson<String>(condition),
       'notes': serializer.toJson<String?>(notes),
+      'cardComment': serializer.toJson<String?>(cardComment),
+      'cardCommentAttachment':
+          serializer.toJson<String?>(cardCommentAttachment),
       'createdBy': serializer.toJson<int>(createdBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
@@ -1066,8 +1156,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           {int? id,
           int? powerLineId,
           String? poleNumber,
-          double? latitude,
-          double? longitude,
+          double? xPosition,
+          double? yPosition,
           String? poleType,
           Value<double?> height = const Value.absent(),
           Value<String?> foundationType = const Value.absent(),
@@ -1075,6 +1165,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           Value<int?> yearInstalled = const Value.absent(),
           String? condition,
           Value<String?> notes = const Value.absent(),
+          Value<String?> cardComment = const Value.absent(),
+          Value<String?> cardCommentAttachment = const Value.absent(),
           int? createdBy,
           DateTime? createdAt,
           Value<DateTime?> updatedAt = const Value.absent(),
@@ -1084,8 +1176,8 @@ class Pole extends DataClass implements Insertable<Pole> {
         id: id ?? this.id,
         powerLineId: powerLineId ?? this.powerLineId,
         poleNumber: poleNumber ?? this.poleNumber,
-        latitude: latitude ?? this.latitude,
-        longitude: longitude ?? this.longitude,
+        xPosition: xPosition ?? this.xPosition,
+        yPosition: yPosition ?? this.yPosition,
         poleType: poleType ?? this.poleType,
         height: height.present ? height.value : this.height,
         foundationType:
@@ -1095,6 +1187,10 @@ class Pole extends DataClass implements Insertable<Pole> {
             yearInstalled.present ? yearInstalled.value : this.yearInstalled,
         condition: condition ?? this.condition,
         notes: notes.present ? notes.value : this.notes,
+        cardComment: cardComment.present ? cardComment.value : this.cardComment,
+        cardCommentAttachment: cardCommentAttachment.present
+            ? cardCommentAttachment.value
+            : this.cardCommentAttachment,
         createdBy: createdBy ?? this.createdBy,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
@@ -1108,8 +1204,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           data.powerLineId.present ? data.powerLineId.value : this.powerLineId,
       poleNumber:
           data.poleNumber.present ? data.poleNumber.value : this.poleNumber,
-      latitude: data.latitude.present ? data.latitude.value : this.latitude,
-      longitude: data.longitude.present ? data.longitude.value : this.longitude,
+      xPosition: data.xPosition.present ? data.xPosition.value : this.xPosition,
+      yPosition: data.yPosition.present ? data.yPosition.value : this.yPosition,
       poleType: data.poleType.present ? data.poleType.value : this.poleType,
       height: data.height.present ? data.height.value : this.height,
       foundationType: data.foundationType.present
@@ -1121,6 +1217,12 @@ class Pole extends DataClass implements Insertable<Pole> {
           : this.yearInstalled,
       condition: data.condition.present ? data.condition.value : this.condition,
       notes: data.notes.present ? data.notes.value : this.notes,
+      cardComment: data.cardComment.present
+          ? data.cardComment.value
+          : this.cardComment,
+      cardCommentAttachment: data.cardCommentAttachment.present
+          ? data.cardCommentAttachment.value
+          : this.cardCommentAttachment,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1135,8 +1237,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           ..write('id: $id, ')
           ..write('powerLineId: $powerLineId, ')
           ..write('poleNumber: $poleNumber, ')
-          ..write('latitude: $latitude, ')
-          ..write('longitude: $longitude, ')
+          ..write('xPosition: $xPosition, ')
+          ..write('yPosition: $yPosition, ')
           ..write('poleType: $poleType, ')
           ..write('height: $height, ')
           ..write('foundationType: $foundationType, ')
@@ -1158,8 +1260,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       id,
       powerLineId,
       poleNumber,
-      latitude,
-      longitude,
+      xPosition,
+      yPosition,
       poleType,
       height,
       foundationType,
@@ -1167,6 +1269,8 @@ class Pole extends DataClass implements Insertable<Pole> {
       yearInstalled,
       condition,
       notes,
+      cardComment,
+      cardCommentAttachment,
       createdBy,
       createdAt,
       updatedAt,
@@ -1179,8 +1283,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           other.id == this.id &&
           other.powerLineId == this.powerLineId &&
           other.poleNumber == this.poleNumber &&
-          other.latitude == this.latitude &&
-          other.longitude == this.longitude &&
+          other.xPosition == this.xPosition &&
+          other.yPosition == this.yPosition &&
           other.poleType == this.poleType &&
           other.height == this.height &&
           other.foundationType == this.foundationType &&
@@ -1188,6 +1292,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           other.yearInstalled == this.yearInstalled &&
           other.condition == this.condition &&
           other.notes == this.notes &&
+          other.cardComment == this.cardComment &&
+          other.cardCommentAttachment == this.cardCommentAttachment &&
           other.createdBy == this.createdBy &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -1199,8 +1305,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<int> id;
   final Value<int> powerLineId;
   final Value<String> poleNumber;
-  final Value<double> latitude;
-  final Value<double> longitude;
+  final Value<double> xPosition;
+  final Value<double> yPosition;
   final Value<String> poleType;
   final Value<double?> height;
   final Value<String?> foundationType;
@@ -1208,6 +1314,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<int?> yearInstalled;
   final Value<String> condition;
   final Value<String?> notes;
+  final Value<String?> cardComment;
+  final Value<String?> cardCommentAttachment;
   final Value<int> createdBy;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
@@ -1217,8 +1325,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.id = const Value.absent(),
     this.powerLineId = const Value.absent(),
     this.poleNumber = const Value.absent(),
-    this.latitude = const Value.absent(),
-    this.longitude = const Value.absent(),
+    this.xPosition = const Value.absent(),
+    this.yPosition = const Value.absent(),
     this.poleType = const Value.absent(),
     this.height = const Value.absent(),
     this.foundationType = const Value.absent(),
@@ -1226,6 +1334,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.yearInstalled = const Value.absent(),
     this.condition = const Value.absent(),
     this.notes = const Value.absent(),
+    this.cardComment = const Value.absent(),
+    this.cardCommentAttachment = const Value.absent(),
     this.createdBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1236,8 +1346,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.id = const Value.absent(),
     required int powerLineId,
     required String poleNumber,
-    required double latitude,
-    required double longitude,
+    required double xPosition,
+    required double yPosition,
     required String poleType,
     this.height = const Value.absent(),
     this.foundationType = const Value.absent(),
@@ -1245,6 +1355,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.yearInstalled = const Value.absent(),
     required String condition,
     this.notes = const Value.absent(),
+    this.cardComment = const Value.absent(),
+    this.cardCommentAttachment = const Value.absent(),
     required int createdBy,
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
@@ -1252,8 +1364,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.needsSync = const Value.absent(),
   })  : powerLineId = Value(powerLineId),
         poleNumber = Value(poleNumber),
-        latitude = Value(latitude),
-        longitude = Value(longitude),
+        xPosition = Value(xPosition),
+        yPosition = Value(yPosition),
         poleType = Value(poleType),
         condition = Value(condition),
         createdBy = Value(createdBy),
@@ -1262,8 +1374,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Expression<int>? id,
     Expression<int>? powerLineId,
     Expression<String>? poleNumber,
-    Expression<double>? latitude,
-    Expression<double>? longitude,
+    Expression<double>? xPosition,
+    Expression<double>? yPosition,
     Expression<String>? poleType,
     Expression<double>? height,
     Expression<String>? foundationType,
@@ -1271,6 +1383,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Expression<int>? yearInstalled,
     Expression<String>? condition,
     Expression<String>? notes,
+    Expression<String>? cardComment,
+    Expression<String>? cardCommentAttachment,
     Expression<int>? createdBy,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -1281,8 +1395,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       if (id != null) 'id': id,
       if (powerLineId != null) 'power_line_id': powerLineId,
       if (poleNumber != null) 'pole_number': poleNumber,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
+      if (xPosition != null) 'x_position': xPosition,
+      if (yPosition != null) 'y_position': yPosition,
       if (poleType != null) 'pole_type': poleType,
       if (height != null) 'height': height,
       if (foundationType != null) 'foundation_type': foundationType,
@@ -1290,6 +1404,9 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       if (yearInstalled != null) 'year_installed': yearInstalled,
       if (condition != null) 'condition': condition,
       if (notes != null) 'notes': notes,
+      if (cardComment != null) 'card_comment': cardComment,
+      if (cardCommentAttachment != null)
+        'card_comment_attachment': cardCommentAttachment,
       if (createdBy != null) 'created_by': createdBy,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1302,8 +1419,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       {Value<int>? id,
       Value<int>? powerLineId,
       Value<String>? poleNumber,
-      Value<double>? latitude,
-      Value<double>? longitude,
+      Value<double>? xPosition,
+      Value<double>? yPosition,
       Value<String>? poleType,
       Value<double?>? height,
       Value<String?>? foundationType,
@@ -1311,6 +1428,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       Value<int?>? yearInstalled,
       Value<String>? condition,
       Value<String?>? notes,
+      Value<String?>? cardComment,
+      Value<String?>? cardCommentAttachment,
       Value<int>? createdBy,
       Value<DateTime>? createdAt,
       Value<DateTime?>? updatedAt,
@@ -1320,8 +1439,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
       poleNumber: poleNumber ?? this.poleNumber,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      xPosition: xPosition ?? this.xPosition,
+      yPosition: yPosition ?? this.yPosition,
       poleType: poleType ?? this.poleType,
       height: height ?? this.height,
       foundationType: foundationType ?? this.foundationType,
@@ -1329,6 +1448,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       yearInstalled: yearInstalled ?? this.yearInstalled,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
+      cardComment: cardComment ?? this.cardComment,
+      cardCommentAttachment: cardCommentAttachment ?? this.cardCommentAttachment,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1349,11 +1470,11 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     if (poleNumber.present) {
       map['pole_number'] = Variable<String>(poleNumber.value);
     }
-    if (latitude.present) {
-      map['latitude'] = Variable<double>(latitude.value);
+    if (xPosition.present) {
+      map['x_position'] = Variable<double>(xPosition.value);
     }
-    if (longitude.present) {
-      map['longitude'] = Variable<double>(longitude.value);
+    if (yPosition.present) {
+      map['y_position'] = Variable<double>(yPosition.value);
     }
     if (poleType.present) {
       map['pole_type'] = Variable<String>(poleType.value);
@@ -1375,6 +1496,12 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
+    }
+    if (cardComment.present) {
+      map['card_comment'] = Variable<String>(cardComment.value);
+    }
+    if (cardCommentAttachment.present) {
+      map['card_comment_attachment'] = Variable<String>(cardCommentAttachment.value);
     }
     if (createdBy.present) {
       map['created_by'] = Variable<int>(createdBy.value);
@@ -1400,8 +1527,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
           ..write('id: $id, ')
           ..write('powerLineId: $powerLineId, ')
           ..write('poleNumber: $poleNumber, ')
-          ..write('latitude: $latitude, ')
-          ..write('longitude: $longitude, ')
+          ..write('xPosition: $xPosition, ')
+          ..write('yPosition: $yPosition, ')
           ..write('poleType: $poleType, ')
           ..write('height: $height, ')
           ..write('foundationType: $foundationType, ')
@@ -1409,6 +1536,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
           ..write('yearInstalled: $yearInstalled, ')
           ..write('condition: $condition, ')
           ..write('notes: $notes, ')
+          ..write('cardComment: $cardComment, ')
+          ..write('cardCommentAttachment: $cardCommentAttachment, ')
           ..write('createdBy: $createdBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1446,6 +1575,32 @@ class $EquipmentTable extends Equipment
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
       'name', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _quantityMeta =
+      const VerificationMeta('quantity');
+  @override
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+      'quantity', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _defectMeta = const VerificationMeta('defect');
+  @override
+  late final GeneratedColumn<String> defect = GeneratedColumn<String>(
+      'defect', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _criticalityMeta =
+      const VerificationMeta('criticality');
+  @override
+  late final GeneratedColumn<String> criticality = GeneratedColumn<String>(
+      'criticality', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _defectAttachmentMeta =
+      const VerificationMeta('defectAttachment');
+  @override
+  late final GeneratedColumn<String> defectAttachment =
+      GeneratedColumn<String>(
+          'defect_attachment', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _manufacturerMeta =
       const VerificationMeta('manufacturer');
   @override
@@ -1530,6 +1685,10 @@ class $EquipmentTable extends Equipment
         poleId,
         equipmentType,
         name,
+        quantity,
+        defect,
+        criticality,
+        defectAttachment,
         manufacturer,
         model,
         serialNumber,
@@ -1575,6 +1734,25 @@ class $EquipmentTable extends Equipment
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('quantity')) {
+      context.handle(_quantityMeta,
+          quantity.isAcceptableOrUnknown(data['quantity']!, _quantityMeta));
+    }
+    if (data.containsKey('defect')) {
+      context.handle(
+          _defectMeta, defect.isAcceptableOrUnknown(data['defect']!, _defectMeta));
+    }
+    if (data.containsKey('criticality')) {
+      context.handle(_criticalityMeta,
+          criticality.isAcceptableOrUnknown(
+              data['criticality']!, _criticalityMeta));
+    }
+    if (data.containsKey('defect_attachment')) {
+      context.handle(
+          _defectAttachmentMeta,
+          defectAttachment.isAcceptableOrUnknown(
+              data['defect_attachment']!, _defectAttachmentMeta));
     }
     if (data.containsKey('manufacturer')) {
       context.handle(
@@ -1655,6 +1833,14 @@ class $EquipmentTable extends Equipment
           .read(DriftSqlType.string, data['${effectivePrefix}equipment_type'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      quantity: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}quantity'])!,
+      defect: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}defect']),
+      criticality: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}criticality']),
+      defectAttachment: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}defect_attachment']),
       manufacturer: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}manufacturer']),
       model: attachedDatabase.typeMapping
@@ -1693,6 +1879,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   final int poleId;
   final String equipmentType;
   final String name;
+  final int quantity;
+  final String? defect;
+  final String? criticality;
+  final String? defectAttachment;
   final String? manufacturer;
   final String? model;
   final String? serialNumber;
@@ -1710,6 +1900,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       required this.poleId,
       required this.equipmentType,
       required this.name,
+      this.quantity = 1,
+      this.defect,
+      this.criticality,
+      this.defectAttachment,
       this.manufacturer,
       this.model,
       this.serialNumber,
@@ -1729,6 +1923,16 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     map['pole_id'] = Variable<int>(poleId);
     map['equipment_type'] = Variable<String>(equipmentType);
     map['name'] = Variable<String>(name);
+    map['quantity'] = Variable<int>(quantity);
+    if (!nullToAbsent || defect != null) {
+      map['defect'] = Variable<String>(defect);
+    }
+    if (!nullToAbsent || criticality != null) {
+      map['criticality'] = Variable<String>(criticality);
+    }
+    if (!nullToAbsent || defectAttachment != null) {
+      map['defect_attachment'] = Variable<String>(defectAttachment);
+    }
     if (!nullToAbsent || manufacturer != null) {
       map['manufacturer'] = Variable<String>(manufacturer);
     }
@@ -1764,6 +1968,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       poleId: Value(poleId),
       equipmentType: Value(equipmentType),
       name: Value(name),
+      quantity: Value(quantity),
+      defect: defect == null && nullToAbsent ? const Value.absent() : Value(defect),
+      criticality: criticality == null && nullToAbsent ? const Value.absent() : Value(criticality),
+      defectAttachment: defectAttachment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defectAttachment),
       manufacturer: manufacturer == null && nullToAbsent
           ? const Value.absent()
           : Value(manufacturer),
@@ -1799,6 +2009,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       poleId: serializer.fromJson<int>(json['poleId']),
       equipmentType: serializer.fromJson<String>(json['equipmentType']),
       name: serializer.fromJson<String>(json['name']),
+      quantity: serializer.fromJson<int>(json['quantity'] ?? 1),
+      defect: serializer.fromJson<String?>(json['defect']),
+      criticality: serializer.fromJson<String?>(json['criticality']),
+      defectAttachment: serializer.fromJson<String?>(json['defectAttachment']),
       manufacturer: serializer.fromJson<String?>(json['manufacturer']),
       model: serializer.fromJson<String?>(json['model']),
       serialNumber: serializer.fromJson<String?>(json['serialNumber']),
@@ -1822,6 +2036,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       'poleId': serializer.toJson<int>(poleId),
       'equipmentType': serializer.toJson<String>(equipmentType),
       'name': serializer.toJson<String>(name),
+      'quantity': serializer.toJson<int>(quantity),
+      'defect': serializer.toJson<String?>(defect),
+      'criticality': serializer.toJson<String?>(criticality),
+      'defectAttachment': serializer.toJson<String?>(defectAttachment),
       'manufacturer': serializer.toJson<String?>(manufacturer),
       'model': serializer.toJson<String?>(model),
       'serialNumber': serializer.toJson<String?>(serialNumber),
@@ -1842,6 +2060,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           int? poleId,
           String? equipmentType,
           String? name,
+          int? quantity,
+          Value<String?> defect = const Value.absent(),
+          Value<String?> criticality = const Value.absent(),
+          Value<String?> defectAttachment = const Value.absent(),
           Value<String?> manufacturer = const Value.absent(),
           Value<String?> model = const Value.absent(),
           Value<String?> serialNumber = const Value.absent(),
@@ -1859,6 +2081,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
         poleId: poleId ?? this.poleId,
         equipmentType: equipmentType ?? this.equipmentType,
         name: name ?? this.name,
+        quantity: quantity ?? this.quantity,
+        defect: defect.present ? defect.value : this.defect,
+        criticality: criticality.present ? criticality.value : this.criticality,
+        defectAttachment: defectAttachment.present
+            ? defectAttachment.value
+            : this.defectAttachment,
         manufacturer:
             manufacturer.present ? manufacturer.value : this.manufacturer,
         model: model.present ? model.value : this.model,
@@ -1886,6 +2114,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           ? data.equipmentType.value
           : this.equipmentType,
       name: data.name.present ? data.name.value : this.name,
+      quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      defect: data.defect.present ? data.defect.value : this.defect,
+      criticality: data.criticality.present ? data.criticality.value : this.criticality,
+      defectAttachment: data.defectAttachment.present
+          ? data.defectAttachment.value
+          : this.defectAttachment,
       manufacturer: data.manufacturer.present
           ? data.manufacturer.value
           : this.manufacturer,
@@ -1916,6 +2150,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           ..write('poleId: $poleId, ')
           ..write('equipmentType: $equipmentType, ')
           ..write('name: $name, ')
+          ..write('quantity: $quantity, ')
+          ..write('defect: $defect, ')
+          ..write('criticality: $criticality, ')
+          ..write('defectAttachment: $defectAttachment, ')
           ..write('manufacturer: $manufacturer, ')
           ..write('model: $model, ')
           ..write('serialNumber: $serialNumber, ')
@@ -1938,6 +2176,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       poleId,
       equipmentType,
       name,
+      quantity,
+      defect,
+      criticality,
+      defectAttachment,
       manufacturer,
       model,
       serialNumber,
@@ -1958,6 +2200,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           other.poleId == this.poleId &&
           other.equipmentType == this.equipmentType &&
           other.name == this.name &&
+          other.quantity == this.quantity &&
+          other.defect == this.defect &&
+          other.criticality == this.criticality &&
+          other.defectAttachment == this.defectAttachment &&
           other.manufacturer == this.manufacturer &&
           other.model == this.model &&
           other.serialNumber == this.serialNumber &&
@@ -1977,6 +2223,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   final Value<int> poleId;
   final Value<String> equipmentType;
   final Value<String> name;
+  final Value<int> quantity;
+  final Value<String?> defect;
+  final Value<String?> criticality;
+  final Value<String?> defectAttachment;
   final Value<String?> manufacturer;
   final Value<String?> model;
   final Value<String?> serialNumber;
@@ -1994,6 +2244,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.poleId = const Value.absent(),
     this.equipmentType = const Value.absent(),
     this.name = const Value.absent(),
+    this.quantity = const Value.absent(),
+    this.defect = const Value.absent(),
+    this.criticality = const Value.absent(),
+    this.defectAttachment = const Value.absent(),
     this.manufacturer = const Value.absent(),
     this.model = const Value.absent(),
     this.serialNumber = const Value.absent(),
@@ -2012,6 +2266,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     required int poleId,
     required String equipmentType,
     required String name,
+    this.quantity = const Value.absent(),
+    this.defect = const Value.absent(),
+    this.criticality = const Value.absent(),
+    this.defectAttachment = const Value.absent(),
     this.manufacturer = const Value.absent(),
     this.model = const Value.absent(),
     this.serialNumber = const Value.absent(),
@@ -2035,6 +2293,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     Expression<int>? poleId,
     Expression<String>? equipmentType,
     Expression<String>? name,
+    Expression<int>? quantity,
+    Expression<String>? defect,
+    Expression<String>? criticality,
+    Expression<String>? defectAttachment,
     Expression<String>? manufacturer,
     Expression<String>? model,
     Expression<String>? serialNumber,
@@ -2053,6 +2315,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       if (poleId != null) 'pole_id': poleId,
       if (equipmentType != null) 'equipment_type': equipmentType,
       if (name != null) 'name': name,
+      if (quantity != null) 'quantity': quantity,
+      if (defect != null) 'defect': defect,
+      if (criticality != null) 'criticality': criticality,
+      if (defectAttachment != null) 'defect_attachment': defectAttachment,
       if (manufacturer != null) 'manufacturer': manufacturer,
       if (model != null) 'model': model,
       if (serialNumber != null) 'serial_number': serialNumber,
@@ -2073,6 +2339,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       Value<int>? poleId,
       Value<String>? equipmentType,
       Value<String>? name,
+      Value<int>? quantity,
+      Value<String?>? defect,
+      Value<String?>? criticality,
+      Value<String?>? defectAttachment,
       Value<String?>? manufacturer,
       Value<String?>? model,
       Value<String?>? serialNumber,
@@ -2090,6 +2360,10 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       poleId: poleId ?? this.poleId,
       equipmentType: equipmentType ?? this.equipmentType,
       name: name ?? this.name,
+      quantity: quantity ?? this.quantity,
+      defect: defect ?? this.defect,
+      criticality: criticality ?? this.criticality,
+      defectAttachment: defectAttachment ?? this.defectAttachment,
       manufacturer: manufacturer ?? this.manufacturer,
       model: model ?? this.model,
       serialNumber: serialNumber ?? this.serialNumber,
@@ -2119,6 +2393,18 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (quantity.present) {
+      map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (defect.present) {
+      map['defect'] = Variable<String>(defect.value);
+    }
+    if (criticality.present) {
+      map['criticality'] = Variable<String>(criticality.value);
+    }
+    if (defectAttachment.present) {
+      map['defect_attachment'] = Variable<String>(defectAttachment.value);
     }
     if (manufacturer.present) {
       map['manufacturer'] = Variable<String>(manufacturer.value);
@@ -2166,6 +2452,9 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
           ..write('poleId: $poleId, ')
           ..write('equipmentType: $equipmentType, ')
           ..write('name: $name, ')
+          ..write('quantity: $quantity, ')
+          ..write('defect: $defect, ')
+          ..write('criticality: $criticality, ')
           ..write('manufacturer: $manufacturer, ')
           ..write('model: $model, ')
           ..write('serialNumber: $serialNumber, ')
@@ -3371,8 +3660,8 @@ typedef $$PolesTableCreateCompanionBuilder = PolesCompanion Function({
   Value<int> id,
   required int powerLineId,
   required String poleNumber,
-  required double latitude,
-  required double longitude,
+  required double xPosition,
+  required double yPosition,
   required String poleType,
   Value<double?> height,
   Value<String?> foundationType,
@@ -3390,8 +3679,8 @@ typedef $$PolesTableUpdateCompanionBuilder = PolesCompanion Function({
   Value<int> id,
   Value<int> powerLineId,
   Value<String> poleNumber,
-  Value<double> latitude,
-  Value<double> longitude,
+  Value<double> xPosition,
+  Value<double> yPosition,
   Value<String> poleType,
   Value<double?> height,
   Value<String?> foundationType,
@@ -3423,11 +3712,11 @@ class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
   ColumnFilters<String> get poleNumber => $composableBuilder(
       column: $table.poleNumber, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<double> get latitude => $composableBuilder(
-      column: $table.latitude, builder: (column) => ColumnFilters(column));
+  ColumnFilters<double> get xPosition => $composableBuilder(
+      column: $table.xPosition, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<double> get longitude => $composableBuilder(
-      column: $table.longitude, builder: (column) => ColumnFilters(column));
+  ColumnFilters<double> get yPosition => $composableBuilder(
+      column: $table.yPosition, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get poleType => $composableBuilder(
       column: $table.poleType, builder: (column) => ColumnFilters(column));
@@ -3485,11 +3774,11 @@ class $$PolesTableOrderingComposer
   ColumnOrderings<String> get poleNumber => $composableBuilder(
       column: $table.poleNumber, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<double> get latitude => $composableBuilder(
-      column: $table.latitude, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<double> get xPosition => $composableBuilder(
+      column: $table.xPosition, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<double> get longitude => $composableBuilder(
-      column: $table.longitude, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<double> get yPosition => $composableBuilder(
+      column: $table.yPosition, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get poleType => $composableBuilder(
       column: $table.poleType, builder: (column) => ColumnOrderings(column));
@@ -3548,11 +3837,11 @@ class $$PolesTableAnnotationComposer
   GeneratedColumn<String> get poleNumber => $composableBuilder(
       column: $table.poleNumber, builder: (column) => column);
 
-  GeneratedColumn<double> get latitude =>
-      $composableBuilder(column: $table.latitude, builder: (column) => column);
+  GeneratedColumn<double> get xPosition =>
+      $composableBuilder(column: $table.xPosition, builder: (column) => column);
 
-  GeneratedColumn<double> get longitude =>
-      $composableBuilder(column: $table.longitude, builder: (column) => column);
+  GeneratedColumn<double> get yPosition =>
+      $composableBuilder(column: $table.yPosition, builder: (column) => column);
 
   GeneratedColumn<String> get poleType =>
       $composableBuilder(column: $table.poleType, builder: (column) => column);
@@ -3617,8 +3906,8 @@ class $$PolesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<int> powerLineId = const Value.absent(),
             Value<String> poleNumber = const Value.absent(),
-            Value<double> latitude = const Value.absent(),
-            Value<double> longitude = const Value.absent(),
+            Value<double> xPosition = const Value.absent(),
+            Value<double> yPosition = const Value.absent(),
             Value<String> poleType = const Value.absent(),
             Value<double?> height = const Value.absent(),
             Value<String?> foundationType = const Value.absent(),
@@ -3636,8 +3925,8 @@ class $$PolesTableTableManager extends RootTableManager<
             id: id,
             powerLineId: powerLineId,
             poleNumber: poleNumber,
-            latitude: latitude,
-            longitude: longitude,
+            xPosition: xPosition,
+            yPosition: yPosition,
             poleType: poleType,
             height: height,
             foundationType: foundationType,
@@ -3655,8 +3944,8 @@ class $$PolesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             required int powerLineId,
             required String poleNumber,
-            required double latitude,
-            required double longitude,
+            required double xPosition,
+            required double yPosition,
             required String poleType,
             Value<double?> height = const Value.absent(),
             Value<String?> foundationType = const Value.absent(),
@@ -3674,8 +3963,8 @@ class $$PolesTableTableManager extends RootTableManager<
             id: id,
             powerLineId: powerLineId,
             poleNumber: poleNumber,
-            latitude: latitude,
-            longitude: longitude,
+            xPosition: xPosition,
+            yPosition: yPosition,
             poleType: poleType,
             height: height,
             foundationType: foundationType,

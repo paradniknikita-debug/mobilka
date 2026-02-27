@@ -7,6 +7,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
   final ObjectType objectType;
   final VoidCallback onClose;
   final VoidCallback? onStartLineFormation;
+  final VoidCallback? onAutoCreateSpans;
   final VoidCallback? onDelete;
 
   const ObjectPropertiesPanel({
@@ -15,6 +16,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
     required this.objectType,
     required this.onClose,
     this.onStartLineFormation,
+    this.onAutoCreateSpans,
     this.onDelete,
   });
 
@@ -121,6 +123,21 @@ class ObjectPropertiesPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                   ],
+                  if (onAutoCreateSpans != null && powerLineId != null) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onAutoCreateSpans,
+                        icon: const Icon(Icons.auto_fix_high),
+                        label: const Text('Создать пролёты автоматически'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   if (onDelete != null) ...[
                     const SizedBox(height: 16),
                     const Divider(),
@@ -206,8 +223,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Позиция (X, Y):',
-        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        '${((objectProperties['x_position'] ?? objectProperties['longitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
+        '${((objectProperties['y_position'] ?? objectProperties['latitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}',
       ),
       if (objectProperties['sequence_number'] != null)
         _buildPropertyItem(
@@ -268,8 +285,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Позиция (X, Y):',
-        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        '${((objectProperties['x_position'] ?? objectProperties['longitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
+        '${((objectProperties['y_position'] ?? objectProperties['latitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}',
       ),
     ];
   }
@@ -295,8 +312,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Позиция (X, Y):',
-        '${(objectProperties['longitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${(objectProperties['latitude'] as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        '${((objectProperties['x_position'] ?? objectProperties['longitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
+        '${((objectProperties['y_position'] ?? objectProperties['latitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}',
       ),
     ];
   }

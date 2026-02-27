@@ -39,38 +39,42 @@ class SyncResponse(BaseModel):
     errors: List[Dict[str, Any]] = []
     batch_id: str
     timestamp: datetime
+    # Маппинг локальных id → серверные (для обновления клиента: pole_server_id и сброса needsSync)
+    id_mapping: Optional[Dict[str, Dict[str, int]]] = None  # {"pole": {"-34": 101}, "power_line": {"-5": 10}}
 
 # JSON Schema для валидации данных
 # branch_id и region_id не обязательны — мобильное приложение может создавать ЛЭП без филиала/региона
+# mrid может быть null — сервер сгенерирует при создании
 POWER_LINE_SCHEMA = {
     "type": "object",
     "properties": {
         "id": {"type": ["integer", "string"]},
-        "mrid": {"type": "string"},
+        "mrid": {"type": ["string", "null"]},
         "name": {"type": "string"},
-        "code": {"type": "string"},
         "voltage_level": {"type": "number"},
-        "length": {"type": "number"},
-        "region_id": {"type": "integer"},
-        "branch_id": {"type": "integer"},
-        "status": {"type": "string"},
+        "length": {"type": ["number", "null"]},
+        "region_id": {"type": ["integer", "null"]},
+        "branch_id": {"type": ["integer", "null"]},
+        "status": {"type": ["string", "null"]},
         "description": {"type": ["string", "null"]},
-        "created_by": {"type": "integer"},
+        "created_by": {"type": ["integer", "null"]},
         "created_at": {"type": ["string", "number"]},
-        "updated_at": {"type": ["string", "number"]}
+        "updated_at": {"type": ["string", "number", "null"]}
     },
-    "required": ["name", "code", "voltage_level"]
+    "required": ["name", "voltage_level"]
 }
 
 POLE_SCHEMA = {
     "type": "object",
     "properties": {
         "id": {"type": ["integer", "string"]},
-        "mrid": {"type": "string"},
+        "mrid": {"type": ["string", "null"]},
         "power_line_id": {"type": ["integer", "string"]},
         "pole_number": {"type": "string"},
-        "latitude": {"type": "number"},
-        "longitude": {"type": "number"},
+        "x_position": {"type": ["number", "null"]},
+        "y_position": {"type": ["number", "null"]},
+        "latitude": {"type": ["number", "null"]},
+        "longitude": {"type": ["number", "null"]},
         "pole_type": {"type": "string"},
         "height": {"type": ["number", "null"]},
         "foundation_type": {"type": ["string", "null"]},
@@ -78,11 +82,11 @@ POLE_SCHEMA = {
         "year_installed": {"type": ["integer", "null"]},
         "condition": {"type": "string"},
         "notes": {"type": ["string", "null"]},
-        "created_by": {"type": "integer"},
+        "created_by": {"type": ["integer", "null"]},
         "created_at": {"type": ["string", "number"]},
         "updated_at": {"type": ["string", "number", "null"]}
     },
-    "required": ["power_line_id", "pole_number", "latitude", "longitude", "pole_type"]
+    "required": ["power_line_id", "pole_number", "pole_type"]
 }
 
 EQUIPMENT_SCHEMA = {
@@ -90,15 +94,19 @@ EQUIPMENT_SCHEMA = {
     "properties": {
         "id": {"type": ["integer", "string"]},
         "pole_id": {"type": ["integer", "string"]},
+        "pole_server_id": {"type": ["integer", "null"]},  # опционально: серверный id опоры, если уже известен
         "equipment_type": {"type": "string"},
         "name": {"type": "string"},
-        "manufacturer": {"type": "string"},
-        "model": {"type": "string"},
-        "serial_number": {"type": "string"},
-        "year_manufactured": {"type": "integer"},
-        "installation_date": {"type": "string", "format": "date-time"},
+        "manufacturer": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]},
+        "serial_number": {"type": ["string", "null"]},
+        "year_manufactured": {"type": ["integer", "null"]},
+        "installation_date": {"type": ["string", "null"]},
         "condition": {"type": "string"},
-        "notes": {"type": "string"}
+        "notes": {"type": ["string", "null"]},
+        "created_by": {"type": ["integer", "null"]},
+        "created_at": {"type": ["string", "number", "null"]},
+        "updated_at": {"type": ["string", "number", "null"]}
     },
     "required": ["pole_id", "equipment_type", "name"]
 }
@@ -112,7 +120,7 @@ ENTITY_SCHEMAS = {
         "type": "object",
         "properties": {
             "id": {"type": "string"},
-            "power_line_id": {"type": "string"},
+            "line_id": {"type": "string"},  # Обновлено: power_line_id -> line_id
             "from_pole_id": {"type": "string"},
             "to_pole_id": {"type": "string"},
             "span_number": {"type": "string"},
@@ -122,15 +130,16 @@ ENTITY_SCHEMAS = {
             "conductor_section": {"type": "string"},
             "tension": {"type": "number"},
             "sag": {"type": "number"},
+            "sequence_number": {"type": "integer"},
             "notes": {"type": "string"}
         },
-        "required": ["power_line_id", "from_pole_id", "to_pole_id", "span_number", "length"]
+        "required": ["line_id", "from_pole_id", "to_pole_id", "span_number", "length"]
     },
     "tap": {
         "type": "object",
         "properties": {
             "id": {"type": "string"},
-            "power_line_id": {"type": "string"},
+            "line_id": {"type": "string"},
             "pole_id": {"type": "string"},
             "tap_number": {"type": "string"},
             "tap_type": {"type": "string"},
@@ -140,6 +149,6 @@ ENTITY_SCHEMAS = {
             "longitude": {"type": "number"},
             "description": {"type": "string"}
         },
-        "required": ["power_line_id", "pole_id", "tap_number", "tap_type", "voltage_level"]
+        "required": ["line_id", "pole_id", "tap_number", "tap_type", "voltage_level"]
     }
 }

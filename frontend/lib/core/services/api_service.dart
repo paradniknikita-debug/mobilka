@@ -51,8 +51,17 @@ abstract class ApiService {
   @GET('/power-lines/{id}/poles')
   Future<List<Pole>> getPoles(@Path('id') int powerLineId);
 
+  @POST('/power-lines/{id}/link-substation')
+  Future<Map<String, dynamic>> linkLineToSubstation(
+    @Path('id') int powerLineId,
+    @Body() Map<String, dynamic> body,
+  );
+
   @DELETE('/power-lines/{powerLineId}/spans/{spanId}')
   Future<void> deleteSpan(@Path('powerLineId') int powerLineId, @Path('spanId') int spanId);
+
+  @POST('/power-lines/{id}/spans/auto-create')
+  Future<Map<String, dynamic>> autoCreateSpans(@Path('id') int powerLineId);
 
   // Poles
   @GET('/poles')
@@ -117,6 +126,10 @@ abstract class ApiService {
   @PATCH('/patrol-sessions/{id}')
   Future<Map<String, dynamic>> endPatrolSession(@Path('id') int id);
 
+  // CIM: карточка участка линии (AClineSegment)
+  @GET('/cim/acline-segments/{id}')
+  Future<Map<String, dynamic>> getAclineSegment(@Path('id') int segmentId);
+
   // Sync
   @POST('/sync/upload')
   Future<dynamic> uploadSyncBatch(@Body() Map<String, dynamic> batch);
@@ -129,18 +142,11 @@ abstract class ApiService {
 
   @GET('/sync/schema/{entity_type}')
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
-
-  // CIM Export - реализован вручную через Dio (Retrofit не поддерживает бинарные ответы)
-  // Метод реализован в ApiServiceProvider
-  Future<Response<List<int>>> exportCimXml(
-    bool useCimpy,
-    bool includeSubstations,
-    bool includePowerLines,
-  );
 }
 
-/// Интерфейс ApiService плюс метод CIM Export (реализуется вручную, т.к. Retrofit не поддерживает бинарные ответы).
-abstract class ApiServiceWithCim implements ApiService {
+// Расширенный интерфейс с методом exportCimXml
+// (не может быть в Retrofit из-за бинарных ответов)
+abstract class ApiServiceWithExport implements ApiService {
   Future<Response<List<int>>> exportCimXml(
     bool useCimpy,
     bool includeSubstations,
@@ -151,7 +157,7 @@ abstract class ApiServiceWithCim implements ApiService {
 class ApiServiceProvider {
   static SharedPreferences? _prefs;
   
-  static ApiServiceWithCim create({SharedPreferences? prefs}) {
+  static ApiServiceWithExport create({SharedPreferences? prefs}) {
     _prefs = prefs; // Сохраняем prefs статически
     final dio = Dio();
     final urlManager = BaseUrlManager();
@@ -171,21 +177,10 @@ class ApiServiceProvider {
           final token = await _getStoredToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
-            if (kDebugMode) {
-              print('🔑 [${options.method} ${options.path}] Добавлен токен авторизации');
-            }
-          } else {
-            if (kDebugMode) {
-              print('⚠️ [${options.method} ${options.path}] Токен авторизации отсутствует!');
-              print('   Запрос будет выполнен без авторизации (может вернуть 403)');
-            }
+          } else if (kDebugMode && !options.path.contains('/auth/login')) {
+            print('⚠️ [${options.method} ${options.path}] Токен отсутствует');
           }
-          
-          // Уменьшаем логирование - только для важных запросов
-          if (kDebugMode && (options.path.contains('/auth/') || options.path.contains('/sync/'))) {
-            print('📤 [${options.method}] ${options.path}');
-          }
-          
+
           handler.next(options);
         },
         onError: (error, handler) async {
@@ -294,7 +289,7 @@ class ApiServiceProvider {
   }
 }
 
-final apiServiceProvider = Provider<ApiServiceWithCim>((ref) {
+final apiServiceProvider = Provider<ApiServiceWithExport>((ref) {
   try {
     final prefs = ref.watch(prefsProvider);
     return ApiServiceProvider.create(prefs: prefs);
@@ -372,8 +367,9 @@ final dioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
-/// Обёртка для ApiService, добавляющая метод exportCimXml.
-class _ApiServiceWrapper implements ApiServiceWithCim {
+/// Обёртка для ApiService, добавляющая метод exportCimXml
+/// (Retrofit не поддерживает бинарные ответы через аннотации)
+class _ApiServiceWrapper implements ApiServiceWithExport {
   final ApiService _delegate;
   final Dio _dio;
 
@@ -431,7 +427,14 @@ class _ApiServiceWrapper implements ApiServiceWithCim {
   Future<List<Pole>> getPoles(int powerLineId) => _delegate.getPoles(powerLineId);
 
   @override
+  Future<Map<String, dynamic>> linkLineToSubstation(int powerLineId, Map<String, dynamic> body) =>
+      _delegate.linkLineToSubstation(powerLineId, body);
+
+  @override
   Future<void> deleteSpan(int powerLineId, int spanId) => _delegate.deleteSpan(powerLineId, spanId);
+
+  @override
+  Future<Map<String, dynamic>> autoCreateSpans(int powerLineId) => _delegate.autoCreateSpans(powerLineId);
 
   @override
   Future<List<Pole>> getAllPoles() => _delegate.getAllPoles();
@@ -465,6 +468,9 @@ class _ApiServiceWrapper implements ApiServiceWithCim {
 
   @override
   Future<dynamic> getSubstationsGeoJSON() => _delegate.getSubstationsGeoJSON();
+
+  @override
+  Future<Map<String, dynamic>> getAclineSegment(int segmentId) => _delegate.getAclineSegment(segmentId);
 
   @override
   Future<Substation> createSubstation(SubstationCreate substationData) => _delegate.createSubstation(substationData);

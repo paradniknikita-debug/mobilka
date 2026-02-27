@@ -13,6 +13,7 @@ import { CreateSpanDialogComponent } from '../../features/map/create-span-dialog
 import { CreateSegmentDialogComponent } from '../../features/map/create-segment-dialog/create-segment-dialog.component';
 import { EditPowerLineDialogComponent } from '../../features/map/edit-power-line-dialog/edit-power-line-dialog.component';
 import { ApiService } from '../../core/services/api.service';
+import { PowerLine } from '../../core/models/power-line.model';
 
 // Структура данных для иерархичного дерева
 interface PowerLineTreeItem {
@@ -115,104 +116,115 @@ export class SidebarComponent implements OnInit, OnDestroy {
     return this.mapData?.spans?.features || [];
   }
 
-  // Группировка опор по ЛЭП
+  // Группировка опор по ЛЭП (backend может отдавать power_line_id или line_id)
   getPolesByPowerLine(powerLineId: number): GeoJSONFeature[] {
-    return this.polesFeatures.filter(feature => 
-      feature.properties['power_line_id'] === powerLineId
-    );
+    return this.polesFeatures.filter(feature => {
+      const plId = feature.properties['power_line_id'] ?? feature.properties['line_id'];
+      return plId === powerLineId;
+    });
   }
 
-  // Получение всех уникальных ЛЭП с их сегментами и опорами (с кэшированием)
+  /** Фича для дерева: из GeoJSON с геометрией, если есть, иначе минимальная из модели ЛЭП. */
+  private powerLineToTreeFeature(pl: PowerLine): GeoJSONFeature {
+    const fromGeo = this.powerLinesFeatures.find(f => f.properties['id'] === pl.id);
+    if (fromGeo?.geometry?.coordinates) {
+      return fromGeo;
+    }
+    return {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: {
+        id: pl.id,
+        name: pl.name ?? '',
+        voltage_level: pl.voltage_level ?? 0,
+        status: pl.status ?? 'active'
+      }
+    };
+  }
+
+  // Получение всех ЛЭП с сегментами и опорами (по списку GET /power-lines, как во Flutter)
   getPowerLinesWithSegmentsAndPoles(): PowerLineTreeItem[] {
-    // Проверяем наличие данных
-    if (!this.mapData || !this.powerLinesFeatures.length) {
+    if (!this.mapData) {
       return [];
     }
-    
-    // Используем кэш, если данные не изменились
+    const list = this.mapData.powerLinesList;
+    if (!list?.length) {
+      return [];
+    }
+
     if (this.powerLinesWithPolesCache !== null) {
       return this.powerLinesWithPolesCache;
     }
-    
+
     const result: PowerLineTreeItem[] = [];
-    
-    this.powerLinesFeatures.forEach(powerLine => {
-      const powerLineId = powerLine.properties['id'];
-      if (powerLineId) {
-        const allPoles = this.getPolesByPowerLine(powerLineId);
-        const allSpans = this.spansFeatures.filter(feature => 
-          feature.properties['power_line_id'] === powerLineId
-        );
-        
-        // Группируем опоры и пролёты по сегментам
-        const segmentsMap = new Map<number | string, {poles: GeoJSONFeature[], spans: GeoJSONFeature[]}>();
-        const polesWithoutSegment: GeoJSONFeature[] = [];
-        const spansWithoutSegment: GeoJSONFeature[] = [];
-        
-        allPoles.forEach(pole => {
-          const segmentId = pole.properties['segment_id'];
-          if (segmentId) {
-            const key = segmentId;
-            if (!segmentsMap.has(key)) {
-              segmentsMap.set(key, {poles: [], spans: []});
-            }
-            segmentsMap.get(key)!.poles.push(pole);
-          } else {
-            polesWithoutSegment.push(pole);
+    for (const pl of list) {
+      const powerLineId = pl.id;
+      const powerLine = this.powerLineToTreeFeature(pl);
+      const allPoles = this.getPolesByPowerLine(powerLineId);
+      const allSpans = this.spansFeatures.filter(f =>
+        f.properties['power_line_id'] === powerLineId
+      );
+
+      const segmentsMap = new Map<number | string, {poles: GeoJSONFeature[], spans: GeoJSONFeature[]}>();
+      const polesWithoutSegment: GeoJSONFeature[] = [];
+      const spansWithoutSegment: GeoJSONFeature[] = [];
+
+      allPoles.forEach(pole => {
+        const segmentId = pole.properties['segment_id'];
+        if (segmentId != null) {
+          const key = segmentId;
+          if (!segmentsMap.has(key)) {
+            segmentsMap.set(key, {poles: [], spans: []});
           }
-        });
-        
-        // Группируем пролёты по сегментам
-        allSpans.forEach((span: GeoJSONFeature) => {
-          const segmentId = span.properties['segment_id'] || span.properties['acline_segment_id'];
-          if (segmentId) {
-            const key = segmentId;
-            if (!segmentsMap.has(key)) {
-              segmentsMap.set(key, {poles: [], spans: []});
-            }
-            segmentsMap.get(key)!.spans.push(span);
-          } else {
-            spansWithoutSegment.push(span);
+          segmentsMap.get(key)!.poles.push(pole);
+        } else {
+          polesWithoutSegment.push(pole);
+        }
+      });
+
+      allSpans.forEach((span: GeoJSONFeature) => {
+        const segmentId = span.properties['segment_id'] ?? span.properties['acline_segment_id'];
+        if (segmentId != null) {
+          const key = segmentId;
+          if (!segmentsMap.has(key)) {
+            segmentsMap.set(key, {poles: [], spans: []});
           }
+          segmentsMap.get(key)!.spans.push(span);
+        } else {
+          spansWithoutSegment.push(span);
+        }
+      });
+
+      const segments: Array<{
+        segmentId: number | null;
+        segmentName: string | null;
+        poles: GeoJSONFeature[];
+        spans: GeoJSONFeature[];
+      }> = [];
+      segmentsMap.forEach((data, segmentId) => {
+        const segmentName = data.poles[0]?.properties['segment_name'] ??
+          data.spans[0]?.properties['segment_name'] ?? null;
+        segments.push({
+          segmentId: typeof segmentId === 'string' ? parseInt(segmentId, 10) : segmentId,
+          segmentName,
+          poles: data.poles,
+          spans: data.spans
         });
-        
-        // Преобразуем Map в массив с информацией о сегментах
-        const segments: Array<{
-          segmentId: number | null;
-          segmentName: string | null;
-          poles: GeoJSONFeature[];
-          spans: GeoJSONFeature[];
-        }> = [];
-        
-        segmentsMap.forEach((data, segmentId) => {
-          // Берем имя сегмента из первой опоры или пролёта
-          const segmentName = data.poles[0]?.properties['segment_name'] || 
-                            data.spans[0]?.properties['segment_name'] || null;
-          segments.push({
-            segmentId: typeof segmentId === 'string' ? parseInt(segmentId) : segmentId,
-            segmentName,
-            poles: data.poles,
-            spans: data.spans
-          });
-        });
-        
-        // Сортируем сегменты по ID
-        segments.sort((a, b) => {
-          if (a.segmentId === null) return 1;
-          if (b.segmentId === null) return -1;
-          return a.segmentId - b.segmentId;
-        });
-        
-        result.push({
-          powerLine,
-          segments,
-          polesWithoutSegment,
-          spansWithoutSegment
-        });
-      }
-    });
-    
-    // Кэшируем результат
+      });
+      segments.sort((a, b) => {
+        if (a.segmentId === null) return 1;
+        if (b.segmentId === null) return -1;
+        return a.segmentId - b.segmentId;
+      });
+
+      result.push({
+        powerLine,
+        segments,
+        polesWithoutSegment,
+        spansWithoutSegment
+      });
+    }
+
     this.powerLinesWithPolesCache = result;
     return result;
   }
@@ -286,7 +298,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const coordinates = feature.geometry.coordinates as number[];
       const lat = coordinates[1];
       const lng = coordinates[0];
-      
+      const isPlaceholder = lat === 0 && lng === 0 && !feature.properties['pole_number'] && !feature.properties['dispatcher_name'];
+      if (isPlaceholder) {
+        return; // ЛЭП без геометрии — не центрируем
+      }
+
       // Если это опора, применяем логику зума
       if (feature.properties['pole_number']) {
         // Получаем текущий зум из сервиса
@@ -357,7 +373,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       // Подстанция
       this.contextMenuType = 'substation';
       this.contextMenuPowerLineId = null;
-    } else if (feature.properties['name'] && feature.properties['code'] && !feature.properties['pole_number'] && !feature.properties['tap_number']) {
+    } else if (feature.properties['name'] && !feature.properties['pole_number'] && !feature.properties['tap_number'] && !feature.properties['dispatcher_name']) {
       // ЛЭП
       this.contextMenuType = 'powerLine';
       this.contextMenuPowerLineId = feature.properties['id'];
@@ -666,7 +682,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       objectType = 'substation';
       objectId = this.contextMenuFeature.properties['id'];
       objectName = this.contextMenuFeature.properties['name'] || 'N/A';
-    } else if (this.contextMenuFeature.properties['name'] && this.contextMenuFeature.properties['code']) {
+    } else if (this.contextMenuFeature.properties['name'] && !this.contextMenuFeature.properties['pole_number'] && !this.contextMenuFeature.properties['tap_number'] && this.contextMenuFeature.properties['dispatcher_name'] === undefined) {
       objectType = 'powerLine';
       objectId = this.contextMenuFeature.properties['id'];
       objectName = this.contextMenuFeature.properties['name'] || 'N/A';

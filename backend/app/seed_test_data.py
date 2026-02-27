@@ -11,10 +11,10 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text as sa_text
+from sqlalchemy import select
 from app.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
-from app.models import (User, GeographicRegion, PowerLine,Pole, AClineSegment,Substation, Branch)
+from app.models import (User, GeographicRegion, PowerLine, Pole, Substation, Branch)
 
 
 
@@ -111,16 +111,16 @@ async def create_test_data():
                 await session.flush()
                 print("✅ Создан РЭС: Минск-Запад")
             
-            # 4. Создаем подстанцию
-            result = await session.execute(select(Substation).where(Substation.code == "SUB_110_1"))
+            # 4. Создаем подстанцию (модель использует dispatcher_name, не code)
+            result = await session.execute(select(Substation).where(Substation.dispatcher_name == "SUB_110_1"))
             substation = result.scalar_one_or_none()
             if not substation:
                 substation = Substation(
                     name="Подстанция 110/10 кВ №1",
-                    code="SUB_110_1",
+                    dispatcher_name="SUB_110_1",
                     voltage_level=110.0,
-                    latitude=53.9045,
-                    longitude=27.5615,
+                    y_position=53.9045,
+                    x_position=27.5615,
                     address="г. Минск, ул. Подстанционная, 1",
                     region_id=res_region.id,
                     branch_id=branch.id if branch else None,
@@ -131,13 +131,12 @@ async def create_test_data():
                 await session.flush()
                 print("✅ Создана подстанция: Подстанция 110/10 кВ №1")
             
-            # 5. Создаем линию электропередачи
-            result = await session.execute(select(PowerLine).where(PowerLine.code == "LINE_110_1"))
+            # 5. Создаем линию электропередачи (модель без code, только name/mrid)
+            result = await session.execute(select(PowerLine).where(PowerLine.name == "ЛЭП 110 кВ Минск-Западная"))
             power_line = result.scalar_one_or_none()
             if not power_line:
                 power_line = PowerLine(
                     name="ЛЭП 110 кВ Минск-Западная",
-                    code="LINE_110_1",
                     voltage_level=110.0,
                     length=25.5,  # км
                     region_id=res_region.id,
@@ -154,124 +153,67 @@ async def create_test_data():
             poles_data = [
                 {
                     "pole_number": "001",
-                    "latitude": 53.9045,
-                    "longitude": 27.5615,
+                    "y_position": 53.9045,
+                    "x_position": 27.5615,
                     "pole_type": "анкерная",
                     "height": 25.0
                 },
                 {
                     "pole_number": "002",
-                    "latitude": 53.9100,
-                    "longitude": 27.5700,
+                    "y_position": 53.9100,
+                    "x_position": 27.5700,
                     "pole_type": "промежуточная",
                     "height": 23.0
                 },
                 {
                     "pole_number": "003",
-                    "latitude": 53.9150,
-                    "longitude": 27.5800,
+                    "y_position": 53.9150,
+                    "x_position": 27.5800,
                     "pole_type": "промежуточная",
                     "height": 23.0
                 },
                 {
                     "pole_number": "004",
-                    "latitude": 53.9200,
-                    "longitude": 27.5900,
+                    "y_position": 53.9200,
+                    "x_position": 27.5900,
                     "pole_type": "анкерная",
                     "height": 25.0
                 },
             ]
             
             poles = []
-            for pole_data in poles_data:
+            for i, pole_data in enumerate(poles_data):
                 result = await session.execute(
-                    select(pole).where(
-                        pole.power_line_id == power_line.id,
-                        pole.pole_number == pole_data["pole_number"]
+                    select(Pole).where(
+                        Pole.line_id == power_line.id,
+                        Pole.pole_number == pole_data["pole_number"]
                     )
                 )
                 existing_pole = result.scalar_one_or_none()
                 if not existing_pole:
-                    pole = pole(
-                        power_line_id=power_line.id,
+                    p = Pole(
+                        line_id=power_line.id,
                         pole_number=pole_data["pole_number"],
-                        latitude=pole_data["latitude"],
-                        longitude=pole_data["longitude"],
+                        y_position=pole_data["y_position"],
+                        x_position=pole_data["x_position"],
                         pole_type=pole_data["pole_type"],
                         height=pole_data["height"],
                         material="металл",
                         foundation_type="железобетон",
                         year_installed=2020,
                         condition="good",
+                        sequence_number=i + 1,
                         created_by=user.id
                     )
-                    session.add(pole)
-                    poles.append(pole)
+                    session.add(p)
+                    poles.append(p)
             
             await session.flush()
             print(f"✅ Создано опор: {len(poles)}")
             
-            # 7. Создаем сегменты линии
-            if len(poles) >= 2:
-                result = await session.execute(select(AClineSegment).where(AClineSegment.code == "SEG_110_1"))
-                segment1 = result.scalar_one_or_none()
-                if not segment1:
-                    segment1 = AClineSegment(
-                        name="Сегмент 1: T001-T002",
-                        code="SEG_110_1",
-                        voltage_level=110.0,
-                        length=5.2,  # км
-                        conductor_type="АС-150",
-                        conductor_material="алюминий",
-                        conductor_section="150",
-                        start_pole_id=poles[0].id,
-                        end_pole_id=poles[1].id,
-                        r=0.21,  # Ом/км
-                        x=0.42,  # Ом/км
-                        description="Первый сегмент линии",
-                        created_by=user.id
-                    )
-                    session.add(segment1)
-                    await session.flush()
-                    
-                    # Связываем сегмент с линией (many-to-many) через прямой SQL
-                    await session.execute(
-                        sa_text("INSERT INTO line_segments (power_line_id, acline_segment_id) VALUES (:line_id, :seg_id) ON CONFLICT DO NOTHING"),
-                        {"line_id": power_line.id, "seg_id": segment1.id}
-                    )
-                    await session.flush()
-                    print("✅ Создан сегмент: Сегмент 1: T001-T002")
-                
-                if len(poles) >= 3:
-                    result = await session.execute(select(AClineSegment).where(AClineSegment.code == "SEG_110_2"))
-                    segment2 = result.scalar_one_or_none()
-                    if not segment2:
-                        segment2 = AClineSegment(
-                            name="Сегмент 2: T002-T003",
-                            code="SEG_110_2",
-                            voltage_level=110.0,
-                            length=4.8,  # км
-                            conductor_type="АС-150",
-                            conductor_material="алюминий",
-                            conductor_section="150",
-                            start_pole_id=poles[1].id,
-                            end_pole_id=poles[2].id,
-                            r=0.21,
-                            x=0.42,
-                            description="Второй сегмент линии",
-                            created_by=user.id
-                        )
-                        session.add(segment2)
-                        await session.flush()
-                        
-                        # Связываем сегмент с линией (many-to-many) через прямой SQL
-                        await session.execute(
-                            sa_text("INSERT INTO line_segments (power_line_id, acline_segment_id) VALUES (:line_id, :seg_id) ON CONFLICT DO NOTHING"),
-                            {"line_id": power_line.id, "seg_id": segment2.id}
-                        )
-                        await session.flush()
-                        print("✅ Создан сегмент: Сегмент 2: T002-T003")
-            
+            # 7. Сегменты линии (AClineSegment) требуют ConnectivityNode у опор — не создаём в seed.
+            #    При необходимости создайте сегменты через API или после создания узлов.
+
             # Сохраняем все изменения
             await session.commit()
             print("\n✅ Все тестовые данные успешно добавлены!")
@@ -283,7 +225,6 @@ async def create_test_data():
             print("   - 1 подстанция")
             print("   - 1 линия электропередачи")
             print("   - 4 опоры")
-            print("   - 2 сегмента линии")
             
         except Exception as e:
             await session.rollback()

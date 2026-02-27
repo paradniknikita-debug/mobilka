@@ -23,6 +23,7 @@ import { MatSortModule } from '@angular/material/sort';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatDividerModule } from '@angular/material/divider';
 
@@ -96,6 +97,7 @@ import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dia
     MatMenuModule,
     MatTooltipModule,
     MatSelectModule,
+    MatCheckboxModule,
     MatAutocompleteModule,
     MatDividerModule,
 

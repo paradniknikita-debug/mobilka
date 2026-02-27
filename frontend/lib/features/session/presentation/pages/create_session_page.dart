@@ -58,6 +58,38 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
 
   Future<void> _loadPowerLines() async {
     final db = ref.read(drift_db.databaseProvider);
+    final apiService = ref.read(apiServiceProvider);
+    // Подгружаем ЛЭП с сервера и сливаем с локальными (дедупликация по mrid/имени), чтобы можно было начать обход по существующей линии
+    try {
+      final serverLines = await apiService.getPowerLines();
+      for (final pl in serverLines) {
+        final mrid = pl.mrid != null && pl.mrid!.trim().isNotEmpty ? pl.mrid : null;
+        final name = pl.name.trim().isEmpty ? 'ЛЭП' : pl.name.trim();
+        final localDup = await db.getLocalPowerLineByMridOrName(mrid, name);
+        if (localDup != null && localDup.id < 0) {
+          await db.updatePolesPowerLineId(localDup.id, pl.id);
+          await db.deletePowerLine(localDup.id);
+        }
+        await db.insertPowerLineOrReplace(drift_db.PowerLinesCompanion.insert(
+          id: drift.Value(pl.id),
+          name: name,
+          code: name,
+          mrid: mrid != null ? drift.Value(mrid) : const drift.Value.absent(),
+          voltageLevel: pl.voltageLevel ?? 0.0,
+          length: pl.length != null ? drift.Value(pl.length!) : const drift.Value.absent(),
+          branchId: pl.branchId ?? 1,
+          createdBy: pl.createdBy,
+          status: pl.status,
+          description: drift.Value(pl.description),
+          createdAt: pl.createdAt,
+          updatedAt: drift.Value(pl.updatedAt),
+          isLocal: const drift.Value(false),
+          needsSync: const drift.Value(false),
+        ));
+      }
+    } catch (_) {
+      // Офлайн или ошибка API — используем только локальные данные
+    }
     final list = await db.getAllPowerLines();
     if (mounted) {
       setState(() {
@@ -107,11 +139,74 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
     return '±${_accuracyMeters!.round()} м';
   }
 
+  Future<void> _showManualCoordinatesDialog() async {
+    final latController = TextEditingController(text: _latitude?.toString() ?? '');
+    final lonController = TextEditingController(text: _longitude?.toString() ?? '');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Координаты вручную'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: latController,
+                  decoration: const InputDecoration(labelText: 'Широта'),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: lonController,
+                  decoration: const InputDecoration(labelText: 'Долгота'),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Отмена')),
+            ElevatedButton(
+              onPressed: () {
+                final lat = double.tryParse(latController.text.replaceAll(',', '.').trim());
+                final lon = double.tryParse(lonController.text.replaceAll(',', '.').trim());
+                if (lat == null || lon == null || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Введите корректные широту (-90…90) и долготу (-180…180).'), backgroundColor: Colors.orange),
+                  );
+                  return;
+                }
+                Navigator.of(ctx).pop(true);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+    final latVal = double.tryParse(latController.text.replaceAll(',', '.').trim());
+    final lonVal = double.tryParse(lonController.text.replaceAll(',', '.').trim());
+    latController.dispose();
+    lonController.dispose();
+    if (result == true && latVal != null && lonVal != null && latVal >= -90 && latVal <= 90 && lonVal >= -180 && lonVal <= 180) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _latitude = latVal;
+          _longitude = lonVal;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Координаты обновлены'), backgroundColor: Colors.green),
+        );
+      });
+    }
+  }
+
   /// Показать диалог создания ЛЭП. После успешного создания обновляет список и выбирает новую линию.
   Future<void> _showCreatePowerLineDialog() async {
     final nameController = TextEditingController();
     final voltageController = TextEditingController(text: '110');
-    final lengthController = TextEditingController();
     final descriptionController = TextEditingController();
 
     final newId = await showDialog<int>(
@@ -142,15 +237,6 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: lengthController,
-                decoration: const InputDecoration(
-                  labelText: 'Длина (км)',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              TextField(
                 controller: descriptionController,
                 decoration: const InputDecoration(
                   labelText: 'Описание',
@@ -178,9 +264,39 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 return;
               }
               final name = nameController.text.trim();
-              final code = name;
+              final nameLower = name.toLowerCase();
+              final apiService = ref.read(apiServiceProvider);
+              final db = ref.read(drift_db.databaseProvider);
+              // Проверка дубликатов по имени
+              try {
+                final existing = await apiService.getPowerLines();
+                if (existing.any((pl) => pl.name.trim().toLowerCase() == nameLower)) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('ЛЭП с таким названием уже существует'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                  return;
+                }
+              } catch (_) {
+                final localLines = await db.getAllPowerLines();
+                if (localLines.any((pl) => pl.name.trim().toLowerCase() == nameLower)) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('ЛЭП с таким названием уже существует'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                  return;
+                }
+              }
+
               final voltageLevel = double.tryParse(voltageController.text) ?? 0.0;
-              final length = double.tryParse(lengthController.text);
               final branchId = 1;
               final status = 'active';
               final description = descriptionController.text.trim().isEmpty
@@ -188,26 +304,21 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                   : descriptionController.text.trim();
               final powerLineData = PowerLineCreate(
                 name: name,
-                code: code,
                 voltageLevel: voltageLevel,
-                length: length,
+                length: null,
                 branchId: branchId,
                 status: status,
                 description: description,
               );
               try {
-                final apiService = ref.read(apiServiceProvider);
-                final db = ref.read(drift_db.databaseProvider);
                 final created = await apiService.createPowerLine(powerLineData);
-                final lineCode = created.code.trim().isEmpty
-                    ? 'LEP-${created.id.toRadixString(16).toUpperCase().padLeft(8, '0')}'
-                    : created.code;
                 await db.insertPowerLineOrReplace(drift_db.PowerLinesCompanion.insert(
                   id: drift.Value(created.id),
                   name: created.name,
-                  code: lineCode,
+                  code: created.name,
+                  mrid: created.mrid != null && created.mrid!.isNotEmpty ? drift.Value(created.mrid!) : const drift.Value.absent(),
                   voltageLevel: created.voltageLevel ?? 0.0,
-                  length: drift.Value(created.length),
+                  length: created.length != null ? drift.Value(created.length!) : const drift.Value.absent(),
                   branchId: created.branchId ?? 1,
                   createdBy: created.createdBy,
                   status: created.status,
@@ -223,7 +334,24 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 final isOffline = e.type == DioExceptionType.connectionError ||
                     e.type == DioExceptionType.connectionTimeout ||
                     e.type == DioExceptionType.unknown;
-                if (!isOffline) rethrow;
+                if (!isOffline) {
+                  String message;
+                  final data = e.response?.data;
+                  if (data is Map && data['detail'] != null) {
+                    final d = data['detail'];
+                    message = d is String ? d : d.toString();
+                  } else if (e.response?.statusCode == 400) {
+                    message = 'Проверьте введённые данные: название, напряжение (кВ), длина (км).';
+                  } else {
+                    message = 'Ошибка создания линии: ${e.message}';
+                  }
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
+                    );
+                  }
+                  return;
+                }
                 final prefs = ref.read(prefsProvider);
                 final db = ref.read(drift_db.databaseProvider);
                 int localId = prefs.getInt(AppConfig.lastLocalPowerLineIdKey) ?? -1;
@@ -234,9 +362,9 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 await db.insertPowerLine(drift_db.PowerLinesCompanion.insert(
                   id: drift.Value(localId),
                   name: name,
-                  code: code,
+                  code: name,
                   voltageLevel: voltageLevel,
-                  length: length != null ? drift.Value(length) : const drift.Value.absent(),
+                  length: const drift.Value.absent(),
                   branchId: branchId,
                   createdBy: userId,
                   status: status,
@@ -280,9 +408,13 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(newLine != null
-                ? 'Линия «${newLine.name}» создана и выбрана для обхода'
-                : 'Линия создана'),
+            content: Text(
+              newLine != null
+                  ? (newLine.mrid != null && newLine.mrid!.trim().isNotEmpty
+                      ? 'Линия «${newLine.name}» создана. UID: ${newLine.mrid}'
+                      : 'Линия «${newLine.name}» создана и выбрана для обхода')
+                  : 'Линия создана',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -384,6 +516,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                     loading: _gpsLoading,
                     warning: _gpsWarning,
                     onRetry: _captureGps,
+                    onManualEdit: _showManualCoordinatesDialog,
                   ),
                   const SizedBox(height: 24),
                   const Text(
@@ -493,6 +626,14 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
   }
 }
 
+/// Отображаемое название ЛЭП: «Название» или «Название (mrid)», если задан уникальный идентификатор.
+String _powerLineDisplayName(drift_db.PowerLine pl) {
+  if (pl.mrid != null && pl.mrid!.trim().isNotEmpty) {
+    return '${pl.name} (${pl.mrid})';
+  }
+  return pl.name;
+}
+
 class _LineSelector extends StatelessWidget {
   const _LineSelector({
     required this.powerLines,
@@ -521,7 +662,7 @@ class _LineSelector extends StatelessWidget {
               Expanded(
                 child: Text(
                   selected != null
-                      ? '${selected!.name} (${selected!.code})'
+                      ? _powerLineDisplayName(selected!)
                       : 'Введите название или номер...',
                   style: TextStyle(
                     fontSize: 15,
@@ -605,9 +746,7 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
         _filtered = List.from(widget.powerLines);
       } else {
         _filtered = widget.powerLines
-            .where((pl) =>
-                pl.name.toLowerCase().contains(q) ||
-                pl.code.toLowerCase().contains(q))
+            .where((pl) => pl.name.toLowerCase().contains(q))
             .toList();
       }
     });
@@ -623,7 +762,7 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
             controller: _queryController,
             style: const TextStyle(color: PatrolColors.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Поиск по названию или коду',
+              labelText: 'Поиск по названию',
               labelStyle: const TextStyle(color: PatrolColors.textSecondary),
               prefixIcon: const Icon(Icons.search, color: PatrolColors.textSecondary),
               filled: true,
@@ -649,14 +788,14 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
                   color: isSelected ? PatrolColors.accent : PatrolColors.textSecondary,
                 ),
                 title: Text(
-                  pl.name,
+                  _powerLineDisplayName(pl),
                   style: const TextStyle(
                     color: PatrolColors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 subtitle: Text(
-                  'ID: ${pl.code.trim().isEmpty ? pl.name : pl.code} • ${pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д'}',
+                  pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д',
                   style: const TextStyle(color: PatrolColors.textSecondary, fontSize: 12),
                 ),
                 selected: isSelected,
@@ -679,6 +818,7 @@ class _GpsBlock extends StatelessWidget {
     required this.loading,
     required this.warning,
     required this.onRetry,
+    this.onManualEdit,
   });
 
   final double? latitude;
@@ -687,6 +827,7 @@ class _GpsBlock extends StatelessWidget {
   final bool loading;
   final bool warning;
   final VoidCallback onRetry;
+  final VoidCallback? onManualEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -760,6 +901,11 @@ class _GpsBlock extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (latitude != null && onManualEdit != null)
+                  TextButton(
+                    onPressed: onManualEdit,
+                    child: Text('Ввести вручную', style: TextStyle(fontSize: 12, color: PatrolColors.accent)),
+                  ),
               ],
             ),
             if (warning) ...[

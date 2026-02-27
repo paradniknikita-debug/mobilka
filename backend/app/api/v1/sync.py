@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, delete
+from sqlalchemy import select, and_, or_, func, delete, update
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone, timedelta
 import uuid
@@ -10,8 +10,12 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.branch import Branch
-from app.models.power_line import PowerLine, Pole, Equipment
-from app.models.substation import Substation, VoltageLevel, Bay, ConductingEquipment, ProtectionEquipment
+from app.models.power_line import PowerLine, Pole, Equipment, Span, Tap
+from app.models.substation import Substation, VoltageLevel, Bay, ConductingEquipment, ProtectionEquipment, Connection
+from app.models.acline_segment import AClineSegment
+from app.models.cim_line_structure import ConnectivityNode, LineSection
+from app.models.patrol_session import PatrolSession
+from app.models.sync_client_mapping import SyncClientMapping
 from app.schemas.sync import SyncBatch, SyncResponse, SyncRecord, SyncStatus, SyncAction, ENTITY_SCHEMAS
 from app.schemas.power_line import PowerLineCreate, PoleCreate, EquipmentCreate
 from app.models.base import generate_mrid
@@ -27,6 +31,54 @@ def _order_for_sync(records: List[SyncRecord]) -> List[SyncRecord]:
     return sorted(records, key=lambda r: (order.get(r.entity_type, 99), r.id))
 
 
+def _to_int(v: Any) -> Optional[int]:
+    """Приводит значение к int (поддержка строк из JSON: '-34' → -34)."""
+    if v is None:
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(v, (float,)):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+async def _delete_power_line_cascade(db: AsyncSession, power_line_id: int) -> None:
+    """Каскадное удаление ЛЭП и всех связанных сущностей (как в REST delete_power_line)."""
+    result = await db.execute(select(PowerLine).where(PowerLine.id == power_line_id))
+    power_line = result.scalar_one_or_none()
+    if not power_line:
+        return
+    # Connection
+    conns = (await db.execute(select(Connection).where(Connection.line_id == power_line_id))).scalars().all()
+    for conn in conns:
+        await db.delete(conn)
+    # ConnectivityNode и связанные Span, AClineSegment, LineSection
+    nodes = (await db.execute(select(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id))).scalars().all()
+    for cn in nodes:
+        cid = cn.id
+        await db.execute(delete(Span).where(Span.from_connectivity_node_id == cid))
+        await db.execute(delete(Span).where(Span.to_connectivity_node_id == cid))
+        segs = (await db.execute(select(AClineSegment).where(AClineSegment.from_connectivity_node_id == cid))).scalars().all()
+        for seg in segs:
+            await db.execute(delete(LineSection).where(LineSection.acline_segment_id == seg.id))
+        await db.execute(delete(AClineSegment).where(AClineSegment.from_connectivity_node_id == cid))
+        await db.execute(update(AClineSegment).where(AClineSegment.to_connectivity_node_id == cid).values(to_connectivity_node_id=None))
+        await db.execute(update(Pole).where(Pole.connectivity_node_id == cid).values(connectivity_node_id=None))
+    await db.execute(delete(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id))
+    # Сессии обхода
+    await db.execute(delete(PatrolSession).where(PatrolSession.power_line_id == power_line_id))
+    # Сама ЛЭП (каскад в модели удалит опоры, пролёты, отпайки и т.д.)
+    await db.delete(power_line)
+
+
 def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     """Приводит datetime к timezone-aware (UTC) для сравнения с last_sync_dt."""
     if dt is None:
@@ -34,6 +86,23 @@ def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+async def _upsert_pole_mapping(user_id: int, client_id: int, server_id: int, db: AsyncSession) -> None:
+    """Сохраняет маппинг локальный id опоры → серверный id для последующих пакетов синхронизации."""
+    existing = (
+        await db.execute(
+            select(SyncClientMapping).where(
+                SyncClientMapping.user_id == user_id,
+                SyncClientMapping.entity_type == "pole",
+                SyncClientMapping.client_id == client_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        existing.server_id = server_id
+    else:
+        db.add(SyncClientMapping(user_id=user_id, entity_type="pole", client_id=client_id, server_id=server_id))
 
 
 @router.post("/upload", response_model=SyncResponse)
@@ -63,13 +132,36 @@ async def upload_sync_batch(
             data = record.data
             # Подстановка серверных id для опор и оборудования (локальные id отрицательные)
             if record.entity_type == "pole" and record.action == SyncAction.CREATE:
-                pl_id = data.get("power_line_id")
-                if isinstance(pl_id, int) and pl_id < 0 and pl_id in id_mapping["power_line"]:
+                pl_id = _to_int(data.get("power_line_id"))
+                if pl_id is not None and pl_id < 0 and pl_id in id_mapping["power_line"]:
                     data = {**data, "power_line_id": id_mapping["power_line"][pl_id]}
             elif record.entity_type == "equipment" and record.action == SyncAction.CREATE:
-                pole_id = data.get("pole_id")
-                if isinstance(pole_id, int) and pole_id < 0 and pole_id in id_mapping["pole"]:
-                    data = {**data, "pole_id": id_mapping["pole"][pole_id]}
+                pole_id = _to_int(data.get("pole_id"))
+                pole_server_id = _to_int(data.get("pole_server_id"))
+                if pole_server_id is not None and pole_server_id > 0:
+                    # Клиент передал уже известный серверный id опоры — используем его
+                    data = {**data, "pole_id": pole_server_id}
+                elif pole_id is not None and pole_id < 0:
+                    if pole_id in id_mapping["pole"]:
+                        data = {**data, "pole_id": id_mapping["pole"][pole_id]}
+                    else:
+                        # Опора не в текущем пакете — ищем в сохранённом маппинге (предыдущие синхронизации)
+                        mapping_row = (
+                            await db.execute(
+                                select(SyncClientMapping)
+                                .where(
+                                    SyncClientMapping.user_id == current_user.id,
+                                    SyncClientMapping.entity_type == "pole",
+                                    SyncClientMapping.client_id == pole_id,
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if mapping_row:
+                            data = {**data, "pole_id": mapping_row.server_id}
+                        else:
+                            raise ValueError(
+                                f"pole_id={pole_id} (локальный) не найден в маппинге: опора должна быть в том же пакете синхронизации или уже синхронизирована ранее"
+                            )
             record.data = data
             
             # Валидируем только create/update — для delete в data только id
@@ -98,15 +190,22 @@ async def upload_sync_batch(
     logger.info("sync/upload: итог processed=%d failed=%d errors=%s", processed_count, failed_count, errors)
     if failed_count == 0:
         await db.commit()
+        # Отдаём клиенту маппинг локальных id → серверные (ключи — строки для JSON)
+        id_mapping_response = {
+            "pole": {str(k): v for k, v in id_mapping["pole"].items()},
+            "power_line": {str(k): v for k, v in id_mapping["power_line"].items()},
+        }
     else:
         await db.rollback()
+        id_mapping_response = None
     return SyncResponse(
         success=failed_count == 0,
         processed_count=processed_count,
         failed_count=failed_count,
         errors=errors,
         batch_id=batch.batch_id,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
+        id_mapping=id_mapping_response,
     )
 
 @router.get("/download")
@@ -116,7 +215,21 @@ async def download_sync_data(
     db: AsyncSession = Depends(get_db)
 ):
     """Скачивание изменений с сервера с момента last_sync"""
-    
+    try:
+        return await _download_sync_data_impl(last_sync, current_user, db)
+    except Exception as e:
+        logger.exception("sync/download: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"sync/download: {type(e).__name__}: {e}",
+        ) from e
+
+
+async def _download_sync_data_impl(
+    last_sync: Optional[str],
+    current_user: User,
+    db: AsyncSession,
+):
     # Парсим last_sync или используем время 24 часа назад. Сдвиг на 60 сек назад,
     # чтобы не терять записи из-за разницы часов поясов или задержки коммита.
     if last_sync:
@@ -146,25 +259,27 @@ async def download_sync_data(
     power_lines = power_lines_result.scalars().all()
     for pl in power_lines:
         pl_created = _ensure_utc(pl.created_at)
+        pl_data = {
+            "id": pl.id,
+            "name": pl.name,
+            "voltage_level": pl.voltage_level,
+            "length": pl.length,
+            "branch_id": getattr(pl, "branch_id", None),
+            "status": pl.status,
+            "description": pl.description,
+            "created_by": pl.created_by,
+            "created_at": pl.created_at.isoformat() if pl.created_at else None,
+            "updated_at": pl.updated_at.isoformat() if pl.updated_at else None,
+        }
+        if getattr(pl, "mrid", None) is not None:
+            pl_data["mrid"] = pl.mrid
+        if getattr(pl, "region_id", None) is not None:
+            pl_data["region_id"] = pl.region_id
         records.append({
             "id": str(uuid.uuid4()),
             "entity_type": "power_line",
             "action": "create" if (pl_created and pl_created >= last_sync_dt) else "update",
-            "data": {
-                "id": pl.id,
-                "mrid": pl.mrid,
-                "name": pl.name,
-                "code": pl.code,
-                "voltage_level": pl.voltage_level,
-                "length": pl.length,
-                "region_id": pl.region_id,
-                "branch_id": pl.branch_id,
-                "status": pl.status,
-                "description": pl.description,
-                "created_by": pl.created_by,
-                "created_at": pl.created_at.isoformat() if pl.created_at else None,
-                "updated_at": pl.updated_at.isoformat() if pl.updated_at else None,
-            },
+            "data": pl_data,
             "timestamp": (pl.updated_at or pl.created_at).isoformat() if (pl.updated_at or pl.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     
@@ -181,28 +296,30 @@ async def download_sync_data(
     poles = poles_result.scalars().all()
     for pole in poles:
         pole_created = _ensure_utc(pole.created_at)
+        pole_data = {
+            "id": pole.id,
+            "power_line_id": pole.line_id,
+            "pole_number": pole.pole_number,
+            "x_position": pole.x_position,
+            "y_position": pole.y_position,
+            "pole_type": pole.pole_type,
+            "height": pole.height,
+            "foundation_type": pole.foundation_type,
+            "material": pole.material,
+            "year_installed": pole.year_installed,
+            "condition": pole.condition,
+            "notes": pole.notes,
+            "created_by": pole.created_by,
+            "created_at": pole.created_at.isoformat() if pole.created_at else None,
+            "updated_at": pole.updated_at.isoformat() if pole.updated_at else None,
+        }
+        if getattr(pole, "mrid", None) is not None:
+            pole_data["mrid"] = pole.mrid
         records.append({
             "id": str(uuid.uuid4()),
             "entity_type": "pole",
             "action": "create" if (pole_created and pole_created >= last_sync_dt) else "update",
-            "data": {
-                "id": pole.id,
-                "mrid": pole.mrid,
-                "power_line_id": pole.power_line_id,
-                "pole_number": pole.pole_number,
-                "latitude": pole.latitude,
-                "longitude": pole.longitude,
-                "pole_type": pole.pole_type,
-                "height": pole.height,
-                "foundation_type": pole.foundation_type,
-                "material": pole.material,
-                "year_installed": pole.year_installed,
-                "condition": pole.condition,
-                "notes": pole.notes,
-                "created_by": pole.created_by,
-                "created_at": pole.created_at.isoformat() if pole.created_at else None,
-                "updated_at": pole.updated_at.isoformat() if pole.updated_at else None,
-            },
+            "data": pole_data,
             "timestamp": (pole.updated_at or pole.created_at).isoformat() if (pole.updated_at or pole.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     
@@ -219,27 +336,29 @@ async def download_sync_data(
     equipment_list = equipment_result.scalars().all()
     for eq in equipment_list:
         eq_created = _ensure_utc(eq.created_at)
+        eq_data = {
+            "id": eq.id,
+            "pole_id": eq.pole_id,
+            "equipment_type": eq.equipment_type,
+            "name": eq.name,
+            "manufacturer": eq.manufacturer,
+            "model": eq.model,
+            "serial_number": eq.serial_number,
+            "year_manufactured": eq.year_manufactured,
+            "installation_date": eq.installation_date.isoformat() if eq.installation_date else None,
+            "condition": eq.condition,
+            "notes": eq.notes,
+            "created_by": eq.created_by,
+            "created_at": eq.created_at.isoformat() if eq.created_at else None,
+            "updated_at": eq.updated_at.isoformat() if eq.updated_at else None,
+        }
+        if getattr(eq, "mrid", None) is not None:
+            eq_data["mrid"] = eq.mrid
         records.append({
             "id": str(uuid.uuid4()),
             "entity_type": "equipment",
             "action": "create" if (eq_created and eq_created >= last_sync_dt) else "update",
-            "data": {
-                "id": eq.id,
-                "mrid": eq.mrid,
-                "pole_id": eq.pole_id,
-                "equipment_type": eq.equipment_type,
-                "name": eq.name,
-                "manufacturer": eq.manufacturer,
-                "model": eq.model,
-                "serial_number": eq.serial_number,
-                "year_manufactured": eq.year_manufactured,
-                "installation_date": eq.installation_date.isoformat() if eq.installation_date else None,
-                "condition": eq.condition,
-                "notes": eq.notes,
-                "created_by": eq.created_by,
-                "created_at": eq.created_at.isoformat() if eq.created_at else None,
-                "updated_at": eq.updated_at.isoformat() if eq.updated_at else None,
-            },
+            "data": eq_data,
             "timestamp": (eq.updated_at or eq.created_at).isoformat() if (eq.updated_at or eq.created_at) else datetime.now(timezone.utc).isoformat(),
         })
     
@@ -261,8 +380,9 @@ async def process_sync_record(
         if record.action == SyncAction.CREATE:
             client_id = data.get('id')
             conds = []
-            if isinstance(client_id, int) and client_id > 0:
-                conds.append(PowerLine.id == client_id)
+            client_id_int = _to_int(client_id)
+            if client_id_int is not None and client_id_int > 0:
+                conds.append(PowerLine.id == client_id_int)
             if data.get('mrid'):
                 conds.append(PowerLine.mrid == data.get('mrid'))
             if not conds:
@@ -273,27 +393,19 @@ async def process_sync_record(
             
             if existing_pl:
                 for key, value in data.items():
-                    if hasattr(existing_pl, key) and key not in ['id', 'mrid', 'created_at']:
+                    if key in ('id', 'mrid', 'created_at', 'code', 'created_by'):
+                        continue
+                    if hasattr(existing_pl, key):
                         setattr(existing_pl, key, value)
-                if isinstance(client_id, int) and client_id < 0:
-                    id_mapping["power_line"][client_id] = existing_pl.id
+                client_id_int = _to_int(client_id)
+                if client_id_int is not None and client_id_int < 0:
+                    id_mapping["power_line"][client_id_int] = existing_pl.id
             else:
                 mrid = data.get('mrid') or generate_mrid()
-                base_code = data.get('code') or f"LEP-{mrid[:8].upper()}"
-                code = base_code
-                for attempt in range(10):
-                    existing_code = await db.execute(select(PowerLine).where(PowerLine.code == code))
-                    if existing_code.scalar_one_or_none() is None:
-                        break
-                    code = f"{base_code}-{mrid[:6]}" if attempt == 0 else f"{base_code}-{attempt}"
                 voltage = data.get('voltage_level')
                 voltage_level = float(voltage) if voltage is not None else 0.0
-                branch_id = data.get('branch_id')
-                if branch_id is not None and not isinstance(branch_id, int):
-                    try:
-                        branch_id = int(branch_id)
-                    except (TypeError, ValueError):
-                        branch_id = None
+                region_id = _to_int(data.get('region_id'))
+                branch_id = _to_int(data.get('branch_id'))
                 if branch_id is not None:
                     branch_exists = await db.execute(select(Branch).where(Branch.id == branch_id))
                     if branch_exists.scalar_one_or_none() is None:
@@ -301,10 +413,9 @@ async def process_sync_record(
                 db_pl = PowerLine(
                     mrid=mrid,
                     name=data.get('name') or 'ЛЭП',
-                    code=code,
                     voltage_level=voltage_level,
                     length=float(data['length']) if data.get('length') is not None else None,
-                    region_id=data.get('region_id'),
+                    region_id=region_id,
                     branch_id=branch_id,
                     status=data.get('status') or 'active',
                     description=data.get('description'),
@@ -312,8 +423,9 @@ async def process_sync_record(
                 )
                 db.add(db_pl)
                 await db.flush()
-                if isinstance(client_id, int) and client_id < 0:
-                    id_mapping["power_line"][client_id] = db_pl.id
+                client_id_int = _to_int(client_id)
+                if client_id_int is not None and client_id_int < 0:
+                    id_mapping["power_line"][client_id_int] = db_pl.id
         
         elif record.action == SyncAction.UPDATE:
             # Обновление ЛЭП (если не найдена — уже удалена на сервере, пропускаем)
@@ -328,23 +440,25 @@ async def process_sync_record(
             pl = result.scalar_one_or_none()
             if pl:
                 for key, value in data.items():
-                    if hasattr(pl, key) and key not in ['id', 'mrid', 'created_at', 'created_by']:
+                    if key in ('id', 'mrid', 'created_at', 'created_by', 'code'):
+                        continue
+                    if hasattr(pl, key):
                         setattr(pl, key, value)
             # иначе уже удалена — не ошибка
         
         elif record.action == SyncAction.DELETE:
-            # Удаление ЛЭП (если не найдена — уже удалена, считаем успехом)
-            result = await db.execute(
-                select(PowerLine).where(
-                    or_(
-                        PowerLine.id == data.get('id'),
-                        PowerLine.mrid == data.get('mrid')
-                    )
-                )
-            )
-            pl = result.scalar_one_or_none()
-            if pl:
-                await db.execute(delete(PowerLine).where(PowerLine.id == pl.id))
+            # Удаление ЛЭП с каскадом (Connection, ConnectivityNode, Span, AClineSegment, PatrolSession, затем сама ЛЭП)
+            pl_id = data.get('id')
+            if isinstance(pl_id, str):
+                try:
+                    pl_id = int(pl_id)
+                except (TypeError, ValueError):
+                    pl_id = None
+            if pl_id is not None:
+                result = await db.execute(select(PowerLine).where(PowerLine.id == pl_id))
+                pl = result.scalar_one_or_none()
+                if pl:
+                    await _delete_power_line_cascade(db, pl.id)
     
     elif record.entity_type == "pole":
         if record.action == SyncAction.CREATE:
@@ -360,37 +474,49 @@ async def process_sync_record(
             existing_pole = existing.scalar_one_or_none()
             client_id = data.get('id')
             if existing_pole:
+                pl_id_val = _to_int(data.get('power_line_id'))
+                if pl_id_val is not None:
+                    existing_pole.line_id = pl_id_val
                 for key, value in data.items():
-                    if hasattr(existing_pole, key) and key not in ['id', 'mrid', 'created_at']:
+                    if key in ('id', 'mrid', 'created_at', 'power_line_id'):
+                        continue
+                    if hasattr(existing_pole, key):
                         setattr(existing_pole, key, value)
-                if isinstance(client_id, int) and client_id < 0:
-                    id_mapping["pole"][client_id] = existing_pole.id
+                client_id_int = _to_int(client_id)
+                if client_id_int is not None and client_id_int < 0:
+                    id_mapping["pole"][client_id_int] = existing_pole.id
+                    await _upsert_pole_mapping(user.id, client_id_int, existing_pole.id, db)
             else:
                 client_id = data.get('id')
                 mrid = data.get('mrid') or generate_mrid()
-                lat = data.get('latitude')
-                lon = data.get('longitude')
-                latitude = float(lat) if lat is not None else None
-                longitude = float(lon) if lon is not None else None
+                lat = data.get('y_position') or data.get('latitude')
+                lon = data.get('x_position') or data.get('longitude')
+                y_pos = float(lat) if lat is not None else None
+                x_pos = float(lon) if lon is not None else None
+                pl_id = _to_int(data.get('power_line_id'))
+                if pl_id is None:
+                    raise ValueError("power_line_id обязателен для создания опоры")
                 db_pole = Pole(
                     mrid=mrid,
-                    power_line_id=int(data['power_line_id']),
+                    line_id=pl_id,
                     pole_number=data.get('pole_number') or '0',
-                    latitude=latitude,
-                    longitude=longitude,
+                    y_position=y_pos,
+                    x_position=x_pos,
                     pole_type=data.get('pole_type') or 'unknown',
                     height=float(data['height']) if data.get('height') is not None else None,
                     foundation_type=data.get('foundation_type'),
                     material=data.get('material'),
-                    year_installed=int(data['year_installed']) if data.get('year_installed') is not None else None,
+                    year_installed=_to_int(data.get('year_installed')),
                     condition=data.get('condition') or 'good',
                     notes=data.get('notes'),
                     created_by=user.id
                 )
                 db.add(db_pole)
                 await db.flush()
-                if isinstance(client_id, int) and client_id < 0:
-                    id_mapping["pole"][client_id] = db_pole.id
+                client_id_int = _to_int(client_id)
+                if client_id_int is not None and client_id_int < 0:
+                    id_mapping["pole"][client_id_int] = db_pole.id
+                    await _upsert_pole_mapping(user.id, client_id_int, db_pole.id, db)
         
         elif record.action == SyncAction.UPDATE:
             result = await db.execute(
@@ -403,8 +529,20 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
-                for key, value in data.items():
-                    if hasattr(pole, key) and key not in ['id', 'mrid', 'created_at', 'created_by']:
+                pl_id_val = _to_int(data.get('power_line_id'))
+                if pl_id_val is not None:
+                    pole.line_id = pl_id_val
+                upd = dict(data)
+                if 'latitude' in upd and 'y_position' not in upd:
+                    upd['y_position'] = upd['latitude']
+                if 'longitude' in upd and 'x_position' not in upd:
+                    upd['x_position'] = upd['longitude']
+                for key in ['latitude', 'longitude', 'power_line_id']:
+                    upd.pop(key, None)
+                for key, value in upd.items():
+                    if key in ('id', 'mrid', 'created_at', 'created_by'):
+                        continue
+                    if hasattr(pole, key):
                         setattr(pole, key, value)
         
         elif record.action == SyncAction.DELETE:
@@ -439,9 +577,12 @@ async def process_sync_record(
                         setattr(existing_eq, key, value)
             else:
                 mrid = data.get('mrid') or generate_mrid()
+                pole_id_val = _to_int(data.get('pole_id'))
+                if pole_id_val is None:
+                    raise ValueError("pole_id обязателен для создания оборудования")
                 db_eq = Equipment(
                     mrid=mrid,
-                    pole_id=data['pole_id'],
+                    pole_id=pole_id_val,
                     equipment_type=data['equipment_type'],
                     name=data['name'],
                     manufacturer=data.get('manufacturer'),
@@ -467,11 +608,17 @@ async def process_sync_record(
             eq = result.scalar_one_or_none()
             if eq:
                 for key, value in data.items():
-                    if hasattr(eq, key) and key not in ['id', 'mrid', 'created_at', 'created_by']:
-                        if key == 'installation_date' and value:
-                            setattr(eq, key, datetime.fromisoformat(value))
+                    if key in ('id', 'mrid', 'created_at', 'created_by'):
+                        continue
+                    if not hasattr(eq, key):
+                        continue
+                    if key == 'installation_date':
+                        if value is None or value == '':
+                            setattr(eq, key, None)
                         else:
-                            setattr(eq, key, value)
+                            setattr(eq, key, datetime.fromisoformat(str(value).replace('Z', '+00:00')))
+                    else:
+                        setattr(eq, key, value)
         
         elif record.action == SyncAction.DELETE:
             result = await db.execute(

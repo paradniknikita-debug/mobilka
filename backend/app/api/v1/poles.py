@@ -22,11 +22,20 @@ async def get_all_poles(
     """Получение всех опор"""
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.equipment))
+        .options(
+            selectinload(Pole.equipment),
+            selectinload(Pole.position_points)  # Загружаем position_points для координат
+        )
         .offset(skip)
         .limit(limit)
     )
     poles = result.scalars().all()
+    
+    # Заполняем координаты для каждой опоры
+    from app.api.v1.power_lines import fill_pole_coordinates
+    for pole in poles:
+        fill_pole_coordinates(pole)
+    
     return poles
 
 @router.get("/{pole_id}", response_model=PoleResponse)
@@ -38,7 +47,10 @@ async def get_pole(
     """Получение опоры по ID"""
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.equipment))
+        .options(
+            selectinload(Pole.equipment),
+            selectinload(Pole.position_points)  # Загружаем position_points для координат
+        )
         .where(Pole.id == pole_id)
     )
     pole = result.scalar_one_or_none()
@@ -47,6 +59,11 @@ async def get_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
+    
+    # Заполняем координаты
+    from app.api.v1.power_lines import fill_pole_coordinates
+    fill_pole_coordinates(pole)
+    
     return pole
 
 @router.post("/{pole_id}/equipment", response_model=EquipmentResponse)

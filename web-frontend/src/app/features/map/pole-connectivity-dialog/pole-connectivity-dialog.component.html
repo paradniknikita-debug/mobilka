@@ -3,7 +3,7 @@
 <mat-dialog-content>
   <div class="pole-info">
     <h3>Опора: {{ pole.pole_number }}</h3>
-    <p><strong>Координаты:</strong> {{ pole.latitude.toFixed(6) }}, {{ pole.longitude.toFixed(6) }}</p>
+    <p><strong>Координаты:</strong> {{ pole.y_position.toFixed(6) }}, {{ pole.x_position.toFixed(6) }}</p>
   </div>
 
   <div class="connectivity-node-status" *ngIf="!isLoading">

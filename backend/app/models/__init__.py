@@ -11,10 +11,11 @@ from .substation import (
     ProtectionEquipment
 )
 from .geographic_region import GeographicRegion
-from .acline_segment import AClineSegment, line_segments
+from .acline_segment import AClineSegment
 from .cim_line_structure import ConnectivityNode, Terminal, LineSection
 from .location import Location, PositionPoint, LocationType
 from .patrol_session import PatrolSession
+from .sync_client_mapping import SyncClientMapping
 # Временно закомментировано до применения миграции
 # from .base_voltage import BaseVoltage
 # from .wire_info import WireInfo
@@ -36,7 +37,6 @@ __all__ = [
     "ProtectionEquipment",
     "GeographicRegion",
     "AClineSegment",
-    "line_segments",
     "ConnectivityNode",
     "Terminal",
     "LineSection",
@@ -44,6 +44,7 @@ __all__ = [
     "PositionPoint",
     "LocationType",
     "PatrolSession",
+    "SyncClientMapping",
     # "BaseVoltage",  # Временно закомментировано
     # "WireInfo"  # Временно закомментировано
 ]

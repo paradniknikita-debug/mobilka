@@ -82,13 +82,16 @@ async def create_substation(
         db.add(db_position_point)
         location_id = db_location.id
     
-    # Создаем новую подстанцию
+    # Создаем новую подстанцию (в БД колонки x_position, y_position)
     substation_dict = substation_data.dict()
     substation_dict['location_id'] = location_id
-    # Удаляем координаты из словаря, так как они теперь в Location
+    if substation_data.latitude is not None:
+        substation_dict['y_position'] = substation_data.latitude
+    if substation_data.longitude is not None:
+        substation_dict['x_position'] = substation_data.longitude
     substation_dict.pop('latitude', None)
     substation_dict.pop('longitude', None)
-    
+
     db_substation = Substation(**substation_dict)
     db.add(db_substation)
     await db.commit()

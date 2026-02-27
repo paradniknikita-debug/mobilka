@@ -39,46 +39,29 @@ final routerProvider = Provider<GoRouter>((ref) {
       final currentPath = state.uri.path;
       final isLoggingIn = state.matchedLocation == '/login' || currentPath == '/login';
       
-      if (kDebugMode) {
-        print('🔄 [Router] redirect проверка:');
-        print('   Текущий путь: $currentPath');
-        print('   matchedLocation: ${state.matchedLocation}');
-        print('   Состояние авторизации: ${currentAuthState.runtimeType}');
-        print('   isAuthenticated: $isAuthenticated');
-        print('   isLoading: $isLoading');
-        print('   isInitial: $isInitial');
-        print('   isLoggingIn: $isLoggingIn');
-      }
-      
       // Если идет загрузка или начальное состояние - разрешаем оставаться на текущей странице
       if (isLoading || isInitial) {
-        if (kDebugMode) {
-          print('   → [Router] Разрешаем навигацию (загрузка или начальное состояние)');
-        }
         return null;
       }
-      
+
       final isRegistering = state.matchedLocation == '/register' || currentPath == '/register';
-      
+
       // Если не авторизован и не на странице логина/регистрации - перенаправляем на логин
       if (!isAuthenticated && !isLoggingIn && !isRegistering) {
         if (kDebugMode) {
-          print('   → [Router] Перенаправление на /login (не авторизован)');
+          print('[Router] → /login (не авторизован)');
         }
         return '/login';
       }
-      
+
       // Если авторизован и на странице логина/регистрации - перенаправляем на главный экран
       if (isAuthenticated && (isLoggingIn || isRegistering)) {
         if (kDebugMode) {
-          print('   → [Router] Перенаправление на / (главная)');
+          print('[Router] → / (после входа)');
         }
         return '/';
       }
-      
-      if (kDebugMode) {
-        print('   → [Router] Разрешаем навигацию (нет редиректа)');
-      }
+
       return null; // Разрешаем навигацию
     },
     routes: [

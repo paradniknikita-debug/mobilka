@@ -1,10 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices
 from typing import Optional
 from datetime import datetime
 
 
 class PatrolSessionCreate(BaseModel):
-    power_line_id: int
+    """Создание сессии обхода. Принимаем power_line_id (snake_case) и powerLineId (camelCase)."""
+    power_line_id: int = Field(..., validation_alias=AliasChoices("power_line_id", "powerLineId"))
     note: Optional[str] = None
 
 

@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 import '../config/app_config.dart';
 import '../database/database.dart';
@@ -69,9 +70,8 @@ class SyncService extends StateNotifier<SyncState> {
         await _downloadServerChanges(useLastSync: lastSyncBeforeUpload);
       }
 
-      // Удаляем локальные копии только после успешной выгрузки И загрузки — иначе данные не потеряются при сбое
+      // Локальные данные не удаляем: выгруженные сущности остаются в БД вместе с загруженными с сервера.
       if (uploadResult != null) {
-        await _removeUploadedLocalEntities(uploadResult.$1, uploadResult.$2, uploadResult.$3);
         _clearPendingDeletePowerLineIds();
       }
       await _setLastSyncTime(DateTime.now());
@@ -99,9 +99,10 @@ class SyncService extends StateNotifier<SyncState> {
     final pending = await _database.getPendingPatrolSessions();
     for (final row in pending) {
       if (row.powerLineId < 0) continue; // ЛЭП создана офлайн — отправим после синхронизации линии
+      // Сервер ожидает power_line_id (int) и опционально note (str)
       final body = <String, dynamic>{
         'power_line_id': row.powerLineId,
-        if (row.note != null && row.note!.isNotEmpty) 'note': row.note,
+        if (row.note != null && row.note!.isNotEmpty) 'note': row.note!,
       };
       final response = await _apiService.createPatrolSession(body);
       final serverId = (response['id'] as num?)?.toInt();
@@ -131,31 +132,48 @@ class SyncService extends StateNotifier<SyncState> {
       records.add(_createSyncRecord('power_line', 'delete', {'id': id}, batchId));
     }
 
-    // Создание: сначала ЛЭП (бэкенд требует name, code, voltage_level — задаём явно)
+    // Создание: сначала ЛЭП (бэкенд требует name, voltage_level)
     for (final powerLine in powerLines) {
       final data = _toSnakeCaseMap(powerLine.toJson());
-      // Всегда задаём обязательные поля, чтобы не терялись при сериализации
-      final String name = (powerLine.name.trim().isNotEmpty)
-          ? powerLine.name
-          : (powerLine.code.trim().isNotEmpty ? powerLine.code : 'ЛЭП');
-      final String code = powerLine.code.trim().isNotEmpty
-          ? powerLine.code
-          : (powerLine.id >= 0 ? 'LEP-${powerLine.id}' : 'LEP-L${-powerLine.id}');
+      final String name = powerLine.name.trim().isNotEmpty ? powerLine.name : 'ЛЭП';
       final num voltageLevel = powerLine.voltageLevel;
       data['name'] = name;
-      data['code'] = code;
       data['voltage_level'] = voltageLevel is int ? voltageLevel.toDouble() : (voltageLevel as double? ?? 0.0);
       records.add(_createSyncRecord('power_line', 'create', data, batchId));
     }
 
-    // Затем опоры (power_line_id может быть локальным < 0 — сервер подставит server id)
+    // Затем опоры (power_line_id может быть локальным < 0 — подставляем server id из маппинга при наличии)
+    final powerLineMapping = _getSyncPowerLineMapping();
     for (final pole in poles) {
-      records.add(_createSyncRecord('pole', 'create', _toSnakeCaseMap(pole.toJson()), batchId));
+      var poleData = _toSnakeCaseMap(pole.toJson());
+      final plId = pole.powerLineId;
+      if (plId < 0) {
+        final serverPlId = powerLineMapping[plId];
+        if (serverPlId != null && serverPlId > 0) {
+          poleData = {...poleData, 'power_line_id': serverPlId};
+        }
+      }
+      records.add(_createSyncRecord('pole', 'create', poleData, batchId));
     }
 
-    // Оборудование
-    for (final equipmentItem in equipment) {
-      records.add(_createSyncRecord('equipment', 'create', _equipmentToJson(equipmentItem), batchId));
+    // Оборудование: передаём pole_server_id из сохранённого маппинга, если опора уже синхронизирована ранее.
+    // Если для локального pole_id нет ни серверного id, ни самой опоры в текущем пакете —
+    // считаем запись устаревшей/дублем и переводим её в состояние «не требует синхронизации», не отправляя на сервер.
+    final poleMapping = _getSyncPoleMapping();
+    final polesInBatch = poles.map((p) => p.id).toSet();
+    final List<EquipmentData> equipmentToSync = [];
+    for (final eq in equipment) {
+      final poleId = eq.poleId;
+      final serverPoleId = poleMapping[poleId];
+      final hasPoleInBatch = polesInBatch.contains(poleId);
+      final canSync = poleId > 0 || (serverPoleId != null && serverPoleId > 0) || hasPoleInBatch;
+      if (!canSync) {
+        // Старые локальные записи, для которых невозможно восстановить связь с опорой, помечаем как «синхронизированные» локально.
+        await _database.setEquipmentNeedsSync(eq.id, false);
+        continue;
+      }
+      equipmentToSync.add(eq);
+      records.add(_createSyncRecord('equipment', 'create', _equipmentToJson(eq, poleMapping), batchId));
     }
 
     if (records.isEmpty) return null;
@@ -167,9 +185,120 @@ class SyncService extends StateNotifier<SyncState> {
     };
     final response = await _apiService.uploadSyncBatch(batch);
     if (response['success'] == true) {
+      final idMapping = response['id_mapping'];
+      if (idMapping is Map) {
+        if (idMapping['pole'] is Map) {
+          _saveSyncPoleMapping(Map<String, dynamic>.from(idMapping['pole'] as Map));
+          for (final entry in (idMapping['pole'] as Map).entries) {
+            final clientId = int.tryParse(entry.key.toString());
+            if (clientId != null) {
+              await _database.setPoleNeedsSync(clientId, false);
+            }
+          }
+        }
+        if (idMapping['power_line'] is Map) {
+          final plMapping = Map<String, dynamic>.from(idMapping['power_line'] as Map);
+          _saveSyncPowerLineMapping(plMapping);
+          // Заменить локальные ЛЭП на серверные: перенос опор, вставка строки с server id, удаление локальной
+          for (final pl in powerLines) {
+            if (pl.id >= 0) continue;
+            final serverIdRaw = plMapping[pl.id.toString()];
+            final int? serverId = serverIdRaw is int
+                ? serverIdRaw
+                : (serverIdRaw is num ? serverIdRaw.toInt() : int.tryParse(serverIdRaw?.toString() ?? ''));
+            if (serverId == null || serverId <= 0) continue;
+            await _database.updatePolesPowerLineId(pl.id, serverId);
+            await _database.insertPowerLineOrReplace(
+              PowerLinesCompanion.insert(
+                id: drift.Value(serverId),
+                name: pl.name,
+                code: pl.name,
+                mrid: pl.mrid != null && pl.mrid!.trim().isNotEmpty ? drift.Value(pl.mrid!) : const drift.Value.absent(),
+                voltageLevel: pl.voltageLevel,
+                length: pl.length != null ? drift.Value(pl.length!) : const drift.Value.absent(),
+                branchId: pl.branchId,
+                createdBy: pl.createdBy,
+                status: pl.status,
+                description: drift.Value(pl.description),
+                createdAt: pl.createdAt,
+                updatedAt: drift.Value(pl.updatedAt),
+                isLocal: const drift.Value(false),
+                needsSync: const drift.Value(false),
+              ),
+            );
+            await _database.deletePowerLine(pl.id);
+            if (_prefs != null) {
+              final sessionLineId = _prefs!.getInt(AppConfig.activeSessionPowerLineIdKey);
+              if (sessionLineId == pl.id) {
+                await _prefs!.setInt(AppConfig.activeSessionPowerLineIdKey, serverId);
+              }
+            }
+          }
+        }
+      }
+      for (final eq in equipmentToSync) {
+        await _database.setEquipmentNeedsSync(eq.id, false);
+      }
+      for (final pl in powerLines) {
+        if (pl.id >= 0) await _database.setPowerLineNeedsSync(pl.id, false);
+      }
       return (powerLines, poles, equipment);
     }
     return null;
+  }
+
+  Map<int, int> _getSyncPoleMapping() {
+    if (_prefs == null) return {};
+    final json = _prefs!.getString(AppConfig.syncPoleMappingKey);
+    if (json == null || json.isEmpty) return {};
+    try {
+      final map = jsonDecode(json) as Map;
+      return map.map((k, v) => MapEntry(
+        int.tryParse(k.toString()) ?? 0,
+        v is int ? v : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0),
+      ));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  void _saveSyncPoleMapping(Map<String, dynamic> newMapping) {
+    if (_prefs == null || newMapping.isEmpty) return;
+    final current = _getSyncPoleMapping();
+    for (final e in newMapping.entries) {
+      final k = int.tryParse(e.key.toString());
+      final v = e.value is int ? e.value as int : (e.value is num ? (e.value as num).toInt() : int.tryParse(e.value?.toString() ?? ''));
+      if (k != null && v != null) current[k] = v;
+    }
+    final toSave = current.map((k, v) => MapEntry(k.toString(), v));
+    _prefs!.setString(AppConfig.syncPoleMappingKey, jsonEncode(toSave));
+  }
+
+  Map<int, int> _getSyncPowerLineMapping() {
+    if (_prefs == null) return {};
+    final json = _prefs!.getString(AppConfig.syncPowerLineMappingKey);
+    if (json == null || json.isEmpty) return {};
+    try {
+      final map = jsonDecode(json) as Map;
+      return map.map((k, v) => MapEntry(
+        int.tryParse(k.toString()) ?? 0,
+        v is int ? v : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0),
+      ));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  void _saveSyncPowerLineMapping(Map<String, dynamic> newMapping) {
+    if (_prefs == null || newMapping.isEmpty) return;
+    final current = _getSyncPowerLineMapping();
+    for (final e in newMapping.entries) {
+      final k = int.tryParse(e.key.toString());
+      final v = e.value is int ? e.value as int : (e.value is num ? (e.value as num).toInt() : int.tryParse(e.value?.toString() ?? ''));
+      if (k != null && v != null) current[k] = v;
+    }
+    final toSave = current.map((k, v) => MapEntry(k.toString(), v));
+    _prefs!.setString(AppConfig.syncPowerLineMappingKey, jsonEncode(toSave));
   }
 
   List<int> _getPendingDeletePowerLineIds() {
@@ -180,22 +309,6 @@ class SyncService extends StateNotifier<SyncState> {
 
   void _clearPendingDeletePowerLineIds() {
     _prefs?.setStringList(AppConfig.pendingDeletePowerLineIdsKey, []);
-  }
-
-  Future<void> _removeUploadedLocalEntities(
-    List<PowerLine> powerLines,
-    List<Pole> poles,
-    List<EquipmentData> equipment,
-  ) async {
-    for (final pl in powerLines) {
-      if (pl.isLocal && pl.id < 0) await _database.deletePowerLine(pl.id);
-    }
-    for (final p in poles) {
-      if (p.isLocal && p.id < 0) await _database.deletePole(p.id);
-    }
-    for (final eq in equipment) {
-      if (eq.isLocal && eq.id < 0) await _database.deleteEquipment(eq.id);
-    }
   }
 
   /// [useLastSync] — если задано, использовать его для запроса (например, время до выгрузки).
@@ -210,8 +323,8 @@ class SyncService extends StateNotifier<SyncState> {
     // Время обновляется в syncData() после успешного завершения
   }
 
-  Map<String, dynamic> _equipmentToJson(EquipmentData equipment) {
-    return {
+  Map<String, dynamic> _equipmentToJson(EquipmentData equipment, Map<int, int> poleMapping) {
+    final map = <String, dynamic>{
       'id': equipment.id,
       'pole_id': equipment.poleId,
       'equipment_type': equipment.equipmentType,
@@ -227,6 +340,11 @@ class SyncService extends StateNotifier<SyncState> {
       'created_at': equipment.createdAt.toIso8601String(),
       'updated_at': equipment.updatedAt?.toIso8601String(),
     };
+    final serverPoleId = poleMapping[equipment.poleId];
+    if (serverPoleId != null && serverPoleId > 0) {
+      map['pole_server_id'] = serverPoleId;
+    }
+    return map;
   }
 
   Map<String, dynamic> _createSyncRecord(
@@ -277,16 +395,32 @@ class SyncService extends StateNotifier<SyncState> {
       case 'create':
       case 'update':
         final id = _toInt(data['id']);
+        final serverMrid = data['mrid'] as String?;
+        final serverName = (data['name'] as String?)?.trim() ?? '';
         final createdAt = _parseDateTime(data['created_at']) ?? DateTime.now();
         final updatedAt = _parseDateTime(data['updated_at']);
+
+        // Дедупликация: если есть локальная ЛЭП с тем же mrid или именем — переносим опоры на серверный id и удаляем дубликат
+        final localDup = await _database.getLocalPowerLineByMridOrName(
+          serverMrid?.trim().isNotEmpty == true ? serverMrid : null,
+          serverName.isEmpty ? 'ЛЭП' : serverName,
+        );
+        if (localDup != null && localDup.id < 0 && localDup.id != id) {
+          await _database.updatePolesPowerLineId(localDup.id, id);
+          await _database.deletePowerLine(localDup.id);
+        }
+
+        final codeStr = data['code'] as String?;
+        final branchIdVal = _toInt(data['branch_id']);
         await _database.insertPowerLineOrReplace(
           PowerLinesCompanion.insert(
             id: drift.Value(id),
-            name: data['name'] as String? ?? '',
-            code: data['code'] as String? ?? '',
+            name: serverName.isEmpty ? 'ЛЭП' : serverName,
+            code: (codeStr != null && codeStr.trim().isNotEmpty) ? codeStr : (serverName.isEmpty ? 'ЛЭП' : serverName),
+            mrid: serverMrid != null && serverMrid.trim().isNotEmpty ? drift.Value(serverMrid) : const drift.Value.absent(),
             voltageLevel: _toDouble(data['voltage_level']),
             length: drift.Value(data['length'] != null ? _toDouble(data['length']) : null),
-            branchId: _toInt(data['branch_id']) != 0 ? _toInt(data['branch_id']) : 1,
+            branchId: branchIdVal != 0 ? branchIdVal : 1,
             createdBy: _toInt(data['created_by']),
             status: data['status'] as String? ?? 'active',
             description: drift.Value(data['description'] as String?),
@@ -314,8 +448,8 @@ class SyncService extends StateNotifier<SyncState> {
             id: drift.Value(id),
             powerLineId: powerLineId,
             poleNumber: data['pole_number'] as String? ?? '',
-            latitude: _toDouble(data['latitude']),
-            longitude: _toDouble(data['longitude']),
+            xPosition: _toDouble(data['x_position'] ?? data['longitude']),
+            yPosition: _toDouble(data['y_position'] ?? data['latitude']),
             poleType: data['pole_type'] as String? ?? 'unknown',
             height: drift.Value(data['height'] != null ? _toDouble(data['height']) : null),
             foundationType: drift.Value(data['foundation_type'] as String?),

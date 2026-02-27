@@ -1,0 +1,417 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<?iec61970-552 version="2.0"?>
+<?floatExporter 1?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#" xmlns:dm="http://iec.ch/TC57/61970-552/DifferenceModel/1#" xmlns:cim="http://iec.ch/TC57/2014/CIM-schema-cim16#" xmlns:cim17="http://iec.ch/TC57/CIM100#" xmlns:me="http://monitel.com/2014/schema-cim16#" xmlns:rf="http://gost.ru/2019/schema-cim01#" xmlns:rh="http://rushydro.ru/2015/schema-cim16#" xmlns:so="http://so-ups.ru/2015/schema-cim16#">
+  <dm:DifferenceModel rdf:about="#_f36686a6-8e31-46a6-b25a-b10f384891f9" comment="Набор изменений версии модели [Тест дифа для задачи 392]:[57] относительной версии модели [Модель 532 Прод Витебск]:[56]">
+    <md:Model.created>2025-11-20T07:57:45.4119798Z</md:Model.created>
+    <md:Model.description>Набор изменений версии модели [Тест дифа для задачи 392]:[57] относительной версии модели [Модель 532 Прод Витебск]:[56]</md:Model.description>
+    <md:Model.version>ver:11.7.1.259;</md:Model.version>
+    <me:Model.name>CIM16</me:Model.name>
+    <dm:forwardDifferences>
+      <rdf:Description rdf:about="#_770b838b-177e-4d6b-9ab0-5ad95b9874f3" me:className="Folder">
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_71a2164c-37f0-447b-9ae7-bd0728162477" />
+      </rdf:Description>
+      <rdf:Description rdf:about="#_f3c4d2da-994d-4163-97b0-9acb0ce0fe19" me:className="Folder">
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_fe31508f-4699-4ecc-a56c-d12c5253ec88" />
+      </rdf:Description>
+      <rdf:Description rdf:about="#_10001483-0000-0000-c000-0000006d746c" me:className="MonitelDiagramCategory">
+        <me:MonitelDiagramCategory.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+      </rdf:Description>
+      <rdf:Description rdf:about="#_2f2e205b-ab93-4f24-9a44-da3e1b9e2f2d" me:className="SubGeographicalRegion">
+        <cim:SubGeographicalRegion.Substations rdf:resource="#_71a2164c-37f0-447b-9ae7-bd0728162477" />
+      </rdf:Description>
+      <rdf:Description rdf:about="#_f36e15bf-aeb8-4a00-90f5-639c54ee92bd" me:className="SubGeographicalRegion">
+        <cim:SubGeographicalRegion.Substations rdf:resource="#_fe31508f-4699-4ecc-a56c-d12c5253ec88" />
+      </rdf:Description>
+      <rdf:Description rdf:about="#_10000cd2-0000-0000-c000-0000006d746c" me:className="PSRType">
+        <cim:PSRType.PowerSystemResources rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <cim:PSRType.PowerSystemResources rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <cim:PSRType.PowerSystemResources rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:PSRType.PowerSystemResources rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+      </rdf:Description>
+      <rdf:Description rdf:about="#_1000063d-0000-0000-c000-0000006d746c" me:className="BaseVoltage">
+        <cim:BaseVoltage.VoltageLevel rdf:resource="#_4d27d20d-8339-4347-9fab-52e84134540f" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_39592cc0-4dfa-4717-87ee-3d5747c59097" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_877024e5-ea05-4a99-99a4-173bc5c782f1" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_c5883c8c-0d4b-4400-8f51-026ae72f2767" />
+        <cim:BaseVoltage.ConductingEquipment rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+      </rdf:Description>
+      <cim:Substation rdf:about="#_71a2164c-37f0-447b-9ae7-bd0728162477">
+        <cim:IdentifiedObject.name>Тест-диф</cim:IdentifiedObject.name>
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_4d27d20d-8339-4347-9fab-52e84134540f" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_770b838b-177e-4d6b-9ab0-5ad95b9874f3" />
+        <me:IdentifiedObject.OwnedDiagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <cim:Substation.VoltageLevels rdf:resource="#_4d27d20d-8339-4347-9fab-52e84134540f" />
+        <cim:Substation.Region rdf:resource="#_2f2e205b-ab93-4f24-9a44-da3e1b9e2f2d" />
+      </cim:Substation>
+      <cim:Substation rdf:about="#_fe31508f-4699-4ecc-a56c-d12c5253ec88">
+        <cim:IdentifiedObject.name>!Тест координат</cim:IdentifiedObject.name>
+        <cim:PowerSystemResource.Location rdf:resource="#_f36f15bf-aebe-4a00-90f5-639c53ee92bd" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_fe0fbb49-1d00-4b5c-bf68-39e7c5644f46" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_f36f15bf-aebe-4a00-90f5-639c53ee92bd" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_f3c4d2da-994d-4163-97b0-9acb0ce0fe19" />
+        <cim:Substation.VoltageLevels rdf:resource="#_fe0fbb49-1d00-4b5c-bf68-39e7c5644f46" />
+        <cim:Substation.Region rdf:resource="#_f36e15bf-aeb8-4a00-90f5-639c54ee92bd" />
+      </cim:Substation>
+      <me:SubstationSLD rdf:about="#_5c2d144e-bff1-485c-8653-cda74ca39bdf">
+        <cim:IdentifiedObject.name>Тест-диф</cim:IdentifiedObject.name>
+        <me:MonitelDiagram.image>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</me:MonitelDiagram.image>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_71a2164c-37f0-447b-9ae7-bd0728162477" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_39592cc0-4dfa-4717-87ee-3d5747c59097" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_877024e5-ea05-4a99-99a4-173bc5c782f1" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_c5883c8c-0d4b-4400-8f51-026ae72f2767" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <me:MonitelDiagram.PSRs rdf:resource="#_578a4049-7bdb-45c6-9b5f-eedd3c16409c" />
+        <me:MonitelDiagram.OwnerObject rdf:resource="#_71a2164c-37f0-447b-9ae7-bd0728162477" />
+        <me:MonitelDiagram.Category rdf:resource="#_10001483-0000-0000-c000-0000006d746c" />
+      </me:SubstationSLD>
+      <cim:VoltageLevel rdf:about="#_4d27d20d-8339-4347-9fab-52e84134540f">
+        <cim:IdentifiedObject.name>110</cim:IdentifiedObject.name>
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_71a2164c-37f0-447b-9ae7-bd0728162477" />
+        <cim:VoltageLevel.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+        <cim:VoltageLevel.Bays rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:VoltageLevel.Substation rdf:resource="#_71a2164c-37f0-447b-9ae7-bd0728162477" />
+      </cim:VoltageLevel>
+      <cim:VoltageLevel rdf:about="#_fe0fbb49-1d00-4b5c-bf68-39e7c5644f46">
+        <cim:IdentifiedObject.name>пример связей</cim:IdentifiedObject.name>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_fe31508f-4699-4ecc-a56c-d12c5253ec88" />
+        <cim:VoltageLevel.Substation rdf:resource="#_fe31508f-4699-4ecc-a56c-d12c5253ec88" />
+      </cim:VoltageLevel>
+      <cim:Bay rdf:about="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b">
+        <cim:IdentifiedObject.name>ВЛ-1</cim:IdentifiedObject.name>
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_5938b353-79c6-4b06-a0f1-1d4387f696a1" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_2a086208-7090-47ef-9973-a5fbfe050c62" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_39592cc0-4dfa-4717-87ee-3d5747c59097" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_877024e5-ea05-4a99-99a4-173bc5c782f1" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_c5883c8c-0d4b-4400-8f51-026ae72f2767" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_4d27d20d-8339-4347-9fab-52e84134540f" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_39592cc0-4dfa-4717-87ee-3d5747c59097" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_877024e5-ea05-4a99-99a4-173bc5c782f1" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_c5883c8c-0d4b-4400-8f51-026ae72f2767" />
+        <cim:EquipmentContainer.Equipments rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <cim:Bay.VoltageLevel rdf:resource="#_4d27d20d-8339-4347-9fab-52e84134540f" />
+        <cim:ConnectivityNodeContainer.ConnectivityNodes rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+        <cim:ConnectivityNodeContainer.ConnectivityNodes rdf:resource="#_5938b353-79c6-4b06-a0f1-1d4387f696a1" />
+        <cim:ConnectivityNodeContainer.ConnectivityNodes rdf:resource="#_2a086208-7090-47ef-9973-a5fbfe050c62" />
+      </cim:Bay>
+      <cim:ConnectivityNode rdf:about="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2">
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_80cabcb5-60a8-478f-8e65-3f5c5a304698" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_b4907302-3abd-4da9-a676-51cf81109d5c" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_e74a2054-3290-47e6-bb14-81758063996d" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_b1d19100-5c4a-4ad9-ac06-3f287a46769a" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_b985c98a-0515-4f6e-bc2d-7f6f33728b11" />
+        <cim:ConnectivityNode.ConnectivityNodeContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+      </cim:ConnectivityNode>
+      <cim:ConnectivityNode rdf:about="#_5938b353-79c6-4b06-a0f1-1d4387f696a1">
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_c908aa7b-648c-4ebf-9e90-8cc6abf4e731" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_8434aecb-42ca-433b-ac35-62da6bc5cac3" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_a2fddd32-ba0e-4717-aa47-832561d9a8d9" />
+        <cim:ConnectivityNode.ConnectivityNodeContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+      </cim:ConnectivityNode>
+      <cim:ConnectivityNode rdf:about="#_2a086208-7090-47ef-9973-a5fbfe050c62">
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_683ba503-1719-45b0-b97f-fe276cc39f25" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_2922f611-c76e-4e72-ab8f-fe9e40c11661" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_86209f37-f4a7-45a9-ac9b-1a6c8690c1a1" />
+        <cim:ConnectivityNode.Terminals rdf:resource="#_0faa6ae9-9a00-406e-97a6-ef10f2137b30" />
+        <cim:ConnectivityNode.ConnectivityNodeContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+      </cim:ConnectivityNode>
+      <cim:Disconnector rdf:about="#_e494639e-0c3d-473b-97b5-f64d27caa85f">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ШР-110 2СШ ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:PowerSystemResource.PSRType rdf:resource="#_10000cd2-0000-0000-c000-0000006d746c" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_80cabcb5-60a8-478f-8e65-3f5c5a304698" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_4b3dc2ed-67d1-4b53-a9bf-ed673b298c5c" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_80cabcb5-60a8-478f-8e65-3f5c5a304698" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_4b3dc2ed-67d1-4b53-a9bf-ed673b298c5c" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:Disconnector>
+      <cim:Disconnector rdf:about="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ШР-110 1СШ ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:PowerSystemResource.PSRType rdf:resource="#_10000cd2-0000-0000-c000-0000006d746c" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_b4907302-3abd-4da9-a676-51cf81109d5c" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_4827f5d2-8fd8-41d1-97e2-903f78c92d3b" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_b4907302-3abd-4da9-a676-51cf81109d5c" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_4827f5d2-8fd8-41d1-97e2-903f78c92d3b" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:Disconnector>
+      <cim:Disconnector rdf:about="#_4cc2792b-f699-4b87-9853-bcc4431e5f90">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ЛР-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>false</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:PowerSystemResource.PSRType rdf:resource="#_10000cd2-0000-0000-c000-0000006d746c" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_683ba503-1719-45b0-b97f-fe276cc39f25" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_c908aa7b-648c-4ebf-9e90-8cc6abf4e731" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_683ba503-1719-45b0-b97f-fe276cc39f25" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_c908aa7b-648c-4ebf-9e90-8cc6abf4e731" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:Disconnector>
+      <cim:Disconnector rdf:about="#_5d5f82df-cc16-430a-9d12-32284c8516a4">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ОР-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:PowerSystemResource.PSRType rdf:resource="#_10000cd2-0000-0000-c000-0000006d746c" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_351683fc-3da7-45d4-9dd5-20dd39c80900" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_2922f611-c76e-4e72-ab8f-fe9e40c11661" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_351683fc-3da7-45d4-9dd5-20dd39c80900" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_2922f611-c76e-4e72-ab8f-fe9e40c11661" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:Disconnector>
+      <cim:Terminal rdf:about="#_80cabcb5-60a8-478f-8e65-3f5c5a304698">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_4b3dc2ed-67d1-4b53-a9bf-ed673b298c5c">
+        <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_e494639e-0c3d-473b-97b5-f64d27caa85f" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_b4907302-3abd-4da9-a676-51cf81109d5c">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_4827f5d2-8fd8-41d1-97e2-903f78c92d3b">
+        <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_3bff29cf-6665-4da6-8adc-4da89c0f7e05" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_683ba503-1719-45b0-b97f-fe276cc39f25">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_2a086208-7090-47ef-9973-a5fbfe050c62" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_c908aa7b-648c-4ebf-9e90-8cc6abf4e731">
+        <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_4cc2792b-f699-4b87-9853-bcc4431e5f90" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_5938b353-79c6-4b06-a0f1-1d4387f696a1" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_351683fc-3da7-45d4-9dd5-20dd39c80900">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_2922f611-c76e-4e72-ab8f-fe9e40c11661">
+        <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_5d5f82df-cc16-430a-9d12-32284c8516a4" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_2a086208-7090-47ef-9973-a5fbfe050c62" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_86209f37-f4a7-45a9-ac9b-1a6c8690c1a1">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_39592cc0-4dfa-4717-87ee-3d5747c59097" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_39592cc0-4dfa-4717-87ee-3d5747c59097" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_2a086208-7090-47ef-9973-a5fbfe050c62" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_e74a2054-3290-47e6-bb14-81758063996d">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_b1d19100-5c4a-4ad9-ac06-3f287a46769a">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_8434aecb-42ca-433b-ac35-62da6bc5cac3">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_877024e5-ea05-4a99-99a4-173bc5c782f1" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_877024e5-ea05-4a99-99a4-173bc5c782f1" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_5938b353-79c6-4b06-a0f1-1d4387f696a1" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_0faa6ae9-9a00-406e-97a6-ef10f2137b30">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_c5883c8c-0d4b-4400-8f51-026ae72f2767" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_c5883c8c-0d4b-4400-8f51-026ae72f2767" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_2a086208-7090-47ef-9973-a5fbfe050c62" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_a2fddd32-ba0e-4717-aa47-832561d9a8d9">
+        <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <cim:Terminal.AuxiliaryEquipment rdf:resource="#_578a4049-7bdb-45c6-9b5f-eedd3c16409c" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_5938b353-79c6-4b06-a0f1-1d4387f696a1" />
+      </cim:Terminal>
+      <cim:Terminal rdf:about="#_b985c98a-0515-4f6e-bc2d-7f6f33728b11">
+        <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+        <me:IdentifiedObject.ParentObject rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <cim:Terminal.ConductingEquipment rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+        <cim:Terminal.ConnectivityNode rdf:resource="#_355ca37a-d13c-4b7b-b517-2eb054dc40f2" />
+      </cim:Terminal>
+      <cim:GroundDisconnector rdf:about="#_39592cc0-4dfa-4717-87ee-3d5747c59097">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ЗН ЛР-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_86209f37-f4a7-45a9-ac9b-1a6c8690c1a1" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_86209f37-f4a7-45a9-ac9b-1a6c8690c1a1" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:GroundDisconnector>
+      <cim:GroundDisconnector rdf:about="#_e6cd6192-77a6-48e3-9904-9d0ecbccfa05">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ЗН ШР-110 2СШ ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_e74a2054-3290-47e6-bb14-81758063996d" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_e74a2054-3290-47e6-bb14-81758063996d" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:GroundDisconnector>
+      <cim:GroundDisconnector rdf:about="#_9ef9db2a-6f6d-4c71-91c1-038fcfe1c6f0">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ЗН ШР-110 1СШ ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_b1d19100-5c4a-4ad9-ac06-3f287a46769a" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_b1d19100-5c4a-4ad9-ac06-3f287a46769a" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:GroundDisconnector>
+      <cim:GroundDisconnector rdf:about="#_877024e5-ea05-4a99-99a4-173bc5c782f1">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ЗН ЛР-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_8434aecb-42ca-433b-ac35-62da6bc5cac3" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_8434aecb-42ca-433b-ac35-62da6bc5cac3" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:GroundDisconnector>
+      <cim:GroundDisconnector rdf:about="#_c5883c8c-0d4b-4400-8f51-026ae72f2767">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ЗН ОР-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>true</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_0faa6ae9-9a00-406e-97a6-ef10f2137b30" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_0faa6ae9-9a00-406e-97a6-ef10f2137b30" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:GroundDisconnector>
+      <cim:Breaker rdf:about="#_38b79888-3bec-4343-8215-893c219e3b66">
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>В-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:Switch.normalOpen>false</cim:Switch.normalOpen>
+        <cim:Switch.retained>false</cim:Switch.retained>
+        <cim:Equipment.EquipmentContainer rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_a2fddd32-ba0e-4717-aa47-832561d9a8d9" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_b985c98a-0515-4f6e-bc2d-7f6f33728b11" />
+        <me:IdentifiedObject.ChildObjects rdf:resource="#_578a4049-7bdb-45c6-9b5f-eedd3c16409c" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_ff7c7583-d21f-4db5-8c5b-f19ec199b96b" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_a2fddd32-ba0e-4717-aa47-832561d9a8d9" />
+        <cim:ConductingEquipment.Terminals rdf:resource="#_b985c98a-0515-4f6e-bc2d-7f6f33728b11" />
+        <cim:ConductingEquipment.BaseVoltage rdf:resource="#_1000063d-0000-0000-c000-0000006d746c" />
+      </cim:Breaker>
+      <cim:CurrentTransformer rdf:about="#_578a4049-7bdb-45c6-9b5f-eedd3c16409c">
+        <rh:CurrentTransformer.bmsat>0</rh:CurrentTransformer.bmsat>
+        <rh:CurrentTransformer.cosburd>0</rh:CurrentTransformer.cosburd>
+        <rh:CurrentTransformer.curmg>1</rh:CurrentTransformer.curmg>
+        <rh:CurrentTransformer.iconsat>0</rh:CurrentTransformer.iconsat>
+        <rh:CurrentTransformer.ilocation>0</rh:CurrentTransformer.ilocation>
+        <rh:CurrentTransformer.ioptsat>iec</rh:CurrentTransformer.ioptsat>
+        <rh:CurrentTransformer.iorient>0</rh:CurrentTransformer.iorient>
+        <rh:CurrentTransformer.iphase>0</rh:CurrentTransformer.iphase>
+        <rf:CurrentTransformer.isEmbeded>false</rf:CurrentTransformer.isEmbeded>
+        <rh:CurrentTransformer.it2p2>a</rh:CurrentTransformer.it2p2>
+        <rh:CurrentTransformer.it2pl>a</rh:CurrentTransformer.it2pl>
+        <rh:CurrentTransformer.itrmt>0</rh:CurrentTransformer.itrmt>
+        <rh:CurrentTransformer.ksat>9</rh:CurrentTransformer.ksat>
+        <rh:CurrentTransformer.pbranch>_</rh:CurrentTransformer.pbranch>
+        <rh:CurrentTransformer.rS>0</rh:CurrentTransformer.rS>
+        <rh:CurrentTransformer.snom>0</rh:CurrentTransformer.snom>
+        <rh:CurrentTransformer.stapcon>0</rh:CurrentTransformer.stapcon>
+        <rh:CurrentTransformer.vMax>0</rh:CurrentTransformer.vMax>
+        <rh:CurrentTransformer.vS>0</rh:CurrentTransformer.vS>
+        <rh:CurrentTransformer.zB>0</rh:CurrentTransformer.zB>
+        <rh:CurrentTransformer.zBurd>0</rh:CurrentTransformer.zBurd>
+        <cim:Equipment.normallyInService>true</cim:Equipment.normallyInService>
+        <cim:IdentifiedObject.name>ТТ В-110 ВЛ-1</cim:IdentifiedObject.name>
+        <cim:AuxiliaryEquipment.Terminal rdf:resource="#_a2fddd32-ba0e-4717-aa47-832561d9a8d9" />
+        <me:PowerSystemResource.Diagrams rdf:resource="#_5c2d144e-bff1-485c-8653-cda74ca39bdf" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_38b79888-3bec-4343-8215-893c219e3b66" />
+      </cim:CurrentTransformer>
+      <cim:Location rdf:about="#_f36f15bf-aebe-4a00-90f5-639c53ee92bd">
+        <cim:IdentifiedObject.name>пример Location</cim:IdentifiedObject.name>
+        <cim:Location.PowerSystemResources rdf:resource="#_fe31508f-4699-4ecc-a56c-d12c5253ec88" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_fe31508f-4699-4ecc-a56c-d12c5253ec88" />
+		<cim:Location.PositionPoints rdf:resource="#_f36f153f-aebe-4a00-90f5-639c89ee52bd" />
+		<me:IdentifiedObject.ChildObjects rdf:resource="#_f36f153f-aebe-4a00-90f5-639c89ee52bd" />
+      </cim:Location>
+	  <cim:PositionPoint rdf:about="#_f36f153f-aebe-4a00-90f5-639c89ee52bd">
+        <cim:IdentifiedObject.name>пример ПозишнПоинт</cim:IdentifiedObject.name>
+        <cim:PositionPoint.Location rdf:resource="#_f36f15bf-aebe-4a00-90f5-639c53ee92bd" />
+        <me:IdentifiedObject.ParentObject rdf:resource="#_f36f15bf-aebe-4a00-90f5-639c53ee92bd" />
+      </cim:PositionPoint>
+    </dm:forwardDifferences>
+    <dm:reverseDifferences />
+  </dm:DifferenceModel>
+</rdf:RDF>

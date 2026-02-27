@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import create_engine, MetaData, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -136,6 +136,17 @@ async def init_db():
             # Используем более простой подход - синхронное создание через sync_engine
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                # Обеспечиваем наличие колонки is_tap_pole в pole (на случай БД без миграций)
+                await conn.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'is_tap_pole')
+                        THEN
+                            ALTER TABLE pole ADD COLUMN is_tap_pole BOOLEAN NOT NULL DEFAULT false;
+                        END IF;
+                    END $$;
+                """))
             
             logger.info("База данных успешно инициализирована")
             print("OK: База данных успешно инициализирована")

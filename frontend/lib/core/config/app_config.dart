@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../services/base_url_manager.dart';
 
 class AppConfig {
@@ -10,7 +9,7 @@ class AppConfig {
   // ============================================
   // Измените эту переменную для переключения между HTTP и HTTPS
   // true = HTTPS, false = HTTP
-  static const bool useHttps = true; // Для разработки используем HTTP
+  static const bool useHttps = false; // Для разработки — HTTP (localhost:8000), иначе ERR_CERT_AUTHORITY_INVALID
   // ============================================
   
   static final BaseUrlManager _urlManager = BaseUrlManager();
@@ -53,15 +52,14 @@ class AppConfig {
   // Sync Configuration
   static const int syncIntervalMinutes = 5;
   static const int maxRetryAttempts = 3;
-  /// Режим синхронизации: 'manual' | 'auto_wifi' | 'auto_any'
+  /// Режим синхронизации: 'manual' (по умолчанию) | 'auto_wifi'
   static const String syncModeKey = 'sync_mode';
   static const String syncModeManual = 'manual';
   static const String syncModeAutoWifi = 'auto_wifi';
-  static const String syncModeAutoAny = 'auto_any';
   
   // Database Configuration
   static const String databaseName = 'lepm_local.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 6;
   
   // Storage Keys
   static const String authTokenKey = 'auth_token';
@@ -73,8 +71,15 @@ class AppConfig {
   /// Счётчик для генерации временных локальных ID (отрицательные)
   static const String lastLocalPoleIdKey = 'last_local_pole_id';
   static const String lastLocalPowerLineIdKey = 'last_local_power_line_id';
+  static const String lastLocalEquipmentIdKey = 'last_local_equipment_id';
+  /// Шаблон автозаполнения оборудования (Фундамент, Изоляторы, Траверсы) для следующей опоры. JSON.
+  static const String autofillEquipmentTemplateKey = 'autofill_equipment_template';
   /// Список id ЛЭП для отложенного удаления на сервере (офлайн-удаление)
   static const String pendingDeletePowerLineIdsKey = 'pending_delete_power_line_ids';
+  /// Маппинг локальный id опоры → серверный (JSON, string→int) для pole_server_id в equipment
+  static const String syncPoleMappingKey = 'sync_pole_mapping';
+  /// Маппинг локальный id ЛЭП → серверный (JSON, string→int) для подстановки power_line_id в опорах
+  static const String syncPowerLineMappingKey = 'sync_power_line_mapping';
   /// Активная сессия обхода: id выбранной ЛЭП
   static const String activeSessionPowerLineIdKey = 'active_session_power_line_id';
   /// Время начала сессии (ISO8601)

@@ -14,6 +14,7 @@ import 'core/services/sync_service.dart';
 import 'core/services/sync_scheduler.dart';
 import 'core/services/base_url_manager.dart';
 import 'core/services/offline_map_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +30,10 @@ void main() async {
   };
 
   // Офлайн-карта: инициализация FMTC и фоновая загрузка тайлов Беларуси
-  await OfflineMapService.init();
+  // FMTC не поддерживается на web без FFI, поэтому на web пропускаем инициализацию.
+  if (!kIsWeb) {
+    await OfflineMapService.init();
+  }
 
   // Минимальная инициализация для быстрого старта
   final prefs = await SharedPreferences.getInstance();

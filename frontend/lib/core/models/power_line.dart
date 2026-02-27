@@ -18,12 +18,35 @@ double? _doubleFromJsonNullable(dynamic value) {
   return null;
 }
 
+double _doubleFromJson(dynamic value) {
+  if (value == null) return 0.0;  // Возвращаем 0.0 вместо null для обязательных полей
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    final parsed = double.tryParse(value);
+    return parsed ?? 0.0;
+  }
+  return 0.0;  // Значение по умолчанию
+}
+
 int? _intFromJsonNullable(dynamic value) {
   if (value == null) return null;
   if (value is int) return value;
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value);
   return null;
+}
+
+int _intFromJson(dynamic value) {
+  if (value == null) return 0;  // Возвращаем 0 вместо null для обязательных полей
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) {
+    final parsed = int.tryParse(value);
+    return parsed ?? 0;  // Возвращаем 0 если парсинг не удался
+  }
+  return 0;  // Значение по умолчанию
 }
 
 DateTime _dateTimeFromJson(dynamic value) {
@@ -60,8 +83,8 @@ class PowerLine {
   final int id;
   @JsonKey(fromJson: _stringFromJson)
   final String name;
-  @JsonKey(fromJson: _stringFromJson)
-  final String code;
+  /// Уникальный идентификатор ЛЭП (отображается в скобках справа от названия)
+  final String? mrid;
   @JsonKey(name: 'voltage_level', fromJson: _doubleFromJsonNullable)
   final double? voltageLevel; // Может быть null на backend
   @JsonKey(fromJson: _doubleFromJsonNullable)
@@ -84,7 +107,7 @@ class PowerLine {
   const PowerLine({
     required this.id,
     required this.name,
-    required this.code,
+    this.mrid,
     this.voltageLevel,
     this.length,
     this.branchId,
@@ -103,7 +126,7 @@ class PowerLine {
   PowerLine copyWith({
     int? id,
     String? name,
-    String? code,
+    String? mrid,
     double? voltageLevel,
     double? length,
     int? branchId,
@@ -118,7 +141,7 @@ class PowerLine {
     return PowerLine(
       id: id ?? this.id,
       name: name ?? this.name,
-      code: code ?? this.code,
+      mrid: mrid ?? this.mrid,
       voltageLevel: voltageLevel ?? this.voltageLevel,
       length: length ?? this.length,
       branchId: branchId ?? this.branchId,
@@ -136,7 +159,6 @@ class PowerLine {
 @JsonSerializable()
 class PowerLineCreate {
   final String name;
-  final String code;
   @JsonKey(name: 'voltage_level')
   final double voltageLevel;
   final double? length;
@@ -147,7 +169,6 @@ class PowerLineCreate {
 
   const PowerLineCreate({
     required this.name,
-    required this.code,
     required this.voltageLevel,
     this.length,
     required this.branchId,
@@ -169,8 +190,10 @@ class Pole {
   final int powerLineId;
   @JsonKey(name: 'pole_number', fromJson: _stringFromJson)
   final String poleNumber;
-  final double latitude;
-  final double longitude;
+  @JsonKey(name: 'x_position', fromJson: _doubleFromJson)
+  final double xPosition;  // Долгота (longitude)
+  @JsonKey(name: 'y_position', fromJson: _doubleFromJson)
+  final double yPosition;  // Широта (latitude)
   @JsonKey(name: 'pole_type', fromJson: _stringFromJson)
   final String poleType;
   @JsonKey(fromJson: _doubleFromJsonNullable)
@@ -182,6 +205,8 @@ class Pole {
   final int? yearInstalled;
   @JsonKey(name: 'sequence_number', fromJson: _intFromJsonNullable)
   final int? sequenceNumber;
+  @JsonKey(name: 'is_tap_pole', defaultValue: false)
+  final bool isTapPole;
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
@@ -197,14 +222,15 @@ class Pole {
     required this.id,
     required this.powerLineId,
     required this.poleNumber,
-    required this.latitude,
-    required this.longitude,
+    required this.xPosition,
+    required this.yPosition,
     required this.poleType,
     this.height,
     this.foundationType,
     this.material,
     this.yearInstalled,
     this.sequenceNumber,
+    this.isTapPole = false,
     required this.condition,
     this.notes,
     required this.createdBy,
@@ -220,13 +246,15 @@ class Pole {
     int? id,
     int? powerLineId,
     String? poleNumber,
-    double? latitude,
-    double? longitude,
+    double? xPosition,
+    double? yPosition,
     String? poleType,
     double? height,
     String? foundationType,
     String? material,
     int? yearInstalled,
+    int? sequenceNumber,
+    bool? isTapPole,
     String? condition,
     String? notes,
     int? createdBy,
@@ -238,13 +266,15 @@ class Pole {
       id: id ?? this.id,
       powerLineId: powerLineId ?? this.powerLineId,
       poleNumber: poleNumber ?? this.poleNumber,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      xPosition: xPosition ?? this.xPosition,
+      yPosition: yPosition ?? this.yPosition,
       poleType: poleType ?? this.poleType,
       height: height ?? this.height,
       foundationType: foundationType ?? this.foundationType,
       material: material ?? this.material,
       yearInstalled: yearInstalled ?? this.yearInstalled,
+      sequenceNumber: sequenceNumber ?? this.sequenceNumber,
+      isTapPole: isTapPole ?? this.isTapPole,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
       createdBy: createdBy ?? this.createdBy,
@@ -262,8 +292,10 @@ class Pole {
 class PoleCreate {
   @JsonKey(name: 'pole_number')
   final String poleNumber;
-  final double latitude;
-  final double longitude;
+  @JsonKey(name: 'x_position', fromJson: _doubleFromJson)
+  final double xPosition;  // Долгота (longitude)
+  @JsonKey(name: 'y_position', fromJson: _doubleFromJson)
+  final double yPosition;  // Широта (latitude)
   @JsonKey(name: 'pole_type')
   final String poleType;
   final double? height;
@@ -286,8 +318,8 @@ class PoleCreate {
 
   const PoleCreate({
     required this.poleNumber,
-    required this.latitude,
-    required this.longitude,
+    required this.xPosition,
+    required this.yPosition,
     required this.poleType,
     this.height,
     this.foundationType,

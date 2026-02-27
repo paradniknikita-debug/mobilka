@@ -19,7 +19,7 @@ class BaseVoltage(Base):
     для классификации оборудования и линий электропередачи.
     Например: 0.4 кВ, 10 кВ, 35 кВ, 110 кВ, 220 кВ, 330 кВ, 500 кВ, 750 кВ
     """
-    __tablename__ = "base_voltages"
+    __tablename__ = "base_voltage"
 
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016

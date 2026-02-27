@@ -44,17 +44,17 @@ class BaseUrlManager {
       }
     }
     // Если был fallback, используем сохраненный протокол (HTTP)
-
-    // Определяем порт в зависимости от протокола:
-    // - HTTPS: используем порт 443 (через Nginx)
-    // - HTTP: используем порт 8000 (напрямую к backend)
+    
+    // Для production web используем относительный путь через nginx (без порта)
+    // Это избегает проблем с Mixed Content и работает с HTTPS
+    // Для development можно использовать абсолютный путь
+    if (kReleaseMode) {
+      // Production: относительный путь
+      return '';
+    }
+    
+    // Development: абсолютный путь с портом
     final port = _protocol == 'https' ? 443 : 8000;
-
-    // ВАЖНО: Используем протокол из конфига, а НЕ протокол самого Flutter приложения
-    // Flutter dev server может быть на HTTP, но backend должен быть на HTTPS
-    // Используем тот же хост, что и у веб-приложения
-    // Если запущено на localhost, используем localhost
-    // Если доступно с других устройств, используем IP адрес
     final hostname = Uri.base.host;
     final baseUrl = (hostname == 'localhost' ||
             hostname == '127.0.0.1' ||

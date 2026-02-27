@@ -59,8 +59,8 @@ async def create_connectivity_node(
         mrid=mrid,
         name=node_data.name,
         pole_id=node_data.pole_id,
-        latitude=node_data.latitude,
-        longitude=node_data.longitude,
+        x_position=node_data.x_position,
+        y_position=node_data.y_position,
         description=node_data.description
     )
     
@@ -108,8 +108,8 @@ async def update_connectivity_node(
     
     # Обновляем поля
     node.name = node_data.name
-    node.latitude = node_data.latitude
-    node.longitude = node_data.longitude
+    node.x_position = node_data.x_position
+    node.y_position = node_data.y_position
     node.description = node_data.description
     
     await db.commit()
@@ -188,8 +188,8 @@ async def create_connectivity_node_for_pole(
         mrid=generate_mrid(),
         name=f"Узел {pole.pole_number}",
         pole_id=pole_id,
-        latitude=pole.latitude,
-        longitude=pole.longitude,
+        y_position=pole.y_position,
+        x_position=pole.x_position,
         description=f"Узел для опоры {pole.pole_number}"
     )
     
@@ -258,7 +258,7 @@ async def create_acline_segment(
     from app.models.base import generate_mrid
     
     # Проверка существования линии
-    power_line = await db.get(PowerLine, segment_data.power_line_id)
+    power_line = await db.get(PowerLine, segment_data.line_id)
     if not power_line:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -290,7 +290,7 @@ async def create_acline_segment(
         mrid=mrid,
         name=segment_data.name,
         code=code,
-        power_line_id=segment_data.power_line_id,
+        line_id=segment_data.line_id,
         voltage_level=segment_data.voltage_level,
         length=segment_data.length,
         is_tap=segment_data.is_tap,
@@ -359,7 +359,7 @@ async def update_acline_segment(
         )
     
     # Проверяем принадлежность к той же линии
-    if segment_data.power_line_id != segment.power_line_id:
+    if segment_data.line_id != segment.line_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя изменить принадлежность сегмента к линии"
@@ -382,8 +382,8 @@ async def update_acline_segment(
                 detail="Конечный узел соединения не найден"
             )
     
-    # Обновляем поля сегмента (исключаем mrid, power_line_id, created_by)
-    segment_dict = segment_data.dict(exclude_unset=True, exclude={'mrid', 'power_line_id'})
+    # Обновляем поля сегмента (исключаем mrid, line_id, created_by)
+    segment_dict = segment_data.dict(exclude_unset=True, exclude={'mrid', 'line_id'})
     
     for key, value in segment_dict.items():
         if hasattr(segment, key):

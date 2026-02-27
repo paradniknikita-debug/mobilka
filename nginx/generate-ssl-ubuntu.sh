@@ -1,0 +1,108 @@
+#!/bin/bash
+# Генерация самоподписанного SSL сертификата для Nginx на Ubuntu
+# Использование: ./generate-ssl-ubuntu.sh
+
+set -e  # Остановка при ошибке
+
+echo "========================================"
+echo "Генерация SSL сертификатов для Nginx"
+echo "========================================"
+echo ""
+
+# Проверка наличия openssl
+if ! command -v openssl &> /dev/null; then
+    echo "❌ OpenSSL не установлен!"
+    echo "Установка OpenSSL..."
+    apt update && apt install -y openssl
+fi
+
+# Определение директории для сертификатов
+SSL_DIR="./nginx/ssl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+SSL_FULL_PATH="$PROJECT_ROOT/nginx/ssl"
+
+# Создание директории
+echo "[1/3] Создание директории для сертификатов..."
+mkdir -p "$SSL_FULL_PATH"
+echo "✅ Директория создана: $SSL_FULL_PATH"
+echo ""
+
+# Генерация приватного ключа
+echo "[2/3] Генерация приватного ключа (2048 бит)..."
+openssl genrsa -out "$SSL_FULL_PATH/key.pem" 2048
+chmod 600 "$SSL_FULL_PATH/key.pem"  # Только для чтения владельцем
+echo "✅ Приватный ключ создан: $SSL_FULL_PATH/key.pem"
+echo ""
+
+# Генерация самоподписанного сертификата
+echo "[3/3] Генерация самоподписанного сертификата (действителен 365 дней)..."
+echo "   Включая поддержку IP адресов для мобильных устройств..."
+
+# Создаем временный конфиг файл для OpenSSL
+CONFIG_FILE=$(mktemp)
+cat > "$CONFIG_FILE" <<EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+C = BY
+ST = Minsk
+L = Minsk
+O = LEPM
+CN = 85.239.48.199
+
+[v3_req]
+keyUsage = digitalSignature, keyEncipherment, keyAgreement
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = @alt_names
+basicConstraints = CA:FALSE
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = *.localhost
+DNS.3 = 85.239.48.199
+IP.1 = 127.0.0.1
+IP.2 = ::1
+IP.3 = 85.239.48.199
+EOF
+
+openssl req -new -x509 \
+    -key "$SSL_FULL_PATH/key.pem" \
+    -out "$SSL_FULL_PATH/cert.pem" \
+    -days 365 \
+    -extensions v3_req \
+    -config "$CONFIG_FILE"
+
+# Удаляем временный файл
+rm -f "$CONFIG_FILE"
+
+chmod 644 "$SSL_FULL_PATH/cert.pem"
+echo "✅ Сертификат создан: $SSL_FULL_PATH/cert.pem"
+echo ""
+
+# Проверка созданных файлов
+echo "========================================"
+echo "✅ SSL сертификаты успешно созданы!"
+echo "========================================"
+echo ""
+echo "📁 Расположение:"
+echo "   - $SSL_FULL_PATH/key.pem (приватный ключ)"
+echo "   - $SSL_FULL_PATH/cert.pem (сертификат)"
+echo ""
+echo "📋 Информация о сертификате:"
+openssl x509 -in "$SSL_FULL_PATH/cert.pem" -noout -subject -dates
+echo ""
+echo "⚠️  ВАЖНО:"
+echo "   Это самоподписанный сертификат для разработки/тестирования!"
+echo "   При первом подключении браузер покажет предупреждение безопасности."
+echo "   Нужно принять сертификат:"
+echo "   - Chrome/Edge: 'Продолжить на сайт' / 'Advanced' -> 'Proceed to localhost'"
+echo "   - Firefox: 'Дополнительно' -> 'Принять риск и продолжить'"
+echo ""
+echo "💡 Для продакшена рекомендуется использовать Let's Encrypt:"
+echo "   certbot certonly --standalone -d your-domain.com"
+echo ""
+

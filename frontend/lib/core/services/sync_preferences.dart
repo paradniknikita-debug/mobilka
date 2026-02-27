@@ -6,12 +6,10 @@ import 'auth_service.dart';
 
 /// Режим синхронизации данных.
 enum SyncMode {
-  /// Только вручную — экономия трафика и полный контроль.
+  /// Только вручную — по умолчанию.
   manual,
-  /// Автоматически при Wi‑Fi — сбалансированный вариант.
+  /// Автоматически при Wi‑Fi.
   autoWifi,
-  /// Автоматически при любой сети — максимальная оперативность.
-  autoAny,
 }
 
 extension SyncModeExtension on SyncMode {
@@ -21,8 +19,6 @@ extension SyncModeExtension on SyncMode {
         return AppConfig.syncModeManual;
       case SyncMode.autoWifi:
         return AppConfig.syncModeAutoWifi;
-      case SyncMode.autoAny:
-        return AppConfig.syncModeAutoAny;
     }
   }
 
@@ -32,8 +28,6 @@ extension SyncModeExtension on SyncMode {
         return 'Только вручную';
       case SyncMode.autoWifi:
         return 'Автоматически при Wi‑Fi';
-      case SyncMode.autoAny:
-        return 'Автоматически при любой сети';
     }
   }
 
@@ -43,21 +37,17 @@ extension SyncModeExtension on SyncMode {
         return 'Экономия трафика и контроль над исходящими данными';
       case SyncMode.autoWifi:
         return 'Синхронизация при подключении к Wi‑Fi';
-      case SyncMode.autoAny:
-        return 'Максимальная оперативность доставки данных';
     }
   }
 }
 
 SyncMode _syncModeFromString(String? v) {
   switch (v) {
-    case AppConfig.syncModeManual:
-      return SyncMode.manual;
-    case AppConfig.syncModeAutoAny:
-      return SyncMode.autoAny;
     case AppConfig.syncModeAutoWifi:
-    default:
       return SyncMode.autoWifi;
+    case AppConfig.syncModeManual:
+    default:
+      return SyncMode.manual;
   }
 }
 

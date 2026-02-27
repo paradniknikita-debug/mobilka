@@ -22,7 +22,7 @@ class WireInfo(Base):
     - Электрические параметры (R, X, B, G)
     - Механические характеристики
     """
-    __tablename__ = "wire_infos"
+    __tablename__ = "wire_info"
 
     id = Column(Integer, primary_key=True, index=True)
     # mRID (Master Resource Identifier) по стандарту IEC 61970-552:2016

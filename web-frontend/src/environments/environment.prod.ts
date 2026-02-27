@@ -5,9 +5,9 @@ export const environment = {
   apiVersion: 'v1',
   
   get apiUrl(): string {
-    const protocol = this.useHttps ? 'https' : 'http';
-    // В продакшене через nginx (порт 80/443), в разработке напрямую к бэкенду (порт 8000)
-    return `${protocol}://localhost/api/${this.apiVersion}`;
+    // В продакшене используем относительный путь через nginx (без порта 8000)
+    // Это избегает проблем с Mixed Content и работает с HTTPS
+    return `/api/${this.apiVersion}`;
   },
   
   map: {

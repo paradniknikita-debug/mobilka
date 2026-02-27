@@ -30,6 +30,6 @@ class GeographicRegion(Base):
     children = relationship("GeographicRegion", back_populates="parent", cascade="all, delete-orphan")
     
     # Связи с объектами сети
-    power_lines = relationship("PowerLine", back_populates="region")
+    lines = relationship("PowerLine", back_populates="region")
     substations = relationship("Substation", back_populates="region")
 

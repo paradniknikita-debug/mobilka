@@ -208,7 +208,7 @@ export class CreateObjectDialogComponent implements OnInit {
       next: (lines) => {
         this.powerLines = lines;
         console.log('Загружены ЛЭП, количество:', lines.length, 'powerLineId для установки:', this.powerLineId);
-        console.log('Все ЛЭП:', lines.map(l => ({ id: l.id, name: l.name, code: l.code })));
+        console.log('Все ЛЭП:', lines.map(l => ({ id: l.id, name: l.name })));
         
         // Если передан powerLineId (при создании опоры из контекстного меню линии), устанавливаем его в форму
         if (this.powerLineId && !this.isEditMode) {
@@ -264,8 +264,8 @@ export class CreateObjectDialogComponent implements OnInit {
         this.poleForm.patchValue({
           pole_number: pole.pole_number || '',
           power_line_id: powerLine || this.powerLineId,
-          latitude: pole.latitude || '',
-          longitude: pole.longitude || '',
+          latitude: (pole as any).y_position ?? (pole as any).latitude ?? '',
+          longitude: (pole as any).x_position ?? (pole as any).longitude ?? '',
           pole_type: pole.pole_type || '',
           mrid: pole.mrid || '',
           height: pole.height || null,
@@ -306,15 +306,12 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   displayPowerLine(powerLine: PowerLine): string {
-    return powerLine ? `${powerLine.name}${powerLine.code ? ` (${powerLine.code})` : ''}` : '';
+    return powerLine ? powerLine.name : '';
   }
 
   private _filterPowerLines(name: string): PowerLine[] {
     const filterValue = name.toLowerCase();
-    return this.powerLines.filter(line => 
-      line.name.toLowerCase().includes(filterValue) || 
-      (line.code && line.code.toLowerCase().includes(filterValue))
-    );
+    return this.powerLines.filter(line => line.name.toLowerCase().includes(filterValue));
   }
 
   onObjectTypeSelected(event: MatSelectChange): void {
@@ -380,11 +377,12 @@ export class CreateObjectDialogComponent implements OnInit {
       return;
     }
 
+    // CIM: x_position = долгота, y_position = широта (форма ввода — широта/долгота)
     const poleData: PoleCreate = {
       power_line_id: powerLineId,
       pole_number: formValue.pole_number.trim(),
-      latitude: latitude,
-      longitude: longitude,
+      x_position: longitude,
+      y_position: latitude,
       pole_type: formValue.pole_type,
       mrid: formValue.mrid && formValue.mrid.trim() ? formValue.mrid.trim() : undefined,
       height: (() => {
@@ -407,13 +405,12 @@ export class CreateObjectDialogComponent implements OnInit {
     
     poleObservable.subscribe({
       next: (pole) => {
-        // Обновляем данные карты и sidebar
-        this.mapService.refreshData();
         const message = this.isEditMode ? 'Опора успешно обновлена' : 'Опора успешно создана';
         console.log(message + ':', pole);
         this.snackBar.open(message, 'Закрыть', {
           duration: 3000
         });
+        // Закрываем с success — обновление дерева/карты выполнит afterClosed у открывателя (один refresh, без гонки)
         this.dialogRef.close({ success: true, pole });
       },
       error: (error) => {
@@ -661,9 +658,7 @@ export class CreateObjectDialogComponent implements OnInit {
         this.snackBar.open('ЛЭП успешно создана', 'Закрыть', {
           duration: 3000
         });
-        // Добавляем изменение в очередь синхронизации (на случай если нужно синхронизировать с Flutter)
-        // this.syncService.addChange('power_line', 'create', createdPowerLine);
-        // Обновляем данные карты и sidebar
+        // Один раз обновляем дерево/карту из диалога; закрываем с объектом ЛЭП (для совместимости)
         this.mapService.refreshData();
         this.dialogRef.close(createdPowerLine);
       },

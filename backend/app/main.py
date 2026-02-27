@@ -14,6 +14,7 @@ from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, sub
 # Временно закомментировано до применения миграции
 # from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
+from app.core.redis_client import set_redis_client, get_redis_client
 
 # Импортируем модели, чтобы они зарегистрировались в Base.metadata
 # Это необходимо для создания таблиц через Base.metadata.create_all
@@ -36,13 +37,14 @@ async def lifespan(app: FastAPI):
     
     # Инициализация Redis (опционально)
     try:
-        # Пытаемся подключиться к Redis, но не блокируем запуск, если он недоступен
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5)
         await redis_client.ping()
+        set_redis_client(redis_client)
         print("OK: Redis подключен")
     except Exception as e:
         print(f"WARNING: Redis недоступен: {e}. Продолжаем без Redis.")
         redis_client = None
+        set_redis_client(None)
     
     # Инициализация базы данных (обязательно)
     try:
@@ -58,11 +60,12 @@ async def lifespan(app: FastAPI):
     yield
     
     # Закрытие соединений при остановке
+    set_redis_client(None)
     if redis_client:
         try:
             await redis_client.close()
         except Exception:
-            pass  # Игнорируем ошибки при закрытии Redis
+            pass
 # Создание FastAPI приложения. Далее можно добавить @app.get, @app.post, @app.put, @app.delete методы.
 app = FastAPI(
     title="ЛЭП Management System",
@@ -76,21 +79,54 @@ app = FastAPI(
 )
 # app.mount("/static", StaticFiles(directory="static"), name="static")
 # Настройка CORS для Flutter приложения
-app.add_middleware(
-    CORSMiddleware, # Перехватывает все запросы и добавляет заголовки CORS
-    allow_origins=[
-        "http://localhost:*",
-        "https://localhost:*",
-        "http://127.0.0.1:*",
-        "https://127.0.0.1:*",
-        "*"  # В продакшене указать конкретные домены
-    ],  # Разрешаем localhost с любым портом
-    allow_credentials=True, # разрешает cookies и jwt токены
-    allow_methods=["*"], # Разрешает все методы get, post, put, delete
-    allow_headers=["*"], # Разрешает все заголовки
-    expose_headers=["*"], # Разрешаем доступ ко всем заголовкам ответа
-    max_age=3600,  # Кэширование preflight запросов на 1 час
+# Определяем origins из настроек или переменных окружения
+cors_origins = settings.ALLOWED_ORIGINS.copy()
+
+# Если задана переменная CORS_ORIGINS, используем её
+if settings.CORS_ORIGINS:
+    cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+
+# Для разработки добавляем localhost варианты и regex для любых портов (Flutter Web, Angular и т.д.)
+import os
+is_development = os.getenv("ENVIRONMENT", "development") == "development"
+cors_origin_regex = None
+
+if is_development:
+    dev_origins = [
+        "http://localhost:53380",
+        "https://localhost:53380",
+        "http://127.0.0.1:53380",
+        "https://127.0.0.1:53380",
+        "http://localhost:4200",
+        "https://localhost:4200",
+        "http://127.0.0.1:4200",
+        "https://127.0.0.1:4200",
+        "http://localhost:8000",
+        "https://localhost:8000",
+    ]
+    cors_origins.extend(dev_origins)
+    cors_origins = list(set(cors_origins))  # Убираем дубликаты
+    # Flutter Web и другие dev-серверы поднимаются на случайном порту (например 64303) — разрешаем любой localhost/127.0.0.1
+    cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+# Проверка на пустой список (для продакшена обязательно указать домены)
+if not cors_origins and not cors_origin_regex and os.getenv("ENVIRONMENT") == "production":
+    raise ValueError("CORS_ORIGINS должен быть задан для продакшена! Установите переменную CORS_ORIGINS в .env")
+
+cors_kw = dict(
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+if cors_origin_regex:
+    cors_kw["allow_origin_regex"] = cors_origin_regex
+    cors_kw["allow_origins"] = cors_origins if cors_origins else []
+else:
+    cors_kw["allow_origins"] = cors_origins if cors_origins else ["*"]
+
+app.add_middleware(CORSMiddleware, **cors_kw)
 
 
 # Тестовый endpoint (определяем ДО роутеров)
@@ -245,15 +281,29 @@ async def status_page():
 
 @app.get("/cache")
 async def cache_example():
-    if not redis_client:
+    """Демо: запись/чтение из Redis (для проверки подключения)."""
+    client = get_redis_client()
+    if not client:
         return {"error": "Redis недоступен"}
-    await redis_client.set("hello", "world")
-    value = await redis_client.get("hello")
+    await client.set("hello", "world")
+    value = await client.get("hello")
     return {"cached_value": value}
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Базовый health: статус приложения и Redis."""
+    redis_ok = False
+    if get_redis_client():
+        try:
+            await get_redis_client().ping()
+            redis_ok = True
+        except Exception:
+            pass
+    return {
+        "status": "healthy",
+        "redis": "connected" if redis_ok else "disconnected",
+    }
 
 if __name__ == "__main__":
     uvicorn.run(

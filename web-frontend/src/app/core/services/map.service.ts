@@ -2,9 +2,11 @@ import { Injectable } from '@angular/core';
 import { Observable, forkJoin, Subject, BehaviorSubject } from 'rxjs';
 import { ApiService } from './api.service';
 import { GeoJSONCollection } from '../models/geojson.model';
+import { PowerLine } from '../models/power-line.model';
 
 export interface MapData {
   powerLines: GeoJSONCollection;
+  powerLinesList: PowerLine[];
   poles: GeoJSONCollection;
   taps: GeoJSONCollection;
   substations: GeoJSONCollection;
@@ -22,6 +24,7 @@ export class MapService {
   loadAllMapData(): Observable<MapData> {
     return forkJoin({
       powerLines: this.apiService.getPowerLinesGeoJSON(),
+      powerLinesList: this.apiService.getPowerLines(),
       poles: this.apiService.getPolesGeoJSON(),
       taps: this.apiService.getTapsGeoJSON(),
       substations: this.apiService.getSubstationsGeoJSON(),

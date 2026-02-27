@@ -51,7 +51,7 @@
       <div class="property-item">
         <span class="property-label">Координаты (ш,д):</span>
         <span class="property-value">
-          {{ selectedPole.latitude?.toFixed(6) || 'N/A' }}, {{ selectedPole.longitude?.toFixed(6) || 'N/A' }}
+          {{ selectedPole.y_position?.toFixed(6) || 'N/A' }}, {{ selectedPole.x_position?.toFixed(6) || 'N/A' }}
         </span>
       </div>
       <div class="property-item" *ngIf="selectedPole.sequence_number">

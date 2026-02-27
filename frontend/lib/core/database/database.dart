@@ -16,6 +16,7 @@ class PowerLines extends Table {
   IntColumn get id => integer()();
   TextColumn get name => text()();
   TextColumn get code => text()();
+  TextColumn get mrid => text().nullable()();
   RealColumn get voltageLevel => real()();
   RealColumn get length => real().nullable()();
   IntColumn get branchId => integer()();
@@ -35,8 +36,10 @@ class Poles extends Table {
   IntColumn get id => integer()();
   IntColumn get powerLineId => integer()();
   TextColumn get poleNumber => text()();
-  RealColumn get latitude => real()();
-  RealColumn get longitude => real()();
+  /// Долгота (longitude), CIM x_position
+  RealColumn get xPosition => real()();
+  /// Широта (latitude), CIM y_position
+  RealColumn get yPosition => real()();
   TextColumn get poleType => text()();
   RealColumn get height => real().nullable()();
   TextColumn get foundationType => text().nullable()();
@@ -44,6 +47,10 @@ class Poles extends Table {
   IntColumn get yearInstalled => integer().nullable()();
   TextColumn get condition => text()();
   TextColumn get notes => text().nullable()();
+  /// Комментарий в конце карточки опоры (текст)
+  TextColumn get cardComment => text().nullable()();
+  /// Вложения к комментарию: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
+  TextColumn get cardCommentAttachment => text().nullable()();
   IntColumn get createdBy => integer()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().nullable()();
@@ -59,6 +66,11 @@ class Equipment extends Table {
   IntColumn get poleId => integer()();
   TextColumn get equipmentType => text()();
   TextColumn get name => text()();
+  IntColumn get quantity => integer().withDefault(const Constant(1))();
+  TextColumn get defect => text().nullable()();
+  TextColumn get criticality => text().nullable()(); // low | medium | high
+  /// Вложения к описанию иного дефекта: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
+  TextColumn get defectAttachment => text().nullable()();
   TextColumn get manufacturer => text().nullable()();
   TextColumn get model => text().nullable()();
   TextColumn get serialNumber => text().nullable()();
@@ -126,6 +138,28 @@ class AppDatabase extends _$AppDatabase {
               'user_id INTEGER)',
             );
           }
+          if (from < 3) {
+            // CIM: latitude -> y_position, longitude -> x_position
+            await migrator.issueCustomQuery(
+              'ALTER TABLE poles RENAME COLUMN latitude TO y_position',
+            );
+            await migrator.issueCustomQuery(
+              'ALTER TABLE poles RENAME COLUMN longitude TO x_position',
+            );
+          }
+          if (from < 4) {
+            await migrator.addColumn(powerLines, powerLines.mrid);
+          }
+          if (from < 5) {
+            await migrator.addColumn(equipment, equipment.quantity);
+            await migrator.addColumn(equipment, equipment.defect);
+            await migrator.addColumn(equipment, equipment.criticality);
+          }
+          if (from < 6) {
+            await migrator.addColumn(poles, poles.cardComment);
+            await migrator.addColumn(poles, poles.cardCommentAttachment);
+            await migrator.addColumn(equipment, equipment.defectAttachment);
+          }
         },
       );
 
@@ -148,6 +182,33 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deletePowerLine(int id) => 
       (delete(powerLines)..where((tbl) => tbl.id.equals(id))).go();
 
+  /// Обновить power_line_id у всех опор с fromPowerLineId на toPowerLineId (при слиянии/маппинге ЛЭП).
+  Future<int> updatePolesPowerLineId(int fromPowerLineId, int toPowerLineId) =>
+      (update(poles)..where((tbl) => tbl.powerLineId.equals(fromPowerLineId)))
+          .write(PolesCompanion(powerLineId: Value(toPowerLineId)));
+
+  /// Найти локальную ЛЭП (id < 0) по mrid или по имени (для слияния с серверной).
+  Future<PowerLine?> getLocalPowerLineByMridOrName(String? mrid, String name) async {
+    final nameNorm = name.trim().toLowerCase();
+    if (nameNorm.isEmpty) return null;
+    final all = await select(powerLines).get();
+    for (final pl in all) {
+      if (pl.id >= 0) continue;
+      if (mrid != null && mrid.trim().isNotEmpty) {
+        if (pl.mrid != null && pl.mrid!.trim().toLowerCase() == mrid.trim().toLowerCase()) {
+          return pl;
+        }
+      }
+      if (pl.name.trim().toLowerCase() == nameNorm) return pl;
+    }
+    return null;
+  }
+
+  /// Пометить ЛЭП как синхронизированную (после успешного upload).
+  Future<int> setPowerLineNeedsSync(int powerLineId, bool needsSync) =>
+      (update(powerLines)..where((tbl) => tbl.id.equals(powerLineId)))
+          .write(PowerLinesCompanion(needsSync: Value(needsSync)));
+
   // Методы для работы с опорами
   Future<List<Pole>> getAllPoles() => select(poles).get();
   
@@ -169,6 +230,11 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deletePole(int id) => 
       (delete(poles)..where((tbl) => tbl.id.equals(id))).go();
 
+  /// Пометить опору как синхронизированную (после успешного upload).
+  Future<int> setPoleNeedsSync(int poleId, bool needsSync) =>
+      (update(poles)..where((tbl) => tbl.id.equals(poleId)))
+          .write(PolesCompanion(needsSync: Value(needsSync)));
+
   // Методы для работы с оборудованием
   Future<List<EquipmentData>> getAllEquipment() => select(equipment).get();
   
@@ -189,6 +255,11 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> deleteEquipment(int id) => 
       (delete(equipment)..where((tbl) => tbl.id.equals(id))).go();
+
+  /// Пометить оборудование как синхронизированное (после успешного upload).
+  Future<int> setEquipmentNeedsSync(int equipmentId, bool needsSync) =>
+      (update(equipment)..where((tbl) => tbl.id.equals(equipmentId)))
+          .write(EquipmentCompanion(needsSync: Value(needsSync)));
 
   // Методы для синхронизации
   Future<List<SyncRecord>> getPendingSyncRecords() => 

@@ -2,17 +2,23 @@
 API для управления последовательностью опор
 """
 from typing import List, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
+from pydantic import ValidationError
 import math
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import Pole, PowerLine
+from app.models.location import Location
 from app.schemas.power_line import PoleResponse
+from app.schemas.cim_line_structure import ConnectivityNodeResponse
 
 router = APIRouter()
 
@@ -43,8 +49,8 @@ def find_nearest_pole(poles: List[Pole], current_pole: Pole, visited: set) -> Op
             continue
         
         distance = calculate_distance(
-            current_pole.latitude, current_pole.longitude,
-            pole.latitude, pole.longitude
+            current_pole.get_latitude(), current_pole.get_longitude(),
+            pole.get_latitude(), pole.get_longitude(),
         )
         
         if distance < min_distance:
@@ -71,7 +77,7 @@ async def auto_sequence_poles(
     """
     # Получаем все опоры линии
     result = await db.execute(
-        select(Pole).where(Pole.power_line_id == power_line_id).order_by(Pole.pole_number)
+        select(Pole).where(Pole.line_id == power_line_id).order_by(Pole.pole_number)
     )
     poles = result.scalars().all()
     
@@ -146,7 +152,7 @@ async def update_pole_sequence(
     # Проверяем, что все опоры принадлежат этой линии
     result = await db.execute(
         select(Pole).where(
-            Pole.power_line_id == power_line_id,
+            Pole.line_id == power_line_id,
             Pole.id.in_(pole_sequence)
         )
     )
@@ -179,23 +185,47 @@ async def get_poles_sequence(
 ):
     """Получение опор линии, отсортированных по последовательности"""
     from app.models.cim_line_structure import ConnectivityNode
-    
+    from app.api.v1.power_lines import fill_pole_coordinates
+
     result = await db.execute(
         select(Pole)
-        .options(selectinload(Pole.connectivity_nodes))
-        .where(Pole.power_line_id == power_line_id)
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
+        .where(Pole.line_id == power_line_id)
         .order_by(Pole.sequence_number.asc().nullslast(), Pole.pole_number.asc())
     )
     poles = result.scalars().all()
-    
-    # Для обратной совместимости добавляем connectivity_node и connectivity_node_id
-    # в каждый объект Pole перед сериализацией
+
     for pole in poles:
-        # Находим ConnectivityNode для этой линии
+        # Координаты для PoleResponse (x_position, y_position)
+        fill_pole_coordinates(pole)
+        # Обязательные поля в схеме (в старых БД или при миграциях могут быть NULL)
+        if getattr(pole, "mrid", None) is None:
+            setattr(pole, "mrid", "")
+        if getattr(pole, "pole_number", None) is None:
+            setattr(pole, "pole_number", "")
+        if getattr(pole, "pole_type", None) is None:
+            setattr(pole, "pole_type", "")
+        # connectivity_node: подставляем только если узел сериализуется в ConnectivityNodeResponse
         cn = pole.get_connectivity_node_for_line(power_line_id)
-        # Устанавливаем как обычные атрибуты для Pydantic сериализации
-        setattr(pole, 'connectivity_node', cn)
-        setattr(pole, 'connectivity_node_id', cn.id if cn else None)
-    
+        if cn is not None:
+            if (
+                getattr(cn, "pole_id", None) is None
+                or getattr(cn, "mrid", None) is None
+                or getattr(cn, "name", None) is None
+                or getattr(cn, "created_at", None) is None
+            ):
+                cn = None
+            else:
+                try:
+                    ConnectivityNodeResponse.model_validate(cn)
+                except (ValidationError, TypeError):
+                    cn = None
+        setattr(pole, "connectivity_node", cn)
+        setattr(pole, "connectivity_node_id", cn.id if cn else None)
+
     return poles
 
