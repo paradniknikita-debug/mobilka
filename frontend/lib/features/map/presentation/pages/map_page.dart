@@ -583,8 +583,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         final firstFeature = features[0];
         final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
         if (geometry != null && geometry['type'] == 'Point') {
-          final coords = geometry['coordinates'] as List<dynamic>;
-          center = LatLng(coords[1] as double, coords[0] as double);
+          final coords = geometry['coordinates'] as List<dynamic>?;
+          if (coords != null && coords.length >= 2) {
+            center = LatLng(_toDouble(coords[1]), _toDouble(coords[0]));
+          }
         }
       }
     }
@@ -595,8 +597,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         final firstFeature = features[0];
         final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
         if (geometry != null && geometry['type'] == 'Point') {
-          final coords = geometry['coordinates'] as List<dynamic>;
-          center = LatLng(coords[1] as double, coords[0] as double);
+          final coords = geometry['coordinates'] as List<dynamic>?;
+          if (coords != null && coords.length >= 2) {
+            center = LatLng(_toDouble(coords[1]), _toDouble(coords[0]));
+          }
         }
       }
     }
@@ -902,8 +906,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             final id = props != null ? _toInt(props['id']) : null;
             if (id != null) powerLineIdsWithGeometry.add(id);
             final points = coordinates.map((coord) => LatLng(
-              (coord[1] as num).toDouble(),
-              (coord[0] as num).toDouble(),
+              _toDouble(coord[1]),
+              _toDouble(coord[0]),
             )).toList();
             final isCurrentPatrol = id != null && id == _currentPowerLineId;
             polylines.add(
@@ -932,8 +936,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         final coords = geom['coordinates'] as List<dynamic>?;
         if (coords == null || coords.length < 2) continue;
         polesByPowerLine.putIfAbsent(plId, () => []).add({
-          'lat': (coords[1] as num).toDouble(),
-          'lng': (coords[0] as num).toDouble(),
+          'lat': _toDouble(coords[1]),
+          'lng': _toDouble(coords[0]),
           'pole_number': props!['pole_number']?.toString() ?? '',
         });
       } catch (_) {}
@@ -944,7 +948,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       final list = entry.value;
       if (list.length < 2) continue;
       list.sort((a, b) => (a['pole_number'] as String).compareTo(b['pole_number'] as String));
-      final points = list.map((e) => LatLng(e['lat'] as double, e['lng'] as double)).toList();
+      final points = list.map((e) => LatLng(_toDouble(e['lat']), _toDouble(e['lng']))).toList();
       final isCurrentPatrol = powerLineId == _currentPowerLineId;
       polylines.add(
         Polyline(
@@ -964,6 +968,16 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (v is num) return v.toInt();
     if (v is String) return int.tryParse(v);
     return null;
+  }
+
+  /// Безопасное преобразование в double (null → 0.0), чтобы избежать "Null is not a subtype of num".
+  static double _toDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
   }
 
   /// Формат номинала напряжения: «н/д» при отсутствии или 0, иначе «X кВ».
@@ -988,8 +1002,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           final coordinates = geometry['coordinates'] as List<dynamic>?;
           if (coordinates != null && coordinates.length >= 2) {
             final latLng = LatLng(
-              (coordinates[1] as num).toDouble(),
-              (coordinates[0] as num).toDouble(),
+              _toDouble(coordinates[1]),
+              _toDouble(coordinates[0]),
             );
             
             // Добавляем координаты в properties (CIM: x_position=долгота, y_position=широта)
@@ -1050,8 +1064,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           final coordinates = geometry['coordinates'] as List<dynamic>?;
           if (coordinates != null && coordinates.length >= 2) {
             final latLng = LatLng(
-              (coordinates[1] as num).toDouble(),
-              (coordinates[0] as num).toDouble(),
+              _toDouble(coordinates[1]),
+              _toDouble(coordinates[0]),
             );
             
             markers.add(
@@ -1098,8 +1112,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           final coordinates = geometry['coordinates'] as List<dynamic>?;
           if (coordinates != null && coordinates.length >= 2) {
             final latLng = LatLng(
-              (coordinates[1] as num).toDouble(),
-              (coordinates[0] as num).toDouble(),
+              _toDouble(coordinates[1]),
+              _toDouble(coordinates[0]),
             );
             
             markers.add(
@@ -1553,8 +1567,11 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     return spans.map<Widget>((span) {
       final spanData = span as Map<String, dynamic>;
-      final spanNumber = spanData['span_number'] as String? ?? 'N/A';
-      final spanLength = spanData['length'] as num? ?? 0;
+      final spanNumber = spanData['span_number']?.toString() ?? 'N/A';
+      final spanLengthRaw = spanData['length'];
+      final spanLength = (spanLengthRaw is num)
+          ? spanLengthRaw.toDouble()
+          : (spanLengthRaw is String ? double.tryParse(spanLengthRaw) : null) ?? 0.0;
       
       return ListTile(
         dense: true,
@@ -1661,14 +1678,18 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     LatLng? center;
     if (geometry['type'] == 'Point') {
-      final coords = geometry['coordinates'] as List<dynamic>;
-      center = LatLng(coords[1] as double, coords[0] as double);
+      final coords = geometry['coordinates'] as List<dynamic>?;
+      if (coords != null && coords.length >= 2) {
+        center = LatLng(_toDouble(coords[1]), _toDouble(coords[0]));
+      }
     } else if (geometry['type'] == 'LineString') {
-      final coords = geometry['coordinates'] as List<dynamic>;
-      if (coords.isNotEmpty) {
+      final coords = geometry['coordinates'] as List<dynamic>?;
+      if (coords != null && coords.isNotEmpty) {
         final midIndex = coords.length ~/ 2;
-        final midCoord = coords[midIndex] as List<dynamic>;
-        center = LatLng(midCoord[1] as double, midCoord[0] as double);
+        final midCoord = coords[midIndex] as List<dynamic>?;
+        if (midCoord != null && midCoord.length >= 2) {
+          center = LatLng(_toDouble(midCoord[1]), _toDouble(midCoord[0]));
+        }
       }
     }
 
@@ -1880,17 +1901,17 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (geometry != null && geometry['type'] == 'Point') {
       final coordinates = geometry['coordinates'] as List<dynamic>?;
       if (coordinates != null && coordinates.length >= 2) {
-        lat = (coordinates[1] as num).toDouble();
-        lng = (coordinates[0] as num).toDouble();
+        lat = _toDouble(coordinates[1]);
+        lng = _toDouble(coordinates[0]);
         properties['x_position'] = lng;
         properties['y_position'] = lat;
       }
     } else if (properties['x_position'] != null && properties['y_position'] != null) {
-      lng = (properties['x_position'] as num).toDouble();
-      lat = (properties['y_position'] as num).toDouble();
+      lng = _toDouble(properties['x_position']);
+      lat = _toDouble(properties['y_position']);
     } else if (properties['latitude'] != null && properties['longitude'] != null) {
-      lat = (properties['latitude'] as num).toDouble();
-      lng = (properties['longitude'] as num).toDouble();
+      lat = _toDouble(properties['latitude']);
+      lng = _toDouble(properties['longitude']);
     }
     
     setState(() {
@@ -1899,7 +1920,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       _showObjectProperties = true;
       // При клике на опору — раскрываем её ЛЭП в дереве объектов
       if (objectType == ObjectType.pole) {
-        final powerLineId = properties['power_line_id'] as int?;
+        final powerLineId = _toInt(properties['power_line_id']);
         if (powerLineId != null) {
           _expandedPowerLineIds.add(powerLineId);
         }

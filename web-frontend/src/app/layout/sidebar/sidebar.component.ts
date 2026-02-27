@@ -3,7 +3,7 @@ import { MapService } from '../../core/services/map.service';
 import { MapData } from '../../core/services/map.service';
 import { GeoJSONFeature } from '../../core/models/geojson.model';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, debounceTime } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
@@ -14,6 +14,7 @@ import { CreateSpanDialogComponent } from '../../features/map/create-span-dialog
 import { CreateSegmentDialogComponent } from '../../features/map/create-segment-dialog/create-segment-dialog.component';
 import { SegmentCardDialogComponent, SegmentCardDialogData } from '../../features/map/segment-card-dialog/segment-card-dialog.component';
 import { EditPowerLineDialogComponent } from '../../features/map/edit-power-line-dialog/edit-power-line-dialog.component';
+import { RebuildTopologyDialogComponent } from '../../features/map/rebuild-topology-dialog/rebuild-topology-dialog.component';
 import { ApiService } from '../../core/services/api.service';
 import { PowerLine } from '../../core/models/power-line.model';
 
@@ -23,12 +24,23 @@ interface PowerLineTreeItem {
   segments: Array<{
     segmentId: number | null;
     segmentName: string | null;
+    branchType: string | null;
     poles: GeoJSONFeature[];
     spans: GeoJSONFeature[];
   }>;
   allPoles: GeoJSONFeature[];
   polesWithoutSegment: GeoJSONFeature[];
   spansWithoutSegment: GeoJSONFeature[];
+}
+
+/** Элемент автодополнения поиска: по имени и UID */
+export interface TreeSearchSuggestion {
+  type: 'power_line' | 'segment' | 'pole' | 'span';
+  label: string;
+  item: PowerLineTreeItem;
+  segment?: { segmentId: number | null; segmentName: string | null; branchType?: string | null; poles: GeoJSONFeature[]; spans: GeoJSONFeature[] };
+  pole?: GeoJSONFeature;
+  span?: GeoJSONFeature;
 }
 
 @Component({
@@ -71,6 +83,13 @@ export class SidebarComponent implements OnInit, OnDestroy {
         }
         this.expandedPolesFolders.add(`${powerLineId}-all-poles`);
         this.selectedPoleIdFromMap = poleId;
+        this.cdr.detectChanges();
+      });
+
+    this.searchInput$
+      .pipe(debounceTime(250), takeUntil(this.destroy$))
+      .subscribe(q => {
+        this.treeSearchSuggestions = q.length < 1 ? [] : this.collectSearchSuggestions(q);
         this.cdr.detectChanges();
       });
   }
@@ -203,15 +222,19 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const segments: Array<{
         segmentId: number | null;
         segmentName: string | null;
+        branchType: string | null;
         poles: GeoJSONFeature[];
         spans: GeoJSONFeature[];
       }> = [];
       segmentsMap.forEach((data, segmentId) => {
         const segmentName = data.poles[0]?.properties['segment_name'] ??
           data.spans[0]?.properties['segment_name'] ?? null;
+        const branchType = data.poles[0]?.properties['branch_type'] ??
+          data.spans[0]?.properties['branch_type'] ?? null;
         segments.push({
           segmentId: typeof segmentId === 'string' ? parseInt(segmentId, 10) : segmentId,
           segmentName,
+          branchType,
           poles: data.poles,
           spans: data.spans
         });
@@ -258,6 +281,23 @@ export class SidebarComponent implements OnInit, OnDestroy {
   /** ID опоры, выбранной по клику на карте (для подсветки в дереве) */
   selectedPoleIdFromMap: number | null = null;
 
+  /** Подпись участка в формате «оп.1-оп.3» по номерам первой и последней опоры по порядку */
+  getSegmentDisplayName(segment: { segmentId: number | null; segmentName: string | null; poles: GeoJSONFeature[] }): string {
+    const poles = segment.poles || [];
+    if (poles.length === 0) return segment.segmentName || `Участок ${segment.segmentId ?? '?'}`;
+    const sorted = [...poles].sort((a, b) => (a.properties['sequence_number'] ?? 0) - (b.properties['sequence_number'] ?? 0));
+    const first = sorted[0].properties['pole_number'] ?? sorted[0].properties['sequence_number'] ?? '?';
+    const last = sorted[sorted.length - 1].properties['pole_number'] ?? sorted[sorted.length - 1].properties['sequence_number'] ?? '?';
+    return `оп.${first}-оп.${last}`;
+  }
+
+  /** Подпись пролёта в формате «пролёт 1-2» (без суффикса «(отпайка)») */
+  getSpanDisplayName(span: GeoJSONFeature): string {
+    const sn = (span.properties['span_number'] ?? '')?.toString().trim();
+    const normalized = sn ? sn.replace(/^пролёт\s+/i, '') : '';
+    return 'пролёт ' + (normalized || 'N/A');
+  }
+
   /**
    * История для кнопок «Назад»/«Вперёд».
    * Сейчас сохраняется только состояние раскрытия дерева (какие линии/участки/папки развёрнуты).
@@ -269,6 +309,9 @@ export class SidebarComponent implements OnInit, OnDestroy {
   private treeUndoStack: Array<{ lines: Set<number>; segments: Set<string>; folders: Set<string> }> = [];
   private treeRedoStack: Array<{ lines: Set<number>; segments: Set<string>; folders: Set<string> }> = [];
   treeSearchQuery = '';
+  /** Подсказки при вводе (поиск по имени и UID) */
+  treeSearchSuggestions: TreeSearchSuggestion[] = [];
+  private searchInput$ = new Subject<string>();
 
   private saveTreeStateForUndo(): void {
     this.treeRedoStack = [];
@@ -327,43 +370,52 @@ export class SidebarComponent implements OnInit, OnDestroy {
   treeSearch(): void {
     const q = (this.treeSearchQuery || '').trim().toLowerCase();
     if (!q) return;
+    const suggestions = this.collectSearchSuggestions(q);
+    if (suggestions.length > 0) {
+      this.applySearchResult(suggestions[0]);
+    } else {
+      this.snackBar.open('Ничего не найдено', 'Закрыть', { duration: 2000 });
+    }
+  }
+
+  onSearchInput(): void {
+    this.searchInput$.next((this.treeSearchQuery || '').trim().toLowerCase());
+  }
+
+  /** Собирает до 15 подсказок по запросу (по имени и UID). */
+  collectSearchSuggestions(q: string): TreeSearchSuggestion[] {
+    if (!q) return [];
     const items = this.getPowerLinesWithSegmentsAndPoles();
+    const out: TreeSearchSuggestion[] = [];
+    const limit = 15;
     for (const item of items) {
       const plId = item.powerLine.properties['id'];
       const name = (item.powerLine.properties['name'] || '').toString().toLowerCase();
       const mrid = (item.powerLine.properties['mrid'] || '').toString().toLowerCase();
       if (name.includes(q) || mrid.includes(q)) {
-        this.expandedPowerLines.add(plId);
-        this.cdr.detectChanges();
-        return;
+        out.push({ type: 'power_line', label: (item.powerLine.properties['name'] || 'ЛЭП') + ` (${item.powerLine.properties['voltage_level']} кВ)`, item });
+        if (out.length >= limit) return out;
       }
       for (const seg of item.segments) {
         const segName = (seg.segmentName || '').toString().toLowerCase();
         if (segName.includes(q)) {
-          this.expandedPowerLines.add(plId);
-          this.expandedSegments.add(`${plId}-${seg.segmentId}`);
-          this.cdr.detectChanges();
-          return;
+          out.push({ type: 'segment', label: seg.segmentName || `Участок ${seg.segmentId}`, item, segment: seg });
+          if (out.length >= limit) return out;
         }
         for (const pole of seg.poles) {
           const pName = (pole.properties['pole_number'] || '').toString().toLowerCase();
           const pMrid = (pole.properties['mrid'] || '').toString().toLowerCase();
           if (pName.includes(q) || pMrid.includes(q)) {
-            this.expandedPowerLines.add(plId);
-            this.expandedSegments.add(`${plId}-${seg.segmentId}`);
-            this.expandedPolesFolders.add(`${plId}-all-poles`);
-            this.cdr.detectChanges();
-            return;
+            out.push({ type: 'pole', label: (pole.properties['pole_number'] || 'Опора') + (pMrid ? ` · ${pole.properties['mrid']}` : ''), item, segment: seg, pole });
+            if (out.length >= limit) return out;
           }
         }
         for (const span of seg.spans) {
           const sName = (span.properties['span_number'] || '').toString().toLowerCase();
           const sMrid = (span.properties['mrid'] || '').toString().toLowerCase();
           if (sName.includes(q) || sMrid.includes(q)) {
-            this.expandedPowerLines.add(plId);
-            this.expandedSegments.add(`${plId}-${seg.segmentId}`);
-            this.cdr.detectChanges();
-            return;
+            out.push({ type: 'span', label: (span.properties['span_number'] || 'Пролёт') + (sMrid ? ` · ${span.properties['mrid']}` : ''), item, segment: seg, span });
+            if (out.length >= limit) return out;
           }
         }
       }
@@ -371,14 +423,95 @@ export class SidebarComponent implements OnInit, OnDestroy {
         const pName = (pole.properties['pole_number'] || '').toString().toLowerCase();
         const pMrid = (pole.properties['mrid'] || '').toString().toLowerCase();
         if (pName.includes(q) || pMrid.includes(q)) {
-          this.expandedPowerLines.add(plId);
-          this.expandedPolesFolders.add(`${plId}-all-poles`);
-          this.cdr.detectChanges();
-          return;
+          out.push({ type: 'pole', label: (pole.properties['pole_number'] || 'Опора') + (pMrid ? ` · ${pole.properties['mrid']}` : ''), item, pole });
+          if (out.length >= limit) return out;
         }
       }
     }
-    this.snackBar.open('Ничего не найдено', 'Закрыть', { duration: 2000 });
+    return out;
+  }
+
+  applySearchResult(s: TreeSearchSuggestion): void {
+    const zoomPole = 18;
+    const zoomSpan = 17;
+    const plId = s.item.powerLine.properties['id'];
+    this.expandedPowerLines.add(plId);
+    if (s.segment) this.expandedSegments.add(`${plId}-${s.segment.segmentId}`);
+    this.expandedPolesFolders.add(`${plId}-all-poles`);
+    if (s.pole) this.selectedPoleIdFromMap = s.pole.properties['id'];
+    if (s.type === 'power_line') {
+      const bounds = this.getBoundsFromFeatures([s.item.powerLine, ...s.item.allPoles]);
+      if (bounds) this.mapService.requestCenterOnFeature('power_line', bounds[0], undefined, undefined, bounds);
+    } else if (s.type === 'segment' && s.segment) {
+      const bounds = this.getBoundsFromFeatures([...s.segment.poles, ...s.segment.spans]);
+      if (bounds) this.mapService.requestCenterOnFeature('segment', bounds[0], undefined, undefined, bounds);
+    } else if (s.type === 'pole' && s.pole) {
+      const coords = this.getPointCoordinates(s.pole);
+      if (coords) this.mapService.requestCenterOnFeature('pole', [coords.lat, coords.lng], zoomPole);
+    } else if (s.type === 'span' && s.span) {
+      const center = this.getLineCenter(s.span);
+      if (center) this.mapService.requestCenterOnFeature('span', [center.lat, center.lng], zoomSpan);
+    }
+    this.treeSearchSuggestions = [];
+    this.cdr.detectChanges();
+  }
+
+  /** Собирает bbox по геометрии фич (Point и LineString). Возвращает [[minLat, minLng], [maxLat, maxLng]] или null. */
+  private getBoundsFromFeatures(features: GeoJSONFeature[]): [[number, number], [number, number]] | null {
+    const lats: number[] = [];
+    const lngs: number[] = [];
+    for (const f of features) {
+      const g = f.geometry;
+      if (!g || !g.coordinates) continue;
+      if (g.type === 'Point') {
+        const c = g.coordinates as number[];
+        if (c.length >= 2) {
+          lngs.push(Number(c[0]));
+          lats.push(Number(c[1]));
+        }
+      } else if (g.type === 'LineString') {
+        const coords = g.coordinates as number[][];
+        for (const c of coords) {
+          if (c.length >= 2) {
+            lngs.push(Number(c[0]));
+            lats.push(Number(c[1]));
+          }
+        }
+      }
+    }
+    if (lats.length === 0 || lngs.length === 0) return null;
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const pad = 0.0001;
+    return [[minLat - pad, minLng - pad], [maxLat + pad, maxLng + pad]];
+  }
+
+  private getPointCoordinates(feature: GeoJSONFeature): { lat: number; lng: number } | null {
+    const g = feature?.geometry;
+    if (!g || g.type !== 'Point') return null;
+    const c = g.coordinates as number[];
+    if (c.length < 2) return null;
+    return { lng: Number(c[0]), lat: Number(c[1]) };
+  }
+
+  private getLineCenter(feature: GeoJSONFeature): { lat: number; lng: number } | null {
+    const g = feature?.geometry;
+    if (!g || g.type !== 'LineString') return null;
+    const coords = g.coordinates as number[][];
+    if (!coords.length) return null;
+    // Геометрическая середина пролёта (центр между опорами), не индекс в массиве
+    let sumLng = 0, sumLat = 0;
+    for (const c of coords) {
+      if (c.length >= 2) {
+        sumLng += Number(c[0]);
+        sumLat += Number(c[1]);
+      }
+    }
+    const n = coords.length;
+    if (n === 0) return null;
+    return { lng: sumLng / n, lat: sumLat / n };
   }
 
   togglePowerLine(powerLineId: number): void {
@@ -429,55 +562,49 @@ export class SidebarComponent implements OnInit, OnDestroy {
       event.stopPropagation();
     }
     
-    // Определяем тип объекта и координаты
     if (feature.geometry.type === 'Point') {
       const coordinates = feature.geometry.coordinates as number[];
       const lat = coordinates[1];
       const lng = coordinates[0];
       const isPlaceholder = lat === 0 && lng === 0 && !feature.properties['pole_number'] && !feature.properties['dispatcher_name'];
       if (isPlaceholder) {
-        return; // ЛЭП без геометрии — не центрируем
+        return;
       }
 
-      // Если это опора, применяем логику зума
       if (feature.properties['pole_number']) {
-        // Получаем текущий зум из сервиса
-        // Используем последнее значение из BehaviorSubject (синхронно)
-        const currentZoom = this.mapService.getCurrentZoom();
-        let targetZoom: number | null | undefined;
-        
-        // Логика зума:
-        // - Если зум < 13: устанавливаем зум 10
-        // - Если зум == 13: не меняем зум (null)
-        // - Если зум >= 14: возвращаем к зуму 10
-        if (currentZoom < 13) {
-          targetZoom = 10;
-        } else if (currentZoom === 13) {
-          targetZoom = null; // Не меняем зум
-        } else if (currentZoom >= 14) {
-          targetZoom = 10;
-        } else {
-          // Для зума между 13 и 14 (не должно быть, но на всякий случай)
-          targetZoom = 10;
-        }
-        
-        // Центрируем карту на опоре с учетом логики зума
-        this.mapService.requestCenterOnFeature('pole', [lat, lng], targetZoom, currentZoom);
+        // Опора: зум ~200 м (уровень 18)
+        this.mapService.requestCenterOnFeature('pole', [lat, lng], 18);
       } else if (feature.properties['dispatcher_name']) {
-        // Для подстанций используем зум 18
         this.mapService.requestCenterOnFeature('substation', [lat, lng], 18);
       } else {
-        // Для других объектов (отпайки) используем текущий зум
-        this.mapService.requestCenterOnFeature('pole', [lat, lng]);
+        this.mapService.requestCenterOnFeature('point', [lat, lng]);
       }
     } else if (feature.geometry.type === 'LineString') {
-      // Для ЛЭП центрируем на середине линии
       const coordinates = feature.geometry.coordinates as number[][];
       if (coordinates.length > 0) {
-        const midIndex = Math.floor(coordinates.length / 2);
-        const midCoord = coordinates[midIndex];
-        this.mapService.requestCenterOnFeature('powerLine', [midCoord[1], midCoord[0]], 12);
+        if (feature.properties['span_number']) {
+          // Пролёт: зум ~500 м (уровень 17)
+          const midIndex = Math.floor(coordinates.length / 2);
+          const midCoord = coordinates[midIndex];
+          this.mapService.requestCenterOnFeature('span', [midCoord[1], midCoord[0]], 17);
+        } else {
+          // ЛЭП целиком: подгоняем bounds по линии
+          const bounds = this.getBoundsFromFeatures([feature]);
+          if (bounds) {
+            this.mapService.requestCenterOnFeature('powerLine', bounds[0], undefined, undefined, bounds);
+          }
+        }
       }
+    }
+  }
+
+  /** Клик по участку в дереве: центрировать карту на всю линию и выделить участок. */
+  onSegmentClick(item: PowerLineTreeItem, segment: { segmentId: number | null; segmentName: string | null; branchType?: string | null; poles: GeoJSONFeature[]; spans: GeoJSONFeature[] }): void {
+    const plId = item.powerLine.properties['id'];
+    // Зум подгоняем под всю линию (линия + все опоры), участок выделяется на карте
+    const bounds = this.getBoundsFromFeatures([item.powerLine, ...item.allPoles]);
+    if (bounds) {
+      this.mapService.requestSelectSegment(plId, segment.segmentId ?? null, bounds);
     }
   }
 
@@ -559,23 +686,28 @@ export class SidebarComponent implements OnInit, OnDestroy {
     this.contextMenuPowerLineId = powerLineId;
     this.contextMenuFeature = null;
     
-    // Используем setTimeout для того, чтобы ViewChild успел инициализироваться
-    setTimeout(() => {
-      if (this.menuTrigger) {
-        try {
-          // Проверяем, что trigger инициализирован
-          if (this.menuTrigger.menu) {
-            this.menuTrigger.openMenu();
-          } else {
-            console.warn('MatMenuTrigger.menu не инициализирован');
+    this.cdr.detectChanges();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (this.menuTrigger) {
+          try {
+            const element = (this.menuTrigger as any)._element?.nativeElement ||
+              (this.menuTrigger as any)._elementRef?.nativeElement;
+            if (element) {
+              element.click();
+            } else if (this.menuTrigger.menu) {
+              this.menuTrigger.openMenu();
+            } else {
+              console.warn('MatMenuTrigger.menu не инициализирован');
+            }
+          } catch (error) {
+            console.error('Ошибка открытия меню:', error);
           }
-        } catch (error) {
-          console.error('Ошибка открытия меню:', error);
+        } else {
+          console.warn('MatMenuTrigger не найден');
         }
-      } else {
-        console.warn('MatMenuTrigger не найден');
-      }
-    }, 0);
+      }, 10);
+    });
   }
 
   onFolderRightClick(folderType: 'poles' | 'spans', powerLineId: number, segmentId: number | null, event: MouseEvent): void {
@@ -589,23 +721,28 @@ export class SidebarComponent implements OnInit, OnDestroy {
     this.contextMenuSegmentId = segmentId;
     this.contextMenuFeature = null;
     
-    // Используем setTimeout для того, чтобы ViewChild успел инициализироваться
-    setTimeout(() => {
-      if (this.menuTrigger) {
-        try {
-          // Проверяем, что trigger инициализирован
-          if (this.menuTrigger.menu) {
-            this.menuTrigger.openMenu();
-          } else {
-            console.warn('MatMenuTrigger.menu не инициализирован');
+    this.cdr.detectChanges();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (this.menuTrigger) {
+          try {
+            const element = (this.menuTrigger as any)._element?.nativeElement ||
+              (this.menuTrigger as any)._elementRef?.nativeElement;
+            if (element) {
+              element.click();
+            } else if (this.menuTrigger.menu) {
+              this.menuTrigger.openMenu();
+            } else {
+              console.warn('MatMenuTrigger.menu не инициализирован');
+            }
+          } catch (error) {
+            console.error('Ошибка открытия меню:', error);
           }
-        } catch (error) {
-          console.error('Ошибка открытия меню:', error);
+        } else {
+          console.warn('MatMenuTrigger не найден');
         }
-      } else {
-        console.warn('MatMenuTrigger не найден');
-      }
-    }, 0);
+      }, 10);
+    });
   }
 
   onRootRightClick(event: MouseEvent): void {
@@ -619,23 +756,28 @@ export class SidebarComponent implements OnInit, OnDestroy {
     this.contextMenuPowerLineId = null;
     this.contextMenuSegmentId = null;
     
-    // Используем setTimeout для того, чтобы ViewChild успел инициализироваться
-    setTimeout(() => {
-      if (this.menuTrigger) {
-        try {
-          // Проверяем, что trigger инициализирован
-          if (this.menuTrigger.menu) {
-            this.menuTrigger.openMenu();
-          } else {
-            console.warn('MatMenuTrigger.menu не инициализирован');
+    this.cdr.detectChanges();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (this.menuTrigger) {
+          try {
+            const element = (this.menuTrigger as any)._element?.nativeElement ||
+              (this.menuTrigger as any)._elementRef?.nativeElement;
+            if (element) {
+              element.click();
+            } else if (this.menuTrigger.menu) {
+              this.menuTrigger.openMenu();
+            } else {
+              console.warn('MatMenuTrigger.menu не инициализирован');
+            }
+          } catch (error) {
+            console.error('Ошибка открытия меню:', error);
           }
-        } catch (error) {
-          console.error('Ошибка открытия меню:', error);
+        } else {
+          console.warn('MatMenuTrigger не найден');
         }
-      } else {
-        console.warn('MatMenuTrigger не найден');
-      }
-    }, 0);
+      }, 10);
+    });
   }
 
   onCreateSubstation(): void {
@@ -734,7 +876,15 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   onRebuildTopology(): void {
     if (this.contextMenuType === 'powerLine' && this.contextMenuPowerLineId != null) {
-      this.mapService.requestRebuildTopology(this.contextMenuPowerLineId);
+      const dialogRef = this.dialog.open(RebuildTopologyDialogComponent, {
+        width: '480px',
+        data: { powerLineId: this.contextMenuPowerLineId }
+      });
+      dialogRef.afterClosed().subscribe((result) => {
+        if (result) {
+          this.mapService.refreshData();
+        }
+      });
     }
   }
 
@@ -804,6 +954,33 @@ export class SidebarComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Отпаечная опора без построенной отпайки — показываем «Продолжить отпайку» */
+  isContextMenuPoleTapAndEmpty(): boolean {
+    if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return false;
+    const p = this.contextMenuFeature.properties;
+    return !!p['is_tap_pole'] && !p['tap_branch_has_poles'];
+  }
+
+  onContinueTapFromPole(): void {
+    if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return;
+    const powerLineId = this.contextMenuFeature.properties['power_line_id'];
+    const tapPoleId = this.contextMenuFeature.properties['id'];
+    if (powerLineId == null || tapPoleId == null) return;
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '520px',
+      data: {
+        defaultObjectType: 'pole',
+        powerLineId: powerLineId as number,
+        tapPoleId: tapPoleId as number
+      }
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.mapService.refreshData();
+      }
+    });
+  }
+
   openSegmentCard(segmentId: number, powerLineId: number, segmentName?: string | null): void {
     if (segmentId == null) return;
     const data: SegmentCardDialogData = {
@@ -822,6 +999,30 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
   onDeleteObject(): void {
+    // Удаление участка (segment): тип задаётся контекстным меню, не feature
+    if (this.contextMenuType === 'segment' && this.contextMenuSegmentId != null && this.contextMenuPowerLineId != null) {
+      const treeItems = this.getPowerLinesWithSegmentsAndPoles();
+      const item = treeItems.find(i => i.powerLine.properties['id'] === this.contextMenuPowerLineId);
+      const segmentName = item?.segments.find(s => s.segmentId === this.contextMenuSegmentId)?.segmentName
+        || `Участок ${this.contextMenuSegmentId}`;
+      const deleteData: DeleteObjectData = {
+        objectType: 'segment',
+        objectId: this.contextMenuSegmentId,
+        objectName: segmentName,
+        powerLineId: this.contextMenuPowerLineId
+      };
+      const dialogRef = this.dialog.open(DeleteObjectDialogComponent, {
+        width: '400px',
+        data: deleteData,
+        autoFocus: false,
+        restoreFocus: false
+      });
+      dialogRef.afterClosed().subscribe(result => {
+        if (result) this.mapService.refreshData();
+      });
+      return;
+    }
+
     if (!this.contextMenuFeature) return;
     
     // Определяем тип объекта
@@ -857,7 +1058,22 @@ export class SidebarComponent implements OnInit, OnDestroy {
       objectName
     };
     
-    // Для пролётов добавляем powerLineId
+    if (objectType === 'powerLine') {
+      const treeItems = this.getPowerLinesWithSegmentsAndPoles();
+      const item = treeItems.find(i => i.powerLine.properties['id'] === objectId);
+      if (item) {
+        const polesCount = item.allPoles.length;
+        const spansCount = item.segments.reduce((s, seg) => s + seg.spans.length, 0) + (item.spansWithoutSegment?.length ?? 0);
+        if (polesCount > 0 || spansCount > 0) {
+          deleteData.hasChildren = true;
+          const parts: string[] = [];
+          if (polesCount > 0) parts.push(polesCount === 1 ? '1 опора' : polesCount + ' опор');
+          if (spansCount > 0) parts.push(spansCount === 1 ? '1 пролёт' : spansCount + ' пролётов');
+          deleteData.childrenSummary = parts.join(', ');
+        }
+      }
+    }
+    
     if (objectType === 'span' && this.contextMenuPowerLineId) {
       deleteData.powerLineId = this.contextMenuPowerLineId;
     }
@@ -870,7 +1086,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
     });
     
     dialogRef.afterClosed().subscribe(result => {
-      if (result && result.deleted) {
+      if (result) {
         this.mapService.refreshData();
       }
     });

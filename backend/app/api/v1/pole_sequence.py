@@ -17,7 +17,6 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import Pole, PowerLine
 from app.models.location import Location
-from app.schemas.power_line import PoleResponse
 from app.schemas.cim_line_structure import ConnectivityNodeResponse
 
 router = APIRouter()
@@ -177,15 +176,15 @@ async def update_pole_sequence(
     }
 
 
-@router.get("/power-lines/{power_line_id}/poles/sequence", response_model=List[PoleResponse])
+@router.get("/power-lines/{power_line_id}/poles/sequence")
 async def get_poles_sequence(
     power_line_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Получение опор линии, отсортированных по последовательности"""
-    from app.models.cim_line_structure import ConnectivityNode
+    """Получение опор линии, отсортированных по последовательности. Возвращает список опор для выбора в диалоге редактирования пролёта."""
     from app.api.v1.power_lines import fill_pole_coordinates
+    from datetime import datetime, timezone
 
     result = await db.execute(
         select(Pole)
@@ -195,42 +194,62 @@ async def get_poles_sequence(
             selectinload(Pole.location).selectinload(Location.position_points),
         )
         .where(Pole.line_id == power_line_id)
-        .order_by(Pole.sequence_number.asc().nullslast(), Pole.pole_number.asc())
+        .order_by(Pole.sequence_number.asc().nulls_last(), Pole.pole_number.asc())
     )
     poles = result.scalars().all()
 
-    from datetime import datetime, timezone
+    out = []
     for pole in poles:
-        # Координаты для PoleResponse (x_position, y_position)
         fill_pole_coordinates(pole)
-        # Обязательные поля в схеме (в старых БД или при миграциях могут быть NULL)
-        if getattr(pole, "mrid", None) is None:
-            setattr(pole, "mrid", "")
-        if getattr(pole, "pole_number", None) is None:
-            setattr(pole, "pole_number", "")
-        if getattr(pole, "pole_type", None) is None:
-            setattr(pole, "pole_type", "")
-        if getattr(pole, "created_by", None) is None:
-            setattr(pole, "created_by", 0)
-        if getattr(pole, "created_at", None) is None:
-            setattr(pole, "created_at", datetime.now(timezone.utc))
-        # connectivity_node: подставляем только если узел сериализуется в ConnectivityNodeResponse
+        mrid = getattr(pole, "mrid", None) or ""
+        pole_number = getattr(pole, "pole_number", None) or ""
+        pole_type = getattr(pole, "pole_type", None) or ""
+        created_by = getattr(pole, "created_by", None) or 0
+        _created_at = getattr(pole, "created_at", None)
+        created_at = _created_at.isoformat() if hasattr(_created_at, "isoformat") else datetime.now(timezone.utc).isoformat()
+        x_pos = getattr(pole, "x_position", None)
+        y_pos = getattr(pole, "y_position", None)
+        if x_pos is None:
+            x_pos = 0.0
+        if y_pos is None:
+            y_pos = 0.0
         cn = pole.get_connectivity_node_for_line(power_line_id)
-        if cn is not None:
-            if (
-                getattr(cn, "pole_id", None) is None
-                or getattr(cn, "mrid", None) is None
-                or getattr(cn, "name", None) is None
-                or getattr(cn, "created_at", None) is None
-            ):
-                cn = None
-            else:
-                try:
-                    ConnectivityNodeResponse.model_validate(cn)
-                except (ValidationError, TypeError):
-                    cn = None
-        setattr(pole, "connectivity_node", cn)
-        setattr(pole, "connectivity_node_id", cn.id if cn else None)
-
-    return poles
+        cn_out = None
+        cn_id = None
+        if cn is not None and getattr(cn, "pole_id", None) is not None:
+            try:
+                cn_out = ConnectivityNodeResponse.model_validate(cn).model_dump()
+                cn_id = cn.id
+            except (ValidationError, TypeError):
+                pass
+        _updated_at = getattr(pole, "updated_at", None)
+        updated_at = _updated_at.isoformat() if _updated_at and hasattr(_updated_at, "isoformat") else None
+        out.append({
+            "id": pole.id,
+            "mrid": mrid,
+            "line_id": pole.line_id,
+            "connectivity_node_id": cn_id,
+            "pole_number": pole_number,
+            "pole_type": pole_type,
+            "x_position": float(x_pos),
+            "y_position": float(y_pos),
+            "sequence_number": getattr(pole, "sequence_number", None),
+            "height": getattr(pole, "height", None),
+            "foundation_type": getattr(pole, "foundation_type", None),
+            "material": getattr(pole, "material", None),
+            "year_installed": getattr(pole, "year_installed", None),
+            "condition": getattr(pole, "condition", None) or "good",
+            "notes": getattr(pole, "notes", None),
+            "conductor_type": getattr(pole, "conductor_type", None),
+            "conductor_material": getattr(pole, "conductor_material", None),
+            "conductor_section": getattr(pole, "conductor_section", None),
+            "is_tap_pole": bool(getattr(pole, "is_tap_pole", False)),
+            "branch_type": getattr(pole, "branch_type", None),
+            "tap_pole_id": getattr(pole, "tap_pole_id", None),
+            "created_by": created_by,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "connectivity_node": cn_out,
+        })
+    return out
 

@@ -19,6 +19,7 @@ Line (PowerLine) - cim:Line
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, remote
+from typing import Optional
 from app.database import Base
 from app.models.base import generate_mrid
 from app.models.cim_base import IdentifiedObject
@@ -79,6 +80,13 @@ class ConnectivityNode(Base, IdentifiedObject):
     from_spans = relationship("Span", primaryjoin="ConnectivityNode.id == remote(Span.from_connectivity_node_id)", back_populates="from_connectivity_node")
     # Пролёты, заканчивающиеся в этом узле
     to_spans = relationship("Span", primaryjoin="ConnectivityNode.id == remote(Span.to_connectivity_node_id)", back_populates="to_connectivity_node")
+
+    @property
+    def pole_number(self) -> Optional[str]:
+        """Номер опоры (для отображения в карточке участка)."""
+        if self.pole is not None:
+            return getattr(self.pole, "pole_number", None)
+        return None
 
 
 class Terminal(Base, IdentifiedObject):

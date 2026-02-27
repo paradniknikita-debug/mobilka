@@ -2,6 +2,11 @@
 
 <mat-dialog-content>
   <p>Вы уверены, что хотите удалить {{ getObjectTypeLabel() }} <strong>{{ data.objectName }}</strong>?</p>
+  <p *ngIf="data.hasChildren" class="cascade-option">
+    <mat-checkbox [(ngModel)]="cascadeDelete">
+      Удалить вместе с дочерними элементами{{ data.childrenSummary ? ' (' + data.childrenSummary + ')' : '' }}
+    </mat-checkbox>
+  </p>
   <p class="warning-text">Это действие нельзя отменить.</p>
 </mat-dialog-content>
 

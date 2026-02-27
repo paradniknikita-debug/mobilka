@@ -24,6 +24,17 @@
     flex: 1;
     font-size: 14px;
   }
+
+  .pole-actions {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+}
+
+.pole-select-inline {
+  margin-top: 4px;
+  margin-bottom: 8px;
 }
 
 .full-width {

@@ -17,6 +17,7 @@
 """
 
 import math
+import re
 from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -86,13 +87,16 @@ async def _connectivity_node_display_name(
 
 
 def _short_label_for_span(display_name: str) -> str:
-    """Из «Опора 1» или «ПС Название» извлекаем короткую подпись для наименования пролёта: «1» или оставляем как есть."""
+    """Подпись конца пролёта: «Опора 1» / «1» -> «оп.1», подстанция и прочее — без изменения."""
     s = (display_name or "").strip()
     if not s:
         return s
     if s.lower().startswith("опора"):
         rest = s[5:].strip()
-        return rest if rest else s
+        num = rest if rest else ""
+        return f"оп.{num}" if num else "оп."
+    if re.match(r"^\d+$", s):
+        return f"оп.{s}"
     return s
 
 
@@ -122,21 +126,44 @@ async def find_previous_pole(
     db: AsyncSession,
     power_line_id: int,
     current_sequence_number: Optional[int],
-    exclude_pole_id: Optional[int] = None
+    exclude_pole_id: Optional[int] = None,
+    tap_pole_id: Optional[int] = None
 ) -> Optional[Pole]:
     """
-    Найти предыдущую опору в линии по sequence_number
-    Используется для автоматического создания пролёта к предыдущей опоре в последовательности
-    
-    Если sequence_number не указан, использует поиск по ближайшему расстоянию (для обратной совместимости)
+    Найти предыдущую опору в линии по sequence_number или по отпайке.
+    Для опоры отпайки (tap_pole_id задан): если sequence_number==1, предыдущая — отпаечная опора; иначе — опора с тем же tap_pole_id и sequence_number-1.
+    Иначе ищем по sequence_number на магистрали или по ближайшему расстоянию.
     """
-    # Если sequence_number указан, ищем предыдущую опору по последовательности
+    if tap_pole_id is not None:
+        if current_sequence_number == 1:
+            result = await db.execute(
+                select(Pole)
+                .where(Pole.id == tap_pole_id, Pole.line_id == power_line_id)
+                .options(selectinload(Pole.connectivity_nodes))
+            )
+            return result.scalar_one_or_none()
+        # Второй и далее по отпайке: предыдущая — опора с тем же tap_pole_id и sequence_number = current - 1
+        if current_sequence_number is not None and current_sequence_number > 1:
+            result = await db.execute(
+                select(Pole)
+                .where(
+                    Pole.line_id == power_line_id,
+                    Pole.tap_pole_id == tap_pole_id,
+                    Pole.sequence_number == current_sequence_number - 1
+                )
+                .options(selectinload(Pole.connectivity_nodes))
+            )
+            return result.scalar_one_or_none()
+        return None
+
+    # Если sequence_number указан, ищем предыдущую опору по последовательности (только та же ветка: магистраль)
     if current_sequence_number is not None:
-        # Находим опору с максимальным sequence_number, который меньше текущего
+        # Находим опору с максимальным sequence_number, который меньше текущего (только магистраль — tap_pole_id is None)
         query = select(Pole).where(
             Pole.line_id == power_line_id,
             Pole.sequence_number.isnot(None),
-            Pole.sequence_number < current_sequence_number
+            Pole.sequence_number < current_sequence_number,
+            Pole.tap_pole_id.is_(None)
         )
         if exclude_pole_id:
             query = query.where(Pole.id != exclude_pole_id)
@@ -217,7 +244,9 @@ async def find_or_create_acline_segment(
     from_connectivity_node_id: int,
     voltage_level: float,
     current_user_id: int,
-    to_connectivity_node_id_if_tap: Optional[int] = None
+    to_connectivity_node_id_if_tap: Optional[int] = None,
+    branch_type: Optional[str] = None,
+    tap_pole_id: Optional[int] = None,
 ) -> AClineSegment:
     """
     Найти или создать AClineSegment от данной опоры.
@@ -234,7 +263,7 @@ async def find_or_create_acline_segment(
                 AClineSegment.line_id == power_line_id,
                 AClineSegment.to_connectivity_node_id == from_connectivity_node_id,
                 AClineSegment.is_tap == False
-            ).order_by(AClineSegment.sequence_number.desc())
+            ).order_by(AClineSegment.sequence_number.desc()).limit(1)
         )
         existing = result.scalar_one_or_none()
         if existing:
@@ -281,18 +310,15 @@ async def find_or_create_acline_segment(
     
     # Если начало или ветвление - создаём новый сегмент
     if is_substation_start or is_branching:
-        # Генерируем код для сегмента
         result = await db.execute(
             select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
         )
         segment_count = result.scalar_one() or 0
-        code = f"SEG-{power_line.mrid[:8].upper()}-{segment_count + 1}"
-        
-        # Создаём новый AClineSegment
+        mrid = generate_mrid()
         segment = AClineSegment(
-            mrid=generate_mrid(),
+            mrid=mrid,
             name=f"Сегмент {segment_count + 1} линии {power_line.name}",
-            code=code,
+            code=mrid,
             line_id=power_line_id,
             is_tap=False,
             from_connectivity_node_id=from_connectivity_node_id,
@@ -300,19 +326,21 @@ async def find_or_create_acline_segment(
             voltage_level=voltage_level,
             length=0.0,  # Будет обновлено при добавлении пролётов
             sequence_number=segment_count + 1,
-            created_by=current_user_id
+            created_by=current_user_id,
+            branch_type=branch_type,
+            tap_pole_id=tap_pole_id,
         )
         db.add(segment)
         await db.flush()
         return segment
     
-    # Иначе ищем незавершённый сегмент (to_connectivity_node_id == None)
+    # Иначе ищем незавершённый сегмент (to_connectivity_node_id == None) — берём один последний по sequence
     result = await db.execute(
         select(AClineSegment).where(
             AClineSegment.line_id == power_line_id,
             AClineSegment.to_connectivity_node_id.is_(None),
             AClineSegment.is_tap == False
-        ).order_by(AClineSegment.sequence_number.desc())
+        ).order_by(AClineSegment.sequence_number.desc()).limit(1)
     )
     existing_segment = result.scalar_one_or_none()
     
@@ -324,12 +352,11 @@ async def find_or_create_acline_segment(
         select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
     )
     segment_count = result.scalar_one() or 0
-    code = f"SEG-{power_line.mrid[:8].upper()}-{segment_count + 1}"
-    
+    mrid = generate_mrid()
     segment = AClineSegment(
-        mrid=generate_mrid(),
+        mrid=mrid,
         name=f"Сегмент {segment_count + 1} линии {power_line.name}",
-        code=code,
+        code=mrid,
         line_id=power_line_id,
         is_tap=False,
         from_connectivity_node_id=from_connectivity_node_id,
@@ -337,7 +364,9 @@ async def find_or_create_acline_segment(
         voltage_level=voltage_level,
         length=0.0,
         sequence_number=segment_count + 1,
-        created_by=current_user_id
+        created_by=current_user_id,
+        branch_type=branch_type,
+        tap_pole_id=tap_pole_id,
     )
     db.add(segment)
     await db.flush()
@@ -442,9 +471,10 @@ async def auto_create_span(
     if new_connectivity_node is None:
         new_connectivity_node = await get_or_create_connectivity_node_for_pole(db, new_pole, power_line_id)
 
-    # Находим предыдущую опору по sequence_number (или ближайшую для обратной совместимости)
+    # Находим предыдущую опору по sequence_number (или отпаечную опору, если tap_pole_id задан)
     previous_pole = await find_previous_pole(
-        db, power_line_id, new_pole.sequence_number, exclude_pole_id=new_pole.id
+        db, power_line_id, new_pole.sequence_number, exclude_pole_id=new_pole.id,
+        tap_pole_id=getattr(new_pole, "tap_pole_id", None)
     )
 
     if not previous_pole:
@@ -478,7 +508,9 @@ async def auto_create_span(
     # Находим или создаём AClineSegment (если новая опора отпаечная — закрываем текущий участок на ней)
     acline_segment = await find_or_create_acline_segment(
         db, power_line_id, previous_cn.id, voltage_level, current_user_id,
-        to_connectivity_node_id_if_tap=new_connectivity_node.id if is_tap else None
+        to_connectivity_node_id_if_tap=new_connectivity_node.id if is_tap else None,
+        branch_type=getattr(new_pole, 'branch_type', None),
+        tap_pole_id=getattr(new_pole, 'tap_pole_id', None),
     )
     
     # Обновляем to_connectivity_node_id текущего сегмента на новую опору (если ещё не закрыт)
@@ -504,12 +536,12 @@ async def auto_create_span(
     )
     span_count = result.scalar_one() or 0
     
-    # Наименование пролёта: «Пролёт 1-2» (без слова «Опора»)
+    # Наименование пролёта: «оп.1 - оп.2» или «ПС Название - оп.1»
     from_display = await _connectivity_node_display_name(db, previous_cn.id)
     to_display = await _connectivity_node_display_name(db, new_connectivity_node.id)
     from_short = _short_label_for_span(from_display)
     to_short = _short_label_for_span(to_display)
-    span_number = f"Пролёт {from_short}-{to_short}"
+    span_number = f"{from_short} - {to_short}"
 
     # Создаём пролёт
     span = Span(
@@ -619,20 +651,20 @@ async def link_line_to_substation(
     if result.scalar_one_or_none():
         raise ValueError("Участок от этой подстанции до этой опоры уже создан")
 
+    mrid_seg = generate_mrid()
     segment_count_result = await db.execute(
         select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
     )
     segment_count = segment_count_result.scalar_one() or 0
-    code = f"SEG-{power_line.mrid[:8].upper()}-{segment_count + 1}"
 
     from_name = await _connectivity_node_display_name(db, substation_cn.id)
     to_name = await _connectivity_node_display_name(db, first_cn.id)
     segment_name = f"{from_name} - {to_name}"
 
     segment = AClineSegment(
-        mrid=generate_mrid(),
+        mrid=mrid_seg,
         name=segment_name,
-        code=code,
+        code=mrid_seg,
         line_id=power_line_id,
         is_tap=False,
         from_connectivity_node_id=substation_cn.id,
@@ -660,7 +692,7 @@ async def link_line_to_substation(
         float(sub_lat), float(sub_lon),
         first_pole.y_position or 0, first_pole.x_position or 0,
     )
-    span_number = f"Пролёт {from_name} - {to_name}"
+    span_number = f"{_short_label_for_span(from_name)} - {_short_label_for_span(to_name)}"
 
     span = Span(
         mrid=generate_mrid(),

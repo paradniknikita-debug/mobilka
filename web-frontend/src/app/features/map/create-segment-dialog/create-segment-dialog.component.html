@@ -31,6 +31,14 @@
         </mat-form-field>
       </div>
 
+      <div *ngIf="showBranchChoice" class="branch-choice-block">
+        <p class="branch-choice-label">Направление от отпаечной опоры</p>
+        <mat-radio-group formControlName="branch_type" class="branch-radio-group">
+          <mat-radio-button value="main">По магистрали</mat-radio-button>
+          <mat-radio-button value="tap">По отпайке</mat-radio-button>
+        </mat-radio-group>
+      </div>
+
       <div *ngIf="isLoading" class="loading-spinner">
         <mat-spinner diameter="24"></mat-spinner>
         <span>Загрузка опор...</span>

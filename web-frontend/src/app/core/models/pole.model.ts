@@ -8,6 +8,10 @@ export interface Pole {
   pole_number: string;
   sequence_number?: number;
   is_tap_pole?: boolean;
+  /** 'main' — магистраль, 'tap' — отпайка */
+  branch_type?: string | null;
+  /** id отпаечной опоры, от которой идёт эта ветка (для отпайки) */
+  tap_pole_id?: number | null;
   /** Долгота (longitude) */
   x_position: number;
   /** Широта (latitude) */
@@ -41,6 +45,10 @@ export interface PoleCreate {
   condition?: string;
   notes?: string;
   is_tap?: boolean;
+  /** Направление после отпаечной опоры: 'main' — магистраль, 'tap' — отпайка */
+  branch_type?: string | null;
+  /** id отпаечной опоры (при выборе «По отпайке») */
+  tap_pole_id?: number | null;
   /** Марка провода (AC-70 и т.д.) — для автосоздания пролёта */
   conductor_type?: string;
   /** Материал провода (алюминий, медь) */

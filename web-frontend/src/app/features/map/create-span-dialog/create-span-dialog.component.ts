@@ -23,6 +23,8 @@ export class CreateSpanDialogComponent implements OnInit {
   spanForm: FormGroup;
   isLoading = false;
   isCreating = false;
+  showFromPoleSelect = false;
+  showToPoleSelect = false;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { 
@@ -217,12 +219,15 @@ export class CreateSpanDialogComponent implements OnInit {
     }
   }
 
-  /** Короткая подпись для наименования пролёта: из «Опора 1» -> «1» */
+  /** Подпись для наименования пролёта: «Опора 1» / «1» -> «оп.1» (формат оп.XX - оп.YY). */
   private shortPoleLabel(poleNumber: string): string {
     const s = (poleNumber || '').trim();
     if (s.toLowerCase().startsWith('опора')) {
       const rest = s.slice(5).trim();
-      return rest || s;
+      return rest ? `оп.${rest}` : 'оп.';
+    }
+    if (/^\d+$/.test(s)) {
+      return `оп.${s}`;
     }
     return s;
   }
@@ -242,20 +247,20 @@ export class CreateSpanDialogComponent implements OnInit {
     if (fromPole && toPole) {
       const fromShort = this.shortPoleLabel(fromPole.pole_number);
       const toShort = this.shortPoleLabel(toPole.pole_number);
-      this.spanForm.patchValue({ span_number: `Пролёт ${fromShort}-${toShort}` });
+      this.spanForm.patchValue({ span_number: `${fromShort} - ${toShort}` });
     }
   }
 
   getFromPoleName(): string {
     const id = this.spanForm.get('from_pole_id')?.value;
     const pole = id ? this.poles.find(p => p.id === id) : null;
-    return pole ? pole.pole_number : '—';
+    return pole ? this.shortPoleLabel(pole.pole_number) : '—';
   }
 
   getToPoleName(): string {
     const id = this.spanForm.get('to_pole_id')?.value;
     const pole = id ? this.poles.find(p => p.id === id) : null;
-    return pole ? pole.pole_number : '—';
+    return pole ? this.shortPoleLabel(pole.pole_number) : '—';
   }
 
   getFromPoleMrid(): string | null {
@@ -429,9 +434,11 @@ export class CreateSpanDialogComponent implements OnInit {
     this.dialogRef.close();
   }
 
+  /** Подпись опоры в списке: наименование в формате оп.X и тип (без порядкового номера #N) */
   displayPole(pole: Pole): string {
     if (!pole) return '';
-    return `${pole.pole_number}${pole.sequence_number ? ` (#${pole.sequence_number})` : ''}`;
+    const name = this.shortPoleLabel(pole.pole_number);
+    return pole.pole_type ? `${name} — ${pole.pole_type}` : name;
   }
 }
 

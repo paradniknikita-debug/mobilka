@@ -5,10 +5,12 @@ import { MapService } from '../../../core/services/map.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 export interface DeleteObjectData {
-  objectType: 'pole' | 'powerLine' | 'substation' | 'tap' | 'span';
+  objectType: 'pole' | 'powerLine' | 'substation' | 'tap' | 'span' | 'segment';
   objectId: number;
   objectName: string;
-  powerLineId?: number; // Для пролётов нужен powerLineId
+  powerLineId?: number; // Для пролётов и участков
+  hasChildren?: boolean;
+  childrenSummary?: string;
 }
 
 @Component({
@@ -18,6 +20,7 @@ export interface DeleteObjectData {
 })
 export class DeleteObjectDialogComponent {
   isDeleting = false;
+  cascadeDelete = true;
 
   constructor(
     public dialogRef: MatDialogRef<DeleteObjectDialogComponent>,
@@ -39,6 +42,8 @@ export class DeleteObjectDialogComponent {
         return 'отпайку';
       case 'span':
         return 'пролёт';
+      case 'segment':
+        return 'участок';
       default:
         return 'объект';
     }
@@ -56,8 +61,25 @@ export class DeleteObjectDialogComponent {
         return 'отпайка';
       case 'span':
         return 'пролёт';
+      case 'segment':
+        return 'участок';
       default:
         return 'объект';
+    }
+  }
+
+  /** Форма глагола «удалён» по роду: пролёт/участок — удалён, опора/ЛЭП/подстанция — удалена */
+  getDeletedForm(): string {
+    switch (this.data.objectType) {
+      case 'span':
+      case 'segment':
+        return 'удалён';
+      case 'pole':
+      case 'powerLine':
+      case 'substation':
+        return 'удалена';
+      default:
+        return 'удалён';
     }
   }
 
@@ -69,7 +91,10 @@ export class DeleteObjectDialogComponent {
     
     switch (this.data.objectType) {
       case 'powerLine':
-        deleteObservable = this.apiService.deletePowerLine(this.data.objectId);
+        deleteObservable = this.apiService.deletePowerLine(
+          this.data.objectId,
+          this.data.hasChildren ? this.cascadeDelete : true
+        );
         break;
       case 'pole':
         deleteObservable = this.apiService.deletePole(this.data.objectId);
@@ -84,6 +109,9 @@ export class DeleteObjectDialogComponent {
           this.isDeleting = false;
           return;
         }
+        break;
+      case 'segment':
+        deleteObservable = this.apiService.deleteAClineSegment(this.data.objectId);
         break;
       case 'substation':
         deleteObservable = this.apiService.deleteSubstation(this.data.objectId);
@@ -106,24 +134,41 @@ export class DeleteObjectDialogComponent {
         next: (response?: {message?: string, details?: string}) => {
           const label = this.getObjectTypeLabelNominative();
           const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+          const deletedForm = this.getDeletedForm(); // "удалён" / "удалена" по роду
           let message: string;
           
           if (this.data.objectType === 'substation') {
-            message = `${capitalizedLabel} успешно удалена.`;
+            message = `${capitalizedLabel} успешно ${deletedForm}.`;
           } else if (this.data.objectType === 'pole') {
             message = response?.details 
-              ? `${capitalizedLabel} успешно удалена. ${response.details}`
-              : `${capitalizedLabel} успешно удалена. Пролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.`;
+              ? `${capitalizedLabel} успешно ${deletedForm}. ${response.details}`
+              : `${capitalizedLabel} успешно ${deletedForm}. Пролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.`;
           } else {
             message = response?.details 
-              ? `${capitalizedLabel} успешно удалена. ${response.details}`
-              : `${capitalizedLabel} успешно удалена.`;
+              ? `${capitalizedLabel} успешно ${deletedForm}. ${response.details}`
+              : `${capitalizedLabel} успешно ${deletedForm}.`;
           }
           
           this.snackBar.open(message, 'Закрыть', {
             duration: 4000
           });
-          // Уведомляем сервис карты об обновлении данных
+          const entityTypeMap: Record<string, string> = {
+            pole: 'pole',
+            powerLine: 'power_line',
+            substation: 'substation',
+            span: 'span',
+            segment: 'acline_segment'
+          };
+          const entityType = entityTypeMap[this.data.objectType];
+          if (entityType) {
+            this.apiService.createChangeLogEntry({
+              source: 'web',
+              action: 'delete',
+              entity_type: entityType,
+              entity_id: this.data.objectId,
+              payload: { name: this.data.objectName }
+            }).subscribe({ error: () => {} });
+          }
           this.mapService.refreshData();
           this.dialogRef.close(true);
         },

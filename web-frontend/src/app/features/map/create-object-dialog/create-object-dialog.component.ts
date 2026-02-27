@@ -67,6 +67,15 @@ export class CreateObjectDialogComponent implements OnInit {
   // Материал провода
   conductorMaterials = ['алюминий', 'медь', 'сталь', 'алмаг'];
 
+  /** Последняя опора в выбранной линии (по sequence_number); если отпаечная — показываем выбор направления */
+  lastPoleInLine: { id: number; is_tap_pole?: boolean } | null = null;
+  showBranchChoice = false;
+  /** При открытии «Продолжить отпайку» — id отпаечной опоры, от которой строим следующую */
+  tapPoleIdToUse?: number;
+
+  /** Список отпаечных опор линии (для выбора при редактировании направления) */
+  tapPolesInLine: { id: number; pole_number: string }[] = [];
+
   // Стандартные значения напряжения для подстанций (кВ)
   voltageLevels = [
     0.4,
@@ -114,16 +123,18 @@ export class CreateObjectDialogComponent implements OnInit {
       latitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       pole_type: ['', Validators.required],
-      sequence_number: [null], // Порядок в линии (1, 2, 3…). Пусто — авто.
+      sequence_number: [null, [this.sequenceNumberValidator.bind(this)]], // Порядок в линии (1, 2, 3…). Пусто — авто.
       mrid: ['', CreateObjectDialogComponent.uuidValidator], // Опциональный UID с валидацией формата
       is_tap: [false],
+      branch_type: ['main'], // Направление после отпаечной опоры: main | tap
+      tap_pole_id: [null as number | null], // id отпаечной опоры (при редактировании и выборе «По отпайке»)
       conductor_type: [''],
       conductor_material: [''],
       conductor_section: [''],
-      height: [null],
+      height: [null, [this.nonNegativeNumberValidator.bind(this)]],
       foundation_type: [''],
       material: [''],
-      year_installed: [null],
+      year_installed: [null, [this.yearValidator.bind(this)]],
       condition: ['good'],
       notes: ['']
     });
@@ -194,6 +205,9 @@ export class CreateObjectDialogComponent implements OnInit {
         if (!this.powerLineId) {
           this.powerLineId = this.data.powerLineId;
         }
+        if (this.data.tapPoleId) {
+          this.tapPoleIdToUse = this.data.tapPoleId;
+        }
         console.log('Установлен powerLineId для опоры:', this.powerLineId);
         // Генерируем MRID сразу, так как тип объекта уже выбран
         this.generateMRID();
@@ -213,6 +227,70 @@ export class CreateObjectDialogComponent implements OnInit {
         return name ? this._filterPowerLines(name) : this.powerLines.slice();
       })
     );
+
+    // При смене ЛЭП — загружаем опоры и определяем, показывать ли выбор «магистраль/отпайка»
+    this.poleForm.get('power_line_id')?.valueChanges.subscribe(val => {
+      const lineId = typeof val === 'object' && val !== null && 'id' in val ? (val as { id: number }).id : null;
+      if (lineId) {
+        this.updateLastPoleInLine(lineId, this.tapPoleIdToUse);
+        this.tapPoleIdToUse = undefined; // используем только при первом открытии
+      } else {
+        this.lastPoleInLine = null;
+        this.showBranchChoice = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  updateLastPoleInLine(powerLineId: number, tapPoleId?: number): void {
+    this.apiService.getPolesByPowerLine(powerLineId).subscribe({
+      next: (poles) => {
+        const list = (poles as any[]) || [];
+        this.tapPolesInLine = list
+          .filter((p: any) => p.is_tap_pole === true)
+          .map((p: any) => ({ id: p.id, pole_number: p.pole_number || `Опора ${p.id}` }));
+        this.showBranchChoice = this.tapPolesInLine.length > 0;
+
+        if (tapPoleId != null) {
+          const tapPole = list.find((p: any) => p.id === tapPoleId);
+          this.lastPoleInLine = tapPole ?? null;
+          if (this.showBranchChoice) {
+            this.poleForm.patchValue({ branch_type: 'tap', tap_pole_id: tapPoleId });
+          }
+        } else {
+          const withSeq = list
+            .filter((p: { sequence_number?: number | null }) => p.sequence_number != null)
+            .sort((a: { sequence_number?: number }, b: { sequence_number?: number }) => (b.sequence_number ?? 0) - (a.sequence_number ?? 0));
+          this.lastPoleInLine = withSeq[0] ?? null;
+          if (this.showBranchChoice && !this.poleForm.get('tap_pole_id')?.value) {
+            this.poleForm.patchValue({ branch_type: 'main', tap_pole_id: null });
+          }
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.lastPoleInLine = null;
+        this.tapPolesInLine = [];
+        this.showBranchChoice = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** Загружает список отпаечных опор линии для выбора при редактировании (направление «По отпайке») */
+  loadTapPolesForLine(powerLineId: number): void {
+    this.apiService.getPolesByPowerLine(powerLineId).subscribe({
+      next: (poles) => {
+        this.tapPolesInLine = (poles as any[])
+          .filter((p: any) => p.is_tap_pole === true)
+          .map((p: any) => ({ id: p.id, pole_number: p.pole_number || `Опора ${p.id}` }));
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.tapPolesInLine = [];
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   loadPowerLines(): void {
@@ -231,6 +309,7 @@ export class CreateObjectDialogComponent implements OnInit {
             setTimeout(() => {
               this.poleForm.patchValue({ power_line_id: selectedLine });
               console.log('Линия установлена в форму:', selectedLine);
+              this.updateLastPoleInLine(selectedLine.id, this.tapPoleIdToUse);
               this.cdr.detectChanges();
             }, 0);
           } else {
@@ -282,6 +361,8 @@ export class CreateObjectDialogComponent implements OnInit {
           sequence_number: pole.sequence_number ?? null,
           mrid: pole.mrid || '',
           is_tap: (pole as any).is_tap_pole ?? false,
+          branch_type: (pole as any).branch_type === 'tap' ? 'tap' : 'main',
+          tap_pole_id: (pole as any).tap_pole_id ?? null,
           conductor_type: (pole as any).conductor_type ?? '',
           conductor_material: (pole as any).conductor_material ?? '',
           conductor_section: (pole as any).conductor_section ?? '',
@@ -293,6 +374,12 @@ export class CreateObjectDialogComponent implements OnInit {
           notes: (pole as any).notes || ''
         });
         this.isLoading = false;
+        // В режиме редактирования показываем выбор направления и загружаем список отпаечных опор
+        if (this.isEditMode && this.powerLineId) {
+          this.showBranchChoice = true;
+          this.loadTapPolesForLine(this.powerLineId);
+        }
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Ошибка загрузки опоры:', error);
@@ -421,6 +508,10 @@ export class CreateObjectDialogComponent implements OnInit {
       pole_type: formValue.pole_type,
       mrid: formValue.mrid && formValue.mrid.trim() ? formValue.mrid.trim() : undefined,
       is_tap: !!formValue.is_tap,
+      branch_type: this.showBranchChoice && formValue.tap_pole_id != null ? 'tap' : (this.showBranchChoice ? 'main' : undefined),
+      tap_pole_id: this.showBranchChoice
+        ? (formValue.tap_pole_id != null && formValue.tap_pole_id !== '' ? formValue.tap_pole_id : null)
+        : undefined,
       conductor_type: formValue.conductor_type?.trim() || undefined,
       conductor_material: formValue.conductor_material?.trim() || undefined,
       conductor_section: formValue.conductor_section != null && String(formValue.conductor_section).trim() !== '' ? String(formValue.conductor_section).trim() : undefined,
@@ -445,11 +536,21 @@ export class CreateObjectDialogComponent implements OnInit {
     poleObservable.subscribe({
       next: (pole) => {
         const message = this.isEditMode ? 'Опора успешно обновлена' : 'Опора успешно создана';
+        const hint = this.isEditMode && this.showBranchChoice
+          ? ' При смене направления выполните «Пересборка топологии» по ЛЭП (ПКМ по линии в дереве).'
+          : '';
         console.log(message + ':', pole);
-        this.snackBar.open(message, 'Закрыть', {
-          duration: 3000
+        this.snackBar.open(message + hint, 'Закрыть', {
+          duration: this.isEditMode && this.showBranchChoice ? 6000 : 3000
         });
-        // Закрываем с success — обновление дерева/карты выполнит afterClosed у открывателя (один refresh, без гонки)
+        this.mapService.refreshData();
+        this.apiService.createChangeLogEntry({
+          source: 'web',
+          action: this.isEditMode ? 'update' : 'create',
+          entity_type: 'pole',
+          entity_id: pole.id,
+          payload: { name: pole.pole_number, mrid: pole.mrid }
+        }).subscribe({ error: () => {} });
         this.dialogRef.close({ success: true, pole });
       },
       error: (error) => {
@@ -595,6 +696,44 @@ export class CreateObjectDialogComponent implements OnInit {
     return null;
   }
 
+  /** Неотрицательное число (0 и больше), для высоты и т.п. */
+  nonNegativeNumberValidator(control: any): { [key: string]: any } | null {
+    if (!control.value && control.value !== 0) return null;
+    const str = String(control.value).replace(',', '.');
+    const num = parseFloat(str);
+    if (isNaN(num)) return { invalidNumber: true };
+    if (num < 0) return { negativeNumber: true };
+    if (num > 200) return { maxValue: { max: 200 } }; // высота опоры до 200 м
+    return null;
+  }
+
+  /** Год в разумных пределах (1900–текущий+5) */
+  yearValidator(control: any): { [key: string]: any } | null {
+    if (!control.value && control.value !== 0) return null;
+    const y = parseInt(String(control.value), 10);
+    if (isNaN(y)) return { invalidNumber: true };
+    const currentYear = new Date().getFullYear();
+    if (y < 1900 || y > currentYear + 5) return { yearRange: true };
+    return null;
+  }
+
+  /** Порядок опоры: пусто — ок (авто), иначе целое ≥ 1 */
+  sequenceNumberValidator(control: any): { [key: string]: any } | null {
+    if (!control.value && control.value !== 0) return null;
+    const n = parseInt(String(control.value), 10);
+    if (isNaN(n)) return { invalidNumber: true };
+    if (n < 1) return { minValue: true };
+    return null;
+  }
+
+  /** Подпись поля «ветка»: что выбрано — Магистраль или Отпайка от опоры X */
+  get tapBranchLabel(): string {
+    const tapId = this.poleForm?.get('tap_pole_id')?.value;
+    if (tapId == null) return 'Магистраль';
+    const tp = this.tapPolesInLine.find((p: { id: number }) => p.id === tapId);
+    return tp ? `Отпайка от ${tp.pole_number}` : 'Ветка';
+  }
+
   // Валидатор для стандартных значений напряжения
   voltageValidator(control: any): { [key: string]: any } | null {
     if (!control.value && control.value !== 0) {
@@ -694,7 +833,13 @@ export class CreateObjectDialogComponent implements OnInit {
         this.snackBar.open('ЛЭП успешно создана', 'Закрыть', {
           duration: 3000
         });
-        // Один раз обновляем дерево/карту из диалога; закрываем с объектом ЛЭП (для совместимости)
+        this.apiService.createChangeLogEntry({
+          source: 'web',
+          action: 'create',
+          entity_type: 'power_line',
+          entity_id: createdPowerLine.id,
+          payload: { name: createdPowerLine.name, mrid: createdPowerLine.mrid }
+        }).subscribe({ error: () => {} });
         this.mapService.refreshData();
         this.dialogRef.close(createdPowerLine);
       },
@@ -838,6 +983,17 @@ export class CreateObjectDialogComponent implements OnInit {
     if (field?.hasError('invalidVoltageLevel')) {
       return `Напряжение должно быть одним из стандартных значений: ${this.voltageLevels.join(', ')} кВ`;
     }
+    if (field?.hasError('yearRange')) {
+      const y = new Date().getFullYear();
+      return `Год должен быть в диапазоне 1900–${y + 5}`;
+    }
+    if (field?.hasError('maxValue')) {
+      const err = field.errors?.['maxValue'];
+      return err?.max != null ? `Максимальное значение: ${err.max}` : 'Значение слишком велико';
+    }
+    if (field?.hasError('minValue')) {
+      return 'Минимальное значение: 1';
+    }
     return '';
   }
 
@@ -873,6 +1029,13 @@ export class CreateObjectDialogComponent implements OnInit {
         this.snackBar.open('Подстанция успешно создана', 'Закрыть', {
           duration: 3000
         });
+        this.apiService.createChangeLogEntry({
+          source: 'web',
+          action: 'create',
+          entity_type: 'substation',
+          entity_id: createdSubstation.id,
+          payload: { name: createdSubstation.name, mrid: createdSubstation.mrid }
+        }).subscribe({ error: () => {} });
         this.mapService.refreshData();
         this.dialogRef.close({ success: true, data: createdSubstation });
       },

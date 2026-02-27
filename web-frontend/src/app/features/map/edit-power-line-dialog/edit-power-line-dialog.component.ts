@@ -72,6 +72,13 @@ export class EditPowerLineDialogComponent implements OnInit {
     this.apiService.updatePowerLine(this.data.powerLineId, formValue).subscribe({
       next: (updated) => {
         this.snackBar.open('ЛЭП успешно обновлена', 'Закрыть', { duration: 3000 });
+        this.apiService.createChangeLogEntry({
+          source: 'web',
+          action: 'update',
+          entity_type: 'power_line',
+          entity_id: updated.id,
+          payload: { name: updated.name, mrid: updated.mrid }
+        }).subscribe({ error: () => {} });
         this.mapService.refreshData();
         this.dialogRef.close({ success: true, powerLine: updated });
       },

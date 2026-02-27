@@ -20,27 +20,26 @@
       </form>
     </div>
 
-    <!-- Шаг 2: Форма создания опоры -->
-    <div *ngIf="selectedObjectType === 'pole'" class="step-container">
+    <!-- Шаг 2: Форма создания опоры (компактная) -->
+    <div *ngIf="selectedObjectType === 'pole'" class="step-container pole-form-compact">
       <form [formGroup]="poleForm" class="pole-form">
-        <!-- Обязательные поля -->
-        <div class="form-section">
-          <h3>Обязательные поля</h3>
+        <div class="form-section form-section--main">
+          <h3 class="section-title">Основные данные</h3>
           
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Название (номер опоры)</mat-label>
-            <input matInput formControlName="pole_number" placeholder="Например: ОП-001">
+            <mat-label>Номер опоры</mat-label>
+            <input matInput formControlName="pole_number" placeholder="ОП-001">
             <mat-error>{{ getFieldError('pole_number') }}</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Родительский объект (ЛЭП)</mat-label>
+            <mat-label>ЛЭП</mat-label>
             <input 
               type="text"
               matInput
               formControlName="power_line_id"
               [matAutocomplete]="autoPowerLine"
-              placeholder="Выберите или введите название ЛЭП">
+              placeholder="Выберите ЛЭП">
             <mat-autocomplete #autoPowerLine="matAutocomplete" [displayWith]="displayPowerLine">
               <mat-option *ngFor="let line of filteredPowerLines | async" [value]="line">
                 {{ line.name }}
@@ -49,53 +48,53 @@
             <mat-error>{{ getFieldError('power_line_id') }}</mat-error>
           </mat-form-field>
 
-          <div class="coordinates-row">
+          <!-- Ветка: магистраль или отпайка от конкретной опоры — подпись показывает выбранное значение -->
+          <mat-form-field *ngIf="showBranchChoice && tapPolesInLine.length" appearance="outline" class="full-width field-tap">
+            <mat-label>{{ tapBranchLabel }}</mat-label>
+            <mat-select formControlName="tap_pole_id" placeholder="Магистраль или отпайка">
+              <mat-option [value]="null">Магистраль</mat-option>
+              <mat-option *ngFor="let tp of tapPolesInLine" [value]="tp.id">Отпайка от {{ tp.pole_number }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <div class="row-2">
             <mat-form-field appearance="outline" class="half-width">
               <mat-label>Широта</mat-label>
-              <input matInput type="text" formControlName="latitude" placeholder="55.7558 или 55,7558">
-              <mat-hint>Используйте точку или запятую как разделитель</mat-hint>
+              <input matInput type="text" formControlName="latitude" placeholder="55.755800">
               <mat-error>{{ getFieldError('latitude') }}</mat-error>
             </mat-form-field>
-
             <mat-form-field appearance="outline" class="half-width">
               <mat-label>Долгота</mat-label>
-              <input matInput type="text" formControlName="longitude" placeholder="37.6173 или 37,6173">
-              <mat-hint>Используйте точку или запятую как разделитель</mat-hint>
+              <input matInput type="text" formControlName="longitude" placeholder="37.617300">
               <mat-error>{{ getFieldError('longitude') }}</mat-error>
             </mat-form-field>
           </div>
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Тип опоры</mat-label>
-            <mat-select formControlName="pole_type">
-              <mat-option *ngFor="let type of poleTypes" [value]="type">
-                {{ type }}
-              </mat-option>
-            </mat-select>
-            <mat-error>{{ getFieldError('pole_type') }}</mat-error>
-          </mat-form-field>
+          <div class="row-2">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Тип опоры</mat-label>
+              <mat-select formControlName="pole_type">
+                <mat-option *ngFor="let type of poleTypes" [value]="type">{{ type }}</mat-option>
+              </mat-select>
+              <mat-error>{{ getFieldError('pole_type') }}</mat-error>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Порядок</mat-label>
+              <input matInput type="number" formControlName="sequence_number" min="1" placeholder="Авто">
+              <mat-error>{{ getFieldError('sequence_number') }}</mat-error>
+            </mat-form-field>
+          </div>
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Порядок в линии</mat-label>
-            <input matInput type="number" formControlName="sequence_number" min="1" placeholder="Пусто — авто">
-            <mat-hint>1, 2, 3… Для автосборки пролётов. Не задано — следующий по линии.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Уникальный UID (MRID)</mat-label>
-            <input matInput formControlName="mrid" placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx">
-            <mat-hint>Генерируется автоматически. Можно изменить вручную (формат UUID).</mat-hint>
-            <mat-error>{{ getFieldError('mrid') }}</mat-error>
-            <button mat-icon-button matSuffix (click)="generateMRID()" type="button" matTooltip="Сгенерировать новый UID">
-              <mat-icon>refresh</mat-icon>
-            </button>
-          </mat-form-field>
+          <div class="tap-checkbox-row">
+            <mat-checkbox formControlName="is_tap">Точка отпайки</mat-checkbox>
+          </div>
         </div>
 
-        <!-- Параметры кабеля и отпаечная опора -->
-        <div class="form-section">
-          <h3>Параметры кабеля (для автоматического создания пролёта)</h3>
-
+        <!-- Дополнительно: кабель и прочее — в раскрывающихся блоках -->
+        <mat-expansion-panel class="expansion-section">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Параметры кабеля и UID</mat-panel-title>
+          </mat-expansion-panel-header>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Марка провода</mat-label>
             <mat-select formControlName="conductor_type">
@@ -103,56 +102,54 @@
               <mat-option *ngFor="let t of conductorTypes" [value]="t">{{ t }}</mat-option>
             </mat-select>
           </mat-form-field>
-
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Материал провода</mat-label>
+            <mat-label>Материал</mat-label>
             <mat-select formControlName="conductor_material">
               <mat-option value="">— не указан</mat-option>
               <mat-option *ngFor="let m of conductorMaterials" [value]="m">{{ m }}</mat-option>
             </mat-select>
           </mat-form-field>
-
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Сечение провода, мм²</mat-label>
-            <input matInput type="text" formControlName="conductor_section" placeholder="Например: 70">
+            <mat-label>Сечение, мм²</mat-label>
+            <input matInput type="text" formControlName="conductor_section" placeholder="70">
           </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>UID (MRID)</mat-label>
+            <input matInput formControlName="mrid" placeholder="UUID">
+            <button mat-icon-button matSuffix (click)="generateMRID()" type="button" matTooltip="Сгенерировать">
+              <mat-icon>refresh</mat-icon>
+            </button>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
+          </mat-form-field>
+        </mat-expansion-panel>
 
-          <div class="tap-checkbox-row">
-            <span class="tap-label">Отпаечная опора:</span>
-            <p class="tap-hint">Укажите, если это точка отпайки (завершит текущий сегмент линии)</p>
-            <mat-checkbox formControlName="is_tap">Отпаечная опора</mat-checkbox>
+        <mat-expansion-panel class="expansion-section">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Дополнительные характеристики</mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="row-2">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Высота, м</mat-label>
+              <input matInput type="number" formControlName="height" step="0.1">
+              <mat-error>{{ getFieldError('height') }}</mat-error>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Год установки</mat-label>
+              <input matInput type="number" formControlName="year_installed">
+              <mat-error>{{ getFieldError('year_installed') }}</mat-error>
+            </mat-form-field>
           </div>
-        </div>
-
-        <!-- Дополнительные поля -->
-        <div class="form-section">
-          <h3>Дополнительные характеристики</h3>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Высота (м)</mat-label>
-            <input matInput type="number" formControlName="height" step="0.1" placeholder="Например: 12.5">
-          </mat-form-field>
-
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Тип фундамента</mat-label>
-            <input matInput formControlName="foundation_type" placeholder="Например: свайный">
+            <input matInput formControlName="foundation_type">
           </mat-form-field>
-
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Материал</mat-label>
             <mat-select formControlName="material">
               <mat-option value="">Не указано</mat-option>
-              <mat-option *ngFor="let material of materials" [value]="material">
-                {{ material }}
-              </mat-option>
+              <mat-option *ngFor="let material of materials" [value]="material">{{ material }}</mat-option>
             </mat-select>
           </mat-form-field>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Год установки</mat-label>
-            <input matInput type="number" formControlName="year_installed" placeholder="Например: 2020">
-          </mat-form-field>
-
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Состояние</mat-label>
             <mat-select formControlName="condition">
@@ -161,24 +158,11 @@
               </mat-option>
             </mat-select>
           </mat-form-field>
-
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Примечания</mat-label>
-            <textarea matInput formControlName="notes" rows="3" placeholder="Дополнительная информация"></textarea>
+            <textarea matInput formControlName="notes" rows="2"></textarea>
           </mat-form-field>
-        </div>
-
-        <!-- Импорт через файл -->
-        <div class="form-section">
-          <mat-divider></mat-divider>
-          <div class="import-section">
-            <button mat-stroked-button type="button" (click)="onImportClick()" class="full-width">
-              <mat-icon>upload_file</mat-icon>
-              Создать через загрузочный шаблон
-            </button>
-            <p class="import-hint">Загрузите файл с данными опор для массового создания</p>
-          </div>
-        </div>
+        </mat-expansion-panel>
       </form>
     </div>
 

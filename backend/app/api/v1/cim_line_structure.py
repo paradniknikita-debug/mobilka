@@ -4,7 +4,7 @@ API endpoints для CIM-совместимой структуры линий э
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -283,8 +283,8 @@ async def create_acline_segment(
     
     mrid = segment_data.mrid or generate_mrid()
     
-    # Генерируем код автоматически, если не указан
-    code = segment_data.code or f"SEG-{mrid[:8].upper()}"
+    # Единый UID: code = mrid (без SEG-xxx и т.п.)
+    code = segment_data.code or mrid
     
     db_segment = AClineSegment(
         mrid=mrid,
@@ -295,6 +295,8 @@ async def create_acline_segment(
         length=segment_data.length,
         is_tap=segment_data.is_tap,
         tap_number=segment_data.tap_number,
+        branch_type=getattr(segment_data, 'branch_type', None),
+        tap_pole_id=getattr(segment_data, 'tap_pole_id', None),
         from_connectivity_node_id=segment_data.from_connectivity_node_id,
         to_connectivity_node_id=segment_data.to_connectivity_node_id,
         to_terminal_id=segment_data.to_terminal_id,
@@ -322,16 +324,18 @@ async def get_acline_segment(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Получение сегмента линии по ID (с секциями и терминалами, без ленивой загрузки)."""
+    """Получение сегмента линии по ID (с секциями, пролётами и номерами опор для карточки участка)."""
     result = await db.execute(
         select(AClineSegment)
         .options(
             selectinload(AClineSegment.line_sections)
             .selectinload(LineSection.spans)
-            .selectinload(Span.from_connectivity_node),
+            .selectinload(Span.from_connectivity_node)
+            .selectinload(ConnectivityNode.pole),
             selectinload(AClineSegment.line_sections)
             .selectinload(LineSection.spans)
-            .selectinload(Span.to_connectivity_node),
+            .selectinload(Span.to_connectivity_node)
+            .selectinload(ConnectivityNode.pole),
             selectinload(AClineSegment.terminals),
         )
         .where(AClineSegment.id == segment_id)
@@ -342,6 +346,15 @@ async def get_acline_segment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Сегмент линии не найден"
         )
+    # Чтобы «Длина (по пролётам)» совпадала с суммой длин секций в карточке — пересчитываем из секций
+    if segment.line_sections:
+        from sqlalchemy import func as sqlfunc
+        seg_len = (await db.execute(
+            select(sqlfunc.coalesce(sqlfunc.sum(LineSection.total_length), 0)).where(
+                LineSection.acline_segment_id == segment_id
+            )
+        )).scalar_one() or 0.0
+        object.__setattr__(segment, "length", seg_len)
     return segment
 
 
@@ -409,6 +422,33 @@ async def update_acline_segment(
     segment = result.scalar_one()
     
     return segment
+
+
+@router.delete("/acline-segments/{segment_id}", status_code=status.HTTP_200_OK)
+async def delete_acline_segment(
+    segment_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Удаление участка линии (AClineSegment): удаляются секции и пролёты участка."""
+    result = await db.execute(
+        select(AClineSegment)
+        .options(selectinload(AClineSegment.line_sections))
+        .where(AClineSegment.id == segment_id)
+    )
+    segment = result.scalar_one_or_none()
+    if not segment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Сегмент линии не найден"
+        )
+    # Удаляем пролёты (Span) всех секций участка, затем секции (LineSection), затем участок
+    for ls in segment.line_sections:
+        await db.execute(delete(Span).where(Span.line_section_id == ls.id))
+    await db.execute(delete(LineSection).where(LineSection.acline_segment_id == segment_id))
+    await db.execute(delete(AClineSegment).where(AClineSegment.id == segment_id))
+    await db.commit()
+    return {"message": "AClineSegment deleted", "details": "Участок линии и связанные секции и пролёты удалены."}
 
 
 # ==================== LineSection ====================

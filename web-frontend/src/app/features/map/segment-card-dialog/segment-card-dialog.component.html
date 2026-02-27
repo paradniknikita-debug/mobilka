@@ -1,7 +1,10 @@
 <div class="segment-card-dialog">
   <h2 mat-dialog-title class="dialog-title">
     <mat-icon class="title-icon">linear_scale</mat-icon>
-    Карточка участка линии
+    <span class="title-text">Карточка участка линии</span>
+    <button mat-icon-button class="close-btn" mat-dialog-close aria-label="Закрыть" title="Закрыть">
+      <mat-icon>close</mat-icon>
+    </button>
   </h2>
 
   <mat-dialog-content *ngIf="loading" class="loading">
@@ -17,7 +20,7 @@
   <mat-dialog-content *ngIf="!loading && !error && segment" class="content">
     <div class="field">
       <span class="label">Наименование</span>
-      <span class="value">{{ segment.name }}</span>
+      <span class="value">{{ segmentNameDisplay() }}</span>
     </div>
     <div class="field">
       <span class="label">Длина (по пролётам)</span>
@@ -29,18 +32,20 @@
       <table class="sections-table">
         <thead>
           <tr>
-            <th>Марка провода</th>
-            <th>Материал</th>
-            <th>Сечение</th>
-            <th>Длина</th>
+            <th class="col-range">Участок (опоры)</th>
+            <th class="col-wire">Марка провода</th>
+            <th class="col-material">Материал</th>
+            <th class="col-section">Сечение</th>
+            <th class="col-length">Длина</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let sec of lineSections">
-            <td>{{ sec.conductor_type || '—' }}</td>
-            <td>{{ sec.conductor_material || '—' }}</td>
-            <td>{{ sec.conductor_section || '—' }}</td>
-            <td>{{ sectionLengthDisplay(sec) }}</td>
+          <tr *ngFor="let sec of lineSections; let i = index">
+            <td class="col-range">{{ i + 1 }}. {{ sectionLabel(sec) }}</td>
+            <td class="col-wire">{{ sec.conductor_type || '—' }}</td>
+            <td class="col-material">{{ sec.conductor_material || '—' }}</td>
+            <td class="col-section">{{ sec.conductor_section || '—' }}</td>
+            <td class="col-length">{{ sectionLengthDisplay(sec) }}</td>
           </tr>
         </tbody>
       </table>

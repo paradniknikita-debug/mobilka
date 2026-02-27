@@ -1,5 +1,14 @@
+/* Хост должен занять высоту родителя (.sidebar-overlay), иначе .sidebar-content не ограничен и прокрутка не работает */
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sidebar-container {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -30,6 +39,52 @@
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   background: #fafafa;
   flex-wrap: wrap;
+  position: relative;
+
+  .tree-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .tree-search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 280px;
+    overflow-y: auto;
+    margin-top: 2px;
+
+    .suggestion-item {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      text-align: left;
+      font-size: 12px;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
+
+      .suggestion-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+        margin-right: 8px;
+        color: rgba(0, 0, 0, 0.54);
+      }
+    }
+  }
 
   button.mat-mdc-icon-button {
     width: 28px;
@@ -100,9 +155,31 @@
 
 .sidebar-content {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0; /* нужно для flex-ребёнка, чтобы overflow-y сработал */
+  overflow-y: scroll; /* всегда показываем ползунок */
+  overflow-x: hidden;
   padding: 0;
   background: white;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.35) rgba(0, 0, 0, 0.08);
+
+  &::-webkit-scrollbar {
+    width: 12px;
+  }
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.08);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
+    border: 3px solid rgba(0, 0, 0, 0.08);
+    background-clip: padding-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.5);
+    border: 3px solid rgba(0, 0, 0, 0.08);
+    background-clip: padding-box;
+  }
 }
 
 .loading-container {
@@ -294,6 +371,23 @@
   &.selected-pole {
     background-color: rgba(25, 118, 210, 0.12);
     border-left: 3px solid #1976d2;
+  }
+}
+
+.tap-pole-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  flex-shrink: 0;
+  &.tap-pole-dot--empty {
+    background-color: #FF9800;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  &.tap-pole-dot--filled {
+    background-color: #4CAF50;
+    border: 1px solid rgba(0, 0, 0, 0.2);
   }
 }
 

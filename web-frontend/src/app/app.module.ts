@@ -24,8 +24,10 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatRadioModule } from '@angular/material/radio';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTabsModule } from '@angular/material/tabs';
 
 // CDK Drag & Drop
 import { DragDropModule } from '@angular/cdk/drag-drop';
@@ -55,6 +57,7 @@ import { CreateSpanDialogComponent } from './features/map/create-span-dialog/cre
 import { CreateSegmentDialogComponent } from './features/map/create-segment-dialog/create-segment-dialog.component';
 import { SegmentCardDialogComponent } from './features/map/segment-card-dialog/segment-card-dialog.component';
 import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dialog/edit-power-line-dialog.component';
+import { RebuildTopologyDialogComponent } from './features/map/rebuild-topology-dialog/rebuild-topology-dialog.component';
 import { ChangeLogComponent } from './features/change-log/change-log.component';
 import { ChangeLogDetailDialogComponent } from './features/change-log/change-log-detail-dialog/change-log-detail-dialog.component';
 
@@ -73,6 +76,7 @@ import { ChangeLogDetailDialogComponent } from './features/change-log/change-log
     CreateSegmentDialogComponent,
     SegmentCardDialogComponent,
     EditPowerLineDialogComponent,
+    RebuildTopologyDialogComponent,
     ChangeLogComponent,
     ChangeLogDetailDialogComponent
   ],
@@ -104,8 +108,10 @@ import { ChangeLogDetailDialogComponent } from './features/change-log/change-log
     MatTooltipModule,
     MatSelectModule,
     MatCheckboxModule,
+    MatRadioModule,
     MatAutocompleteModule,
     MatDividerModule,
+    MatTabsModule,
 
     // CDK
     DragDropModule,

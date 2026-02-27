@@ -88,6 +88,10 @@ class Pole(Base):
     conductor_section = Column(String(20), nullable=True)  # 70, 95 и т.д. (сечение в мм²)
     # Отпаечная опора: на этой опоре заканчивается текущий ACLineSegment (участок от ПС/пред. отпайки)
     is_tap_pole = Column(Boolean, default=False, nullable=False)
+    # Магистраль/отпайка: null — до первой отпаечной, 'main' — магистраль, 'tap' — отпайка
+    branch_type = Column(String(10), nullable=True)
+    # Для опор на отпайке: id отпаечной опоры, от которой идёт эта ветка
+    tap_pole_id = Column(Integer, ForeignKey("pole.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -100,6 +104,7 @@ class Pole(Base):
     creator = relationship("User", lazy='selectin')
     equipment = relationship("Equipment", back_populates="pole", cascade="all, delete-orphan", lazy='selectin')
     location = relationship("Location", foreign_keys=[location_id], lazy='selectin')
+    tap_pole = relationship("Pole", remote_side="Pole.id", foreign_keys=[tap_pole_id])
     
     def _get_connectivity_node_safe(self):
         """Безопасное получение первого ConnectivityNode без ленивой загрузки"""

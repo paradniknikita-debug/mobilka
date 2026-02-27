@@ -18,6 +18,19 @@
   gap: 16px;
 }
 
+.branch-choice-block {
+  margin-bottom: 16px;
+  .branch-choice-label {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.87);
+  }
+  .branch-radio-group {
+    display: flex;
+    gap: 16px;
+  }
+}
+
 .loading-spinner {
   display: flex;
   align-items: center;

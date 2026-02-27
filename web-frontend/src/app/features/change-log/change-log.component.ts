@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
-import { ChangeLogEntry } from '../../core/models/change-log.model';
+import { ChangeLogEntry, ModelIssue } from '../../core/models/change-log.model';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChangeLogDetailDialogComponent } from './change-log-detail-dialog/change-log-detail-dialog.component';
 
 @Component({
@@ -15,9 +16,16 @@ export class ChangeLogComponent implements OnInit {
   loading = true;
   error: string | null = null;
 
+  issues: ModelIssue[] = [];
+  issuesColumns: string[] = ['issue_type', 'entity_type', 'entity_uid', 'line_uid', 'message'];
+  issuesLoading = false;
+  issuesError: string | null = null;
+  selectedTabIndex = 0;
+
   constructor(
     private apiService: ApiService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar
   ) {}
 
   ngOnInit(): void {
@@ -37,6 +45,27 @@ export class ChangeLogComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  loadIssues(): void {
+    this.issuesLoading = true;
+    this.issuesError = null;
+    this.apiService.getChangeLogErrors().subscribe({
+      next: (list) => {
+        this.issues = list || [];
+        this.issuesLoading = false;
+      },
+      error: (err) => {
+        this.issuesError = err.error?.detail || err.message || 'Ошибка загрузки несоответствий';
+        this.issuesLoading = false;
+      }
+    });
+  }
+
+  onTabChange(index: number): void {
+    if (index === 1 && this.issues.length === 0 && !this.issuesLoading) {
+      this.loadIssues();
+    }
   }
 
   getName(entry: ChangeLogEntry): string {
@@ -83,7 +112,30 @@ export class ChangeLogComponent implements OnInit {
   }
 
   sourceLabel(source: string): string {
-    return source === 'web' ? 'Веб' : source === 'flutter' ? 'Flutter' : source;
+    return source === 'web' ? 'Веб' : source === 'flutter' ? 'Мобильное' : source;
+  }
+
+  issueTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      orphan_pole: 'Опора без ЛЭП',
+      orphan_span: 'Пролёт без секции',
+      tap_pole_without_tap: 'Отпаечная опора без отпайки',
+      line_break: 'Обрыв линии',
+      orphan_connectivity_node: 'Узел без ЛЭП',
+      orphan_line_section: 'Секция без участка'
+    };
+    return labels[type] ?? type;
+  }
+
+  entityTypeLabelForIssue(type: string): string {
+    const labels: Record<string, string> = {
+      pole: 'Опора',
+      span: 'Пролёт',
+      acline_segment: 'Участок',
+      connectivity_node: 'Узел соединения',
+      line_section: 'Секция линии'
+    };
+    return labels[type] ?? type;
   }
 
   openDetail(entry: ChangeLogEntry): void {
@@ -92,5 +144,21 @@ export class ChangeLogComponent implements OnInit {
       maxHeight: '90vh',
       data: { entry }
     });
+  }
+
+  /** Показать UID сокращённо (начало + «...») для копирования по клику */
+  formatUidForDisplay(uid: string | null | undefined): string {
+    if (!uid) return '—';
+    return uid.length <= 12 ? uid : uid.slice(0, 8) + '…';
+  }
+
+  copyUidToClipboard(uid: string | null | undefined, event?: Event): void {
+    if (!uid) return;
+    event?.preventDefault();
+    event?.stopPropagation();
+    navigator.clipboard.writeText(uid).then(
+      () => this.snackBar.open('UID скопирован', 'Закрыть', { duration: 2000 }),
+      () => this.snackBar.open('Не удалось скопировать', 'Закрыть', { duration: 2000 })
+    );
   }
 }

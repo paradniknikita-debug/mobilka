@@ -23,7 +23,8 @@ class ConnectivityNodeCreate(ConnectivityNodeBase):
 class ConnectivityNodeResponse(ConnectivityNodeBase):
     id: int
     mrid: str
-    pole_id: int
+    pole_id: Optional[int] = None
+    pole_number: Optional[str] = None  # номер опоры для отображения (оп.X-оп.Y)
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -99,11 +100,13 @@ class LineSectionResponse(LineSectionBase):
 
 class AClineSegmentBase(BaseModel):
     name: str
-    code: Optional[str] = None  # Генерируется автоматически, если не указан
-    voltage_level: float  # кВ
-    length: float  # км
+    code: Optional[str] = None
+    voltage_level: float
+    length: float
     is_tap: bool = False
     tap_number: Optional[str] = None
+    branch_type: Optional[str] = None   # 'main' | 'tap'
+    tap_pole_id: Optional[int] = None   # id отпаечной опоры для участка-отпайки
     sequence_number: int = 1
     # Параметры по умолчанию (могут переопределяться в LineSection)
     conductor_type: Optional[str] = None

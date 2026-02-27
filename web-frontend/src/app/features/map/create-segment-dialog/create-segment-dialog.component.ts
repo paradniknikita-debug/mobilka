@@ -18,6 +18,11 @@ export class CreateSegmentDialogComponent implements OnInit {
   poles: Pole[] = [];
   isLoading = false;
   
+  /** Показывать выбор «По магистрали» / «По отпайке», если начальная опора — отпаечная */
+  showBranchChoice = false;
+  /** Начальная опора (для tap_pole_id при выборе «По отпайке») */
+  fromPoleForBranch: Pole | null = null;
+  
   // Режим редактирования
   isEditMode = false;
   segmentId?: number;
@@ -47,12 +52,20 @@ export class CreateSegmentDialogComponent implements OnInit {
       to_pole_id: ['', Validators.required],
       is_tap: [false],
       tap_number: [''],
-      description: ['']
+      description: [''],
+      branch_type: ['main']
     });
   }
 
   ngOnInit(): void {
     this.loadPoles();
+    this.segmentForm.get('from_pole_id')?.valueChanges.subscribe((fromId: number) => {
+      this.fromPoleForBranch = fromId ? (this.poles.find(p => p.id === fromId) ?? null) : null;
+      this.showBranchChoice = !!(this.fromPoleForBranch && (this.fromPoleForBranch as any).is_tap_pole);
+      if (this.showBranchChoice && !this.segmentForm.get('branch_type')?.value) {
+        this.segmentForm.patchValue({ branch_type: 'main' });
+      }
+    });
   }
   
   loadSegment(): void {
@@ -76,8 +89,13 @@ export class CreateSegmentDialogComponent implements OnInit {
           to_pole_id: toPole?.id || this.segmentForm.get('to_pole_id')?.value || '',
           is_tap: segment.is_tap || false,
           tap_number: segment.tap_number || '',
-          description: segment.description || ''
+          description: segment.description || '',
+          branch_type: (segment as any).branch_type === 'tap' ? 'tap' : 'main'
         });
+        if (fromPole && (fromPole as any).is_tap_pole) {
+          this.fromPoleForBranch = fromPole;
+          this.showBranchChoice = true;
+        }
         this.isLoading = false;
       },
       error: (error) => {
@@ -94,6 +112,11 @@ export class CreateSegmentDialogComponent implements OnInit {
       next: (poles) => {
         this.poles = poles || [];
         this.isLoading = false;
+        const fromId = this.segmentForm.get('from_pole_id')?.value;
+        if (fromId) {
+          this.fromPoleForBranch = this.poles.find(p => p.id === fromId) ?? null;
+          this.showBranchChoice = !!(this.fromPoleForBranch && (this.fromPoleForBranch as any).is_tap_pole);
+        }
         // Если режим редактирования, загружаем данные участка после загрузки опор
         if (this.isEditMode && this.segmentId) {
           setTimeout(() => {
@@ -147,7 +170,11 @@ export class CreateSegmentDialogComponent implements OnInit {
       from_connectivity_node_id: fromPole.connectivity_node_id!,
       to_connectivity_node_id: toPole.connectivity_node_id!,
       is_tap: formValue.is_tap || false,
-      tap_number: formValue.tap_number || undefined
+      tap_number: formValue.tap_number || undefined,
+      branch_type: this.showBranchChoice && formValue.branch_type ? formValue.branch_type : undefined,
+      tap_pole_id: this.showBranchChoice && formValue.branch_type === 'tap' && this.fromPoleForBranch
+        ? this.fromPoleForBranch.id
+        : undefined
     };
 
     // Используем API для создания или обновления участка

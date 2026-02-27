@@ -25,3 +25,14 @@ export interface ChangeLogFilters {
   limit?: number;
   offset?: number;
 }
+
+export interface ModelIssue {
+  issue_type: string;
+  entity_type: string;
+  entity_id: number | null;
+  line_id: number | null;
+  message: string;
+  details: Record<string, unknown> | null;
+  entity_uid?: string | null;
+  line_uid?: string | null;
+}

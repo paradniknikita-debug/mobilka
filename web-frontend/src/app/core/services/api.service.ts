@@ -16,7 +16,7 @@ import {
   Span, SpanCreate,
   PoleSequenceResponse
 } from '../models/cim.model';
-import { ChangeLogEntry } from '../models/change-log.model';
+import { ChangeLogEntry, ChangeLogFilters, ModelIssue } from '../models/change-log.model';
 
 @Injectable({
   providedIn: 'root'
@@ -65,8 +65,9 @@ export class ApiService {
     return this.http.put<PowerLine>(`${this.apiUrl}/power-lines/${id}`, powerLine);
   }
 
-  deletePowerLine(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/power-lines/${id}`);
+  deletePowerLine(id: number, cascade: boolean = true): Observable<void> {
+    const params = new HttpParams().set('cascade', String(cascade));
+    return this.http.delete<void>(`${this.apiUrl}/power-lines/${id}`, { params });
   }
 
   // ========== Poles ==========
@@ -130,8 +131,9 @@ export class ApiService {
     return this.http.delete<void>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`);
   }
 
-  autoCreateSpans(powerLineId: number): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/power-lines/${powerLineId}/spans/auto-create`, {});
+  autoCreateSpans(powerLineId: number, mode: 'full' | 'preserve' = 'preserve'): Observable<any> {
+    const params = new HttpParams().set('mode', mode);
+    return this.http.post<any>(`${this.apiUrl}/power-lines/${powerLineId}/spans/auto-create`, {}, { params });
   }
 
   // ========== Equipment ==========
@@ -244,7 +246,9 @@ export class ApiService {
 
   // AClineSegment
   createAClineSegment(segment: AClineSegmentCreate): Observable<AClineSegment> {
-    return this.http.post<AClineSegment>(`${this.apiUrl}/cim/acline-segments`, segment);
+    const body = { ...segment, line_id: segment.power_line_id } as any;
+    delete body.power_line_id;
+    return this.http.post<AClineSegment>(`${this.apiUrl}/cim/acline-segments`, body);
   }
 
   getAClineSegment(id: number): Observable<AClineSegment> {
@@ -252,7 +256,13 @@ export class ApiService {
   }
 
   updateAClineSegment(id: number, segment: AClineSegmentCreate): Observable<AClineSegment> {
-    return this.http.put<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`, segment);
+    const body = { ...segment, line_id: segment.power_line_id } as any;
+    delete body.power_line_id;
+    return this.http.put<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`, body);
+  }
+
+  deleteAClineSegment(id: number): Observable<{message?: string; details?: string}> {
+    return this.http.delete<{message?: string; details?: string}>(`${this.apiUrl}/cim/acline-segments/${id}`);
   }
 
   // LineSection
@@ -290,8 +300,8 @@ export class ApiService {
     return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${powerLineId}/poles/sequence`);
   }
 
-  // ========== Журнал изменений ==========
-  getChangeLog(params?: { source?: string; action?: string; entity_type?: string; limit?: number; offset?: number }): Observable<ChangeLogEntry[]> {
+  // ========== Журнал (изменения + несоответствия) ==========
+  getChangeLog(params?: ChangeLogFilters): Observable<ChangeLogEntry[]> {
     let httpParams = new HttpParams();
     if (params?.source) httpParams = httpParams.set('source', params.source);
     if (params?.action) httpParams = httpParams.set('action', params.action);
@@ -299,6 +309,21 @@ export class ApiService {
     if (params?.limit != null) httpParams = httpParams.set('limit', params.limit.toString());
     if (params?.offset != null) httpParams = httpParams.set('offset', params.offset.toString());
     return this.http.get<ChangeLogEntry[]>(`${this.apiUrl}/change-log`, { params: httpParams });
+  }
+
+  getChangeLogErrors(): Observable<ModelIssue[]> {
+    return this.http.get<ModelIssue[]>(`${this.apiUrl}/change-log/errors`);
+  }
+
+  createChangeLogEntry(data: {
+    source: string;
+    action: string;
+    entity_type: string;
+    entity_id?: number | null;
+    payload?: Record<string, unknown> | null;
+    session_id?: string | null;
+  }): Observable<ChangeLogEntry> {
+    return this.http.post<ChangeLogEntry>(`${this.apiUrl}/change-log`, data);
   }
 }
 

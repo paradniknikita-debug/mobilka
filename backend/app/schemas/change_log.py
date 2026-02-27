@@ -26,3 +26,18 @@ class ChangeLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ModelIssueResponse(BaseModel):
+    """Одна запись журнала несоответствий (ошибки модели данных)."""
+    issue_type: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    line_id: Optional[int] = None
+    message: str
+    details: Optional[dict] = None
+    entity_uid: Optional[str] = None
+    line_uid: Optional[str] = None
+
+    class Config:
+        from_attributes = True

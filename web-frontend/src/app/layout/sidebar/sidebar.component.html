@@ -10,12 +10,20 @@
     <button mat-icon-button (click)="treeRedo()" [disabled]="!canTreeRedo()" matTooltip="Вперёд (вернуть изменение)">
       <mat-icon>redo</mat-icon>
     </button>
+    <div class="tree-search-wrap">
     <mat-form-field class="tree-search-field" appearance="outline" subscriptSizing="dynamic">
-      <input matInput placeholder="Поиск по UID или названию" [(ngModel)]="treeSearchQuery" (keyup.enter)="treeSearch()">
+      <input matInput placeholder="Поиск по UID или названию" [(ngModel)]="treeSearchQuery" (input)="onSearchInput()" (keyup.enter)="treeSearch()">
       <button mat-icon-button matSuffix (click)="treeSearch()" matTooltip="Найти в дереве">
         <mat-icon>search</mat-icon>
       </button>
     </mat-form-field>
+    <div class="tree-search-suggestions" *ngIf="treeSearchSuggestions.length > 0">
+      <button type="button" class="suggestion-item" *ngFor="let s of treeSearchSuggestions" (click)="applySearchResult(s)">
+        <mat-icon class="suggestion-icon">{{ s.type === 'power_line' ? 'electrical_services' : s.type === 'segment' ? 'linear_scale' : s.type === 'pole' ? 'account_tree' : 'swap_horiz' }}</mat-icon>
+        <span>{{ s.label }}</span>
+      </button>
+    </div>
+    </div>
     <button mat-icon-button (click)="treeCollapseAll()" matTooltip="Свернуть дерево">
       <mat-icon>unfold_less</mat-icon>
     </button>
@@ -23,30 +31,28 @@
 
   <div class="sidebar-content" *ngIf="!isLoading">
     <div *ngFor="let item of getPowerLinesWithSegmentsAndPoles()" class="tree-item">
-      <!-- ЛЭП -->
+      <!-- ЛЭП: раскрытие только по стрелке, по клику на название — без зума -->
       <div class="tree-node power-line-node" 
-           (click)="togglePowerLine(item.powerLine.properties['id'])"
            (contextmenu)="onFeatureRightClick(item.powerLine, $event)"
            [class.expanded]="isPowerLineExpanded(item.powerLine.properties['id'])">
-        <mat-icon class="expand-icon">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+        <mat-icon class="expand-icon" (click)="togglePowerLine(item.powerLine.properties['id']); $event.stopPropagation()">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
         <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">electrical_services</mat-icon>
-        <span class="node-label" (click)="onFeatureClick(item.powerLine, $event)">{{ item.powerLine.properties['name'] || 'Без названия' }}</span>
+        <span class="node-label">{{ item.powerLine.properties['name'] || 'Без названия' }}</span>
         <span class="node-description">{{ item.powerLine.properties['voltage_level'] }} кВ</span>
       </div>
       
       <!-- Вложенные элементы ЛЭП: участки (под каждым — пролёты без папки) и одна папка «Опоры» -->
       <div *ngIf="isPowerLineExpanded(item.powerLine.properties['id'])" class="tree-children">
-        <!-- Участки линии: под каждым участком — пролёты напрямую -->
+        <!-- Участки: раскрытие только по стрелке, по клику на строку — зум на участок -->
         <div *ngFor="let segment of item.segments" class="tree-node segment-node">
           <div class="tree-node-header" 
-               (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId)"
-               (dblclick)="segment.segmentId != null && openSegmentCard(segment.segmentId, item.powerLine.properties['id'], segment.segmentName)"
                (contextmenu)="onSegmentRightClick(segment.segmentId, item.powerLine.properties['id'], $event)"
+               (dblclick)="segment.segmentId != null && openSegmentCard(segment.segmentId, item.powerLine.properties['id'], segment.segmentName)"
                [class.expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId)">
-            <mat-icon class="expand-icon">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <mat-icon class="expand-icon" (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId); $event.stopPropagation()">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId) ? 'expand_more' : 'chevron_right' }}</mat-icon>
             <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">linear_scale</mat-icon>
-            <span class="node-label">{{ segment.segmentName || 'Участок ' + segment.segmentId }}</span>
-            <span class="node-description">{{ segment.spans.length }} прол.</span>
+            <span class="node-label" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ getSegmentDisplayName(segment) }}</span>
+            <span class="node-description" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ segment.spans.length }} прол.</span>
           </div>
           
           <!-- Пролёты участка (без обобщающей папки) -->
@@ -57,18 +63,17 @@
                  (contextmenu)="onFeatureRightClick(span, $event)"
                  [matTooltip]="span.properties['mrid'] ? 'UID: ' + span.properties['mrid'] : ''">
               <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">swap_horiz</mat-icon>
-              <span class="node-label">{{ span.properties['span_number'] || 'N/A' }}</span>
+              <span class="node-label">{{ getSpanDisplayName(span) }}</span>
             </div>
           </div>
         </div>
         
-        <!-- Одна папка «Опоры» на уровне участков -->
+        <!-- Папка «Опоры»: раскрытие только по стрелке -->
         <div *ngIf="item.allPoles.length > 0" class="poles-folder-wrapper">
           <div class="tree-node-header poles-folder-header"
-               (click)="togglePolesFolder(item.powerLine.properties['id'], 'all-poles')"
                (contextmenu)="onFolderRightClick('poles', item.powerLine.properties['id'], null, $event)"
                [class.expanded]="isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles')">
-            <mat-icon class="expand-icon">{{ isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <mat-icon class="expand-icon" (click)="togglePolesFolder(item.powerLine.properties['id'], 'all-poles'); $event.stopPropagation()">{{ isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles') ? 'expand_more' : 'chevron_right' }}</mat-icon>
             <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">folder</mat-icon>
             <span class="node-label">Опоры ({{ item.allPoles.length }})</span>
           </div>
@@ -82,6 +87,11 @@
                  [matTooltip]="pole.properties['mrid'] ? 'UID: ' + pole.properties['mrid'] : ''">
               <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">account_tree</mat-icon>
               <span class="node-label">{{ pole.properties['pole_number'] || 'N/A' }}</span>
+              <span *ngIf="pole.properties['is_tap_pole']" 
+                    class="tap-pole-dot" 
+                    [class.tap-pole-dot--filled]="pole.properties['tap_branch_has_poles']"
+                    [class.tap-pole-dot--empty]="!pole.properties['tap_branch_has_poles']"
+                    [matTooltip]="pole.properties['tap_branch_has_poles'] ? 'Отпайка построена' : 'Отпайка не начата'"></span>
             </div>
           </div>
         </div>
@@ -176,6 +186,10 @@
   </ng-container>
   
   <ng-container *ngIf="contextMenuType === 'pole' || contextMenuType === 'span'">
+    <button mat-menu-item *ngIf="contextMenuType === 'pole' && isContextMenuPoleTapAndEmpty()" (click)="onContinueTapFromPole()">
+      <mat-icon>call_split</mat-icon>
+      <span>Продолжить отпайку</span>
+    </button>
     <button mat-menu-item (click)="onEditObject()">
       <mat-icon>edit</mat-icon>
       <span>Редактировать</span>

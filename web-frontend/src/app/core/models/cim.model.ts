@@ -7,6 +7,7 @@ export interface ConnectivityNode {
   mrid: string;
   name: string;
   pole_id: number;
+  pole_number?: string | null;
   latitude: number;
   longitude: number;
   description?: string;
@@ -62,7 +63,7 @@ export interface LineSection {
   b?: number;
   g?: number;
   sequence_number: number;
-  total_length?: number;
+  total_length?: number;  // в км на бэкенде
   description?: string;
   created_by: number;
   created_at: string;
@@ -115,6 +116,8 @@ export interface AClineSegment {
   updated_at?: string;
   line_sections?: LineSection[];
   terminals?: Terminal[];
+  branch_type?: string;
+  tap_pole_id?: number;
 }
 
 export interface AClineSegmentCreate {
@@ -138,6 +141,8 @@ export interface AClineSegmentCreate {
   g?: number;
   description?: string;
   mrid?: string;
+  branch_type?: string;
+  tap_pole_id?: number;
 }
 
 export interface Span {

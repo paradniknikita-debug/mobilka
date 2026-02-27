@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import re
 import uuid
 from pydantic import BaseModel
@@ -18,8 +18,9 @@ from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.schemas.power_line import (
     PowerLineCreate, PowerLineUpdate, PowerLineResponse, PoleCreate, PoleResponse,
-    SpanCreate, SpanResponse, TapCreate, TapResponse, EquipmentCreate, EquipmentResponse
+    SpanCreate, SpanUpdate, SpanResponse, TapCreate, TapResponse, EquipmentCreate, EquipmentResponse
 )
+from app.schemas.cim_line_structure import ConnectivityNodeResponse
 
 router = APIRouter()
 
@@ -413,6 +414,10 @@ async def create_pole(
     pole_dict.pop('id', None)
     if pole_dict.get('pole_number') is not None:
         pole_dict['pole_number'] = normalize_pole_number(pole_dict['pole_number'])
+    if getattr(pole_data, 'branch_type', None) is not None:
+        pole_dict['branch_type'] = pole_data.branch_type
+    if getattr(pole_data, 'tap_pole_id', None) is not None:
+        pole_dict['tap_pole_id'] = pole_data.tap_pole_id
 
     lon_val = getattr(pole_data, 'x_position', None)
     lat_val = getattr(pole_data, 'y_position', None)
@@ -431,13 +436,25 @@ async def create_pole(
         db.add(db_pole)
         await db.flush()  # Получаем ID опоры
 
-        # Порядок опоры: если не передан — назначаем следующий по линии (для автосборки пролётов)
+        # Порядок опоры: если не передан — для отпайки считаем в рамках ветки (1, 2, …), иначе следующий по магистрали
         if db_pole.sequence_number is None:
-            from sqlalchemy import func as sql_func
-            max_seq = await db.execute(
-                select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(Pole.line_id == power_line_id)
-            )
-            db_pole.sequence_number = (max_seq.scalar() or 0) + 1
+            tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
+            if tap_pole_id_val is not None:
+                from sqlalchemy import func as sql_func
+                max_tap = await db.execute(
+                    select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(
+                        Pole.line_id == power_line_id, Pole.tap_pole_id == tap_pole_id_val
+                    )
+                )
+                db_pole.sequence_number = (max_tap.scalar() or 0) + 1
+            else:
+                from sqlalchemy import func as sql_func
+                max_seq = await db.execute(
+                    select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(
+                        Pole.line_id == power_line_id, Pole.tap_pole_id.is_(None)
+                    )
+                )
+                db_pole.sequence_number = (max_seq.scalar() or 0) + 1
             await db.flush()
 
         # CIM: координаты только в PositionPoint
@@ -544,6 +561,81 @@ async def get_poles(
     
     return poles
 
+
+@router.get("/{power_line_id}/poles/sequence")
+async def get_poles_sequence(
+    power_line_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Опоры линии в порядке sequence_number (для диалога редактирования пролёта). Маршрут задан явно, чтобы не перехватывался .../poles/{pole_id}."""
+    from datetime import datetime, timezone
+    from pydantic import ValidationError
+
+    result = await db.execute(
+        select(Pole)
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
+        .where(Pole.line_id == power_line_id)
+        .order_by(Pole.sequence_number.asc().nulls_last(), Pole.pole_number.asc())
+    )
+    poles = result.scalars().all()
+    out = []
+    for pole in poles:
+        mrid = getattr(pole, "mrid", None) or ""
+        pole_number = getattr(pole, "pole_number", None) or ""
+        pole_type = getattr(pole, "pole_type", None) or ""
+        created_by = getattr(pole, "created_by", None) or 0
+        _created_at = getattr(pole, "created_at", None)
+        created_at = _created_at.isoformat() if hasattr(_created_at, "isoformat") else datetime.now(timezone.utc).isoformat()
+        x_pos = getattr(pole, "x_position", None)
+        y_pos = getattr(pole, "y_position", None)
+        x_pos = 0.0 if x_pos is None else float(x_pos)
+        y_pos = 0.0 if y_pos is None else float(y_pos)
+        cn = pole.get_connectivity_node_for_line(power_line_id)
+        cn_out = None
+        cn_id = None
+        if cn is not None and getattr(cn, "pole_id", None) is not None:
+            try:
+                cn_out = ConnectivityNodeResponse.model_validate(cn).model_dump()
+                cn_id = cn.id
+            except (ValidationError, TypeError):
+                pass
+        _updated_at = getattr(pole, "updated_at", None)
+        updated_at = _updated_at.isoformat() if _updated_at and hasattr(_updated_at, "isoformat") else None
+        out.append({
+            "id": pole.id,
+            "mrid": mrid,
+            "line_id": pole.line_id,
+            "connectivity_node_id": cn_id,
+            "pole_number": pole_number,
+            "pole_type": pole_type,
+            "x_position": x_pos,
+            "y_position": y_pos,
+            "sequence_number": getattr(pole, "sequence_number", None),
+            "height": getattr(pole, "height", None),
+            "foundation_type": getattr(pole, "foundation_type", None),
+            "material": getattr(pole, "material", None),
+            "year_installed": getattr(pole, "year_installed", None),
+            "condition": getattr(pole, "condition", None) or "good",
+            "notes": getattr(pole, "notes", None),
+            "conductor_type": getattr(pole, "conductor_type", None),
+            "conductor_material": getattr(pole, "conductor_material", None),
+            "conductor_section": getattr(pole, "conductor_section", None),
+            "is_tap_pole": bool(getattr(pole, "is_tap_pole", False)),
+            "branch_type": getattr(pole, "branch_type", None),
+            "tap_pole_id": getattr(pole, "tap_pole_id", None),
+            "created_by": created_by,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "connectivity_node": cn_out,
+        })
+    return out
+
+
 @router.get("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
 async def get_pole(
     power_line_id: int,
@@ -647,6 +739,10 @@ async def update_pole(
 
     if "is_tap" in pole_data.dict(exclude_unset=True):
         pole.is_tap_pole = pole_data.is_tap
+    if "branch_type" in pole_dict:
+        pole.branch_type = pole_dict.get("branch_type")
+    if "tap_pole_id" in pole_dict:
+        pole.tap_pole_id = pole_dict.get("tap_pole_id")
     if "pole_number" in pole_dict and pole_dict["pole_number"] is not None:
         pole_dict["pole_number"] = normalize_pole_number(pole_dict["pole_number"])
     for key, value in pole_dict.items():
@@ -722,10 +818,11 @@ async def update_pole(
                         from app.models.acline_segment import AClineSegment as ACS
                         from app.models.base import generate_mrid
                         seg_count = (await db.execute(select(func.count(ACS.id)).where(ACS.line_id == power_line_id))).scalar_one() or 0
+                        seg_mrid = generate_mrid()
                         new_seg = ACS(
-                            mrid=generate_mrid(),
+                            mrid=seg_mrid,
                             name=f"Участок от оп. {pole.pole_number}",
-                            code=f"SEG-{power_line.mrid[:8].upper()}-{seg_count + 1}",
+                            code=seg_mrid,
                             line_id=power_line_id,
                             is_tap=False,
                             from_connectivity_node_id=pole_cn.id,
@@ -929,16 +1026,13 @@ async def create_span(
         existing_segment = result_segment.scalar_one_or_none()
         
         if not existing_segment:
-            # Создаём временный AClineSegment
+            # Создаём временный AClineSegment (единый UID = mrid)
             from app.models.base import generate_mrid
-            # Генерируем короткий код (максимум 20 символов)
-            # Формат: SEG-{короткий UUID} (например: SEG-A1B2C3D4)
-            short_uuid = str(uuid.uuid4()).replace('-', '')[:8].upper()
-            segment_code = f"SEG-{short_uuid}"  # Максимум 12 символов
+            seg_mrid = generate_mrid()
             temp_segment = AClineSegment(
-                mrid=generate_mrid(),
+                mrid=seg_mrid,
                 name=f"Сегмент {power_line.name}",
-                code=segment_code,
+                code=seg_mrid,
                 voltage_level=power_line.voltage_level or 0.0,
                 length=0.0,
                 line_id=power_line_id,
@@ -1045,7 +1139,7 @@ async def get_span(
 async def update_span(
     power_line_id: int,
     span_id: int,
-    span_data: SpanCreate,
+    span_data: SpanUpdate,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1261,14 +1355,14 @@ async def delete_span(
 @router.post("/{power_line_id}/spans/auto-create")
 async def auto_create_spans(
     power_line_id: int,
+    mode: str = Query("preserve", description="full — пересобрать с нуля (удалить существующие); preserve — добавить только недостающие"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Автоматическое создание пролётов на основе последовательности опор.
-    Создаёт пролёты между соседними опорами в порядке sequence_number,
-    а также участки линии (AClineSegment) и секции линии (LineSection)
-    по той же логике, что и при пошаговом добавлении опор.
+    - mode=preserve (по умолчанию): существующие пролёты сохраняются, добавляются только недостающие.
+    - mode=full: существующие пролёты и участки линии удаляются, топология строится с нуля.
     """
     from app.models.base import generate_mrid
 
@@ -1280,19 +1374,60 @@ async def auto_create_spans(
             detail="Power line not found"
         )
     
-    # Получаем опоры, отсортированные по sequence_number
+    if mode == "full":
+        # Удаляем все пролёты и участки линии для пересборки с нуля
+        from app.models.cim_line_structure import LineSection
+        segment_ids_subq = select(AClineSegment.id).where(AClineSegment.line_id == power_line_id)
+        line_section_ids_subq = select(LineSection.id).where(LineSection.acline_segment_id.in_(segment_ids_subq))
+        await db.execute(delete(Span).where(Span.line_section_id.in_(line_section_ids_subq)))
+        await db.execute(delete(LineSection).where(LineSection.acline_segment_id.in_(segment_ids_subq)))
+        await db.execute(delete(AClineSegment).where(AClineSegment.line_id == power_line_id))
+        await db.flush()
+    
+    # Получаем опоры с sequence_number (все ветки)
     result = await db.execute(
         select(Pole)
         .where(Pole.line_id == power_line_id)
         .where(Pole.sequence_number.isnot(None))
-        .order_by(Pole.sequence_number)
+        .options(selectinload(Pole.connectivity_nodes))
     )
-    poles = result.scalars().all()
+    all_poles = result.scalars().all()
+
+    # Строим пролёты по ветвям: магистраль (tap_pole_id is None) + каждая отпайка (tap_pole_id = id отпаечной опоры)
+    # Магистраль: сортировка по sequence_number
+    main_poles = sorted(
+        [p for p in all_poles if getattr(p, "tap_pole_id", None) is None],
+        key=lambda p: (p.sequence_number or 0),
+    )
+    # Пары (from_pole, to_pole) для магистрали
+    span_pairs: List[Tuple[Pole, Pole]] = []
+    for i in range(1, len(main_poles)):
+        span_pairs.append((main_poles[i - 1], main_poles[i]))
+
+    # Отпайки: для каждой отпаечной опоры — цепочка от неё к опорам с tap_pole_id = её id
+    tap_pole_ids = {getattr(p, "tap_pole_id", None) for p in all_poles if getattr(p, "tap_pole_id", None) is not None}
+    poles_by_id = {p.id: p for p in all_poles}
+    for tpid in tap_pole_ids:
+        tap_pole = poles_by_id.get(tpid)
+        if not tap_pole:
+            continue
+        branch_poles = sorted(
+            [p for p in all_poles if getattr(p, "tap_pole_id", None) == tpid],
+            key=lambda p: (p.sequence_number or 0),
+        )
+        if not branch_poles:
+            continue
+        # Пролёт от отпаечной опоры к первой опоре отпайки
+        span_pairs.append((tap_pole, branch_poles[0]))
+        for i in range(1, len(branch_poles)):
+            span_pairs.append((branch_poles[i - 1], branch_poles[i]))
+
+    poles = all_poles  # для создания узлов ниже
     
-    if len(poles) < 2:
+    if len(span_pairs) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Для создания пролётов необходимо минимум 2 опоры с заданной последовательностью"
+            detail="Для создания пролётов необходимо минимум 2 опоры с заданной последовательностью (магистраль или отпайка)"
         )
     
     # Проверяем, что у всех опор есть ConnectivityNode для этой линии
@@ -1334,9 +1469,7 @@ async def auto_create_spans(
     from app.core.line_auto_assembly import auto_create_span
 
     created_spans = []
-    for i in range(1, len(poles)):
-        from_pole = poles[i - 1]
-        to_pole = poles[i]
+    for from_pole, to_pole in span_pairs:
         existing_span = await db.execute(
             select(Span).where(
                 Span.from_pole_id == from_pole.id,
@@ -1409,6 +1542,7 @@ async def create_tap(
 @router.delete("/{power_line_id}", status_code=status.HTTP_200_OK)
 async def delete_power_line(
     power_line_id: int,
+    cascade: bool = Query(True, description="При True удалить ЛЭП и все дочерние объекты; при False — только саму ЛЭП, если дочерних нет"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1451,14 +1585,42 @@ async def delete_power_line(
             select(func.count(AClineSegment.id)).where(AClineSegment.line_id == power_line_id)
         )
         
-        print(f"DEBUG: Связанные объекты - Опоры: {poles_count.scalar()}, Пролёты: {spans_count.scalar()}, Сегменты: {segments_count.scalar()}")
+        poles_n = poles_count.scalar() or 0
+        spans_n = spans_count.scalar() or 0
+        segments_n = segments_count.scalar() or 0
         
-        # Удаляем ConnectivityNode, связанные с опорами этой ЛЭП
-        # Это нужно сделать перед удалением опор, чтобы избежать ошибки NOT NULL constraint
+        print(f"DEBUG: Связанные объекты - Опоры: {poles_n}, Пролёты: {spans_n}, Сегменты: {segments_n}")
+        
+        if not cascade and (poles_n > 0 or spans_n > 0 or segments_n > 0):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Невозможно удалить только ЛЭП: есть дочерние элементы (опоры, пролёты). Удалите их отдельно или выберите каскадное удаление."
+            )
+        
+        if not cascade and poles_n == 0 and spans_n == 0 and segments_n == 0:
+            from app.models.substation import Substation
+            patrol_sessions_stmt = delete(PatrolSession).where(PatrolSession.line_id == power_line_id)
+            await db.execute(patrol_sessions_stmt)
+            substations_result = await db.execute(select(Substation).where(Substation.connected_line_ids.isnot(None)))
+            for substation in substations_result.scalars().all():
+                if substation.connected_line_ids and power_line_id in substation.connected_line_ids:
+                    substation.connected_line_ids = [lid for lid in substation.connected_line_ids if lid != power_line_id]
+            await db.delete(power_line)
+            await db.commit()
+            print(f"DEBUG: ЛЭП {power_line_id} удалена (без дочерних)")
+            return {"message": "Power line deleted successfully"}
+        
+        # Каскадное удаление
         connectivity_nodes_result = await db.execute(
             select(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id)
         )
         connectivity_nodes = connectivity_nodes_result.scalars().all()
+        
+        # Сначала удаляем ВСЕ пролёты (Span), ссылающиеся на LineSection этой линии,
+        # иначе при удалении LineSection получим нарушение FK span_line_section_id_fkey
+        segment_ids_subq = select(AClineSegment.id).where(AClineSegment.line_id == power_line_id)
+        line_section_ids_subq = select(LineSection.id).where(LineSection.acline_segment_id.in_(segment_ids_subq))
+        await db.execute(delete(Span).where(Span.line_section_id.in_(line_section_ids_subq)))
         
         # Для каждого ConnectivityNode нужно удалить связанные объекты
         for cn in connectivity_nodes:
@@ -1511,6 +1673,11 @@ async def delete_power_line(
         for substation in substations_result.scalars().all():
             if substation.connected_line_ids and power_line_id in substation.connected_line_ids:
                 substation.connected_line_ids = [lid for lid in substation.connected_line_ids if lid != power_line_id]
+        
+        # Обнуляем самоссылки и ссылки на опоры, чтобы каскадное удаление не упало на FK:
+        # Pole.tap_pole_id -> Pole.id и AClineSegment.tap_pole_id -> Pole.id
+        await db.execute(update(Pole).where(Pole.line_id == power_line_id).values(tap_pole_id=None))
+        await db.execute(update(AClineSegment).where(AClineSegment.line_id == power_line_id).values(tap_pole_id=None))
         
         # Удаляем ЛЭП (каскадное удаление опор, пролётов, отпаек и сегментов настроено в модели)
         # Используем delete через сессию для правильной работы каскадов

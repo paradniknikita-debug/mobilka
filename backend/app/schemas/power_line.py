@@ -26,10 +26,11 @@ class PoleBase(BaseModel):
 class PoleCreate(PoleBase):
     mrid: Optional[str] = None  # Опциональный UID, если не указан - генерируется автоматически
     is_tap: bool = False  # Является ли опора отпаечной (точкой отпайки)
-    # Параметры кабеля для автоматического создания пролёта
-    conductor_type: Optional[str] = None  # Марка провода (AC-70, AC-95 и т.д.)
-    conductor_material: Optional[str] = None  # Материал (алюминий, медь)
-    conductor_section: Optional[str] = None  # Сечение, мм²
+    branch_type: Optional[str] = None  # 'main' — магистраль, 'tap' — отпайка (для опор после отпаечной)
+    tap_pole_id: Optional[int] = None   # id отпаечной опоры, от которой идёт эта ветка (для отпайки)
+    conductor_type: Optional[str] = None
+    conductor_material: Optional[str] = None
+    conductor_section: Optional[str] = None
 
 class PoleResponse(PoleBase):
     id: int
@@ -38,6 +39,8 @@ class PoleResponse(PoleBase):
     connectivity_node_id: Optional[int] = None
     sequence_number: Optional[int] = None
     is_tap_pole: bool = False
+    branch_type: Optional[str] = None
+    tap_pole_id: Optional[int] = None
     conductor_type: Optional[str] = None
     conductor_material: Optional[str] = None
     conductor_section: Optional[str] = None
@@ -107,6 +110,21 @@ class SpanCreate(SpanBase):
     line_id: int
     from_pole_id: int
     to_pole_id: int
+
+class SpanUpdate(BaseModel):
+    """Тело PUT для обновления пролёта — все поля опциональны."""
+    span_number: Optional[str] = None
+    length: Optional[float] = None
+    conductor_type: Optional[str] = None
+    conductor_material: Optional[str] = None
+    conductor_section: Optional[str] = None
+    tension: Optional[float] = None
+    sag: Optional[float] = None
+    sequence_number: Optional[int] = None
+    notes: Optional[str] = None
+    line_id: Optional[int] = None
+    from_pole_id: Optional[int] = None
+    to_pole_id: Optional[int] = None
 
 class SpanResponse(SpanBase):
     id: int

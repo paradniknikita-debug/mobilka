@@ -52,3 +52,43 @@
 .mat-row:hover {
   background: rgba(0, 0, 0, 0.04);
 }
+
+.journal-tabs {
+  margin-top: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  ::ng-deep .mat-mdc-tab-body-wrapper {
+    flex: 1;
+    overflow: auto;
+  }
+}
+
+.tab-description {
+  margin: 0 0 12px 0;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+.refresh-issues {
+  margin-bottom: 16px;
+}
+
+.issues-table {
+  margin-top: 8px;
+}
+
+.uid-cell {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  &:hover {
+    color: var(--mat-primary-color, #1976d2);
+  }
+  &.uid-cell--empty {
+    cursor: default;
+    text-decoration: none;
+  }
+}

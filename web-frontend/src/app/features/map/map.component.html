@@ -27,10 +27,11 @@
     <p>Загрузка данных карты...</p>
   </div>
 
-  <!-- Окно свойств опоры -->
+  <!-- Панель свойств опоры (правый нижний угол), компактная, в стиле дерева объектов -->
   <div *ngIf="showPoleProperties && selectedPole" class="pole-properties-panel">
     <div class="pole-properties-header">
-      <button mat-icon-button (click)="closePoleProperties()" class="close-button">
+      <span class="pole-properties-title">Свойства опоры</span>
+      <button mat-icon-button (click)="closePoleProperties()" class="close-button" aria-label="Закрыть">
         <mat-icon>close</mat-icon>
       </button>
     </div>
@@ -40,8 +41,24 @@
         <span class="property-value">{{ selectedPole.pole_number || 'N/A' }}</span>
       </div>
       <div class="property-item">
-        <span class="property-label">UID (MRID):</span>
-        <span class="property-value">{{ selectedPole.mrid || 'N/A' }}</span>
+        <span class="property-label">UID:</span>
+        <span class="property-value uid-value">{{ selectedPole.mrid || 'N/A' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.sequence_number != null">
+        <span class="property-label">Порядок:</span>
+        <span class="property-value">{{ selectedPole.sequence_number }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Тип:</span>
+        <span class="property-value">{{ selectedPole.pole_type || 'N/A' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Высота:</span>
+        <span class="property-value">{{ selectedPole.height != null ? selectedPole.height + ' м' : 'N/A' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Состояние:</span>
+        <span class="property-value">{{ selectedPole.condition || 'N/A' }}</span>
       </div>
       <div class="property-item">
         <span class="property-label">Участок линии:</span>
@@ -49,57 +66,21 @@
       </div>
       <div class="property-item">
         <span class="property-label">Координаты (ш,д):</span>
-        <span class="property-value">
-          {{ selectedPole.y_position?.toFixed(6) || 'N/A' }}, {{ selectedPole.x_position?.toFixed(6) || 'N/A' }}
-        </span>
-      </div>
-      <div class="property-item" *ngIf="selectedPole.sequence_number">
-        <span class="property-label">Порядок в линии:</span>
-        <span class="property-value">{{ selectedPole.sequence_number }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">Узел соединения:</span>
-        <span class="property-value">
-          <span *ngIf="selectedPole.connectivity_node_id" class="status-badge success">Есть</span>
-          <span *ngIf="!selectedPole.connectivity_node_id" class="status-badge warning">Нет</span>
+        <span class="property-value coord">
+          {{ getPoleLat() != null ? (getPoleLat() | number:'1.4-6') : 'N/A' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.4-6') : 'N/A' }}
         </span>
       </div>
     </div>
     <div class="pole-properties-actions">
-      <button mat-raised-button color="primary" (click)="openConnectivityNodeDialog()" class="action-button">
-        <mat-icon>settings_ethernet</mat-icon>
-        Управление узлом соединения
-      </button>
       <button 
-        mat-raised-button 
-        color="accent" 
-        (click)="openPoleSequenceDialog()" 
-        class="action-button"
-        *ngIf="selectedPole.power_line_id"
+        mat-stroked-button 
+        (click)="openCreatePoleFromTapPolePanel()" 
+        class="action-button action-button--tap"
+        *ngIf="selectedPole.is_tap_pole && !selectedPole.tap_branch_has_poles"
+        matTooltip="Добавить опоры по отпайке от этой опоры"
       >
-        <mat-icon>sort</mat-icon>
-        Последовательность опор
-      </button>
-      <button 
-        mat-raised-button 
-        color="primary" 
-        (click)="openCreateSpanDialog()" 
-        class="action-button"
-        *ngIf="selectedPole.power_line_id && selectedPole.connectivity_node_id"
-      >
-        <mat-icon>timeline</mat-icon>
-        Создать пролёт
-      </button>
-      <button 
-        mat-raised-button 
-        color="accent" 
-        (click)="autoCreateSpans()" 
-        class="action-button"
-        *ngIf="selectedPole.power_line_id"
-        matTooltip="Пересоздать пролёты и сегменты по порядку опор"
-      >
-        <mat-icon>auto_fix_high</mat-icon>
-        Пересобрать топологию линии
+        <mat-icon>call_split</mat-icon>
+        Продолжить отпайку
       </button>
     </div>
   </div>

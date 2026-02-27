@@ -228,6 +228,10 @@ async def delete_pole(
             await db.execute(connectivity_node_stmt)
             print(f"DEBUG: Удалены ConnectivityNode для опоры {pole_id}")
         
+        # Обнуляем ссылки на удаляемую опору (tap_pole_id) до удаления самой опоры
+        await db.execute(update(Pole).where(Pole.tap_pole_id == pole_id).values(tap_pole_id=None))
+        await db.execute(update(AClineSegment).where(AClineSegment.tap_pole_id == pole_id).values(tap_pole_id=None))
+        
         # Удаляем опору используя правильный синтаксис SQLAlchemy 2.0 async
         stmt = delete(Pole).where(Pole.id == pole_id)
         await db.execute(stmt)

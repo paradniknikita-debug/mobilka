@@ -39,7 +39,7 @@ class AClineSegment(Base, ConductingEquipment):
     # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
-    code = Column(String(20), unique=True, index=True, nullable=False)  # Внутренний код (не CIM)
+    code = Column(String(36), unique=True, index=True, nullable=False)  # Единый UID = mrid (без SEG-xxx и т.п.)
     
     # Связь с линией (PowerLine) - это EquipmentContainer для Equipment
     # Equipment.EquipmentContainer -> Line
@@ -48,6 +48,11 @@ class AClineSegment(Base, ConductingEquipment):
     # Тип сегмента: основной или отпайка
     is_tap = Column(Boolean, default=False, nullable=False)  # True = отпайка, False = основной сегмент
     tap_number = Column(String(20), nullable=True)  # Номер отпайки (44/1, 44/2 и т.д.)
+    
+    # Направление: 'main' — магистраль, 'tap' — отпайка (для участков после отпаечной опоры)
+    branch_type = Column(String(10), nullable=True)
+    # Для участка-отпайки: id отпаечной опоры, от которой идёт эта ветка
+    tap_pole_id = Column(Integer, ForeignKey("pole.id"), nullable=True)
     
     # Связь с узлами соединения (ConnectivityNode = опоры)
     # Для основного сегмента: начало и конец линии
@@ -104,4 +109,3 @@ class AClineSegment(Base, ConductingEquipment):
     # wire_info = relationship("WireInfo", back_populates="acline_segments")
     
     creator = relationship("User")
-

@@ -1,6 +1,7 @@
 """
-API журнала изменений.
-События с веб- (Angular) и Flutter-клиентов: создание/редактирование/удаление объектов, начало/закрытие сессий.
+API журнала изменений и журнала несоответствий.
+События с веб- (Angular) и Flutter-клиентов: создание/редактирование/удаление объектов.
+Отдельный эндпоинт — проверка модели на «забытые» объекты и обрывы линий.
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
@@ -11,7 +12,10 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.change_log import ChangeLog
-from app.schemas.change_log import ChangeLogCreate, ChangeLogResponse
+from app.models.power_line import PowerLine, Pole, Span
+from app.models.acline_segment import AClineSegment
+from app.models.cim_line_structure import ConnectivityNode, LineSection
+from app.schemas.change_log import ChangeLogCreate, ChangeLogResponse, ModelIssueResponse
 
 router = APIRouter()
 
@@ -58,3 +62,152 @@ async def get_change_log(
         q = q.where(ChangeLog.entity_type == entity_type)
     result = await db.execute(q)
     return result.scalars().all()
+
+
+@router.get("/errors", response_model=List[ModelIssueResponse])
+async def get_model_issues(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Журнал несоответствий: опоры/пролёты без линии, отпаечные опоры без отпаек, обрывы линий.
+    Данные вычисляются при запросе, не хранятся в БД.
+    """
+    issues: List[ModelIssueResponse] = []
+    line_ids_needed: set = set()
+
+    # 1) Опоры, у которых line_id указывает на несуществующую ЛЭП
+    line_ids_result = await db.execute(select(PowerLine.id))
+    existing_line_ids = {r[0] for r in line_ids_result.fetchall()}
+    poles_orphan = await db.execute(
+        select(Pole.id, Pole.line_id, Pole.pole_number, Pole.mrid).where(Pole.line_id.isnot(None))
+    )
+    for row in poles_orphan.fetchall():
+        pid, lid, pnum, pmrid = row
+        if lid is not None and lid not in existing_line_ids:
+            issues.append(ModelIssueResponse(
+                issue_type="orphan_pole",
+                entity_type="pole",
+                entity_id=pid,
+                line_id=lid,
+                message=f"Опора «{pnum or pid}» привязана к несуществующей ЛЭП (id={lid})",
+                details={"pole_number": pnum},
+                entity_uid=pmrid,
+                line_uid=None
+            ))
+
+    # 2) Отпаечные опоры, от которых ещё не построена ни одна отпайка (нет опор с tap_pole_id = эта опора)
+    tap_poles_result = await db.execute(
+        select(Pole.id, Pole.pole_number, Pole.line_id, Pole.mrid).where(Pole.is_tap_pole == True)
+    )
+    tap_pole_ids = set()
+    tap_rows = []
+    for row in tap_poles_result.fetchall():
+        tap_pole_ids.add(row[0])
+        tap_rows.append(row)
+    if tap_pole_ids:
+        has_tap_result = await db.execute(
+            select(Pole.tap_pole_id).where(Pole.tap_pole_id.isnot(None)).distinct()
+        )
+        tap_poles_with_children = {r[0] for r in has_tap_result.fetchall()}
+        for row in tap_rows:
+            pid, pnum, lid, pmrid = row
+            if pid not in tap_poles_with_children:
+                if lid is not None:
+                    line_ids_needed.add(lid)
+                issues.append(ModelIssueResponse(
+                    issue_type="tap_pole_without_tap",
+                    entity_type="pole",
+                    entity_id=pid,
+                    line_id=lid,
+                    message=f"Отпаечная опора «{pnum or pid}» без построенной отпайки",
+                    details={"pole_number": pnum},
+                    entity_uid=pmrid,
+                    line_uid=None
+                ))
+
+    # 3) Сегменты линии без конечного узла (обрыв: to_connectivity_node_id и to_terminal_id пусты)
+    segments_result = await db.execute(
+        select(AClineSegment.id, AClineSegment.name, AClineSegment.line_id, AClineSegment.mrid).where(
+            AClineSegment.to_connectivity_node_id.is_(None),
+            AClineSegment.to_terminal_id.is_(None)
+        )
+    )
+    for row in segments_result.fetchall():
+        seg_id, name, line_id, seg_mrid = row
+        if line_id is not None:
+            line_ids_needed.add(line_id)
+        issues.append(ModelIssueResponse(
+            issue_type="line_break",
+            entity_type="acline_segment",
+            entity_id=seg_id,
+            line_id=line_id,
+            message=f"Участок «{name or seg_id}» без конечного узла (обрыв линии)",
+            details={"segment_name": name},
+            entity_uid=seg_mrid,
+            line_uid=None
+        ))
+
+    # 4) ConnectivityNode с line_id несуществующей ЛЭП
+    cn_result = await db.execute(
+        select(ConnectivityNode.id, ConnectivityNode.line_id, ConnectivityNode.mrid).where(ConnectivityNode.line_id.isnot(None))
+    )
+    for row in cn_result.fetchall():
+        cn_id, lid, cn_mrid = row
+        if lid not in existing_line_ids:
+            issues.append(ModelIssueResponse(
+                issue_type="orphan_connectivity_node",
+                entity_type="connectivity_node",
+                entity_id=cn_id,
+                line_id=lid,
+                message=f"Узел соединения (id={cn_id}) привязан к несуществующей ЛЭП (id={lid})",
+                details={},
+                entity_uid=cn_mrid,
+                line_uid=None
+            ))
+
+    # 5) LineSection с acline_segment_id несуществующего сегмента
+    seg_ids_result = await db.execute(select(AClineSegment.id))
+    existing_segment_ids = {r[0] for r in seg_ids_result.fetchall()}
+    ls_result = await db.execute(select(LineSection.id, LineSection.acline_segment_id, LineSection.name, LineSection.mrid))
+    for row in ls_result.fetchall():
+        ls_id, aseg_id, name, ls_mrid = row
+        if aseg_id is not None and aseg_id not in existing_segment_ids:
+            issues.append(ModelIssueResponse(
+                issue_type="orphan_line_section",
+                entity_type="line_section",
+                entity_id=ls_id,
+                message=f"Секция линии «{name or ls_id}» привязана к несуществующему участку (id={aseg_id})",
+                details={"acline_segment_id": aseg_id},
+                entity_uid=ls_mrid,
+                line_uid=None
+            ))
+
+    # 6) Пролёты (Span) с line_section_id несуществующей секции
+    ls_ids_result = await db.execute(select(LineSection.id))
+    existing_ls_ids = {r[0] for r in ls_ids_result.fetchall()}
+    span_result = await db.execute(select(Span.id, Span.line_section_id, Span.span_number, Span.mrid))
+    for row in span_result.fetchall():
+        span_id, ls_id, snum, span_mrid = row
+        if ls_id is not None and ls_id not in existing_ls_ids:
+            issues.append(ModelIssueResponse(
+                issue_type="orphan_span",
+                entity_type="span",
+                entity_id=span_id,
+                message=f"Пролёт «{snum or span_id}» привязан к несуществующей секции линии (id={ls_id})",
+                details={"line_section_id": ls_id, "span_number": snum},
+                entity_uid=span_mrid,
+                line_uid=None
+            ))
+
+    # Заполняем line_uid для записей, где line_id есть и ЛЭП существует
+    line_ids_needed |= {i.line_id for i in issues if i.line_id is not None}
+    line_uid_map = {}
+    if line_ids_needed:
+        pl_mrid_result = await db.execute(select(PowerLine.id, PowerLine.mrid).where(PowerLine.id.in_(line_ids_needed)))
+        line_uid_map = {r[0]: r[1] for r in pl_mrid_result.fetchall()}
+    for issue in issues:
+        if issue.line_id is not None and issue.line_uid is None:
+            issue.line_uid = line_uid_map.get(issue.line_id)
+
+    return issues

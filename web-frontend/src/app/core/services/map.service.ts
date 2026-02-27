@@ -44,8 +44,14 @@ export class MapService {
 
   // Subject для центрирования на объекте
   // zoom: number - конкретный зум, null - не менять зум, undefined - использовать значение по умолчанию
-  // currentZoomForLogic: текущий зум для применения логики (если нужен)
-  private centerOnFeatureSubject$ = new Subject<{type: string, coordinates: [number, number], zoom?: number | null, currentZoomForLogic?: number}>();
+  // bounds: опционально [[southWest lat, southWest lng], [northEast lat, northEast lng]] — при задании выполняется fitBounds
+  private centerOnFeatureSubject$ = new Subject<{
+    type: string;
+    coordinates: [number, number];
+    zoom?: number | null;
+    currentZoomForLogic?: number;
+    bounds?: [[number, number], [number, number]];
+  }>();
   
   // Текущий зум карты (используем BehaviorSubject для синхронизации)
   private currentZoom$ = new BehaviorSubject<number>(10);
@@ -67,13 +73,25 @@ export class MapService {
   
   // Метод для центрирования на объекте
   // zoom: number - конкретный зум, null - не менять зум, undefined - использовать значение по умолчанию
-  // currentZoomForLogic: текущий зум для применения логики (опционально)
-  requestCenterOnFeature(type: string, coordinates: [number, number], zoom?: number | null, currentZoomForLogic?: number): void {
-    this.centerOnFeatureSubject$.next({ type, coordinates, zoom, currentZoomForLogic });
+  // bounds: при задании карта выполняет fitBounds (координаты [lat, lng]: southWest, northEast)
+  requestCenterOnFeature(
+    type: string,
+    coordinates: [number, number],
+    zoom?: number | null,
+    currentZoomForLogic?: number,
+    bounds?: [[number, number], [number, number]]
+  ): void {
+    this.centerOnFeatureSubject$.next({ type, coordinates, zoom, currentZoomForLogic, bounds });
   }
 
   // Observable для подписки на центрирование
-  get centerOnFeature$(): Observable<{type: string, coordinates: [number, number], zoom?: number | null, currentZoomForLogic?: number}> {
+  get centerOnFeature$(): Observable<{
+    type: string;
+    coordinates: [number, number];
+    zoom?: number | null;
+    currentZoomForLogic?: number;
+    bounds?: [[number, number], [number, number]];
+  }> {
     return this.centerOnFeatureSubject$.asObservable();
   }
 
@@ -105,6 +123,30 @@ export class MapService {
 
   get requestRebuildTopology$(): Observable<number> {
     return this.requestRebuildTopologySubject$.asObservable();
+  }
+
+  private requestSelectSegmentSubject$ = new Subject<{
+    powerLineId: number;
+    segmentId: number | null;
+    bounds: [[number, number], [number, number]];
+  }>();
+
+  requestSelectSegment(powerLineId: number, segmentId: number | null, bounds: [[number, number], [number, number]]): void {
+    this.requestSelectSegmentSubject$.next({ powerLineId, segmentId, bounds });
+  }
+
+  get requestSelectSegment$(): Observable<{ powerLineId: number; segmentId: number | null; bounds: [[number, number], [number, number]] }> {
+    return this.requestSelectSegmentSubject$.asObservable();
+  }
+
+  private clearSegmentSelectionSubject$ = new Subject<void>();
+
+  clearSegmentSelection(): void {
+    this.clearSegmentSelectionSubject$.next();
+  }
+
+  get clearSegmentSelection$(): Observable<void> {
+    return this.clearSegmentSelectionSubject$.asObservable();
   }
 }
 

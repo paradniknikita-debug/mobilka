@@ -102,18 +102,19 @@
   display: none !important;
 }
 
-// Окно свойств опоры
+// Панель свойств опоры — компактная, в стиле дерева объектов (шрифт 12px, отступы как в сайдбаре)
 .pole-properties-panel {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 380px;
-  max-width: 100%;
+  width: 280px;
+  max-width: calc(100% - 24px);
   background: white;
   border-radius: 8px 0 0 0;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
   animation: slideInUp 0.3s ease-out;
+  font-size: 12px;
 }
 
 @keyframes slideInUp {
@@ -129,31 +130,49 @@
 
 .pole-properties-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  padding: 8px;
+  padding: 4px 8px 4px 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
 
+  .pole-properties-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.7);
+  }
+
   .close-button {
-    width: 32px;
-    height: 32px;
-    line-height: 32px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    .mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
   }
 }
 
 .pole-properties-content {
-  padding: 16px;
-  max-height: 400px;
+  padding: 8px 10px;
+  max-height: 280px;
   overflow-y: auto;
 }
 
-.property-item {
+.pole-properties-content .property-item {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 12px;
 
   &:last-child {
     margin-bottom: 0;
@@ -164,47 +183,55 @@
   .property-label {
     font-weight: 500;
     color: rgba(0, 0, 0, 0.6);
-    margin-right: 16px;
+    margin-right: 8px;
     flex-shrink: 0;
+    font-size: 12px;
   }
 
   .property-value {
     color: rgba(0, 0, 0, 0.87);
     text-align: right;
     word-break: break-word;
-  }
-}
+    font-size: 12px;
 
-.status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
+    &.coord {
+      font-size: 11px;
+    }
 
-  &.success {
-    background-color: #e8f5e9;
-    color: #2e7d32;
-  }
-
-  &.warning {
-    background-color: #fff3e0;
-    color: #e65100;
+    &.uid-value {
+      font-size: 11px;
+      word-break: break-all;
+    }
   }
 }
 
 .pole-properties-actions {
-  padding: 16px;
+  padding: 8px 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 
   .action-button {
     width: 100%;
-    
+    font-size: 12px;
+    line-height: 32px;
+
     mat-icon {
-      margin-right: 8px;
+      margin-right: 6px;
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &.action-button--tap {
+      background-color: #FF9800;
+      color: #fff;
+      border: none;
+      &:hover {
+        background-color: #F57C00;
+        color: #fff;
+      }
     }
   }
 }

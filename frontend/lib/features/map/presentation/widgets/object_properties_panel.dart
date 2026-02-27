@@ -20,6 +20,17 @@ class ObjectPropertiesPanel extends StatelessWidget {
     this.onDelete,
   });
 
+  /// Безопасное форматирование числа для отображения координат (избегаем "null is not a subtype of num").
+  static String _formatCoord(dynamic v) {
+    if (v == null) return 'N/A';
+    if (v is num) return v.toStringAsFixed(6);
+    if (v is String) {
+      final n = num.tryParse(v);
+      return n != null ? n.toStringAsFixed(6) : v;
+    }
+    return v.toString();
+  }
+
   String get _title {
     switch (objectType) {
       case ObjectType.pole:
@@ -223,8 +234,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Позиция (X, Y):',
-        '${((objectProperties['x_position'] ?? objectProperties['longitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${((objectProperties['y_position'] ?? objectProperties['latitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
+        '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
       ),
       if (objectProperties['sequence_number'] != null)
         _buildPropertyItem(
@@ -285,8 +296,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Позиция (X, Y):',
-        '${((objectProperties['x_position'] ?? objectProperties['longitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${((objectProperties['y_position'] ?? objectProperties['latitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
+        '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
       ),
     ];
   }
@@ -312,8 +323,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Позиция (X, Y):',
-        '${((objectProperties['x_position'] ?? objectProperties['longitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}, '
-        '${((objectProperties['y_position'] ?? objectProperties['latitude']) as num?)?.toStringAsFixed(6) ?? 'N/A'}',
+        '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
+        '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
       ),
     ];
   }

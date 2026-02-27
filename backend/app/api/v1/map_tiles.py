@@ -102,55 +102,95 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
             }
 
         # Создаем LineString из координат опор по CIM (только Location/PositionPoint)
-        # Сортировка: сначала по sequence_number, затем по pole_number — чтобы линия совпадала с порядком опор
-        if len(poles_list) >= 2:
-            coordinates = []
-            def _line_sort_key(p):
-                sn = getattr(p, "sequence_number", None)
-                if sn is not None:
-                    return (0, sn, (p.pole_number or ""))
-                return (1, 0, (p.pole_number or ""))
-            for pole in sorted(poles_list, key=_line_sort_key):
-                longitude, latitude = _pole_coords_from_position_point(pole)
+        # Магистраль: опоры с tap_pole_id is None. Отпайки: отдельная цепочка от каждой отпаечной опоры (зелёный цвет на фронте).
+        def _add_line_feature(coords: list, props: dict, branch_type: str = "main", tap_pole_id_val=None):
+            if len(coords) < 2:
+                return
+            p = dict(props)
+            if tap_pole_id_val is not None:
+                p["branch_type"] = "tap"
+                p["tap_pole_id"] = int(tap_pole_id_val)
+            else:
+                p["branch_type"] = "main"
+            features.append({
+                "type": "Feature",
+                "properties": p,
+                "geometry": {"type": "LineString", "coordinates": coords}
+            })
 
+        def _line_sort_key(p):
+            sn = getattr(p, "sequence_number", None)
+            if sn is not None:
+                return (0, sn, (p.pole_number or ""))
+            return (1, 0, (p.pole_number or ""))
+
+        if len(poles_list) >= 2:
+            # Магистраль: опоры с tap_pole_id is None
+            main_poles = [p for p in poles_list if getattr(p, "tap_pole_id", None) is None]
+            main_coords = []
+            for pole in sorted(main_poles, key=_line_sort_key):
+                longitude, latitude = _pole_coords_from_position_point(pole)
                 if longitude is not None and latitude is not None:
                     try:
-                        longitude = float(longitude)
-                        latitude = float(latitude)
-                        # Проверяем, что координаты валидны (не NaN, не Infinity)
-                        if isinstance(longitude, (int, float)) and isinstance(latitude, (int, float)):
-                            if (longitude != float('inf') and latitude != float('inf') and 
-                                longitude != float('-inf') and latitude != float('-inf') and
-                                not math.isnan(longitude) and not math.isnan(latitude)):
-                                coordinates.append([float(longitude), float(latitude)])  # Явное приведение к float
+                        longitude, latitude = float(longitude), float(latitude)
+                        if (longitude != float('inf') and latitude != float('inf') and
+                            longitude != float('-inf') and latitude != float('-inf') and
+                            not math.isnan(longitude) and not math.isnan(latitude)):
+                            main_coords.append([longitude, latitude])
                     except (TypeError, ValueError):
-                        continue  # Пропускаем опоры с невалидными координатами
-            
-            # Включаем только если есть минимум 2 точки с валидными координатами; иначе — в дереве показываем как Point по умолчанию
-            if len(coordinates) >= 2:
-                # Создаем properties, исключая None значения для числовых полей
+                        continue
+            if len(main_coords) >= 2:
                 properties = {
                     "id": int(power_line.id),
                     "name": str(power_line.name) if power_line.name else "",
                     "status": str(power_line.status) if power_line.status else "active",
                     "pole_count": len(poles_list)
                 }
-                # Добавляем voltage_level только если он не None
                 if power_line.voltage_level is not None:
                     properties["voltage_level"] = float(power_line.voltage_level)
-                
-                feature = {
-                    "type": "Feature",
-                    "properties": properties,
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": coordinates
+                _add_line_feature(main_coords, properties, "main", None)
+
+            # Отпайки: для каждой отпаечной опоры X цепочка [X, опоры с tap_pole_id=X]
+            tap_pole_ids = {getattr(p, "tap_pole_id", None) for p in poles_list if getattr(p, "tap_pole_id", None) is not None}
+            tap_poles_by_id = {p.id: p for p in poles_list}
+            for tpid in tap_pole_ids:
+                tap_pole = tap_poles_by_id.get(tpid)
+                if not tap_pole:
+                    continue
+                branch_poles = [p for p in poles_list if getattr(p, "tap_pole_id", None) == tpid]
+                coords = []
+                x0, y0 = _pole_coords_from_position_point(tap_pole)
+                if x0 is not None and y0 is not None:
+                    try:
+                        coords.append([float(x0), float(y0)])
+                    except (TypeError, ValueError):
+                        pass
+                for pole in sorted(branch_poles, key=_line_sort_key):
+                    longitude, latitude = _pole_coords_from_position_point(pole)
+                    if longitude is not None and latitude is not None:
+                        try:
+                            longitude, latitude = float(longitude), float(latitude)
+                            if (longitude != float('inf') and latitude != float('inf') and
+                                longitude != float('-inf') and latitude != float('-inf') and
+                                not math.isnan(longitude) and not math.isnan(latitude)):
+                                coords.append([longitude, latitude])
+                        except (TypeError, ValueError):
+                            continue
+                if len(coords) >= 2:
+                    properties = {
+                        "id": int(power_line.id),
+                        "name": str(power_line.name) if power_line.name else "",
+                        "status": str(power_line.status) if power_line.status else "active",
+                        "pole_count": len(poles_list)
                     }
-                }
-                features.append(feature)
-            else:
-                # Мало точек с координатами — ЛЭП всё равно показываем в дереве (геометрия по умолчанию)
-                features.append(_default_point_feature())
+                    if power_line.voltage_level is not None:
+                        properties["voltage_level"] = float(power_line.voltage_level)
+                    _add_line_feature(coords, properties, "tap", tpid)
+
+            # Если не добавили ни одной линии (например, все опоры без координат), оставляем одну точку по умолчанию
+            if not features or features[-1].get("properties", {}).get("id") != int(power_line.id):
+                if len(poles_list) >= 2:
+                    features.append(_default_point_feature())
         elif len(poles_list) == 1:
             pole = poles_list[0]
             longitude, latitude = _pole_coords_from_position_point(pole)
@@ -249,6 +289,12 @@ async def _get_poles_geojson_impl(db: AsyncSession):
     )
     poles = result.scalars().all()
     
+    # Для отпаечных опор: у каких уже есть хотя бы одна опора по отпайке (tap_pole_id = id отпаечной)
+    tap_pole_ids_with_branch = {
+        p.tap_pole_id for p in poles
+        if getattr(p, "tap_pole_id", None) is not None
+    }
+    
     features = []
     for pole in poles:
         # CIM: координаты только из Location/PositionPoint
@@ -310,6 +356,14 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["material"] = str(pole.material)
             if pole.year_installed is not None:
                 properties["year_installed"] = int(pole.year_installed)
+            if getattr(pole, "branch_type", None):
+                properties["branch_type"] = str(pole.branch_type)
+            if getattr(pole, "tap_pole_id", None) is not None:
+                properties["tap_pole_id"] = int(pole.tap_pole_id)
+            if getattr(pole, "is_tap_pole", None) is True:
+                properties["is_tap_pole"] = True
+                # Оранжевый = отпайка не начата, зелёный = от отпаечной уже есть опоры
+                properties["tap_branch_has_poles"] = pole.id in tap_pole_ids_with_branch
             
             # Убеждаемся, что координаты - это числа, а не None
             feature = {
@@ -645,9 +699,14 @@ async def get_spans_geojson(
                 # Получаем acline_segment_id и название участка через line_section
                 acline_segment_id = None
                 segment_name = None
+                segment_branch_type = None
+                segment_tap_pole_id = None
                 if span.line_section and span.line_section.acline_segment:
-                    acline_segment_id = span.line_section.acline_segment_id
-                    segment_name = getattr(span.line_section.acline_segment, "name", None)
+                    seg = span.line_section.acline_segment
+                    acline_segment_id = seg.id
+                    segment_name = getattr(seg, "name", None)
+                    segment_branch_type = getattr(seg, "branch_type", None)
+                    segment_tap_pole_id = getattr(seg, "tap_pole_id", None)
                 
                 feature = {
                     "type": "Feature",
@@ -678,6 +737,10 @@ async def get_spans_geojson(
                         "coordinates": coordinates
                     }
                 }
+                if segment_branch_type:
+                    feature["properties"]["branch_type"] = str(segment_branch_type)
+                if segment_tap_pole_id is not None:
+                    feature["properties"]["tap_pole_id"] = int(segment_tap_pole_id)
                 features.append(feature)
     
     return {

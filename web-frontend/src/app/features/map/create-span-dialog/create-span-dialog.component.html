@@ -3,48 +3,51 @@
 <mat-dialog-content>
   <form [formGroup]="spanForm" class="span-form">
     <div class="form-section">
-      <h3>Выбор опор</h3>
-      
+      <h3>Соединяет опоры</h3>
       <div *ngIf="isLoading" class="loading-indicator">
         <mat-spinner diameter="30"></mat-spinner>
         <span>Загрузка опор...</span>
       </div>
-      
-      <mat-form-field appearance="outline" class="full-width" *ngIf="!isLoading && poles.length > 0">
-        <mat-label>Начальная опора *</mat-label>
-        <mat-select formControlName="from_pole_id" (selectionChange)="calculateDistance()">
-          <mat-option *ngFor="let pole of poles" [value]="pole.id" [disabled]="pole.id === spanForm.get('to_pole_id')?.value">
-            {{ displayPole(pole) }} - {{ pole.pole_type }}
-          </mat-option>
-        </mat-select>
-        <mat-error>{{ getFieldError('from_pole_id') }}</mat-error>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" class="full-width" *ngIf="!isLoading && poles.length > 0">
-        <mat-label>Конечная опора *</mat-label>
-        <mat-select formControlName="to_pole_id" (selectionChange)="calculateDistance()">
-          <mat-option *ngFor="let pole of poles" [value]="pole.id" [disabled]="pole.id === spanForm.get('from_pole_id')?.value">
-            {{ displayPole(pole) }} - {{ pole.pole_type }}
-          </mat-option>
-        </mat-select>
-        <mat-error>{{ getFieldError('to_pole_id') }}</mat-error>
-      </mat-form-field>
-    </div>
-
-    <div class="form-section" *ngIf="(spanForm.get('from_pole_id')?.value && spanForm.get('to_pole_id')?.value) || isEditMode">
-      <h3>Соединяет опоры</h3>
-      <div class="pole-connect-row">
-        <span class="pole-label">{{ getFromPoleName() }}</span>
-        <button mat-icon-button type="button" (click)="copyPoleUid(getFromPoleMrid())" [disabled]="!getFromPoleMrid()" matTooltip="Скопировать UID опоры">
-          <mat-icon>content_copy</mat-icon>
-        </button>
-      </div>
-      <div class="pole-connect-row">
-        <span class="pole-label">{{ getToPoleName() }}</span>
-        <button mat-icon-button type="button" (click)="copyPoleUid(getToPoleMrid())" [disabled]="!getToPoleMrid()" matTooltip="Скопировать UID опоры">
-          <mat-icon>content_copy</mat-icon>
-        </button>
-      </div>
+      <ng-container *ngIf="!isLoading">
+        <div class="pole-connect-row">
+          <span class="pole-label">{{ getFromPoleName() }}</span>
+          <span class="pole-actions">
+            <button mat-icon-button type="button" (click)="copyPoleUid(getFromPoleMrid())" [disabled]="!getFromPoleMrid()" matTooltip="Скопировать UID опоры">
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            <button mat-icon-button type="button" (click)="showFromPoleSelect = !showFromPoleSelect; showToPoleSelect = false" matTooltip="Изменить начальную опору">
+              <mat-icon>edit</mat-icon>
+            </button>
+          </span>
+        </div>
+        <mat-form-field *ngIf="showFromPoleSelect" appearance="outline" class="full-width pole-select-inline">
+          <mat-label>Начальная опора</mat-label>
+          <mat-select formControlName="from_pole_id" (selectionChange)="showFromPoleSelect = false; calculateDistance()">
+            <mat-option *ngFor="let pole of poles" [value]="pole.id" [disabled]="pole.id === spanForm.get('to_pole_id')?.value">
+              {{ displayPole(pole) }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+        <div class="pole-connect-row">
+          <span class="pole-label">{{ getToPoleName() }}</span>
+          <span class="pole-actions">
+            <button mat-icon-button type="button" (click)="copyPoleUid(getToPoleMrid())" [disabled]="!getToPoleMrid()" matTooltip="Скопировать UID опоры">
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            <button mat-icon-button type="button" (click)="showToPoleSelect = !showToPoleSelect; showFromPoleSelect = false" matTooltip="Изменить конечную опору">
+              <mat-icon>edit</mat-icon>
+            </button>
+          </span>
+        </div>
+        <mat-form-field *ngIf="showToPoleSelect" appearance="outline" class="full-width pole-select-inline">
+          <mat-label>Конечная опора</mat-label>
+          <mat-select formControlName="to_pole_id" (selectionChange)="showToPoleSelect = false; calculateDistance()">
+            <mat-option *ngFor="let pole of poles" [value]="pole.id" [disabled]="pole.id === spanForm.get('from_pole_id')?.value">
+              {{ displayPole(pole) }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </ng-container>
     </div>
 
     <div class="form-section">
