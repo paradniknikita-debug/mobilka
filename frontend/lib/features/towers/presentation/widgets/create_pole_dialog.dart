@@ -321,7 +321,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           defectAttachment: eq.defectAttachment != null && eq.defectAttachment!.isNotEmpty
               ? drift.Value(eq.defectAttachment!)
               : const drift.Value.absent(),
-          condition: const drift.Value('good'),
+          condition: 'good',
           notes: drift.Value(null),
           createdBy: userId,
           createdAt: now,
