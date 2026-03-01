@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/api_service.dart';
+import '../../../../core/database/database.dart';
 import '../widgets/create_pole_dialog.dart';
 
 class TowersPage extends ConsumerStatefulWidget {
@@ -69,10 +69,15 @@ class _TowersPageState extends ConsumerState<TowersPage> {
       return;
     }
 
+    final db = ref.read(databaseProvider);
+    final linePoles = await db.getPolesByLine(_selectedPowerLineId!);
+    final existingPolesCount = linePoles.length;
+
     final result = await showDialog<dynamic>(
       context: context,
       builder: (context) => CreatePoleDialog(
-        powerLineId: _selectedPowerLineId!,
+        lineId: _selectedPowerLineId!,
+        existingPolesCount: existingPolesCount,
       ),
     );
 

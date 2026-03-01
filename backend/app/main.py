@@ -87,9 +87,12 @@ cors_origins = settings.ALLOWED_ORIGINS.copy()
 if settings.CORS_ORIGINS:
     cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
 
-# Для разработки добавляем localhost варианты
+# Для разработки добавляем localhost варианты и regex для любых портов (Flutter Web, Angular и т.д.)
 import os
-if os.getenv("ENVIRONMENT", "development") == "development":
+is_development = os.getenv("ENVIRONMENT", "development") == "development"
+cors_origin_regex = None
+
+if is_development:
     dev_origins = [
         "http://localhost:53380",
         "https://localhost:53380",
@@ -104,20 +107,27 @@ if os.getenv("ENVIRONMENT", "development") == "development":
     ]
     cors_origins.extend(dev_origins)
     cors_origins = list(set(cors_origins))  # Убираем дубликаты
+    # Flutter Web и другие dev-серверы поднимаются на случайном порту — разрешаем любой localhost/127.0.0.1
+    cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 # Проверка на пустой список (для продакшена обязательно указать домены)
-if not cors_origins and os.getenv("ENVIRONMENT") == "production":
+if not cors_origins and not cors_origin_regex and os.getenv("ENVIRONMENT") == "production":
     raise ValueError("CORS_ORIGINS должен быть задан для продакшена! Установите переменную CORS_ORIGINS в .env")
 
-app.add_middleware(
-    CORSMiddleware, # Перехватывает все запросы и добавляет заголовки CORS
-    allow_origins=cors_origins if cors_origins else ["*"],  # В продакшене НЕ использовать "*"
-    allow_credentials=True, # разрешает cookies и jwt токены
-    allow_methods=["*"], # Разрешает все методы get, post, put, delete
-    allow_headers=["*"], # Разрешает все заголовки
-    expose_headers=["*"], # Разрешаем доступ ко всем заголовкам ответа
-    max_age=3600,  # Кэширование preflight запросов на 1 час
+cors_kw = dict(
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+if cors_origin_regex:
+    cors_kw["allow_origin_regex"] = cors_origin_regex
+    cors_kw["allow_origins"] = cors_origins if cors_origins else []
+else:
+    cors_kw["allow_origins"] = cors_origins if cors_origins else ["*"]
+
+app.add_middleware(CORSMiddleware, **cors_kw)
 
 
 # Тестовый endpoint (определяем ДО роутеров)

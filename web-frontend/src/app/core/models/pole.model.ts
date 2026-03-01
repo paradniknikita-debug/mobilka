@@ -2,7 +2,8 @@
 export interface Pole {
   id: number;
   mrid: string;
-  power_line_id: number;
+  /** Единое поле line_id (без приставки power). */
+  line_id: number;
   segment_id?: number;
   connectivity_node_id?: number;
   pole_number: string;
@@ -12,6 +13,8 @@ export interface Pole {
   branch_type?: string | null;
   /** id отпаечной опоры, от которой идёт эта ветка (для отпайки) */
   tap_pole_id?: number | null;
+  /** Номер ветки от одной отпаечной опоры (1, 2, …) */
+  tap_branch_index?: number | null;
   /** Долгота (longitude) */
   x_position: number;
   /** Широта (latitude) */
@@ -27,7 +30,7 @@ export interface Pole {
 }
 
 export interface PoleCreate {
-  power_line_id: number;
+  line_id: number;
   segment_id?: number;
   pole_number: string;
   /** Порядок опоры в линии (1, 2, 3…). Если не задан — назначается автоматически. */
@@ -49,6 +52,10 @@ export interface PoleCreate {
   branch_type?: string | null;
   /** id отпаечной опоры (при выборе «По отпайке») */
   tap_pole_id?: number | null;
+  /** Номер ветки от одной отпаечной (1, 2, …); при продолжении существующей отпайки */
+  tap_branch_index?: number | null;
+  /** Начать новую отпайку от tap_pole_id (вторая/третья ветка от одной опоры) */
+  start_new_tap?: boolean;
   /** Марка провода (AC-70 и т.д.) — для автосоздания пролёта */
   conductor_type?: string;
   /** Материал провода (алюминий, медь) */

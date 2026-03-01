@@ -32,6 +32,7 @@ from app.schemas.substation import (
     ProtectionEquipmentResponse
 )
 from app.models.base import generate_mrid
+from app.models.branch import Branch
 
 router = APIRouter()
 
@@ -80,13 +81,9 @@ async def create_substation(
         db.add(db_position_point)
         location_id = db_location.id
     
-    # Создаем новую подстанцию (в БД колонки x_position, y_position)
-    substation_dict = substation_data.dict()
+    # Создаем новую подстанцию (координаты только в Location/PositionPoint)
+    substation_dict = substation_data.model_dump() if hasattr(substation_data, 'model_dump') else substation_data.dict()
     substation_dict['location_id'] = location_id
-    if substation_data.latitude is not None:
-        substation_dict['y_position'] = substation_data.latitude
-    if substation_data.longitude is not None:
-        substation_dict['x_position'] = substation_data.longitude
     substation_dict.pop('latitude', None)
     substation_dict.pop('longitude', None)
     # UID (mrid): передаём только если указан клиентом, иначе сработает default=generate_mrid
@@ -96,12 +93,58 @@ async def create_substation(
     if substation_dict.get('dispatcher_name') is not None and not str(substation_dict['dispatcher_name']).strip():
         substation_dict['dispatcher_name'] = None
 
+    # branch_id: если таблица branches пуста или id нет — не задаём FK
+    branch_id = substation_dict.get('branch_id')
+    if branch_id is not None:
+        branch_exists = await db.execute(select(Branch).where(Branch.id == branch_id))
+        if not branch_exists.scalar_one_or_none():
+            substation_dict['branch_id'] = None
+
     db_substation = Substation(**substation_dict)
     db.add(db_substation)
+    await db.flush()  # получаем id до commit
+    new_id = db_substation.id
+    new_mrid = db_substation.mrid
     await db.commit()
-    await db.refresh(db_substation)
-    
-    return db_substation
+
+    # Лёгкий запрос только нужных полей (без связей), чтобы не вызывать lazy load в async
+    row = await db.execute(
+        select(
+            Substation.id,
+            Substation.mrid,
+            Substation.name,
+            Substation.dispatcher_name,
+            Substation.voltage_level,
+            Substation.address,
+            Substation.branch_id,
+            Substation.description,
+            Substation.connected_line_ids,
+            Substation.is_active,
+            Substation.created_at,
+            Substation.updated_at,
+        ).where(Substation.id == new_id)
+    )
+    one = row.one_or_none()
+    if not one:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Substation not created")
+
+    response_data = {
+        "id": one.id,
+        "mrid": one.mrid,
+        "name": one.name,
+        "dispatcher_name": one.dispatcher_name,
+        "voltage_level": float(one.voltage_level),
+        "latitude": substation_data.latitude if substation_data.latitude is not None else 0.0,
+        "longitude": substation_data.longitude if substation_data.longitude is not None else 0.0,
+        "address": one.address,
+        "branch_id": one.branch_id,
+        "description": one.description,
+        "connected_line_ids": one.connected_line_ids,
+        "is_active": one.is_active,
+        "created_at": one.created_at,
+        "updated_at": one.updated_at,
+    }
+    return SubstationResponse.model_validate(response_data)
 
 @router.get("/", response_model=List[SubstationResponse])
 async def get_substations(
@@ -113,7 +156,9 @@ async def get_substations(
 ):
     """Получение списка подстанций с фильтрацией"""
     
-    query = select(Substation)
+    query = select(Substation).options(
+        selectinload(Substation.location).selectinload(Location.position_points)
+    )
     
     # По умолчанию показываем только активные подстанции
     if is_active is not None:
@@ -138,7 +183,9 @@ async def get_substation(
     """Получение подстанции по ID"""
     
     result = await db.execute(
-        select(Substation).where(Substation.id == substation_id)
+        select(Substation)
+        .options(selectinload(Substation.location).selectinload(Location.position_points))
+        .where(Substation.id == substation_id)
     )
     substation = result.scalar_one_or_none()
     
@@ -158,38 +205,147 @@ async def update_substation(
     db: AsyncSession = Depends(get_db)
 ):
     """Обновление подстанции"""
-    
-    # Получаем существующую подстанцию
     result = await db.execute(
-        select(Substation).where(Substation.id == substation_id)
+        select(Substation)
+        .options(
+            selectinload(Substation.location).selectinload(Location.position_points),
+            selectinload(Substation.position_points),
+        )
+        .where(Substation.id == substation_id)
     )
     substation = result.scalar_one_or_none()
-    
+
     if not substation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Substation not found"
         )
-    
-    # Проверяем уникальность кода (если изменился)
-    if substation.dispatcher_name != substation_data.dispatcher_name:
-        existing_dispatcher_name = await db.execute(
-            select(Substation).where(Substation.dispatcher_name == substation_data.dispatcher_name)
-        )
-        if existing_dispatcher_name.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Substation dispatcher name already exists"
+
+    data = substation_data.model_dump() if hasattr(substation_data, "model_dump") else substation_data.dict()
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+
+    # Проверка уникальности диспетчерского наименования при изменении
+    if substation.dispatcher_name != data.get("dispatcher_name"):
+        if data.get("dispatcher_name") and str(data["dispatcher_name"]).strip():
+            existing = await db.execute(
+                select(Substation).where(Substation.dispatcher_name == data["dispatcher_name"].strip())
             )
-    
-    # Обновляем данные
-    for field, value in substation_data.dict().items():
-        setattr(substation, field, value)
-    
+            if existing.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Substation dispatcher name already exists"
+                )
+
+    # Обновляем только поля, которые есть в модели (без latitude/longitude — они в Location/PositionPoint)
+    for key in ("name", "dispatcher_name", "voltage_level", "address", "branch_id", "description", "mrid", "connected_line_ids"):
+        if key in data and hasattr(substation, key):
+            val = data[key]
+            if key == "dispatcher_name" and val is not None and not str(val).strip():
+                val = None
+            setattr(substation, key, val)
+
+    # Координаты: обновляем или создаём Location и PositionPoint
+    if lat is not None and lon is not None:
+        try:
+            lat_f = float(lat)
+            lon_f = float(lon)
+        except (TypeError, ValueError):
+            lat_f, lon_f = None, None
+        if lat_f is not None and lon_f is not None:
+            if substation.location_id:
+                loc = await db.get(Location, substation.location_id)
+                if loc:
+                    pts = (await db.execute(
+                        select(PositionPoint).where(PositionPoint.location_id == loc.id)
+                    )).scalars().all()
+                    if pts:
+                        pts[0].x_position = lon_f
+                        pts[0].y_position = lat_f
+                    else:
+                        pp = PositionPoint(
+                            mrid=generate_mrid(),
+                            location_id=loc.id,
+                            x_position=lon_f,
+                            y_position=lat_f,
+                        )
+                        db.add(pp)
+                await db.flush()
+            else:
+                loc = Location(
+                    mrid=generate_mrid(),
+                    location_type=LocationType.POINT,
+                    address=data.get("address"),
+                    description=f"Location for substation {substation.name}",
+                )
+                db.add(loc)
+                await db.flush()
+                substation.location_id = loc.id
+                pp = PositionPoint(
+                    mrid=generate_mrid(),
+                    location_id=loc.id,
+                    x_position=lon_f,
+                    y_position=lat_f,
+                )
+                db.add(pp)
+                await db.flush()
+    loc_id = getattr(substation, "location_id", None)
     await db.commit()
-    await db.refresh(substation)
-    
-    return substation
+
+    # Ответ без lazy load: координаты из PositionPoint
+    location_id = loc_id
+    res_lat, res_lon = 0.0, 0.0
+    if location_id:
+        pp_result = await db.execute(
+            select(PositionPoint).where(PositionPoint.location_id == location_id).limit(1)
+        )
+        pp_row = pp_result.scalar_one_or_none()
+        if pp_row:
+            res_lat = float(pp_row.y_position)
+            res_lon = float(pp_row.x_position)
+    if res_lat == 0.0 and res_lon == 0.0:
+        direct_pp = await db.execute(select(PositionPoint).where(PositionPoint.substation_id == substation_id).limit(1))
+        direct = direct_pp.scalar_one_or_none()
+        if direct:
+            res_lat = float(direct.y_position)
+            res_lon = float(direct.x_position)
+
+    row = await db.execute(
+        select(
+            Substation.id,
+            Substation.mrid,
+            Substation.name,
+            Substation.dispatcher_name,
+            Substation.voltage_level,
+            Substation.address,
+            Substation.branch_id,
+            Substation.description,
+            Substation.connected_line_ids,
+            Substation.is_active,
+            Substation.created_at,
+            Substation.updated_at,
+        ).where(Substation.id == substation_id)
+    )
+    one = row.one_or_none()
+    if not one:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Substation not found after update")
+
+    return SubstationResponse(
+        id=one.id,
+        mrid=one.mrid,
+        name=one.name,
+        dispatcher_name=one.dispatcher_name,
+        voltage_level=float(one.voltage_level),
+        latitude=res_lat,
+        longitude=res_lon,
+        address=one.address,
+        branch_id=one.branch_id,
+        description=one.description,
+        connected_line_ids=one.connected_line_ids,
+        is_active=one.is_active,
+        created_at=one.created_at,
+        updated_at=one.updated_at,
+    )
 
 @router.delete("/{substation_id}")
 async def delete_substation(

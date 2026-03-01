@@ -67,7 +67,14 @@
       <div class="property-item">
         <span class="property-label">Координаты (ш,д):</span>
         <span class="property-value coord">
-          {{ getPoleLat() != null ? (getPoleLat() | number:'1.4-6') : 'N/A' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.4-6') : 'N/A' }}
+          {{ getPoleLat() != null ? (getPoleLat() | number:'1.6-6') : 'N/A' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.6-6') : 'N/A' }}
+        </span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Узел соединения:</span>
+        <span class="property-value">
+          <span *ngIf="selectedPole.connectivity_node_id" class="status-badge success">Есть</span>
+          <span *ngIf="!selectedPole.connectivity_node_id" class="status-badge warning">Нет</span>
         </span>
       </div>
     </div>
@@ -76,11 +83,11 @@
         mat-stroked-button 
         (click)="openCreatePoleFromTapPolePanel()" 
         class="action-button action-button--tap"
-        *ngIf="selectedPole.is_tap_pole && !selectedPole.tap_branch_has_poles"
-        matTooltip="Добавить опоры по отпайке от этой опоры"
+        *ngIf="selectedPole.is_tap_pole"
+        matTooltip="Создать отпайку от этой опоры (новая ветка)"
       >
         <mat-icon>call_split</mat-icon>
-        Продолжить отпайку
+        Начать отпайку
       </button>
     </div>
   </div>

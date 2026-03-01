@@ -135,8 +135,8 @@ async def create_test_data():
                     name="Подстанция 110/10 кВ №1",
                     dispatcher_name="SUB_110_1",
                     voltage_level=110.0,
-                    latitude=53.9045,
-                    longitude=27.5615,
+                    y_position=53.9045,
+                    x_position=27.5615,
                     address="г. Минск, ул. Подстанционная, 1",
                     region_id=res_region.id,
                     branch_id=branch.id if branch else None,
@@ -147,97 +147,13 @@ async def create_test_data():
                 await session.flush()
                 print("[OK] Создана подстанция: Подстанция 110/10 кВ №1")
 
-            # 5. Линия электропередачи
-            result = await session.execute(
-                select(PowerLine).where(PowerLine.code == "LINE_110_1")
-            )
-            power_line = result.scalar_one_or_none()
-            if not power_line:
-                power_line = PowerLine(
-                    name="ЛЭП 110 кВ Минск-Западная",
-                    code="LINE_110_1",
-                    voltage_level=110.0,
-                    length=25.5,
-                    region_id=res_region.id,
-                    branch_id=branch.id if branch else None,
-                    created_by=user.id,
-                    status="active",
-                    description="Тестовая линия 110 кВ",
-                )
-                session.add(power_line)
-                await session.flush()
-                print("[OK] Создана линия: ЛЭП 110 кВ Минск-Западная")
-
-            # 6. Опоры (модель Pole: pole_number, pole_type, latitude, longitude и т.д.)
-            poles_data = [
-                {
-                    "pole_number": "ОП-001",
-                    "latitude": 53.9045,
-                    "longitude": 27.5615,
-                    "pole_type": "анкерная",
-                    "height": 25.0,
-                },
-                {
-                    "pole_number": "ОП-002",
-                    "latitude": 53.9100,
-                    "longitude": 27.5700,
-                    "pole_type": "промежуточная",
-                    "height": 23.0,
-                },
-                {
-                    "pole_number": "ОП-003",
-                    "latitude": 53.9150,
-                    "longitude": 27.5800,
-                    "pole_type": "промежуточная",
-                    "height": 23.0,
-                },
-                {
-                    "pole_number": "ОП-004",
-                    "latitude": 53.9200,
-                    "longitude": 27.5900,
-                    "pole_type": "анкерная",
-                    "height": 25.0,
-                },
-            ]
-
-            poles = []
-            for i, pdata in enumerate(poles_data):
-                result = await session.execute(
-                    select(Pole).where(
-                        Pole.power_line_id == power_line.id,
-                        Pole.pole_number == pdata["pole_number"],
-                    )
-                )
-                existing = result.scalar_one_or_none()
-                if not existing:
-                    pole = Pole(
-                        power_line_id=power_line.id,
-                        pole_number=pdata["pole_number"],
-                        latitude=pdata["latitude"],
-                        longitude=pdata["longitude"],
-                        pole_type=pdata["pole_type"],
-                        height=pdata["height"],
-                        material="металл",
-                        foundation_type="железобетон",
-                        year_installed=2020,
-                        condition="good",
-                        sequence_number=i + 1,
-                        created_by=user.id,
-                    )
-                    session.add(pole)
-                    poles.append(pole)
-
-            await session.flush()
-            print(f"[OK] Создано опор: {len(poles)}")
-
+            
             await session.commit()
             print("\n[OK] Все тестовые данные успешно добавлены!")
             print("\nСтруктура данных:")
             print("   - 1 пользователь (admin / admin123)")
             print("   - 1 рабочая область, 1 ФЭС, 1 РЭС")
             print("   - 1 подстанция")
-            print("   - 1 линия электропередачи")
-            print("   - 4 опоры")
 
         except Exception as e:
             await session.rollback()

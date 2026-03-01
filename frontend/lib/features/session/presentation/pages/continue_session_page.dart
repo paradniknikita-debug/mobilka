@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/database/database.dart' as drift_db;
+import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 
@@ -28,6 +29,36 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
 
   Future<void> _loadPowerLines() async {
     final db = ref.read(drift_db.databaseProvider);
+    final apiService = ref.read(apiServiceProvider);
+    // Подгружаем ЛЭП с сервера и сливаем с локальными (дедупликация по mrid/имени)
+    try {
+      final serverLines = await apiService.getPowerLines();
+      for (final pl in serverLines) {
+        final mrid = pl.mrid != null && pl.mrid!.trim().isNotEmpty ? pl.mrid : null;
+        final name = pl.name.trim().isEmpty ? 'ЛЭП' : pl.name.trim();
+        final localDup = await db.getLocalPowerLineByMridOrName(mrid, name);
+        if (localDup != null && localDup.id < 0) {
+          await db.updatePolesLineId(localDup.id, pl.id);
+          await db.deletePowerLine(localDup.id);
+        }
+        await db.insertPowerLineOrReplace(drift_db.PowerLinesCompanion.insert(
+          id: drift.Value(pl.id),
+          name: name,
+          code: name,
+          mrid: mrid != null ? drift.Value(mrid) : const drift.Value.absent(),
+          voltageLevel: pl.voltageLevel ?? 0.0,
+          length: pl.length != null ? drift.Value(pl.length!) : const drift.Value.absent(),
+          branchId: pl.branchId ?? 1,
+          createdBy: pl.createdBy,
+          status: pl.status,
+          description: drift.Value(pl.description),
+          createdAt: pl.createdAt,
+          updatedAt: drift.Value(pl.updatedAt),
+          isLocal: const drift.Value(false),
+          needsSync: const drift.Value(false),
+        ));
+      }
+    } catch (_) {}
     final list = await db.getAllPowerLines();
     if (mounted) {
       setState(() {
@@ -46,7 +77,7 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
 
     final localId = await db.insertPatrolSession(
       drift_db.PatrolSessionsCompanion.insert(
-        powerLineId: line.id,
+        lineId: line.id,
         note: const drift.Value(null),
         startedAt: startedAt,
         syncStatus: const drift.Value('pending'),
@@ -65,7 +96,7 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Обход по линии «${line.name}». Ожидает синхронизации.'),
+        content: Text('Обход по линии «${line.mrid != null && line.mrid!.trim().isNotEmpty ? "${line.name} (${line.mrid})" : line.name}». Ожидает синхронизации.'),
         backgroundColor: Colors.orange,
       ),
     );
@@ -135,7 +166,7 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
                               leading: const Icon(Icons.electrical_services),
-                              title: Text(pl.name),
+                              title: Text(pl.mrid != null && pl.mrid!.trim().isNotEmpty ? '${pl.name} (${pl.mrid})' : pl.name),
                               subtitle: Text(
                                   '${pl.name} • ${pl.voltageLevel > 0 ? '${pl.voltageLevel == pl.voltageLevel.roundToDouble() ? pl.voltageLevel.toInt() : pl.voltageLevel} кВ' : 'н/д'}'),
                               trailing: const Icon(Icons.chevron_right),

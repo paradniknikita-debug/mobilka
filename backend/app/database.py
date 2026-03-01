@@ -151,32 +151,52 @@ async def init_db():
                     for legacy in ("line_segments", "line_segment", "acline_segments", "connections"):
                         await conn.execute(text(f'DROP TABLE IF EXISTS "{legacy}" CASCADE'))
                 await conn.run_sync(Base.metadata.create_all)
-                # Обеспечиваем наличие колонок при донакатке схемы (только если не пересоздавали)
-                if not getattr(settings, "RECREATE_DB", False):
-                    await conn.execute(text("""
-                        DO $$
-                        BEGIN
-                            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
-                               AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'is_tap_pole')
-                            THEN
-                                ALTER TABLE pole ADD COLUMN is_tap_pole BOOLEAN NOT NULL DEFAULT false;
-                            END IF;
-                            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'substation')
-                               AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'substation' AND column_name = 'connected_line_ids')
-                            THEN
-                                ALTER TABLE substation ADD COLUMN connected_line_ids INTEGER[];
-                            END IF;
-                            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'patrol_sessions')
-                               AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patrol_sessions' AND column_name = 'power_line_id')
-                               AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patrol_sessions' AND column_name = 'line_id')
-                            THEN
-                                ALTER TABLE patrol_sessions RENAME COLUMN power_line_id TO line_id;
-                            END IF;
-                        END $$;
-                    """))
+                # Обеспечиваем наличие колонок при донакатке схемы (миграции + create_all)
+                await conn.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'is_tap_pole')
+                        THEN
+                            ALTER TABLE pole ADD COLUMN is_tap_pole BOOLEAN NOT NULL DEFAULT false;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'substation')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'substation' AND column_name = 'connected_line_ids')
+                        THEN
+                            ALTER TABLE substation ADD COLUMN connected_line_ids INTEGER[];
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'patrol_sessions')
+                           AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patrol_sessions' AND column_name = 'power_line_id')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patrol_sessions' AND column_name = 'line_id')
+                        THEN
+                            ALTER TABLE patrol_sessions RENAME COLUMN power_line_id TO line_id;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'tap_branch_index')
+                        THEN
+                            ALTER TABLE pole ADD COLUMN tap_branch_index INTEGER;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'line')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'line' AND column_name = 'substation_start_id')
+                        THEN
+                            ALTER TABLE "line" ADD COLUMN substation_start_id INTEGER NULL REFERENCES substation(id);
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'line')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'line' AND column_name = 'substation_end_id')
+                        THEN
+                            ALTER TABLE "line" ADD COLUMN substation_end_id INTEGER NULL REFERENCES substation(id);
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'acline_segment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'acline_segment' AND column_name = 'to_substation_id')
+                        THEN
+                            ALTER TABLE acline_segment ADD COLUMN to_substation_id INTEGER NULL REFERENCES substation(id);
+                        END IF;
+                    END $$;
+                """))
+                await conn.execute(text('CREATE INDEX IF NOT EXISTS idx_line_substation_start_id ON "line"(substation_start_id)'))
+                await conn.execute(text('CREATE INDEX IF NOT EXISTS idx_line_substation_end_id ON "line"(substation_end_id)'))
             
             logger.info("База данных успешно инициализирована")
-            print("OK: База данных успешно инициализирована")
             return
             
         except Exception as e:

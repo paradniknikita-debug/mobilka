@@ -9,6 +9,7 @@ part of 'power_line.dart';
 PowerLine _$PowerLineFromJson(Map<String, dynamic> json) => PowerLine(
   id: (json['id'] as num).toInt(),
   name: _stringFromJson(json['name']),
+  mrid: json['mrid'] as String?,
   voltageLevel: _doubleFromJsonNullable(json['voltage_level']),
   length: _doubleFromJsonNullable(json['length']),
   branchId: _intFromJsonNullable(json['branch_id']),
@@ -26,6 +27,7 @@ PowerLine _$PowerLineFromJson(Map<String, dynamic> json) => PowerLine(
 Map<String, dynamic> _$PowerLineToJson(PowerLine instance) => <String, dynamic>{
   'id': instance.id,
   'name': instance.name,
+  'mrid': ?instance.mrid,
   'voltage_level': ?instance.voltageLevel,
   'length': ?instance.length,
   'branch_id': ?instance.branchId,
@@ -60,7 +62,7 @@ Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
 
 Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
   id: (json['id'] as num).toInt(),
-  powerLineId: (json['power_line_id'] as num).toInt(),
+  lineId: (json['line_id'] as num).toInt(),
   poleNumber: _stringFromJson(json['pole_number']),
   xPosition: _doubleFromJson(json['x_position']),
   yPosition: _doubleFromJson(json['y_position']),
@@ -85,7 +87,7 @@ Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
 
 Map<String, dynamic> _$PoleToJson(Pole instance) => <String, dynamic>{
   'id': instance.id,
-  'power_line_id': instance.powerLineId,
+  'line_id': instance.lineId,
   'pole_number': instance.poleNumber,
   'x_position': instance.xPosition,
   'y_position': instance.yPosition,

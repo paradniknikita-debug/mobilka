@@ -1,0 +1,13 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <g id="arrester_on" transform="translate(100,100) rotate(-90)">
+    <path
+      fill="none"
+      stroke="black"
+      stroke-width="6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M 0 -80 L 0 80
+         M -25 -40 L 25 -40 L 0 -20 L -25 0 L 25 0 L 0 20 L -25 40 L 25 40"
+    />
+  </g>
+</svg>

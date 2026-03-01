@@ -11,6 +11,8 @@ interface KeyValueRow {
   before: string;
   after: string;
   changed: boolean;
+  added?: boolean;   // только после (новое значение)
+  removed?: boolean; // только до (удалённое значение)
 }
 
 @Component({
@@ -43,13 +45,15 @@ export class ChangeLogDetailDialogComponent {
       const a = newVal?.[key];
       const beforeStr = b === undefined || b === null ? '—' : JSON.stringify(b);
       const afterStr = a === undefined || a === null ? '—' : JSON.stringify(a);
-      const changed = beforeStr !== afterStr;
-      return { key, before: beforeStr, after: afterStr, changed };
+      const added = beforeStr === '—' && afterStr !== '—';
+      const removed = beforeStr !== '—' && afterStr === '—';
+      const changed = !added && !removed && beforeStr !== afterStr;
+      return { key, before: beforeStr, after: afterStr, changed, added, removed };
     }).sort((a, b) => a.key.localeCompare(b.key));
   }
 
   get displayedRows(): KeyValueRow[] {
-    if (this.onlyChanges) return this.rows.filter(r => r.changed);
+    if (this.onlyChanges) return this.rows.filter(r => r.changed || r.added || r.removed);
     return this.rows;
   }
 

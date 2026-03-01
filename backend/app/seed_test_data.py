@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text as sa_text
+from sqlalchemy import select
 from app.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
 from app.models import (User, GeographicRegion, PowerLine, Pole, AClineSegment, Substation, Branch)
@@ -113,13 +113,13 @@ async def create_test_data():
                 await session.flush()
                 print("✅ Создан РЭС: Минск-Запад")
             
-            # 4. Создаем подстанцию
-            result = await session.execute(select(Substation).where(Substation.code == "SUB_110_1"))
+            # 4. Создаем подстанцию (модель использует dispatcher_name, не code)
+            result = await session.execute(select(Substation).where(Substation.dispatcher_name == "SUB_110_1"))
             substation = result.scalar_one_or_none()
             if not substation:
                 substation = Substation(
                     name="Подстанция 110/10 кВ №1",
-                    code="SUB_110_1",
+                    dispatcher_name="SUB_110_1",
                     voltage_level=110.0,
                     y_position=53.9045,
                     x_position=27.5615,
@@ -186,7 +186,7 @@ async def create_test_data():
             ]
             
             poles = []
-            for pole_data in poles_data:
+            for i, pole_data in enumerate(poles_data):
                 result = await session.execute(
                     select(Pole).where(
                         Pole.line_id == power_line.id,
@@ -204,6 +204,7 @@ async def create_test_data():
                         foundation_type="железобетон",
                         year_installed=2020,
                         condition="good",
+                        sequence_number=i + 1,
                         created_by=user.id
                     )
                     session.add(pole)
@@ -220,51 +221,24 @@ async def create_test_data():
             await session.flush()
             print(f"✅ Создано опор: {len(poles)}")
             
-            # 7. Создаем сегменты линии
+            # 7. Сегменты линии (AClineSegment) — минимальное создание; полная топология через API.
             if len(poles) >= 2:
-                result = await session.execute(select(AClineSegment).where(AClineSegment.code == "SEG_110_1"))
-                segment1 = result.scalar_one_or_none()
-                if not segment1:
+                result = await session.execute(select(AClineSegment).where(AClineSegment.line_id == power_line.id).limit(1))
+                if result.scalar_one_or_none() is None:
+                    seg_mrid = generate_mrid()
                     segment1 = AClineSegment(
-                        name="Сегмент 1: T001-T002",
-                        code="SEG_110_1",
+                        mrid=seg_mrid,
+                        name="Сегмент 1",
+                        code=seg_mrid,
                         line_id=power_line.id,
                         voltage_level=110.0,
-                        length=5.2,  # км
-                        conductor_type="АС-150",
-                        conductor_material="алюминий",
-                        conductor_section="150",
-                        r=0.21,  # Ом/км
-                        x=0.42,  # Ом/км
-                        description="Первый сегмент линии",
-                        created_by=user.id
+                        length=0.0,
+                        sequence_number=1,
+                        created_by=user.id,
                     )
                     session.add(segment1)
                     await session.flush()
-                    print("✅ Создан сегмент: Сегмент 1: T001-T002")
-                
-                if len(poles) >= 3:
-                    result = await session.execute(select(AClineSegment).where(AClineSegment.code == "SEG_110_2"))
-                    segment2 = result.scalar_one_or_none()
-                    if not segment2:
-                        segment2 = AClineSegment(
-                            name="Сегмент 2: T002-T003",
-                            code="SEG_110_2",
-                            line_id=power_line.id,
-                            voltage_level=110.0,
-                            length=4.8,  # км
-                            conductor_type="АС-150",
-                            conductor_material="алюминий",
-                            conductor_section="150",
-                            r=0.21,
-                            x=0.42,
-                            description="Второй сегмент линии",
-                            created_by=user.id
-                        )
-                        session.add(segment2)
-                        await session.flush()
-                        print("✅ Создан сегмент: Сегмент 2: T002-T003")
-            
+
             # Сохраняем все изменения
             await session.commit()
             print("\n✅ Все тестовые данные успешно добавлены!")
@@ -276,7 +250,6 @@ async def create_test_data():
             print("   - 1 подстанция")
             print("   - 1 линия электропередачи")
             print("   - 4 опоры")
-            print("   - 2 сегмента линии")
             
         except Exception as e:
             await session.rollback()

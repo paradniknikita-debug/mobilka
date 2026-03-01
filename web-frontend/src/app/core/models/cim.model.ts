@@ -102,6 +102,8 @@ export interface AClineSegment {
   from_connectivity_node_id: number;
   to_connectivity_node_id?: number;
   to_terminal_id?: number;
+  /** ТП в конце участка (отпайки) */
+  to_substation_id?: number | null;
   sequence_number: number;
   conductor_type?: string;
   conductor_material?: string;

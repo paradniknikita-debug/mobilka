@@ -17,10 +17,12 @@ class ChangeLogResponse(BaseModel):
     id: int
     created_at: datetime
     user_id: Optional[int] = None
+    user_name: Optional[str] = None  # имя пользователя для отображения
     source: str
     action: str
     entity_type: str
     entity_id: Optional[int] = None
+    entity_name: Optional[str] = None  # наименование сущности для отображения
     payload: Optional[dict] = None
     session_id: Optional[str] = None
 

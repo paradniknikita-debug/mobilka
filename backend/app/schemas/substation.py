@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -15,6 +15,20 @@ class SubstationBase(BaseModel):
     # id линий, подключённых к подстанции (хранится в таблице подстанции)
     connected_line_ids: Optional[List[int]] = None
 
+    @field_validator('latitude')
+    @classmethod
+    def latitude_in_range(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and (v < -90 or v > 90):
+            raise ValueError('Широта должна быть в диапазоне от -90 до 90')
+        return v
+
+    @field_validator('longitude')
+    @classmethod
+    def longitude_in_range(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and (v < -180 or v > 180):
+            raise ValueError('Долгота должна быть в диапазоне от -180 до 180')
+        return v
+
 class SubstationCreate(SubstationBase):
     mrid: Optional[str] = None  # UID в формате системы (как у остальных сущностей); если не передан — генерируется
 
@@ -27,6 +41,25 @@ class SubstationResponse(SubstationBase):
 
     class Config:
         from_attributes = True
+
+
+class ConnectionBase(BaseModel):
+    substation_id: int
+    line_id: int
+    connection_type: str
+    voltage_level: float
+    description: Optional[str] = None
+
+class ConnectionCreate(ConnectionBase):
+    pass
+
+class ConnectionResponse(ConnectionBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 
 # Схемы для VoltageLevel
 class VoltageLevelBase(BaseModel):

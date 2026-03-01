@@ -70,8 +70,21 @@ export class ChangeLogComponent implements OnInit {
 
   getName(entry: ChangeLogEntry): string {
     const p = entry.payload;
+    if (!p) return entry.entity_name ?? '—';
+    if (p['cascade'] === true && p['name']) {
+      const parts = [`Линия «${p['name']}»`];
+      if (p['deleted_poles']) parts.push(`${p['deleted_poles']} опор`);
+      if (p['deleted_spans']) parts.push(`${p['deleted_spans']} пролётов`);
+      if (p['deleted_segments']) parts.push(`${p['deleted_segments']} участков`);
+      return parts.join(', ');
+    }
+    if (p['topology_rebuild'] === true) {
+      const n = p['created_spans'];
+      const msg = typeof p['message'] === 'string' ? p['message'] : 'Автосборка топологии';
+      return n != null ? `${msg}: ${n} пролётов` : msg;
+    }
     const v = p?.name ?? p?.['title'];
-    return typeof v === 'string' ? v : '—';
+    return typeof v === 'string' ? v : (entry.entity_name ?? '—');
   }
 
   getUid(entry: ChangeLogEntry): string {

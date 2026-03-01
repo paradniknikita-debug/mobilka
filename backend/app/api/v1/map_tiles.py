@@ -1,5 +1,6 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import math
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -20,6 +21,13 @@ router = APIRouter()
 def filter_none_properties(props: Dict[str, Any]) -> Dict[str, Any]:
     """Удаляет None значения из properties для совместимости с Flutter"""
     return {k: v for k, v in props.items() if v is not None}
+
+
+def _segment_name_to_short(s: Optional[str]) -> Optional[str]:
+    """«Опора 4 - Опора 5» → «оп.4 - оп.5» для отображения в UI."""
+    if not s or not s.strip():
+        return s
+    return re.sub(r"Опора\s+", "оп.", s, flags=re.IGNORECASE).strip()
 
 @router.get("/tiles/{z}/{x}/{y}")
 async def get_tile(
@@ -194,7 +202,6 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
         elif len(poles_list) == 1:
             pole = poles_list[0]
             longitude, latitude = _pole_coords_from_position_point(pole)
-
             if longitude is not None and latitude is not None:
                 try:
                     longitude = float(longitude)
@@ -351,7 +358,7 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["segment_id"] = segment_id
                 properties["acline_segment_id"] = segment_id
             if segment_name:
-                properties["segment_name"] = str(segment_name)
+                properties["segment_name"] = _segment_name_to_short(str(segment_name)) or str(segment_name)
             if pole.material:
                 properties["material"] = str(pole.material)
             if pole.year_installed is not None:
@@ -481,7 +488,11 @@ async def get_substations_geojson(
     result = await db.execute(
         select(Substation)
         .where(Substation.is_active == True)
-        .options(selectinload(Substation.voltage_levels))
+        .options(
+            selectinload(Substation.voltage_levels),
+            selectinload(Substation.location).selectinload(Location.position_points),
+            selectinload(Substation.position_points),
+        )
     )
     substations = result.scalars().all()
 
@@ -651,10 +662,10 @@ async def get_spans_geojson(
             except (AttributeError, IndexError, TypeError):
                 pass
             
-            # Fallback для начальной точки
+            # Fallback для начальной точки (узел без опоры — подстанция: координаты в x_position, y_position)
             if from_longitude is None or from_latitude is None:
-                from_longitude = getattr(span.from_connectivity_node, 'longitude', None)
-                from_latitude = getattr(span.from_connectivity_node, 'latitude', None)
+                from_longitude = getattr(span.from_connectivity_node, 'longitude', None) or getattr(span.from_connectivity_node, 'x_position', None)
+                from_latitude = getattr(span.from_connectivity_node, 'latitude', None) or getattr(span.from_connectivity_node, 'y_position', None)
             
             # Координаты конечной точки
             try:
@@ -668,10 +679,10 @@ async def get_spans_geojson(
             except (AttributeError, IndexError, TypeError):
                 pass
             
-            # Fallback для конечной точки
+            # Fallback для конечной точки (узел без опоры — подстанция: координаты в x_position, y_position)
             if to_longitude is None or to_latitude is None:
-                to_longitude = getattr(span.to_connectivity_node, 'longitude', None)
-                to_latitude = getattr(span.to_connectivity_node, 'latitude', None)
+                to_longitude = getattr(span.to_connectivity_node, 'longitude', None) or getattr(span.to_connectivity_node, 'x_position', None)
+                to_latitude = getattr(span.to_connectivity_node, 'latitude', None) or getattr(span.to_connectivity_node, 'y_position', None)
             
             # Включаем только если обе точки имеют валидные координаты
             if (from_longitude is not None and from_latitude is not None and 
@@ -714,7 +725,7 @@ async def get_spans_geojson(
                         "id": int(span.id),
                         "mrid": str(span.mrid),
                         "span_number": str(span.span_number),
-                        "segment_name": str(segment_name) if segment_name else None,
+                        "segment_name": _segment_name_to_short(str(segment_name)) if segment_name else None,
                         "length": float(span.length) if span.length is not None else None,
                         "conductor_type": str(span.conductor_type) if span.conductor_type else None,
                         "conductor_material": str(span.conductor_material) if span.conductor_material else None,

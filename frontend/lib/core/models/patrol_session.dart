@@ -2,7 +2,8 @@
 class PatrolSession {
   final int id;
   final int userId;
-  final int powerLineId;
+  /// ID линии (ЛЭП). Единое поле line_id.
+  final int lineId;
   final String? note;
   final DateTime startedAt;
   final DateTime? endedAt;
@@ -12,7 +13,7 @@ class PatrolSession {
   const PatrolSession({
     required this.id,
     required this.userId,
-    required this.powerLineId,
+    required this.lineId,
     this.note,
     required this.startedAt,
     this.endedAt,
@@ -24,7 +25,7 @@ class PatrolSession {
     return PatrolSession(
       id: (json['id'] as num).toInt(),
       userId: (json['user_id'] as num).toInt(),
-      powerLineId: (json['power_line_id'] as num).toInt(),
+      lineId: ((json['line_id'] ?? json['power_line_id']) as num).toInt(),
       note: json['note'] as String?,
       startedAt: DateTime.parse(json['started_at'] as String),
       endedAt: json['ended_at'] != null

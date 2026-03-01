@@ -91,7 +91,7 @@ async def create_patrol_session(
     if pl_result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"ЛЭП с id={body.line_id} не найдена. Возможно, она удалена на сервере или ещё не синхронизирована.",
+            detail=f"ЛЭП с id={body.line_id} не найдена. Укажите line_id существующей линии на сервере (при синхронизации с мобильного приложения используйте серверный id линии, а не локальный).",
         )
     session = PatrolSession(
         user_id=current_user.id,

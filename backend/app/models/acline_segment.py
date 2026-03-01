@@ -39,7 +39,7 @@ class AClineSegment(Base, ConductingEquipment):
     # Но оставляем явное определение для обратной совместимости
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=False)
-    code = Column(String(36), unique=True, index=True, nullable=False)  # Единый UID = mrid (без SEG-xxx и т.п.)
+    code = Column(String(36), unique=True, index=True, nullable=False)  # Единый UID = mrid (без SEG-xxx и т.п.), длина 36 для UUID
     
     # Связь с линией (PowerLine) - это EquipmentContainer для Equipment
     # Equipment.EquipmentContainer -> Line
@@ -62,6 +62,8 @@ class AClineSegment(Base, ConductingEquipment):
     
     # Для отпаек, заканчивающихся на подстанции/КТП
     to_terminal_id = Column(Integer, ForeignKey("terminal.id"), nullable=True)
+    # Подстанция (ТП) в конце участка — для отпаек, заканчивающихся на трансформаторной подстанции
+    to_substation_id = Column(Integer, ForeignKey("substation.id"), nullable=True)
     
     # Уровень напряжения
     voltage_level = Column(Float, nullable=False)  # кВ
@@ -101,6 +103,8 @@ class AClineSegment(Base, ConductingEquipment):
     terminals = relationship("Terminal", primaryjoin="AClineSegment.id == Terminal.acline_segment_id", back_populates="acline_segment")
     # Терминал, к которому подключается сегмент (для отпаек, заканчивающихся на подстанции)
     to_terminal = relationship("Terminal", primaryjoin="AClineSegment.to_terminal_id == Terminal.id", foreign_keys=[to_terminal_id])
+    # Подстанция (ТП) в конце участка — для отпаек
+    to_substation = relationship("Substation", foreign_keys=[to_substation_id])
     
     # Секции линии (LineSection)
     line_sections = relationship("LineSection", back_populates="acline_segment", cascade="all, delete-orphan", order_by="LineSection.sequence_number")

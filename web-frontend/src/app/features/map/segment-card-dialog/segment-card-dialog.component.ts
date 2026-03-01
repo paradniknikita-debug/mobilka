@@ -2,6 +2,7 @@ import { Component, Inject, HostListener, ElementRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ApiService } from '../../../core/services/api.service';
 import { AClineSegment, LineSection } from '../../../core/models/cim.model';
+import { Substation } from '../../../core/models/substation.model';
 
 export interface SegmentCardDialogData {
   segmentId: number;
@@ -16,8 +17,11 @@ export interface SegmentCardDialogData {
 })
 export class SegmentCardDialogComponent {
   segment: AClineSegment | null = null;
+  substations: Substation[] = [];
+  selectedSubstationIdForTap: number | null = null;
   loading = true;
   error: string | null = null;
+  savingTapSubstation = false;
   private resizing = false;
   private startX = 0;
   private startY = 0;
@@ -81,6 +85,11 @@ export class SegmentCardDialogComponent {
       next: (seg) => {
         this.segment = seg;
         this.loading = false;
+        if (seg?.is_tap) {
+          this.apiService.getSubstations().subscribe({
+            next: (list) => { this.substations = list; }
+          });
+        }
       },
       error: (err) => {
         this.error = err.error?.detail || err.message || 'Не удалось загрузить участок';
@@ -140,5 +149,39 @@ export class SegmentCardDialogComponent {
 
   onClose(): void {
     this.dialogRef.close();
+  }
+
+  /** Название подстанции по id для отображения «ТП в конце» */
+  getSubstationNameById(id: number | null | undefined): string {
+    if (id == null) return '—';
+    const s = this.substations.find(x => x.id === id);
+    return s ? (s.name || s.dispatcher_name || `ПС ${id}`) : `ПС ${id}`;
+  }
+
+  setTapSubstation(): void {
+    const plId = this.data.powerLineId;
+    if (plId == null || !this.segment || this.selectedSubstationIdForTap == null) return;
+    this.savingTapSubstation = true;
+    this.apiService.setSegmentEndSubstation(plId, this.data.segmentId, { to_substation_id: this.selectedSubstationIdForTap }).subscribe({
+      next: () => {
+        this.savingTapSubstation = false;
+        this.segment = { ...this.segment!, to_substation_id: this.selectedSubstationIdForTap };
+      },
+      error: () => { this.savingTapSubstation = false; }
+    });
+  }
+
+  clearTapSubstation(): void {
+    const plId = this.data.powerLineId;
+    if (plId == null || !this.segment) return;
+    this.savingTapSubstation = true;
+    this.apiService.setSegmentEndSubstation(plId, this.data.segmentId, { to_substation_id: null }).subscribe({
+      next: () => {
+        this.savingTapSubstation = false;
+        this.segment = { ...this.segment!, to_substation_id: null };
+        this.selectedSubstationIdForTap = null;
+      },
+      error: () => { this.savingTapSubstation = false; }
+    });
   }
 }

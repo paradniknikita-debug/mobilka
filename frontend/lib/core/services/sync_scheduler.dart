@@ -59,7 +59,6 @@ class _SyncSchedulerState extends ConsumerState<SyncScheduler>
 
     final result = await Connectivity().checkConnectivity();
     if (mode == SyncMode.autoWifi && result != ConnectivityResult.wifi) return;
-    if (mode == SyncMode.autoAny && result == ConnectivityResult.none) return;
 
     ref.read(syncServiceProvider).syncData();
   }

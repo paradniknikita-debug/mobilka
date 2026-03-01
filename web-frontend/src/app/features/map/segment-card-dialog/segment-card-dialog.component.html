@@ -27,6 +27,25 @@
       <span class="value">{{ lengthKm() | number:'1.2-2' }} км</span>
     </div>
 
+    <div *ngIf="segment.is_tap" class="tap-substation-section">
+      <h3 class="sections-title">ТП в конце участка (отпайки)</h3>
+      <div class="field">
+        <span class="label">Сейчас в конце:</span>
+        <span class="value">{{ segment.to_substation_id != null ? getSubstationNameById(segment.to_substation_id) : 'нет' }}</span>
+        <button *ngIf="segment.to_substation_id != null" mat-button color="warn" (click)="clearTapSubstation()" [disabled]="savingTapSubstation">Снять</button>
+      </div>
+      <div class="field link-controls">
+        <mat-form-field appearance="outline" class="line-select">
+          <mat-label>Подстанция (ТП)</mat-label>
+          <mat-select [(value)]="selectedSubstationIdForTap">
+            <mat-option [value]="null">— не выбрана —</mat-option>
+            <mat-option *ngFor="let s of substations" [value]="s.id">{{ s.name || s.dispatcher_name || 'ПС ' + s.id }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-flat-button color="primary" (click)="setTapSubstation()" [disabled]="savingTapSubstation || selectedSubstationIdForTap == null">Установить</button>
+      </div>
+    </div>
+
     <h3 class="sections-title">Секции линии (по марке провода)</h3>
     <div class="sections-table-wrap" *ngIf="lineSections.length; else noSections">
       <table class="sections-table">

@@ -146,7 +146,7 @@ class _PatrolSessionCard extends StatelessWidget {
         title: Text(
           session.powerLineName.isNotEmpty
               ? session.powerLineName
-              : 'ЛЭП #${session.powerLineId}',
+              : 'ЛЭП #${session.lineId}',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Column(

@@ -48,8 +48,8 @@ def find_nearest_pole(poles: List[Pole], current_pole: Pole, visited: set) -> Op
             continue
         
         distance = calculate_distance(
-            current_pole.y_position, current_pole.x_position,
-            pole.y_position, pole.x_position
+            current_pole.get_latitude(), current_pole.get_longitude(),
+            pole.get_latitude(), pole.get_longitude(),
         )
         
         if distance < min_distance:
@@ -252,4 +252,3 @@ async def get_poles_sequence(
             "connectivity_node": cn_out,
         })
     return out
-

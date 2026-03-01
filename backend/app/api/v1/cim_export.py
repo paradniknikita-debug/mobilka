@@ -4,7 +4,9 @@ API endpoints для экспорта данных в CIM форматы
 """
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import tempfile
+import os
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -21,11 +23,13 @@ from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
 from app.models.base_voltage import BaseVoltage
 from app.models.wire_info import WireInfo
-from app.core.cim.cim_xml import CIMXMLExporter
+from app.core.cim.cim_xml import CIMXMLExporter, CIMXMLImporter
 from app.core.cim.cim_xml_cimpy import CIMpyXMLExporter, CIMPY_AVAILABLE
 from app.core.cim.cim_json import CIMJSONExporter
 from app.core.cim.cim_552_protocol import CIM552Service, MessagePurpose
 from app.core.cim.cim_base import CIMObject
+from app.core.config import settings
+from app.models.base import generate_mrid
 from app.core.cim.cim_objects import (
     SubstationCIMObject,
     VoltageLevelCIMObject,
@@ -603,6 +607,187 @@ async def export_cim_json(
             "Content-Disposition": f'attachment; filename="cim_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json"'
         }
     )
+
+
+@router.post("/import/xml")
+async def import_cim_xml(
+    file: UploadFile = File(..., description="CIM XML файл (FullModel RDF/XML)"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Импорт CIM XML (FullModel). Парсит файл и возвращает сводку по объектам для предпросмотра.
+    """
+    if not file.filename or not file.filename.lower().endswith(".xml"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Требуется файл .xml")
+    importer = CIMXMLImporter()
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".xml", delete=False) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            objects = importer.import_from_file(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ошибка разбора CIM XML: {str(e)}",
+        )
+    summary: dict = {}
+    for obj in objects:
+        cls = obj.get("_class") or obj.get("type") or "Unknown"
+        summary[cls] = summary.get(cls, 0) + 1
+    return {"summary": summary, "count": len(objects), "objects": objects}
+
+
+@router.get("/export/552-diff")
+async def export_cim_552_diff(
+    include_substations: bool = Query(True, description="Включить подстанции"),
+    include_power_lines: bool = Query(True, description="Включить ЛЭП"),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Экспорт данных в формате 552 (один XML, по структуре как FullModel).
+    Возвращает тот же CIM XML, что и /export/xml (для совместимости с кнопкой «Экспорт 552 diff» на фронте).
+    """
+    return await export_cim_xml(
+        use_cimpy=False,
+        include_substations=include_substations,
+        include_power_lines=include_power_lines,
+        current_user=current_user,
+        db=db,
+    )
+
+
+@router.post("/import/552-diff")
+async def import_cim_552_diff(
+    file: UploadFile = File(..., description="552 DifferenceModel XML"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Импорт 552 DifferenceModel XML. Парсит файл и возвращает сводку по объектам.
+    """
+    return await import_cim_xml(file=file, current_user=current_user)
+
+
+@router.post("/apply/552-diff")
+async def apply_cim_552_diff(
+    file: UploadFile = File(..., description="552 DifferenceModel XML для записи в БД"),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Применить 552-диф к БД: создать подстанции, локации и точки координат из загруженного XML.
+    """
+    if not file.filename or not file.filename.lower().endswith(".xml"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Требуется файл .xml")
+    importer = CIMXMLImporter()
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".xml", delete=False) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            objects = importer.import_from_file(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ошибка разбора XML: {str(e)}",
+        )
+    by_mrid: dict = {}
+    for o in objects:
+        m = o.get("mRID") or o.get("mrid")
+        if m:
+            by_mrid[str(m)] = o
+    created_locations = 0
+    created_position_points = 0
+    created_substations = 0
+
+    for obj in objects:
+        cls = obj.get("_class") or obj.get("type") or ""
+        if cls == "Location":
+            mrid = (obj.get("mRID") or obj.get("mrid") or "").strip() or generate_mrid()
+            existing = await db.execute(select(Location).where(Location.mrid == mrid))
+            if existing.scalar_one_or_none() is None:
+                loc = Location(mrid=mrid)
+                db.add(loc)
+                await db.flush()
+                created_locations += 1
+
+    for obj in objects:
+        cls = obj.get("_class") or obj.get("type") or ""
+        if cls == "PositionPoint":
+            x = obj.get("xPosition") or obj.get("XPosition")
+            y = obj.get("yPosition") or obj.get("YPosition")
+            if x is not None and y is not None:
+                mrid = (obj.get("mRID") or obj.get("mrid") or "").strip() or generate_mrid()
+                existing = await db.execute(select(PositionPoint).where(PositionPoint.mrid == mrid))
+                if existing.scalar_one_or_none() is None:
+                    loc_id = None
+                    loc_ref = obj.get("Location") or obj.get("location")
+                    if isinstance(loc_ref, dict):
+                        ref_mrid = (loc_ref.get("mRID") or loc_ref.get("mrid") or "").strip()
+                        if ref_mrid:
+                            loc_res = await db.execute(select(Location).where(Location.mrid == ref_mrid))
+                            loc_inst = loc_res.scalar_one_or_none()
+                            if loc_inst:
+                                loc_id = loc_inst.id
+                    pp = PositionPoint(
+                        mrid=mrid,
+                        location_id=loc_id,
+                        x_position=float(x),
+                        y_position=float(y),
+                        z_position=obj.get("zPosition") or obj.get("ZPosition"),
+                    )
+                    db.add(pp)
+                    await db.flush()
+                    created_position_points += 1
+
+    for obj in objects:
+        cls = obj.get("_class") or obj.get("type") or ""
+        if cls == "Substation":
+            mrid = (obj.get("mRID") or obj.get("mrid") or "").strip() or generate_mrid()
+            existing = await db.execute(select(Substation).where(Substation.mrid == mrid))
+            if existing.scalar_one_or_none() is None:
+                name = (obj.get("name") or "Подстанция").strip() or "Подстанция"
+                voltage = 10.0
+                try:
+                    v = obj.get("nominalVoltage") or obj.get("VoltageLevel")
+                    if isinstance(v, dict):
+                        v = v.get("nominalVoltage")
+                    if v is not None:
+                        voltage = float(v)
+                except (TypeError, ValueError):
+                    pass
+                loc_id = None
+                loc_ref = obj.get("Location") or obj.get("location")
+                if isinstance(loc_ref, dict):
+                    ref_mrid = (loc_ref.get("mRID") or loc_ref.get("mrid") or "").strip()
+                    if ref_mrid:
+                        loc_res = await db.execute(select(Location).where(Location.mrid == ref_mrid))
+                        loc_inst = loc_res.scalar_one_or_none()
+                        if loc_inst:
+                            loc_id = loc_inst.id
+                sub = Substation(
+                    mrid=mrid,
+                    name=name[:100],
+                    voltage_level=voltage,
+                    location_id=loc_id,
+                    is_active=True,
+                )
+                db.add(sub)
+                await db.flush()
+                created_substations += 1
+    await db.commit()
+    return {
+        "created_substations": created_substations,
+        "created_locations": created_locations,
+        "created_position_points": created_position_points,
+    }
 
 
 @router.post("/552/request")

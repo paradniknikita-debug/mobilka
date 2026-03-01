@@ -1,7 +1,8 @@
-import { Component, HostListener, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Subject } from 'rxjs';
+import { filter, takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
-import { Router } from '@angular/router';
+import { Router, NavigationEnd } from '@angular/router';
 import { SidebarService } from '../../core/services/sidebar.service';
 
 @Component({
@@ -9,9 +10,11 @@ import { SidebarService } from '../../core/services/sidebar.service';
   templateUrl: './main-layout.component.html',
   styleUrls: ['./main-layout.component.scss']
 })
-export class MainLayoutComponent implements OnDestroy {
+export class MainLayoutComponent implements OnInit, OnDestroy {
   sidebarWidth = 350;
   sidebarVisible = true;
+  /** Показывать кнопку раскрытия дерева только на карте (скрыта на Журнал и CIM/552) */
+  showSidebarToggle = true;
   private destroy$ = new Subject<void>();
   private isResizing = false;
   private startX = 0;
@@ -24,6 +27,24 @@ export class MainLayoutComponent implements OnDestroy {
   ) {
     this.sidebarService.setSidebarVisible(this.sidebarVisible);
     this.sidebarService.setSidebarWidth(this.sidebarWidth);
+  }
+
+  ngOnInit(): void {
+    this.updateShowSidebarToggle(this.router.url);
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      takeUntil(this.destroy$)
+    ).subscribe(e => this.updateShowSidebarToggle(e.urlAfterRedirects || e.url));
+  }
+
+  private updateShowSidebarToggle(url: string): void {
+    const hideOn = ['/change-log', '/cim-import'];
+    const hide = hideOn.some(path => url.startsWith(path) || url.includes(path));
+    this.showSidebarToggle = !hide;
+    if (hide) {
+      this.sidebarVisible = false;
+      this.sidebarService.setSidebarVisible(false);
+    }
   }
 
   startResize(event: MouseEvent): void {

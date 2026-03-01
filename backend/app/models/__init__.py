@@ -7,7 +7,8 @@ from .substation import (
     Bay,
     BusbarSection,
     ConductingEquipment,
-    ProtectionEquipment
+    ProtectionEquipment,
+    Connection,
 )
 from .geographic_region import GeographicRegion
 from .acline_segment import AClineSegment
@@ -15,6 +16,7 @@ from .cim_line_structure import ConnectivityNode, Terminal, LineSection
 from .location import Location, PositionPoint, LocationType
 from .patrol_session import PatrolSession
 from .change_log import ChangeLog
+from .sync_client_mapping import SyncClientMapping
 # Временно закомментировано до применения миграции
 # from .base_voltage import BaseVoltage
 # from .wire_info import WireInfo
@@ -33,6 +35,7 @@ __all__ = [
     "BusbarSection",
     "ConductingEquipment",
     "ProtectionEquipment",
+    "Connection",
     "GeographicRegion",
     "AClineSegment",
     "ConnectivityNode",
@@ -43,6 +46,7 @@ __all__ = [
     "LocationType",
     "PatrolSession",
     "ChangeLog",
+    "SyncClientMapping",
     # "BaseVoltage",  # Временно закомментировано
     # "WireInfo"  # Временно закомментировано
 ]

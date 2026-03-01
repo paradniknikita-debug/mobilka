@@ -33,7 +33,7 @@
     <div *ngFor="let item of getPowerLinesWithSegmentsAndPoles()" class="tree-item">
       <!-- ЛЭП: раскрытие только по стрелке, по клику на название — без зума -->
       <div class="tree-node power-line-node" 
-           (contextmenu)="onFeatureRightClick(item.powerLine, $event)"
+           (contextmenu)="onFeatureRightClick(item.powerLine, $event, 'powerLine')"
            [class.expanded]="isPowerLineExpanded(item.powerLine.properties['id'])">
         <mat-icon class="expand-icon" (click)="togglePowerLine(item.powerLine.properties['id']); $event.stopPropagation()">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
         <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">electrical_services</mat-icon>
@@ -51,7 +51,7 @@
                [class.expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId)">
             <mat-icon class="expand-icon" (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId); $event.stopPropagation()">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId) ? 'expand_more' : 'chevron_right' }}</mat-icon>
             <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">linear_scale</mat-icon>
-            <span class="node-label" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ getSegmentDisplayName(segment) }}</span>
+            <span class="node-label" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ getSegmentDisplayName(item, segment) }}</span>
             <span class="node-description" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ segment.spans.length }} прол.</span>
           </div>
           
@@ -102,7 +102,7 @@
     <div *ngFor="let substation of substationsFeatures" class="tree-item">
       <div class="tree-node substation-node" 
            (click)="onFeatureClick(substation, $event)"
-           (contextmenu)="onFeatureRightClick(substation, $event)">
+           (contextmenu)="onFeatureRightClick(substation, $event, 'substation')">
         <mat-icon class="node-icon" style="color: rgba(156, 39, 176, 0.87);">power</mat-icon>
         <span class="node-label">{{ substation.properties['name'] || 'Без названия' }}</span>
         <span class="node-description">{{ substation.properties['voltage_level'] }} кВ</span>
@@ -186,9 +186,9 @@
   </ng-container>
   
   <ng-container *ngIf="contextMenuType === 'pole' || contextMenuType === 'span'">
-    <button mat-menu-item *ngIf="contextMenuType === 'pole' && isContextMenuPoleTapAndEmpty()" (click)="onContinueTapFromPole()">
+    <button mat-menu-item *ngIf="contextMenuType === 'pole' && isContextMenuPoleTap()" (click)="onStartTapFromPole()">
       <mat-icon>call_split</mat-icon>
-      <span>Продолжить отпайку</span>
+      <span>Начать отпайку</span>
     </button>
     <button mat-menu-item (click)="onEditObject()">
       <mat-icon>edit</mat-icon>

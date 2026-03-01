@@ -31,9 +31,10 @@ export class CreateObjectDialogComponent implements OnInit {
   isSubmitting = false;
   showImportOption = false;
   
-  // Режим редактирования для опор
+  // Режим редактирования для опор и подстанций
   isEditMode = false;
   poleId?: number;
+  substationId?: number;
   powerLineId?: number;
   isLoading = false;
 
@@ -70,11 +71,19 @@ export class CreateObjectDialogComponent implements OnInit {
   /** Последняя опора в выбранной линии (по sequence_number); если отпаечная — показываем выбор направления */
   lastPoleInLine: { id: number; is_tap_pole?: boolean } | null = null;
   showBranchChoice = false;
-  /** При открытии «Продолжить отпайку» — id отпаечной опоры, от которой строим следующую */
+  /** При открытии «Начать отпайку» — id отпаечной опоры, от которой строим новую ветку */
   tapPoleIdToUse?: number;
 
-  /** Список отпаечных опор линии (для выбора при редактировании направления) */
+  /** Список веток для выбора: магистраль + все отпайки (от одной опоры может быть несколько веток) */
+  tapBranchesInLine: { value: string; label: string }[] = [];
+  /** Для обратной совместимости и подписи: отпаечные опоры по id (pole_number для лейбла) */
   tapPolesInLine: { id: number; pole_number: string }[] = [];
+
+  /** Связь подстанции с линиями: выбранная ЛЭП для установки как начало/конец */
+  lineForStartId: number | null = null;
+  lineForEndId: number | null = null;
+  linkingLineStart = false;
+  linkingLineEnd = false;
 
   // Стандартные значения напряжения для подстанций (кВ)
   voltageLevels = [
@@ -127,7 +136,8 @@ export class CreateObjectDialogComponent implements OnInit {
       mrid: ['', CreateObjectDialogComponent.uuidValidator], // Опциональный UID с валидацией формата
       is_tap: [false],
       branch_type: ['main'], // Направление после отпаечной опоры: main | tap
-      tap_pole_id: [null as number | null], // id отпаечной опоры (при редактировании и выборе «По отпайке»)
+      tap_pole_id: [null as number | null], // для обратной совместимости и startNewTap
+      branch_selection: [null as string | null], // null = магистраль, "poleId:branchIndex" = отпайка
       conductor_type: [''],
       conductor_material: [''],
       conductor_section: [''],
@@ -171,7 +181,7 @@ export class CreateObjectDialogComponent implements OnInit {
       latitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       address: [''],
-      branch_id: [1, Validators.required], // TODO: Получить реальный branch_id
+      branch_id: [null], // опционально; если в БД нет записей в branches — не передаём
       description: ['']
     });
     this.generateSubstationUID();
@@ -189,6 +199,13 @@ export class CreateObjectDialogComponent implements OnInit {
       this.selectedObjectType = 'pole';
       this.objectTypeForm.patchValue({ objectType: 'pole' });
       console.log('Режим редактирования опоры, poleId:', this.poleId, 'powerLineId:', this.powerLineId);
+      this.cdr.detectChanges();
+    } else if (this.data?.isEdit && this.data?.objectType === 'substation' && this.data?.substationId) {
+      this.isEditMode = true;
+      this.substationId = this.data.substationId;
+      this.selectedObjectType = 'substation';
+      this.objectTypeForm.patchValue({ objectType: 'substation' });
+      this.loadSubstation();
       this.cdr.detectChanges();
     } else if (this.data?.defaultObjectType) {
       // Автоматически выбираем тип объекта, если передан defaultObjectType
@@ -246,24 +263,40 @@ export class CreateObjectDialogComponent implements OnInit {
     this.apiService.getPolesByPowerLine(powerLineId).subscribe({
       next: (poles) => {
         const list = (poles as any[]) || [];
-        this.tapPolesInLine = list
-          .filter((p: any) => p.is_tap_pole === true)
-          .map((p: any) => ({ id: p.id, pole_number: p.pole_number || `Опора ${p.id}` }));
-        this.showBranchChoice = this.tapPolesInLine.length > 0;
+        const tapPoles = list.filter((p: any) => p.is_tap_pole === true);
+        this.tapPolesInLine = tapPoles.map((p: any) => ({ id: p.id, pole_number: p.pole_number || `Опора ${p.id}` }));
+        const tapPoleNames: Record<number, string> = {};
+        tapPoles.forEach((p: any) => { tapPoleNames[p.id] = p.pole_number || `Опора ${p.id}`; });
+        const branchSet = new Set<string>();
+        list.forEach((p: any) => {
+          if (p.tap_pole_id != null) {
+            const bi = p.tap_branch_index != null ? p.tap_branch_index : 1;
+            branchSet.add(`${p.tap_pole_id}:${bi}`);
+          }
+        });
+        this.tapBranchesInLine = Array.from(branchSet)
+          .map(s => {
+            const [pid, bi] = s.split(':').map(Number);
+            return { value: s, label: `Отпайка от ${tapPoleNames[pid] ?? 'опора ' + pid} — ветка ${bi}` };
+          })
+          .sort((a, b) => a.value.localeCompare(b.value));
+        this.showBranchChoice = this.tapBranchesInLine.length > 0 || this.tapPolesInLine.length > 0;
 
         if (tapPoleId != null) {
           const tapPole = list.find((p: any) => p.id === tapPoleId);
           this.lastPoleInLine = tapPole ?? null;
-          if (this.showBranchChoice) {
-            this.poleForm.patchValue({ branch_type: 'tap', tap_pole_id: tapPoleId });
+          if (this.showBranchChoice && this.data?.startNewTap !== true) {
+            this.poleForm.patchValue({ branch_type: 'tap', tap_pole_id: tapPoleId, branch_selection: `${tapPoleId}:1` });
+          } else if (this.data?.startNewTap === true && tapPoleId != null) {
+            this.poleForm.patchValue({ branch_type: 'tap', tap_pole_id: tapPoleId, branch_selection: null });
           }
         } else {
           const withSeq = list
             .filter((p: { sequence_number?: number | null }) => p.sequence_number != null)
             .sort((a: { sequence_number?: number }, b: { sequence_number?: number }) => (b.sequence_number ?? 0) - (a.sequence_number ?? 0));
           this.lastPoleInLine = withSeq[0] ?? null;
-          if (this.showBranchChoice && !this.poleForm.get('tap_pole_id')?.value) {
-            this.poleForm.patchValue({ branch_type: 'main', tap_pole_id: null });
+          if (this.showBranchChoice && !this.poleForm.get('branch_selection')?.value) {
+            this.poleForm.patchValue({ branch_type: 'main', tap_pole_id: null, branch_selection: null });
           }
         }
         this.cdr.detectChanges();
@@ -271,23 +304,40 @@ export class CreateObjectDialogComponent implements OnInit {
       error: () => {
         this.lastPoleInLine = null;
         this.tapPolesInLine = [];
+        this.tapBranchesInLine = [];
         this.showBranchChoice = false;
         this.cdr.detectChanges();
       }
     });
   }
 
-  /** Загружает список отпаечных опор линии для выбора при редактировании (направление «По отпайке») */
+  /** Загружает список отпаечных опор и веток линии для выбора при редактировании (направление «По отпайке») */
   loadTapPolesForLine(powerLineId: number): void {
     this.apiService.getPolesByPowerLine(powerLineId).subscribe({
       next: (poles) => {
-        this.tapPolesInLine = (poles as any[])
-          .filter((p: any) => p.is_tap_pole === true)
-          .map((p: any) => ({ id: p.id, pole_number: p.pole_number || `Опора ${p.id}` }));
+        const list = (poles as any[]) || [];
+        const tapPoles = list.filter((p: any) => p.is_tap_pole === true);
+        this.tapPolesInLine = tapPoles.map((p: any) => ({ id: p.id, pole_number: p.pole_number || `Опора ${p.id}` }));
+        const tapPoleNames: Record<number, string> = {};
+        tapPoles.forEach((p: any) => { tapPoleNames[p.id] = p.pole_number || `Опора ${p.id}`; });
+        const branchSet = new Set<string>();
+        list.forEach((p: any) => {
+          if (p.tap_pole_id != null) {
+            const bi = p.tap_branch_index != null ? p.tap_branch_index : 1;
+            branchSet.add(`${p.tap_pole_id}:${bi}`);
+          }
+        });
+        this.tapBranchesInLine = Array.from(branchSet)
+          .map(s => {
+            const [pid, bi] = s.split(':').map(Number);
+            return { value: s, label: `Отпайка от ${tapPoleNames[pid] ?? 'опора ' + pid} — ветка ${bi}` };
+          })
+          .sort((a, b) => a.value.localeCompare(b.value));
         this.cdr.detectChanges();
       },
       error: () => {
         this.tapPolesInLine = [];
+        this.tapBranchesInLine = [];
         this.cdr.detectChanges();
       }
     });
@@ -352,6 +402,9 @@ export class CreateObjectDialogComponent implements OnInit {
         const powerLine = this.powerLines.find(p => p.id === this.powerLineId);
         
         // Заполняем форму данными опоры
+        const tapId = (pole as any).tap_pole_id ?? null;
+        const tapBi = (pole as any).tap_branch_index ?? 1;
+        const branchSel = tapId != null ? `${tapId}:${tapBi}` : null;
         this.poleForm.patchValue({
           pole_number: pole.pole_number || '',
           power_line_id: powerLine || this.powerLineId,
@@ -362,7 +415,8 @@ export class CreateObjectDialogComponent implements OnInit {
           mrid: pole.mrid || '',
           is_tap: (pole as any).is_tap_pole ?? false,
           branch_type: (pole as any).branch_type === 'tap' ? 'tap' : 'main',
-          tap_pole_id: (pole as any).tap_pole_id ?? null,
+          tap_pole_id: tapId,
+          branch_selection: branchSel,
           conductor_type: (pole as any).conductor_type ?? '',
           conductor_material: (pole as any).conductor_material ?? '',
           conductor_section: (pole as any).conductor_section ?? '',
@@ -385,6 +439,33 @@ export class CreateObjectDialogComponent implements OnInit {
         console.error('Ошибка загрузки опоры:', error);
         this.snackBar.open('Ошибка загрузки данных опоры: ' + (error.error?.detail || error.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
         this.isLoading = false;
+      }
+    });
+  }
+
+  loadSubstation(): void {
+    if (!this.substationId) return;
+    this.isLoading = true;
+    this.apiService.getSubstation(this.substationId).subscribe({
+      next: (sub) => {
+        this.substationForm.patchValue({
+          name: sub.name || '',
+          uid: sub.mrid || '',
+          dispatcher_name: sub.dispatcher_name ?? '',
+          voltage_level: sub.voltage_level ?? null,
+          latitude: (sub as any).latitude ?? sub.latitude ?? '',
+          longitude: (sub as any).longitude ?? sub.longitude ?? '',
+          address: sub.address ?? '',
+          branch_id: sub.branch_id ?? null,
+          description: (sub as any).description ?? ''
+        });
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.snackBar.open('Ошибка загрузки подстанции: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -498,9 +579,32 @@ export class CreateObjectDialogComponent implements OnInit {
       return;
     }
 
+    // Ветка: из branch_selection или из data (Начать отпайку)
+    let tapPoleId: number | null = null;
+    let tapBranchIndex: number | undefined;
+    let branchType: 'main' | 'tap' | undefined;
+    let startNewTap: boolean | undefined;
+    if (this.data?.startNewTap === true && this.data?.tapPoleId != null) {
+      tapPoleId = this.data.tapPoleId as number;
+      startNewTap = true;
+      branchType = 'tap';
+    } else if (this.showBranchChoice) {
+      const sel = formValue.branch_selection;
+      if (sel && typeof sel === 'string' && sel.includes(':')) {
+        const parts = sel.split(':');
+        tapPoleId = parseInt(parts[0], 10);
+        tapBranchIndex = parseInt(parts[1], 10);
+        if (!isNaN(tapPoleId) && !isNaN(tapBranchIndex)) {
+          branchType = 'tap';
+        }
+      } else {
+        branchType = 'main';
+      }
+    }
+
     // CIM: x_position = долгота, y_position = широта (форма ввода — широта/долгота)
     const poleData: PoleCreate = {
-      power_line_id: powerLineId,
+      line_id: powerLineId,
       pole_number: formValue.pole_number.trim(),
       sequence_number: seqNum,
       x_position: longitude,
@@ -508,10 +612,10 @@ export class CreateObjectDialogComponent implements OnInit {
       pole_type: formValue.pole_type,
       mrid: formValue.mrid && formValue.mrid.trim() ? formValue.mrid.trim() : undefined,
       is_tap: !!formValue.is_tap,
-      branch_type: this.showBranchChoice && formValue.tap_pole_id != null ? 'tap' : (this.showBranchChoice ? 'main' : undefined),
-      tap_pole_id: this.showBranchChoice
-        ? (formValue.tap_pole_id != null && formValue.tap_pole_id !== '' ? formValue.tap_pole_id : null)
-        : undefined,
+      branch_type: branchType,
+      tap_pole_id: tapPoleId ?? undefined,
+      tap_branch_index: tapBranchIndex,
+      start_new_tap: startNewTap,
       conductor_type: formValue.conductor_type?.trim() || undefined,
       conductor_material: formValue.conductor_material?.trim() || undefined,
       conductor_section: formValue.conductor_section != null && String(formValue.conductor_section).trim() !== '' ? String(formValue.conductor_section).trim() : undefined,
@@ -726,12 +830,12 @@ export class CreateObjectDialogComponent implements OnInit {
     return null;
   }
 
-  /** Подпись поля «ветка»: что выбрано — Магистраль или Отпайка от опоры X */
+  /** Подпись поля «ветка»: что выбрано — Магистраль или Отпайка от опоры X — ветка N */
   get tapBranchLabel(): string {
-    const tapId = this.poleForm?.get('tap_pole_id')?.value;
-    if (tapId == null) return 'Магистраль';
-    const tp = this.tapPolesInLine.find((p: { id: number }) => p.id === tapId);
-    return tp ? `Отпайка от ${tp.pole_number}` : 'Ветка';
+    const sel = this.poleForm?.get('branch_selection')?.value;
+    if (sel == null || sel === '') return 'Магистраль';
+    const tb = this.tapBranchesInLine.find(b => b.value === sel);
+    return tb ? tb.label : 'Ветка';
   }
 
   // Валидатор для стандартных значений напряжения
@@ -840,6 +944,7 @@ export class CreateObjectDialogComponent implements OnInit {
           entity_id: createdPowerLine.id,
           payload: { name: createdPowerLine.name, mrid: createdPowerLine.mrid }
         }).subscribe({ error: () => {} });
+        // Обновляем дерево/карту; закрываем с объектом ЛЭП
         this.mapService.refreshData();
         this.dialogRef.close(createdPowerLine);
       },
@@ -1012,7 +1117,7 @@ export class CreateObjectDialogComponent implements OnInit {
       latitude: parseFloat(formValue.latitude) || 0,
       longitude: parseFloat(formValue.longitude) || 0,
       address: formValue.address?.trim() || undefined,
-      branch_id: formValue.branch_id || 1,
+      branch_id: formValue.branch_id ?? undefined,
       description: formValue.description?.trim() || undefined
     };
     if (formValue.uid && String(formValue.uid).trim()) {
@@ -1022,35 +1127,135 @@ export class CreateObjectDialogComponent implements OnInit {
       substationData.dispatcher_name = String(formValue.dispatcher_name).trim();
     }
 
-    this.apiService.createSubstation(substationData).subscribe({
-      next: (createdSubstation) => {
-        console.log('Подстанция успешно создана:', createdSubstation);
+    const obs = this.isEditMode && this.substationId
+      ? this.apiService.updateSubstation(this.substationId, substationData)
+      : this.apiService.createSubstation(substationData);
+
+    obs.subscribe({
+      next: (createdOrUpdated) => {
         this.isSubmitting = false;
-        this.snackBar.open('Подстанция успешно создана', 'Закрыть', {
-          duration: 3000
-        });
+        const message = this.isEditMode ? 'Подстанция успешно обновлена' : 'Подстанция успешно создана';
+        this.snackBar.open(message, 'Закрыть', { duration: 3000 });
         this.apiService.createChangeLogEntry({
           source: 'web',
-          action: 'create',
+          action: this.isEditMode ? 'update' : 'create',
           entity_type: 'substation',
-          entity_id: createdSubstation.id,
-          payload: { name: createdSubstation.name, mrid: createdSubstation.mrid }
+          entity_id: createdOrUpdated.id,
+          payload: { name: createdOrUpdated.name, mrid: createdOrUpdated.mrid }
         }).subscribe({ error: () => {} });
         this.mapService.refreshData();
-        this.dialogRef.close({ success: true, data: createdSubstation });
+        this.dialogRef.close({ success: true, data: createdOrUpdated });
       },
       error: (error) => {
-        console.error('Ошибка создания подстанции:', error);
+        console.error(this.isEditMode ? 'Ошибка обновления подстанции:' : 'Ошибка создания подстанции:', error);
         this.isSubmitting = false;
-        let errorMessage = 'Ошибка создания подстанции';
+        let errorMessage = this.isEditMode ? 'Ошибка обновления подстанции' : 'Ошибка создания подстанции';
         if (error.error?.detail) {
           errorMessage = error.error.detail;
         } else if (error.message) {
           errorMessage = error.message;
         }
-        this.snackBar.open(errorMessage, 'Закрыть', {
-          duration: 5000
-        });
+        this.snackBar.open(errorMessage, 'Закрыть', { duration: 5000 });
+      }
+    });
+  }
+
+  /** ЛЭП, у которых эта подстанция указана в начале линии */
+  get linesWhereSubstationIsStart(): PowerLine[] {
+    if (!this.substationId || !this.powerLines.length) return [];
+    return this.powerLines.filter(l => l.substation_start_id === this.substationId);
+  }
+
+  /** Строка имён ЛЭП «в начале» для отображения в шаблоне */
+  get linesWhereSubstationIsStartNames(): string {
+    return this.linesWhereSubstationIsStart.map(line => line.name).join(', ');
+  }
+
+  /** ЛЭП, у которых эта подстанция указана в конце линии */
+  get linesWhereSubstationIsEnd(): PowerLine[] {
+    if (!this.substationId || !this.powerLines.length) return [];
+    return this.powerLines.filter(l => l.substation_end_id === this.substationId);
+  }
+
+  /** Строка имён ЛЭП «в конце» для отображения в шаблоне */
+  get linesWhereSubstationIsEndNames(): string {
+    return this.linesWhereSubstationIsEnd.map(line => line.name).join(', ');
+  }
+
+  setSubstationAsLineStart(): void {
+    if (!this.substationId || this.lineForStartId == null) return;
+    this.linkingLineStart = true;
+    this.apiService.updatePowerLine(this.lineForStartId, { substation_start_id: this.substationId }).subscribe({
+      next: () => {
+        this.linkingLineStart = false;
+        this.lineForStartId = null;
+        this.loadPowerLines();
+        this.mapService.refreshData();
+        this.snackBar.open('Подстанция установлена как начало линии', 'Закрыть', { duration: 3000 });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.linkingLineStart = false;
+        this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  setSubstationAsLineEnd(): void {
+    if (!this.substationId || this.lineForEndId == null) return;
+    this.linkingLineEnd = true;
+    this.apiService.updatePowerLine(this.lineForEndId, { substation_end_id: this.substationId }).subscribe({
+      next: () => {
+        this.linkingLineEnd = false;
+        this.lineForEndId = null;
+        this.loadPowerLines();
+        this.mapService.refreshData();
+        this.snackBar.open('Подстанция установлена как конец линии', 'Закрыть', { duration: 3000 });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.linkingLineEnd = false;
+        this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  clearSubstationFromLineStart(lineId: number): void {
+    if (!this.substationId) return;
+    this.linkingLineStart = true;
+    this.apiService.updatePowerLine(lineId, { substation_start_id: null }).subscribe({
+      next: () => {
+        this.linkingLineStart = false;
+        this.loadPowerLines();
+        this.mapService.refreshData();
+        this.snackBar.open('Связь «начало линии» снята', 'Закрыть', { duration: 3000 });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.linkingLineStart = false;
+        this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  clearSubstationFromLineEnd(lineId: number): void {
+    if (!this.substationId) return;
+    this.linkingLineEnd = true;
+    this.apiService.updatePowerLine(lineId, { substation_end_id: null }).subscribe({
+      next: () => {
+        this.linkingLineEnd = false;
+        this.loadPowerLines();
+        this.mapService.refreshData();
+        this.snackBar.open('Связь «конец линии» снята', 'Закрыть', { duration: 3000 });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.linkingLineEnd = false;
+        this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.cdr.detectChanges();
       }
     });
   }

@@ -107,6 +107,7 @@ class AClineSegmentBase(BaseModel):
     tap_number: Optional[str] = None
     branch_type: Optional[str] = None   # 'main' | 'tap'
     tap_pole_id: Optional[int] = None   # id отпаечной опоры для участка-отпайки
+    to_substation_id: Optional[int] = None  # ТП в конце участка (отпайки)
     sequence_number: int = 1
     # Параметры по умолчанию (могут переопределяться в LineSection)
     conductor_type: Optional[str] = None
@@ -134,6 +135,7 @@ class AClineSegmentResponse(AClineSegmentBase):
     from_connectivity_node_id: int
     to_connectivity_node_id: Optional[int] = None
     to_terminal_id: Optional[int] = None
+    to_substation_id: Optional[int] = None  # ТП в конце участка (отпайки)
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime] = None

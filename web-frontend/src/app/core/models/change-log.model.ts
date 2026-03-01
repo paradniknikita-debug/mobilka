@@ -2,10 +2,12 @@ export interface ChangeLogEntry {
   id: number;
   created_at: string;
   user_id: number | null;
+  user_name?: string | null;
   source: string;
   action: string;
   entity_type: string;
   entity_id: number | null;
+  entity_name?: string | null;
   payload: ChangeLogPayload | null;
   session_id: string | null;
 }
@@ -15,6 +17,8 @@ export interface ChangeLogPayload {
   mrid?: string;
   old_value?: Record<string, unknown>;
   new_value?: Record<string, unknown>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

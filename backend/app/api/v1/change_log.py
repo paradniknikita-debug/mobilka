@@ -3,7 +3,7 @@ API журнала изменений и журнала несоответств
 События с веб- (Angular) и Flutter-клиентов: создание/редактирование/удаление объектов.
 Отдельный эндпоинт — проверка модели на «забытые» объекты и обрывы линий.
 """
-from typing import List, Optional
+from typing import List, Optional, Dict, Set, Tuple
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -15,9 +15,48 @@ from app.models.change_log import ChangeLog
 from app.models.power_line import PowerLine, Pole, Span
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
+from app.models.substation import Substation
 from app.schemas.change_log import ChangeLogCreate, ChangeLogResponse, ModelIssueResponse
 
 router = APIRouter()
+
+
+async def _load_user_names(db: AsyncSession, user_ids: Set[int]) -> Dict[int, str]:
+    """Вернуть словарь user_id -> full_name (или username)."""
+    if not user_ids:
+        return {}
+    result = await db.execute(
+        select(User.id, User.full_name, User.username).where(User.id.in_(user_ids))
+    )
+    return {r[0]: (r[1] or r[2] or str(r[0])) for r in result.fetchall()}
+
+
+async def _load_entity_names(
+    db: AsyncSession, entity_type: str, entity_ids: Set[int]
+) -> Dict[int, str]:
+    """Вернуть словарь entity_id -> отображаемое имя для заданного entity_type."""
+    if not entity_ids:
+        return {}
+    name_col = None
+    model = None
+    if entity_type == "pole":
+        model, name_col = Pole, Pole.pole_number
+    elif entity_type == "power_line":
+        model, name_col = PowerLine, PowerLine.name
+    elif entity_type == "span":
+        model, name_col = Span, Span.span_number
+    elif entity_type == "substation":
+        model, name_col = Substation, Substation.name
+    elif entity_type == "acline_segment":
+        model, name_col = AClineSegment, AClineSegment.name
+    elif entity_type == "line_section":
+        model, name_col = LineSection, LineSection.name
+    else:
+        return {}
+    result = await db.execute(
+        select(model.id, name_col).where(model.id.in_(entity_ids))
+    )
+    return {r[0]: (r[1] or f"id={r[0]}") for r in result.fetchall()}
 
 
 @router.post("", response_model=ChangeLogResponse)
@@ -39,7 +78,24 @@ async def create_change_log_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
-    return entry
+    user_name = current_user.full_name or current_user.username
+    entity_name = None
+    if entry.entity_id and entry.entity_type:
+        names = await _load_entity_names(db, entry.entity_type, {entry.entity_id})
+        entity_name = names.get(entry.entity_id)
+    return ChangeLogResponse(
+        id=entry.id,
+        created_at=entry.created_at,
+        user_id=entry.user_id,
+        user_name=user_name,
+        source=entry.source,
+        action=entry.action,
+        entity_type=entry.entity_type,
+        entity_id=entry.entity_id,
+        entity_name=entity_name,
+        payload=entry.payload,
+        session_id=entry.session_id,
+    )
 
 
 @router.get("", response_model=List[ChangeLogResponse])
@@ -52,7 +108,7 @@ async def get_change_log(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Список записей журнала изменений (для отображения в вебе и во Flutter)."""
+    """Список записей журнала изменений (с именами пользователей и сущностей вместо только id)."""
     q = select(ChangeLog).order_by(desc(ChangeLog.created_at)).limit(limit).offset(offset)
     if source:
         q = q.where(ChangeLog.source == source)
@@ -61,7 +117,36 @@ async def get_change_log(
     if entity_type:
         q = q.where(ChangeLog.entity_type == entity_type)
     result = await db.execute(q)
-    return result.scalars().all()
+    rows = result.scalars().all()
+
+    user_ids: Set[int] = {r.user_id for r in rows if r.user_id is not None}
+    by_entity: Dict[str, Set[int]] = {}
+    for r in rows:
+        if r.entity_id is not None:
+            by_entity.setdefault(r.entity_type, set()).add(r.entity_id)
+
+    user_names = await _load_user_names(db, user_ids)
+    entity_names: Dict[str, Dict[int, str]] = {}
+    for et, ids in by_entity.items():
+        entity_names[et] = await _load_entity_names(db, et, ids)
+
+    out: List[ChangeLogResponse] = []
+    for r in rows:
+        d = {
+            "id": r.id,
+            "created_at": r.created_at,
+            "user_id": r.user_id,
+            "user_name": user_names.get(r.user_id) if r.user_id else None,
+            "source": r.source,
+            "action": r.action,
+            "entity_type": r.entity_type,
+            "entity_id": r.entity_id,
+            "entity_name": entity_names.get(r.entity_type, {}).get(r.entity_id) if r.entity_id else None,
+            "payload": r.payload,
+            "session_id": r.session_id,
+        }
+        out.append(ChangeLogResponse.model_validate(d))
+    return out
 
 
 @router.get("/errors", response_model=List[ModelIssueResponse])

@@ -1,17 +1,21 @@
 <h2 mat-dialog-title>Пересборка топологии линии</h2>
 
 <mat-dialog-content>
-  <p>На линии уже есть созданные пролёты и участки. Как пересобрать топологию?</p>
+  <p class="intro">На линии уже есть созданные пролёты и участки. Как пересобрать топологию?</p>
   <div class="options">
     <button mat-stroked-button class="option-btn" (click)="onMode('full')">
-      <mat-icon color="warn">delete_sweep</mat-icon>
-      <span class="option-title">Пересобрать с нуля</span>
-      <span class="option-desc">Существующие пролёты и участки будут удалены и заменены на новые по текущей последовательности опор.</span>
+      <mat-icon class="option-icon" color="warn">delete_sweep</mat-icon>
+      <div class="option-text">
+        <span class="option-title">Пересобрать с нуля</span>
+        <span class="option-desc">Существующие пролёты и участки будут удалены и заменены на новые по текущей последовательности опор.</span>
+      </div>
     </button>
     <button mat-stroked-button class="option-btn" (click)="onMode('preserve')">
-      <mat-icon color="primary">add_circle_outline</mat-icon>
-      <span class="option-title">Добавить недостающее</span>
-      <span class="option-desc">Уже созданные пролёты сохраняются, добавляются только отсутствующие между соседними опорами.</span>
+      <mat-icon class="option-icon" color="primary">add_circle_outline</mat-icon>
+      <div class="option-text">
+        <span class="option-title">Добавить недостающее</span>
+        <span class="option-desc">Уже созданные пролёты сохраняются, добавляются только отсутствующие между соседними опорами.</span>
+      </div>
     </button>
   </div>
 </mat-dialog-content>

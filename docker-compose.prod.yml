@@ -17,9 +17,7 @@ services:
       retries: 5
     networks:
       - lepm_network
-    # Не открываем порт наружу в продакшене
 
-  # Redis для кэширования
   redis:
     image: redis:7-alpine
     container_name: lepm_redis
@@ -32,9 +30,12 @@ services:
     networks:
       - lepm_network
 
-  # Backend API сервер (образ из GHCR, задаётся в .env как BACKEND_IMAGE)
+  # Backend API: образ из .env (BACKEND_IMAGE) для деплоя с GHCR; локально можно собрать через build
   backend:
-    image: ${BACKEND_IMAGE}
+    image: ${BACKEND_IMAGE:-ghcr.io/mobilka-backend:local}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: lepm_backend
     depends_on:
       postgres:
@@ -49,15 +50,12 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       RELOAD: "false"
       TZ: ${TZ:-Europe/Moscow}
-    # Не монтируем код в продакшене - используем образ
-    # Не открываем порт 8000 наружу - только через nginx
     expose:
       - "8000"
     restart: unless-stopped
     networks:
       - lepm_network
 
-  # Nginx для прода: статика (Angular + Flutter) + прокси API + HTTPS
   nginx:
     image: nginx:alpine
     container_name: lepm_nginx
@@ -68,9 +66,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # Для самоподписанных сертификатов (создаются через nginx/generate-ssl-ubuntu.sh)
       - ./nginx/ssl:/etc/nginx/ssl:ro
-      # Для Let's Encrypt (если используете реальный домен)
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./web-frontend/dist/lepm-web-frontend:/app/angular-web:ro
       - ./frontend/build/web:/app/flutter-web:ro
@@ -84,4 +80,3 @@ volumes:
 networks:
   lepm_network:
     driver: bridge
-

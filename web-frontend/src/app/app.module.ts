@@ -60,6 +60,8 @@ import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dia
 import { RebuildTopologyDialogComponent } from './features/map/rebuild-topology-dialog/rebuild-topology-dialog.component';
 import { ChangeLogComponent } from './features/change-log/change-log.component';
 import { ChangeLogDetailDialogComponent } from './features/change-log/change-log-detail-dialog/change-log-detail-dialog.component';
+import { CimImportComponent } from './features/cim-import/cim-import.component';
+import { CimPreviewMapDialogComponent } from './features/cim-import/cim-preview-map-dialog/cim-preview-map-dialog.component';
 
 @NgModule({
   declarations: [
@@ -78,7 +80,9 @@ import { ChangeLogDetailDialogComponent } from './features/change-log/change-log
     EditPowerLineDialogComponent,
     RebuildTopologyDialogComponent,
     ChangeLogComponent,
-    ChangeLogDetailDialogComponent
+    ChangeLogDetailDialogComponent,
+    CimImportComponent,
+    CimPreviewMapDialogComponent
   ],
   imports: [
     BrowserModule,

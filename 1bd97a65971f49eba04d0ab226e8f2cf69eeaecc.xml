@@ -1,0 +1,173 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:cim="http://iec.ch/TC57/2014/CIM-schema-cim16#" xmlns:its="http://intechs.by/2025/schema-cim16#" xmlns:cim17="http://iec.ch/TC57/2014/CIM-schema-cim17#" xmlns:me="http://monitel.com/2014/schema-cim16#" xmlns:rf="http://gost.ru/2019/schema-cim01#" xmlns:rh="http://rushydro.ru/2015/schema-cim16#" xmlns:so="http://so-ups.ru/2015/schema-cim16#" xmlns:dm="http://iec.ch/TC57/61970-552/DifferenceModel/1#" xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#">
+  <dm:DifferenceModel>
+    <md:Model.version>ver:11.6.5.203;ext:4;</md:Model.version>
+    <dm:forwardDifferences><rf:ACLineSeriesSection rdf:about="gm:#_88fa98d5-a022-4cae-8def-df551835e4b5">
+    <rf:ACLineSeriesSection.length>263</rf:ACLineSeriesSection.length>
+    <rf:ACLineSeriesSection.ACLineSegment rdf:resource="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4"/>
+    <cim:IdentifiedObject.name>ЗТП-438 - Муфта 1</cim:IdentifiedObject.name>
+    <rh:PowerSystemResource.ccsCode>KS010-0003902-006-SEG-000-SS-ААБ2л_3х95-cable-ac15ea37</rh:PowerSystemResource.ccsCode>
+    <me:Equipment.nameplate>ААБ2л 3х95</me:Equipment.nameplate>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4"/>
+    <me:ACLineSeriesSection.isCable>True</me:ACLineSeriesSection.isCable>
+    <rf:ACLineSeriesSection.sectionNumber>1</rf:ACLineSeriesSection.sectionNumber>
+  </rf:ACLineSeriesSection>
+  <cim:ACLineSegment rdf:about="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4">
+    <cim:ConductingEquipment.BaseVoltage rdf:resource="gm:#_10000637-0000-0000-C000-0000006D746C"/>
+    <cim:ACLineSegment.r>0</cim:ACLineSegment.r>
+    <cim:IdentifiedObject.name>ЗТП-438 - Р-175</cim:IdentifiedObject.name>
+    <cim:ACLineSegment.gch>0</cim:ACLineSegment.gch>
+    <cim:Conductor.length>365</cim:Conductor.length>
+    <cim:ACLineSegment.g0ch>0</cim:ACLineSegment.g0ch>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e"/>
+    <cim:ACLineSegment.b0ch>0</cim:ACLineSegment.b0ch>
+    <cim:ACLineSegment.r0>0</cim:ACLineSegment.r0>
+    <cim:ACLineSegment.x0>0</cim:ACLineSegment.x0>
+    <cim:ACLineSegment.bch>0</cim:ACLineSegment.bch>
+    <me:Equipment.nameplate/>
+    <rh:PowerSystemResource.ccsCode>KS010-0003902-006-SEG-000</rh:PowerSystemResource.ccsCode>
+    <cim:Equipment.EquipmentContainer rdf:resource="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e"/>
+    <cim:ACLineSegment.x>0</cim:ACLineSegment.x>
+    <cim:PowerSystemResource.PSRType rdf:resource="gm:#_10000CC6-0000-0000-C000-0000006D746C"/>
+    <me:ACLineSegment.sections>PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0ndXRmLTgnPz4KPFNlY3Rpb25zIC8+</me:ACLineSegment.sections>
+    <rf:ACLineSegment.ACLineSeriesSections rdf:resource="gm:#_88fa98d5-a022-4cae-8def-df551835e4b5"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_88fa98d5-a022-4cae-8def-df551835e4b5"/>
+  </cim:ACLineSegment>
+  <cim:Disconnector rdf:about="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef">
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_658c3335-3583-4ad5-b8f0-9f68fdab8273"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_8d40d018-a4a7-4e98-8bca-cb1d0348118a"/>
+    <rh:PowerSystemResource.ccsCode>KS010-0003902-202-1025_2001515541</rh:PowerSystemResource.ccsCode>
+    <cim:ConductingEquipment.Terminals rdf:resource="gm:#_658c3335-3583-4ad5-b8f0-9f68fdab8273"/>
+    <cim:ConductingEquipment.Terminals rdf:resource="gm:#_8d40d018-a4a7-4e98-8bca-cb1d0348118a"/>
+    <cim:IdentifiedObject.name>Р-175 (Опора №25)</cim:IdentifiedObject.name>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e"/>
+    <me:ConductingEquipment.iTh>10,0000</me:ConductingEquipment.iTh>
+    <cim:Equipment.EquipmentContainer rdf:resource="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e"/>
+    <cim:ConductingEquipment.BaseVoltage rdf:resource="gm:#_10000637-0000-0000-C000-0000006D746C"/>
+    <me:ConductingEquipment.tTh>4,000</me:ConductingEquipment.tTh>
+    <me:Equipment.nameplate>РЛНД.2-10.II/400 У1 Р-175</me:Equipment.nameplate>
+    <me:ConductingEquipment.ipMax>25.000,00</me:ConductingEquipment.ipMax>
+  </cim:Disconnector>
+  <cim:Terminal rdf:about="gm:#_470226f3-aa1d-454a-8410-06a27edc4214">
+    <cim:IdentifiedObject.mRID>T2_KS010-0003902-202-SEG-000</cim:IdentifiedObject.mRID>
+    <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_076d0db2-149e-4f48-8ad9-c606d2c0e3dc"/>
+    <cim:Terminal.ConductingEquipment rdf:resource="gm:#_076d0db2-149e-4f48-8ad9-c606d2c0e3dc"/>
+  </cim:Terminal>
+  <rdf:Description rdf:about="gm:#_63d6a933-a5b1-426e-b8b7-6f1f4ea7f6f1">
+    <cim:ConnectivityNode.Terminals rdf:resource="gm:#_032a9942-847f-4796-8af3-17cd3b0859a2"/>
+    <cim:ConnectivityNode.Terminals rdf:resource="gm:#_91ab4fee-e70f-4628-b472-bc508b4fffd9"/>
+  </rdf:Description>
+  <rf:ACLineSeriesSection rdf:about="gm:#_a86cbbdc-a8fb-401e-844f-43385b053810">
+    <me:ACLineSeriesSection.isCable>True</me:ACLineSeriesSection.isCable>
+    <rf:ACLineSeriesSection.ACLineSegment rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <rf:ACLineSeriesSection.sectionNumber>1</rf:ACLineSeriesSection.sectionNumber>
+    <rh:PowerSystemResource.ccsCode>KS010-0003902-005-SEG-000-SS-АПвПу_1х95-cable-73f82ce6</rh:PowerSystemResource.ccsCode>
+    <rf:ACLineSeriesSection.length>45</rf:ACLineSeriesSection.length>
+    <me:Equipment.nameplate>АПвПу 1х95/16</me:Equipment.nameplate>
+    <cim:IdentifiedObject.name>ЗТП-410 - Оп. 14</cim:IdentifiedObject.name>
+  </rf:ACLineSeriesSection>
+  <cim:ACLineSegment rdf:about="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68">
+    <cim:ConductingEquipment.BaseVoltage rdf:resource="gm:#_10000637-0000-0000-C000-0000006D746C"/>
+    <cim:ACLineSegment.r0>0</cim:ACLineSegment.r0>
+    <cim:ACLineSegment.x0>0</cim:ACLineSegment.x0>
+    <cim:ACLineSegment.b0ch>0</cim:ACLineSegment.b0ch>
+    <cim:ACLineSegment.gch>0</cim:ACLineSegment.gch>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e"/>
+    <cim:ACLineSegment.g0ch>0</cim:ACLineSegment.g0ch>
+    <cim:ACLineSegment.bch>0</cim:ACLineSegment.bch>
+    <cim:IdentifiedObject.name>ЗТП-410 - Оп. 14</cim:IdentifiedObject.name>
+    <cim:ACLineSegment.x>0</cim:ACLineSegment.x>
+    <cim:PowerSystemResource.PSRType rdf:resource="gm:#_10000CC6-0000-0000-C000-0000006D746C"/>
+    <me:Equipment.nameplate/>
+    <me:ACLineSegment.sections>PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0ndXRmLTgnPz4KPFNlY3Rpb25zIC8+</me:ACLineSegment.sections>
+    <rh:PowerSystemResource.ccsCode>KS010-0003902-005-SEG-000</rh:PowerSystemResource.ccsCode>
+    <cim:Equipment.EquipmentContainer rdf:resource="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e"/>
+    <cim:ACLineSegment.r>0</cim:ACLineSegment.r>
+    <cim:Conductor.length>45</cim:Conductor.length>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_a86cbbdc-a8fb-401e-844f-43385b053810"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_70231070-48cc-400c-aa41-9272fbbd1f5a"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_91ab4fee-e70f-4628-b472-bc508b4fffd9"/>
+    <rf:ACLineSegment.ACLineSeriesSections rdf:resource="gm:#_a86cbbdc-a8fb-401e-844f-43385b053810"/>
+    <cim:ConductingEquipment.Terminals rdf:resource="gm:#_70231070-48cc-400c-aa41-9272fbbd1f5a"/>
+    <cim:ConductingEquipment.Terminals rdf:resource="gm:#_91ab4fee-e70f-4628-b472-bc508b4fffd9"/>
+  </cim:ACLineSegment>
+  <rdf:Description rdf:about="gm:#_b8bc577b-c064-44a1-8401-193d2ce06a0f">
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_43e576ae-6c5f-4e3f-9d03-ad5cd04b7a97"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="gm:#_076d0db2-149e-4f48-8ad9-c606d2c0e3dc">
+    <cim:ConductingEquipment.Terminals rdf:resource="gm:#_032a9942-847f-4796-8af3-17cd3b0859a2"/>
+    <cim:ConductingEquipment.Terminals rdf:resource="gm:#_470226f3-aa1d-454a-8410-06a27edc4214"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_032a9942-847f-4796-8af3-17cd3b0859a2"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_470226f3-aa1d-454a-8410-06a27edc4214"/>
+  </rdf:Description>
+  <cim:Terminal rdf:about="gm:#_91ab4fee-e70f-4628-b472-bc508b4fffd9">
+    <cim:Terminal.ConnectivityNode rdf:resource="gm:#_63d6a933-a5b1-426e-b8b7-6f1f4ea7f6f1"/>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <cim:IdentifiedObject.mRID>T2_KS010-0003902-005-SEG-000</cim:IdentifiedObject.mRID>
+  </cim:Terminal>
+  <rdf:Description rdf:about="gm:#_10000637-0000-0000-C000-0000006D746C">
+    <cim:BaseVoltage.ConductingEquipment rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <cim:BaseVoltage.ConductingEquipment rdf:resource="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4"/>
+    <cim:BaseVoltage.ConductingEquipment rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="gm:#_31bc103c-ea48-43e8-98ff-25c12f04a18e">
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+    <cim:EquipmentContainer.Equipments rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <cim:EquipmentContainer.Equipments rdf:resource="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4"/>
+    <cim:EquipmentContainer.Equipments rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+  </rdf:Description>
+  <cim:Location rdf:about="gm:#_699e99fd-8e26-4c41-b9a0-611196808816">
+    <cim:IdentifiedObject.name>Расположение Опора №25</cim:IdentifiedObject.name>
+    <cim:Location.Assets rdf:resource="gm:#_43e576ae-6c5f-4e3f-9d03-ad5cd04b7a97"/>
+    <cim:Location.PositionPoints rdf:resource="gm:#_9af8e314-c596-4904-ad54-3bcecdc24994"/>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_43e576ae-6c5f-4e3f-9d03-ad5cd04b7a97"/>
+  </cim:Location>
+  <cim:Terminal rdf:about="gm:#_032a9942-847f-4796-8af3-17cd3b0859a2">
+    <cim:IdentifiedObject.mRID>T1_KS010-0003902-202-SEG-000</cim:IdentifiedObject.mRID>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConnectivityNode rdf:resource="gm:#_63d6a933-a5b1-426e-b8b7-6f1f4ea7f6f1"/>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_076d0db2-149e-4f48-8ad9-c606d2c0e3dc"/>
+    <cim:Terminal.ConductingEquipment rdf:resource="gm:#_076d0db2-149e-4f48-8ad9-c606d2c0e3dc"/>
+  </cim:Terminal>
+  <cim:Pole rdf:about="gm:#_43e576ae-6c5f-4e3f-9d03-ad5cd04b7a97">
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_b8bc577b-c064-44a1-8401-193d2ce06a0f"/>
+    <me:IdentifiedObject.ChildObjects rdf:resource="gm:#_699e99fd-8e26-4c41-b9a0-611196808816"/>
+    <cim:IdentifiedObject.name>Опора №25</cim:IdentifiedObject.name>
+    <cim:Asset.Location rdf:resource="gm:#_699e99fd-8e26-4c41-b9a0-611196808816"/>
+    <cim:Asset.serialNumber>KS010-0003902-202-1025</cim:Asset.serialNumber>
+  </cim:Pole>
+  <cim:PositionPoint rdf:about="gm:#_9af8e314-c596-4904-ad54-3bcecdc24994">
+    <cim:PositionPoint.Location rdf:resource="gm:#_699e99fd-8e26-4c41-b9a0-611196808816"/>
+    <cim:PositionPoint.xPosition>52.384118</cim:PositionPoint.xPosition>
+    <cim:PositionPoint.yPosition>31.338416</cim:PositionPoint.yPosition>
+  </cim:PositionPoint>
+  <cim:Terminal rdf:about="gm:#_70231070-48cc-400c-aa41-9272fbbd1f5a">
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <cim:IdentifiedObject.mRID>T1_KS010-0003902-005-SEG-000</cim:IdentifiedObject.mRID>
+    <cim:Terminal.ConductingEquipment rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+  </cim:Terminal>
+  <rdf:Description rdf:about="gm:#_10000CC6-0000-0000-C000-0000006D746C">
+    <cim:PSRType.PowerSystemResources rdf:resource="gm:#_9aeeca73-a94e-4d7e-872d-fb1ca53a3b68"/>
+    <cim:PSRType.PowerSystemResources rdf:resource="gm:#_e39042fa-0428-48f1-ba85-9b95b76b88d4"/>
+  </rdf:Description>
+  <cim:Terminal rdf:about="gm:#_8d40d018-a4a7-4e98-8bca-cb1d0348118a">
+    <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+  </cim:Terminal>
+  <cim:Terminal rdf:about="gm:#_658c3335-3583-4ad5-b8f0-9f68fdab8273">
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <me:IdentifiedObject.ParentObject rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+    <cim:Terminal.ConductingEquipment rdf:resource="gm:#_3a35be2d-6d15-49de-a0d4-310b499ce4ef"/>
+  </cim:Terminal>
+</dm:forwardDifferences>
+    <dm:reverseDifferences/>
+  </dm:DifferenceModel>
+</rdf:RDF>

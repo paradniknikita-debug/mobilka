@@ -47,7 +47,7 @@ final activeSessionProvider = FutureProvider<ActiveSessionInfo?>((ref) async {
         final unfinished = sessions.where((s) => s.endedAt == null).toList();
         if (unfinished.isNotEmpty) {
           final s = unfinished.first;
-          lineId = s.powerLineId;
+          lineId = s.lineId;
           startTime = s.startedAt;
           note = s.note ?? '';
           startIso = s.startedAt.toIso8601String();
@@ -71,7 +71,10 @@ final activeSessionProvider = FutureProvider<ActiveSessionInfo?>((ref) async {
     try {
       final db = ref.read(drift_db.databaseProvider);
       final line = await db.getPowerLine(lineId);
-      if (line != null) lineName = line.name;
+      if (line != null) {
+        lineName = line.name;
+        if (line.mrid != null && line.mrid!.trim().isNotEmpty) lineName += ' (${line.mrid})';
+      }
     } catch (_) {
       // БД может быть ещё не готова — всё равно показываем кнопку возобновления
     }
@@ -112,17 +115,20 @@ final recentPatrolsProvider = FutureProvider<List<RecentPatrolItem>>((ref) async
 
   final List<RecentPatrolItem> items = [];
   for (final row in localPending) {
-    final pl = await db.getPowerLine(row.powerLineId);
+    final pl = await db.getPowerLine(row.lineId);
     if (pl == null) continue; // Линия удалена — не показываем сессию в списке
+    final powerLineDisplayName = pl.mrid != null && pl.mrid!.trim().isNotEmpty
+        ? '${pl.name} (${pl.mrid})'
+        : pl.name;
     final session = PatrolSession(
       id: row.serverId ?? -row.id,
       userId: row.userId ?? userId,
-      powerLineId: row.powerLineId,
+      lineId: row.lineId,
       note: row.note,
       startedAt: row.startedAt,
       endedAt: row.endedAt,
       userName: '',
-      powerLineName: pl.name,
+      powerLineName: powerLineDisplayName,
     );
     items.add(RecentPatrolItem(session: session, isPendingSync: true));
   }
@@ -271,36 +277,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
 class _PendingSyncBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasPendingAsync = ref.watch(hasPendingSyncProvider);
-    return hasPendingAsync.when(
-      data: (hasPending) {
-        if (!hasPending) return const SizedBox.shrink();
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          color: PatrolColors.statusPending.withOpacity(0.2),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.cloud_upload, size: 20, color: PatrolColors.statusPending),
-                const SizedBox(width: 8),
-                Text(
-                  'Ожидает синхронизации',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: PatrolColors.statusPending,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-    );
+    // Статус «Ожидает синхронизации» по запросу заказчика скрыт из UI.
+    // Провайдер всё равно читаем, чтобы при изменениях не было неиспользуемого состояния.
+    ref.watch(hasPendingSyncProvider);
+    return const SizedBox.shrink();
   }
 }
 
@@ -314,7 +294,6 @@ class _TopStatusBar extends StatelessWidget {
     final (icon, label) = switch (status) {
       ConnectionStatus.online => (Icons.wifi, 'ОНЛАЙН'),
       ConnectionStatus.offline => (Icons.wifi_off, 'ОФЛАЙН'),
-      ConnectionStatus.unstable => (Icons.cloud_queue, 'НЕСТАБИЛЬНО'),
     };
     return Container(
       width: double.infinity,
@@ -477,7 +456,9 @@ class _SyncedCountCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final recentAsync = ref.watch(recentPatrolsProvider);
     final list = recentAsync.asData?.value ?? [];
-    final count = list.where((item) => !item.isPendingSync && item.session.isCompleted).length;
+    final syncedCount = list.where((item) => !item.isPendingSync && item.session.isCompleted).length;
+    final total = list.length;
+    final displayText = total > 0 ? '$syncedCount из $total' : '$syncedCount';
     return Row(
       children: [
         Expanded(
@@ -492,7 +473,7 @@ class _SyncedCountCard extends ConsumerWidget {
                 Icon(Icons.check_circle_outline, color: PatrolColors.statusSynced, size: 28),
                 const SizedBox(height: 8),
                 Text(
-                  '$count',
+                  displayText,
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -618,21 +599,35 @@ class _RecentPatrolCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = item.session;
     final started = session.startedAt.toLocal();
+    final ended = session.endedAt?.toLocal();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final startDay = DateTime(started.year, started.month, started.day);
     String dateStr;
-    if (startDay == today) {
-      dateStr = 'Сегодня, ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
-    } else if (startDay == today.subtract(const Duration(days: 1))) {
-      dateStr = 'Вчера, ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
+    if (ended != null) {
+      final startStr = '${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
+      final endStr = '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}';
+      if (startDay == today) {
+        dateStr = 'Сегодня, $startStr – $endStr';
+      } else if (startDay == today.subtract(const Duration(days: 1))) {
+        dateStr = 'Вчера, $startStr – $endStr';
+      } else {
+        dateStr = '${started.day.toString().padLeft(2, '0')}.${started.month.toString().padLeft(2, '0')}.${started.year} $startStr – $endStr';
+      }
     } else {
-      dateStr = '${started.day.toString().padLeft(2, '0')}.${started.month.toString().padLeft(2, '0')}.${started.year} ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
+      if (startDay == today) {
+        dateStr = 'Сегодня, ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
+      } else if (startDay == today.subtract(const Duration(days: 1))) {
+        dateStr = 'Вчера, ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
+      } else {
+        dateStr = '${started.day.toString().padLeft(2, '0')}.${started.month.toString().padLeft(2, '0')}.${started.year} ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}';
+      }
     }
     final String statusText;
     final bool usePendingStyle;
     if (item.isPendingSync) {
-      statusText = 'ОЖИДАНИЕ СИНХРОНИЗАЦИИ';
+      // Статус «ОЖИДАНИЕ СИНХРОНИЗАЦИИ» убран, вместо него показываем просто факт несинхронизированности.
+      statusText = 'НЕ СИНХРОНИЗИРОВАН';
       usePendingStyle = true;
     } else {
       statusText = session.isCompleted ? 'СИНХРОНИЗИРОВАН' : 'ОЖИДАЕТ ОТПРАВКИ';
@@ -653,7 +648,7 @@ class _RecentPatrolCard extends StatelessWidget {
                 Text(
                   session.powerLineName.isNotEmpty
                       ? session.powerLineName
-                      : 'ЛЭП #${session.powerLineId}',
+                      : 'ЛЭП #${session.lineId}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 15,

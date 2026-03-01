@@ -83,6 +83,8 @@ class PowerLine {
   final int id;
   @JsonKey(fromJson: _stringFromJson)
   final String name;
+  /// Уникальный идентификатор ЛЭП (отображается в скобках справа от названия)
+  final String? mrid;
   @JsonKey(name: 'voltage_level', fromJson: _doubleFromJsonNullable)
   final double? voltageLevel; // Может быть null на backend
   @JsonKey(fromJson: _doubleFromJsonNullable)
@@ -105,6 +107,7 @@ class PowerLine {
   const PowerLine({
     required this.id,
     required this.name,
+    this.mrid,
     this.voltageLevel,
     this.length,
     this.branchId,
@@ -123,6 +126,7 @@ class PowerLine {
   PowerLine copyWith({
     int? id,
     String? name,
+    String? mrid,
     double? voltageLevel,
     double? length,
     int? branchId,
@@ -137,6 +141,7 @@ class PowerLine {
     return PowerLine(
       id: id ?? this.id,
       name: name ?? this.name,
+      mrid: mrid ?? this.mrid,
       voltageLevel: voltageLevel ?? this.voltageLevel,
       length: length ?? this.length,
       branchId: branchId ?? this.branchId,
@@ -181,8 +186,9 @@ class PowerLineCreate {
 )
 class Pole {
   final int id;
-  @JsonKey(name: 'power_line_id')
-  final int powerLineId;
+  /// ID линии (ЛЭП). В API и БД — единое поле line_id (без приставки power_).
+  @JsonKey(name: 'line_id')
+  final int lineId;
   @JsonKey(name: 'pole_number', fromJson: _stringFromJson)
   final String poleNumber;
   @JsonKey(name: 'x_position', fromJson: _doubleFromJson)
@@ -215,7 +221,7 @@ class Pole {
 
   const Pole({
     required this.id,
-    required this.powerLineId,
+    required this.lineId,
     required this.poleNumber,
     required this.xPosition,
     required this.yPosition,
@@ -239,7 +245,7 @@ class Pole {
 
   Pole copyWith({
     int? id,
-    int? powerLineId,
+    int? lineId,
     String? poleNumber,
     double? xPosition,
     double? yPosition,
@@ -259,7 +265,7 @@ class Pole {
   }) {
     return Pole(
       id: id ?? this.id,
-      powerLineId: powerLineId ?? this.powerLineId,
+      lineId: lineId ?? this.lineId,
       poleNumber: poleNumber ?? this.poleNumber,
       xPosition: xPosition ?? this.xPosition,
       yPosition: yPosition ?? this.yPosition,

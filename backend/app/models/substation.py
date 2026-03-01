@@ -21,9 +21,7 @@ class Substation(Base, ConnectivityNodeContainer):
     # CIM Location - связь с Location для координат
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
     
-    # Координаты (CIM: x_position = долгота, y_position = широта)
-    y_position = Column(Float, nullable=True)
-    x_position = Column(Float, nullable=True)
+    # Координаты хранятся только в Location/PositionPoint (колонок y_position/x_position в таблице substation нет)
     
     address = Column(Text, nullable=True)  # Адрес теперь хранится в Location, но оставляем для обратной совместимости
     # Заменяем branch_id на region_id для географической иерархии
@@ -39,6 +37,7 @@ class Substation(Base, ConnectivityNodeContainer):
     # Связи
     region = relationship("GeographicRegion", back_populates="substations")
     branch = relationship("Branch", back_populates="substations")  # Для обратной совместимости
+    connections = relationship("Connection", back_populates="substation")
     # CIM-структура: Substation (EquipmentContainer) содержит множество VoltageLevel (EquipmentContainer)
     voltage_levels = relationship("VoltageLevel", back_populates="substation", cascade="all, delete-orphan")
     location = relationship("Location", foreign_keys=[location_id])
@@ -48,28 +47,48 @@ class Substation(Base, ConnectivityNodeContainer):
     connectivity_nodes = relationship("ConnectivityNode", back_populates="substation")
     
     def get_latitude(self) -> float:
-        """Получить широту из Location/PositionPoint или из колонки"""
-        if self.location and self.location.position_points:
-            return self.location.position_points[0].y_position
-        return self.__dict__.get('y_position')
-    
+        """Получить широту из Location/PositionPoint"""
+        if self.location and getattr(self.location, 'position_points', None):
+            pts = self.location.position_points
+            if pts:
+                return float(pts[0].y_position)
+        return 0.0
+
     def get_longitude(self) -> float:
-        """Получить долготу из Location/PositionPoint или из колонки"""
-        if self.location and self.location.position_points:
-            return self.location.position_points[0].x_position
-        return self.__dict__.get('x_position')
+        """Получить долготу из Location/PositionPoint"""
+        if self.location and getattr(self.location, 'position_points', None):
+            pts = self.location.position_points
+            if pts:
+                return float(pts[0].x_position)
+        return 0.0
 
     @property
-    def x_position(self) -> float:
-        """Долгота (CIM x_position)."""
-        val = self.get_longitude()
-        return float(val) if val is not None else 0.0
+    def latitude(self) -> float:
+        """Широта для API-ответов (SubstationResponse)."""
+        return self.get_latitude()
 
     @property
-    def y_position(self) -> float:
-        """Широта (CIM y_position)."""
-        val = self.get_latitude()
-        return float(val) if val is not None else 0.0
+    def longitude(self) -> float:
+        """Долгота для API-ответов (SubstationResponse)."""
+        return self.get_longitude()
+
+
+class Connection(Base):
+    """Связь подстанция–линия (для второго разработчика)."""
+    __tablename__ = "connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
+    substation_id = Column(Integer, ForeignKey("substation.id"), nullable=False)
+    line_id = Column(Integer, ForeignKey("line.id"), nullable=False)
+    connection_type = Column(String(20), nullable=False)  # input, output
+    voltage_level = Column(Float, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    substation = relationship("Substation", back_populates="connections")
+    line = relationship("PowerLine", foreign_keys=[line_id], back_populates="connections")
+
 
 class VoltageLevel(Base):
     """

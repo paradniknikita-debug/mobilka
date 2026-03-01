@@ -6,7 +6,7 @@
       <div class="meta-row"><span class="label">Действие:</span> {{ actionLabel(entry.action) }}</div>
       <div class="meta-row"><span class="label">Тип объекта:</span> {{ entityTypeLabel(entry.entity_type) }}</div>
       <div class="meta-row"><span class="label">ID сущности:</span> {{ entry.entity_id ?? '—' }}</div>
-      <div class="meta-row"><span class="label">Кто изменил (user_id):</span> {{ entry.user_id ?? '—' }}</div>
+      <div class="meta-row"><span class="label">Кто изменил:</span> {{ entry.user_name ? entry.user_name + ' (' + entry.user_id + ')' : (entry.user_id ?? '—') }}</div>
       <div class="meta-row"><span class="label">Источник:</span> {{ entry.source === 'web' ? 'Веб' : entry.source === 'flutter' ? 'Flutter' : entry.source }}</div>
     </div>
 
@@ -16,19 +16,19 @@
     </div>
 
     <div class="before-after" *ngIf="hasPayload">
-      <h3>Было / Стало</h3>
+      <h3>До / После</h3>
       <mat-checkbox [(ngModel)]="onlyChanges">Отобразить только изменения</mat-checkbox>
       <div class="table-wrap">
         <table class="diff-table">
           <thead>
             <tr>
               <th>Поле</th>
-              <th>Было</th>
-              <th>Стало</th>
+              <th>До</th>
+              <th>После</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let row of displayedRows" [class.changed]="row.changed">
+            <tr *ngFor="let row of displayedRows" [class.changed]="row.changed" [class.row-added]="row.added" [class.row-removed]="row.removed">
               <td class="key">{{ row.key }}</td>
               <td class="before">{{ row.before }}</td>
               <td class="after">{{ row.after }}</td>

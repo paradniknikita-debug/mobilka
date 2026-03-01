@@ -94,6 +94,14 @@ export class ApiService {
     );
   }
 
+  /** Назначить или снять ТП в конце участка (отпайки) */
+  setSegmentEndSubstation(powerLineId: number, segmentId: number, body: { to_substation_id: number | null }): Observable<{ segment_id: number; to_substation_id: number | null }> {
+    return this.http.patch<{ segment_id: number; to_substation_id: number | null }>(
+      `${this.apiUrl}/power-lines/${powerLineId}/segments/${segmentId}/substation`,
+      body
+    );
+  }
+
   getPoleByPowerLine(powerLineId: number, poleId: number): Observable<Pole> {
     return this.http.get<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles/${poleId}`);
   }
@@ -166,6 +174,10 @@ export class ApiService {
     return this.http.post<Substation>(`${this.apiUrl}/substations`, substation);
   }
 
+  updateSubstation(id: number, substation: SubstationCreate): Observable<Substation> {
+    return this.http.put<Substation>(`${this.apiUrl}/substations/${id}`, substation);
+  }
+
   deleteSubstation(id: number): Observable<{message: string}> {
     return this.http.delete<{message: string}>(`${this.apiUrl}/substations/${id}`);
   }
@@ -215,6 +227,59 @@ export class ApiService {
 
   getEntitySchema(entityType: string): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/sync/schema/${entityType}`);
+  }
+
+  // ========== CIM Export / Import (FullModel, 552) ==========
+  exportCIMXml(
+    includeSubstations: boolean = true,
+    includePowerLines: boolean = true,
+    useCimpy: boolean = true
+  ): Observable<Blob> {
+    const params = new HttpParams()
+      .set('include_substations', String(includeSubstations))
+      .set('include_power_lines', String(includePowerLines))
+      .set('use_cimpy', String(useCimpy));
+    return this.http.get(`${this.apiUrl}/cim/export/xml`, {
+      params,
+      responseType: 'blob'
+    });
+  }
+
+  importCIMXml(file: File): Observable<{ summary?: Record<string, number>; count?: number; objects?: any[] }> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<{ summary?: Record<string, number>; count?: number; objects?: any[] }>(
+      `${this.apiUrl}/cim/import/xml`,
+      formData
+    );
+  }
+
+  exportCIM552Diff(includeSubstations: boolean = true, includePowerLines: boolean = true): Observable<Blob> {
+    const params = new HttpParams()
+      .set('include_substations', String(includeSubstations))
+      .set('include_power_lines', String(includePowerLines));
+    return this.http.get(`${this.apiUrl}/cim/export/552-diff`, {
+      params,
+      responseType: 'blob'
+    });
+  }
+
+  importCIM552Diff(file: File): Observable<{ summary?: Record<string, number>; count?: number; objects?: any[] }> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<{ summary?: Record<string, number>; count?: number; objects?: any[] }>(
+      `${this.apiUrl}/cim/import/552-diff`,
+      formData
+    );
+  }
+
+  applyCIM552Diff(file: File): Observable<{ created_substations?: number; created_locations?: number; created_position_points?: number }> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<{ created_substations?: number; created_locations?: number; created_position_points?: number }>(
+      `${this.apiUrl}/cim/apply/552-diff`,
+      formData
+    );
   }
 
   // ========== CIM Structure ==========

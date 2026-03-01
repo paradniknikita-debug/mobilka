@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, forkJoin, Subject, BehaviorSubject } from 'rxjs';
 import { ApiService } from './api.service';
-import { GeoJSONCollection } from '../models/geojson.model';
+import { GeoJSONCollection, GeoJSONFeature } from '../models/geojson.model';
 import { PowerLine } from '../models/power-line.model';
 
 export interface MapData {
@@ -112,6 +112,17 @@ export class MapService {
     poleId: number;
   }> {
     return this.requestSelectPoleInTreeSubject$.asObservable();
+  }
+
+  /** Запрос показа панели свойств опоры при клике по дереву (то же, что при клике на карте) */
+  private showPolePropertiesSubject$ = new Subject<GeoJSONFeature>();
+
+  requestShowPoleProperties(feature: GeoJSONFeature): void {
+    this.showPolePropertiesSubject$.next(feature);
+  }
+
+  get showPoleProperties$(): Observable<GeoJSONFeature> {
+    return this.showPolePropertiesSubject$.asObservable();
   }
 
   /** Запрос пересборки топологии линии (пролёты/сегменты по порядку опор) */

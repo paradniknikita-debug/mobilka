@@ -16,44 +16,50 @@ from app.models.location import Location, PositionPoint
 from app.models.patrol_session import PatrolSession
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
+from app.models.change_log import ChangeLog
 from app.schemas.power_line import (
     PowerLineCreate, PowerLineUpdate, PowerLineResponse, PoleCreate, PoleResponse,
     SpanCreate, SpanUpdate, SpanResponse, TapCreate, TapResponse, EquipmentCreate, EquipmentResponse
 )
-from app.schemas.cim_line_structure import ConnectivityNodeResponse
+from app.schemas.cim_line_structure import (
+    ConnectivityNodeResponse,
+    AClineSegmentResponse,
+    LineSectionResponse,
+    SpanResponse,
+    TerminalResponse,
+)
 
 router = APIRouter()
 
 
 def normalize_pole_number(s: Optional[str]) -> str:
     """
-    Нормализация наименования опоры: «1» -> «Опора 1»; опечатки «опооа», «опрора», «опра», «оп.» и т.п. -> «Опора»/«Опора N».
+    Нормализация наименования опоры: «1» -> «Опора 1»; «3/2», «3/2 а» -> «Опора 3/2», «Опора 3/2 а»;
+    опечатки «опооа», «опрора», «опра», «оп.» и т.п. -> «Опора»/«Опора N».
     """
     if not s or not isinstance(s, str):
         return (s or "").strip()
     s = s.strip()
     if not s:
         return s
-    if re.match(r"^\d+$", s):
-        return f"Опора {s}"
     low = s.lower()
-    # Сокращение «оп.» (с точкой и пробелами)
-    if re.match(r"^оп\.\s*", low) or low == "оп.":
+    # Уже есть префикс «опора» или «оп.» — нормализуем только опечатки
+    if low.startswith("оп.") or low == "оп.":
         rest = re.sub(r"^оп\.\s*", "", low, flags=re.I).strip()
         if not rest:
             return "Опора"
-        if re.match(r"^\d+$", rest):
-            return f"Опора {rest}"
         return f"Опора {rest}"
-    # Точные префиксы с опечатками (опора, опооа, опра, опрора и т.д.)
     for prefix in ("опрора", "опра", "опора", "опооа", "опораа", "опорра", "опоро"):
         if low.startswith(prefix) or low == prefix:
             rest = s[len(prefix):].strip()
             if not rest:
                 return "Опора"
-            if re.match(r"^\d+$", rest):
-                return f"Опора {rest}"
             return f"Опора {rest}"
+    # Число или номер вида 3/2, 3/2 а, 44/1 — подтягиваем «Опора »
+    if re.match(r"^\d+$", s):
+        return f"Опора {s}"
+    if re.match(r"^\d+/\s*\d+", s) or re.match(r"^\d+\s*/\s*\d+", s):
+        return f"Опора {s}"
     return s
 
 
@@ -67,6 +73,188 @@ def fill_pole_coordinates(pole) -> None:
         lat = 0.0
     object.__setattr__(pole, "x_position", float(lon))
     object.__setattr__(pole, "y_position", float(lat))
+
+
+def _get_attr_safe(obj, key: str, default=None):
+    """Читает атрибут из __dict__ ORM-объекта, не вызывая дескрипторы SQLAlchemy (избегаем MissingGreenlet)."""
+    if obj is None:
+        return default
+    d = getattr(obj, "__dict__", {})
+    return d.get(key, default)
+
+
+def _pole_orm_to_dict(pole) -> dict:
+    """Собирает dict для PoleResponse из ORM, читая только из __dict__."""
+    out = {
+        "id": _get_attr_safe(pole, "id"),
+        "mrid": _get_attr_safe(pole, "mrid", ""),
+        "line_id": _get_attr_safe(pole, "line_id"),
+        "connectivity_node_id": _get_attr_safe(pole, "connectivity_node_id"),
+        "pole_number": _get_attr_safe(pole, "pole_number", ""),
+        "x_position": _get_attr_safe(pole, "x_position") if _get_attr_safe(pole, "x_position") is not None else 0.0,
+        "y_position": _get_attr_safe(pole, "y_position") if _get_attr_safe(pole, "y_position") is not None else 0.0,
+        "pole_type": _get_attr_safe(pole, "pole_type", ""),
+        "height": _get_attr_safe(pole, "height"),
+        "foundation_type": _get_attr_safe(pole, "foundation_type"),
+        "material": _get_attr_safe(pole, "material"),
+        "year_installed": _get_attr_safe(pole, "year_installed"),
+        "condition": _get_attr_safe(pole, "condition", "good"),
+        "notes": _get_attr_safe(pole, "notes"),
+        "sequence_number": _get_attr_safe(pole, "sequence_number"),
+        "conductor_type": _get_attr_safe(pole, "conductor_type"),
+        "conductor_material": _get_attr_safe(pole, "conductor_material"),
+        "conductor_section": _get_attr_safe(pole, "conductor_section"),
+        "is_tap_pole": bool(_get_attr_safe(pole, "is_tap_pole", False)),
+        "branch_type": _get_attr_safe(pole, "branch_type"),
+        "tap_pole_id": _get_attr_safe(pole, "tap_pole_id"),
+        "tap_branch_index": _get_attr_safe(pole, "tap_branch_index"),
+        "created_by": _get_attr_safe(pole, "created_by", 0),
+        "created_at": _get_attr_safe(pole, "created_at"),
+        "updated_at": _get_attr_safe(pole, "updated_at"),
+        "connectivity_node": None,
+    }
+    return out
+
+
+def _terminal_orm_to_dict(t) -> dict:
+    """Собирает dict для TerminalResponse из ORM через __dict__."""
+    if t is None:
+        return None
+    return {
+        "id": _get_attr_safe(t, "id"),
+        "mrid": _get_attr_safe(t, "mrid", ""),
+        "name": _get_attr_safe(t, "name"),
+        "sequence_number": _get_attr_safe(t, "sequence_number", 1),
+        "connection_direction": _get_attr_safe(t, "connection_direction", "both"),
+        "description": _get_attr_safe(t, "description"),
+        "connectivity_node_id": _get_attr_safe(t, "connectivity_node_id"),
+        "acline_segment_id": _get_attr_safe(t, "acline_segment_id"),
+        "conducting_equipment_id": _get_attr_safe(t, "conducting_equipment_id"),
+        "bay_id": _get_attr_safe(t, "bay_id"),
+        "created_at": _get_attr_safe(t, "created_at"),
+    }
+
+
+def _span_orm_to_dict(span) -> dict:
+    """Собирает dict для SpanResponse (cim) из ORM через __dict__."""
+    if span is None:
+        return None
+    return {
+        "id": _get_attr_safe(span, "id"),
+        "mrid": _get_attr_safe(span, "mrid", ""),
+        "span_number": _get_attr_safe(span, "span_number", ""),
+        "length": _get_attr_safe(span, "length", 0.0),
+        "sequence_number": _get_attr_safe(span, "sequence_number", 1),
+        "conductor_type": _get_attr_safe(span, "conductor_type"),
+        "conductor_material": _get_attr_safe(span, "conductor_material"),
+        "conductor_section": _get_attr_safe(span, "conductor_section"),
+        "tension": _get_attr_safe(span, "tension"),
+        "sag": _get_attr_safe(span, "sag"),
+        "notes": _get_attr_safe(span, "notes"),
+        "line_section_id": _get_attr_safe(span, "line_section_id"),
+        "from_connectivity_node_id": _get_attr_safe(span, "from_connectivity_node_id"),
+        "to_connectivity_node_id": _get_attr_safe(span, "to_connectivity_node_id"),
+        "created_by": _get_attr_safe(span, "created_by"),
+        "created_at": _get_attr_safe(span, "created_at"),
+        "line_id": _get_attr_safe(span, "line_id"),
+        "from_pole_id": _get_attr_safe(span, "from_pole_id"),
+        "to_pole_id": _get_attr_safe(span, "to_pole_id"),
+        "from_connectivity_node": None,
+        "to_connectivity_node": None,
+    }
+
+
+def _line_section_orm_to_dict(ls) -> dict:
+    """Собирает dict для LineSectionResponse из ORM через __dict__."""
+    if ls is None:
+        return None
+    spans = _get_attr_safe(ls, "spans") or []
+    return {
+        "id": _get_attr_safe(ls, "id"),
+        "mrid": _get_attr_safe(ls, "mrid", ""),
+        "name": _get_attr_safe(ls, "name", ""),
+        "acline_segment_id": _get_attr_safe(ls, "acline_segment_id"),
+        "conductor_type": _get_attr_safe(ls, "conductor_type") or "",
+        "conductor_material": _get_attr_safe(ls, "conductor_material"),
+        "conductor_section": _get_attr_safe(ls, "conductor_section") or "",
+        "r": _get_attr_safe(ls, "r"),
+        "x": _get_attr_safe(ls, "x"),
+        "b": _get_attr_safe(ls, "b"),
+        "g": _get_attr_safe(ls, "g"),
+        "sequence_number": _get_attr_safe(ls, "sequence_number", 1),
+        "total_length": _get_attr_safe(ls, "total_length"),
+        "description": _get_attr_safe(ls, "description"),
+        "created_by": _get_attr_safe(ls, "created_by"),
+        "created_at": _get_attr_safe(ls, "created_at"),
+        "updated_at": _get_attr_safe(ls, "updated_at"),
+        "spans": [_span_orm_to_dict(s) for s in spans] if spans else [],
+    }
+
+
+def _acline_segment_orm_to_dict(seg) -> dict:
+    """Собирает dict для AClineSegmentResponse из ORM через __dict__."""
+    if seg is None:
+        return None
+    line_sections = _get_attr_safe(seg, "line_sections") or []
+    terminals = _get_attr_safe(seg, "terminals") or []
+    return {
+        "id": _get_attr_safe(seg, "id"),
+        "mrid": _get_attr_safe(seg, "mrid", ""),
+        "name": _get_attr_safe(seg, "name", ""),
+        "code": _get_attr_safe(seg, "code"),
+        "line_id": _get_attr_safe(seg, "line_id"),
+        "voltage_level": _get_attr_safe(seg, "voltage_level", 0.0),
+        "length": _get_attr_safe(seg, "length", 0.0),
+        "is_tap": bool(_get_attr_safe(seg, "is_tap", False)),
+        "tap_number": _get_attr_safe(seg, "tap_number"),
+        "branch_type": _get_attr_safe(seg, "branch_type"),
+        "tap_pole_id": _get_attr_safe(seg, "tap_pole_id"),
+        "sequence_number": _get_attr_safe(seg, "sequence_number", 1),
+        "conductor_type": _get_attr_safe(seg, "conductor_type"),
+        "conductor_material": _get_attr_safe(seg, "conductor_material"),
+        "conductor_section": _get_attr_safe(seg, "conductor_section"),
+        "r": _get_attr_safe(seg, "r"),
+        "x": _get_attr_safe(seg, "x"),
+        "b": _get_attr_safe(seg, "b"),
+        "g": _get_attr_safe(seg, "g"),
+        "description": _get_attr_safe(seg, "description"),
+        "from_connectivity_node_id": _get_attr_safe(seg, "from_connectivity_node_id"),
+        "to_connectivity_node_id": _get_attr_safe(seg, "to_connectivity_node_id"),
+        "to_terminal_id": _get_attr_safe(seg, "to_terminal_id"),
+        "to_substation_id": _get_attr_safe(seg, "to_substation_id"),
+        "created_by": _get_attr_safe(seg, "created_by"),
+        "created_at": _get_attr_safe(seg, "created_at"),
+        "updated_at": _get_attr_safe(seg, "updated_at"),
+        "line_sections": [_line_section_orm_to_dict(sec) for sec in line_sections],
+        "terminals": [_terminal_orm_to_dict(tr) for tr in terminals],
+    }
+
+
+def _power_line_orm_to_dict(pl) -> dict:
+    """Собирает dict для PowerLineResponse из ORM через __dict__ (без дескрипторов SQLAlchemy)."""
+    poles = _get_attr_safe(pl, "poles") or []
+    acline_segments = _get_attr_safe(pl, "acline_segments") or []
+    # Сегменты в порядке sequence_number (первый — от подстанции до первой опоры)
+    acline_segments_sorted = sorted(acline_segments, key=lambda s: (_get_attr_safe(s, "sequence_number") or 0))
+    return {
+        "id": _get_attr_safe(pl, "id"),
+        "mrid": _get_attr_safe(pl, "mrid", ""),
+        "name": _get_attr_safe(pl, "name", ""),
+        "base_voltage_id": _get_attr_safe(pl, "base_voltage_id"),
+        "voltage_level": _get_attr_safe(pl, "voltage_level"),
+        "length": _get_attr_safe(pl, "length"),
+        "branch_name": _get_attr_safe(pl, "branch_name"),
+        "region_name": _get_attr_safe(pl, "region_name"),
+        "status": _get_attr_safe(pl, "status", "active"),
+        "description": _get_attr_safe(pl, "description"),
+        "created_by": _get_attr_safe(pl, "created_by"),
+        "created_at": _get_attr_safe(pl, "created_at"),
+        "updated_at": _get_attr_safe(pl, "updated_at"),
+        "substation_start_id": _get_attr_safe(pl, "substation_start_id"),
+        "substation_end_id": _get_attr_safe(pl, "substation_end_id"),
+        "poles": [_pole_orm_to_dict(p) for p in poles],
+        "acline_segments": [_acline_segment_orm_to_dict(s) for s in acline_segments_sorted],
+    }
 
 
 async def _recompute_power_line_length(db: AsyncSession, power_line_id: int) -> float:
@@ -216,7 +404,10 @@ async def create_power_line(
             .where(PowerLine.id == db_power_line.id)
         )
         db_power_line = result.scalar_one()
-        return db_power_line
+        for p in getattr(db_power_line, "poles", []) or []:
+            fill_pole_coordinates(p)
+        object.__setattr__(db_power_line, "length", await _recompute_power_line_length(db, db_power_line.id))
+        return PowerLineResponse.model_validate(_power_line_orm_to_dict(db_power_line))
     except Exception as e:
         await db.rollback()
         import traceback
@@ -251,17 +442,17 @@ async def get_power_lines(
     )
     power_lines = result.scalars().all()
     
-    # Предзагружаем connectivity_node и заполняем координаты для каждой опоры
+    # Заполняем x_position, y_position у каждой опоры для PoleResponse (иначе валидация падает на None)
     for power_line in power_lines:
         for pole in power_line.poles:
-            # Предзагружаем connectivity_node через безопасный метод
+            fill_pole_coordinates(pole)
             if hasattr(pole, '_get_connectivity_node_safe'):
                 _ = pole._get_connectivity_node_safe()
-        # Длина линии — всегда по сумме пролётов (авторасчёт)
         computed_length = await _recompute_power_line_length(db, power_line.id)
         object.__setattr__(power_line, "length", computed_length)
 
-    return power_lines
+    # Сериализуем через dict (чтение только из __dict__), чтобы не вызывать MissingGreenlet при доступе к ORM
+    return [PowerLineResponse.model_validate(_power_line_orm_to_dict(pl)) for pl in power_lines]
 
 @router.get("/{power_line_id}", response_model=PowerLineResponse)
 async def get_power_line(
@@ -302,10 +493,13 @@ async def get_power_line(
         object.__setattr__(power_line, "poles", [])
     if getattr(power_line, "acline_segments", None) is None:
         object.__setattr__(power_line, "acline_segments", [])
+    for pole in power_line.poles:
+        fill_pole_coordinates(pole)
     # Длина линии — всегда по сумме пролётов (авторасчёт)
     computed_length = await _recompute_power_line_length(db, power_line_id)
     object.__setattr__(power_line, "length", computed_length)
-    return power_line
+    # Сериализуем через dict (избегаем MissingGreenlet)
+    return PowerLineResponse.model_validate(_power_line_orm_to_dict(power_line))
 
 
 @router.put("/{power_line_id}", response_model=PowerLineResponse)
@@ -322,10 +516,27 @@ async def update_power_line(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Power line not found",
         )
-    data = body.dict(exclude_unset=True)
+    data = body.model_dump(exclude_unset=True) if hasattr(body, "model_dump") else body.dict(exclude_unset=True)
     if not data:
         await db.refresh(power_line)
-        return power_line
+        # Сессия открыта — сериализуем в Pydantic, чтобы не было MissingGreenlet при отдаче
+        pl_loaded = await db.execute(
+            select(PowerLine)
+            .options(
+                selectinload(PowerLine.poles).selectinload(Pole.connectivity_nodes),
+                selectinload(PowerLine.poles).selectinload(Pole.position_points),
+                selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
+                selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
+                selectinload(PowerLine.acline_segments).selectinload(AClineSegment.terminals),
+                selectinload(PowerLine.acline_segments).selectinload(AClineSegment.line),
+            )
+            .where(PowerLine.id == power_line_id),
+        )
+        pl = pl_loaded.scalar_one()
+        for p in getattr(pl, "poles", []) or []:
+            fill_pole_coordinates(p)
+        object.__setattr__(pl, "length", await _recompute_power_line_length(db, power_line_id))
+        return PowerLineResponse.model_validate(_power_line_orm_to_dict(pl))
 
     STANDARD_VOLTAGES_KV = [
         0.23, 0.4, 0.66, 3, 6, 6.3, 6.6, 10, 10.5, 11, 13.8, 15, 15.75, 18, 20, 21, 22, 24,
@@ -364,6 +575,46 @@ async def update_power_line(
             setattr(power_line, key, value)
     await db.commit()
     await db.refresh(power_line)
+
+    # Если привязали подстанцию как начало/конец ЛЭП — создаём пролёт подстанция–опора, если его ещё нет
+    if "substation_start_id" in data or "substation_end_id" in data:
+        from app.core.line_auto_assembly import link_line_to_substation, add_substation_span_from_last_pole
+        # Перечитываем ЛЭП из БД, чтобы гарантированно иметь актуальные substation_*_id
+        await db.refresh(power_line)
+        sub_start = getattr(power_line, "substation_start_id", None)
+        sub_end = getattr(power_line, "substation_end_id", None)
+        if sub_start is not None:
+            sub_start = int(sub_start)
+        if sub_end is not None:
+            sub_end = int(sub_end)
+        poles_res = await db.execute(
+            select(Pole)
+            .where(Pole.line_id == power_line_id, Pole.sequence_number.isnot(None), Pole.tap_pole_id.is_(None))
+            .order_by(Pole.sequence_number)
+            .options(selectinload(Pole.connectivity_nodes), selectinload(Pole.location).selectinload(Location.position_points))
+        )
+        main_poles = list(poles_res.scalars().all())
+        if main_poles:
+            if sub_start:
+                try:
+                    await link_line_to_substation(
+                        db, power_line_id, main_poles[0].id, sub_start, current_user.id
+                    )
+                    await db.commit()
+                except ValueError:
+                    # Участок подстанция–опора уже есть
+                    await db.rollback()
+            if sub_end:
+                try:
+                    await add_substation_span_from_last_pole(
+                        db, power_line_id, main_poles[-1], sub_end, current_user.id
+                    )
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+        if main_poles and (sub_start or sub_end):
+            await db.refresh(power_line)
+
     result = await db.execute(
         select(PowerLine)
         .options(
@@ -376,7 +627,11 @@ async def update_power_line(
         )
         .where(PowerLine.id == power_line_id),
     )
-    return result.scalar_one()
+    pl = result.scalar_one()
+    for p in getattr(pl, "poles", []) or []:
+        fill_pole_coordinates(p)
+    object.__setattr__(pl, "length", await _recompute_power_line_length(db, power_line_id))
+    return PowerLineResponse.model_validate(_power_line_orm_to_dict(pl))
 
 
 @router.post("/{power_line_id}/poles", response_model=PoleResponse)
@@ -418,6 +673,7 @@ async def create_pole(
         pole_dict['branch_type'] = pole_data.branch_type
     if getattr(pole_data, 'tap_pole_id', None) is not None:
         pole_dict['tap_pole_id'] = pole_data.tap_pole_id
+    pole_dict.pop('start_new_tap', None)  # не поле БД, только флаг для логики
 
     lon_val = getattr(pole_data, 'x_position', None)
     lat_val = getattr(pole_data, 'y_position', None)
@@ -436,17 +692,46 @@ async def create_pole(
         db.add(db_pole)
         await db.flush()  # Получаем ID опоры
 
-        # Порядок опоры: если не передан — для отпайки считаем в рамках ветки (1, 2, …), иначе следующий по магистрали
+        # Порядок опоры: если не передан — для отпайки считаем в рамках ветки (tap_branch_index) или новую ветку (start_new_tap)
         if db_pole.sequence_number is None:
             tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
             if tap_pole_id_val is not None:
                 from sqlalchemy import func as sql_func
-                max_tap = await db.execute(
-                    select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(
-                        Pole.line_id == power_line_id, Pole.tap_pole_id == tap_pole_id_val
+                start_new_tap = getattr(pole_data, "start_new_tap", False)
+                tap_branch_from_request = getattr(pole_data, "tap_branch_index", None)
+                if start_new_tap:
+                    max_branch = await db.execute(
+                        select(sql_func.coalesce(sql_func.max(Pole.tap_branch_index), 0)).where(
+                            Pole.line_id == power_line_id, Pole.tap_pole_id == tap_pole_id_val
+                        )
                     )
-                )
-                db_pole.sequence_number = (max_tap.scalar() or 0) + 1
+                    max_branch_val = (max_branch.scalar() or 0)
+                    db_pole.tap_branch_index = max_branch_val + 1
+                    db_pole.sequence_number = 1
+                else:
+                    if tap_branch_from_request is not None:
+                        db_pole.tap_branch_index = tap_branch_from_request
+                    else:
+                        max_branch = await db.execute(
+                            select(sql_func.coalesce(sql_func.max(Pole.tap_branch_index), 0)).where(
+                                Pole.line_id == power_line_id, Pole.tap_pole_id == tap_pole_id_val
+                            )
+                        )
+                        max_branch_val = (max_branch.scalar() or 0)
+                        db_pole.tap_branch_index = max_branch_val if max_branch_val > 0 else 1
+                    # Макс sequence в этой ветке (для обратной совместимости: tap_branch_index NULL считаем как ветка 1)
+                    max_seq_q = select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(
+                        Pole.line_id == power_line_id,
+                        Pole.tap_pole_id == tap_pole_id_val,
+                    )
+                    if db_pole.tap_branch_index == 1:
+                        max_seq_q = max_seq_q.where(
+                            (Pole.tap_branch_index == 1) | (Pole.tap_branch_index.is_(None))
+                        )
+                    else:
+                        max_seq_q = max_seq_q.where(Pole.tap_branch_index == db_pole.tap_branch_index)
+                    max_seq = await db.execute(max_seq_q)
+                    db_pole.sequence_number = (max_seq.scalar() or 0) + 1
             else:
                 from sqlalchemy import func as sql_func
                 max_seq = await db.execute(
@@ -533,10 +818,8 @@ async def create_pole(
     )
     db_pole = result.scalar_one()
     
-    # Для обратной совместимости: connectivity_node доступен через @property
-    # Не нужно устанавливать через setattr, так как это property
-    # Pydantic получит его автоматически через from_attributes=True
-    
+    # Заполняем x_position, y_position для ответа (из PositionPoint или 0.0), чтобы PoleResponse не получил None
+    fill_pole_coordinates(db_pole)
     
     return db_pole
 
@@ -559,6 +842,8 @@ async def get_poles(
     )
     poles = result.scalars().all()
     
+    for pole in poles:
+        fill_pole_coordinates(pole)
     return poles
 
 
@@ -660,6 +945,7 @@ async def get_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
+    fill_pole_coordinates(pole)
     # Для обратной совместимости: connectivity_node доступен через @property
     # Не нужно устанавливать через setattr, так как это property
     # Pydantic получит его автоматически через from_attributes=True
@@ -693,6 +979,46 @@ async def link_line_to_substation(
         return {"acline_segment_id": segment.id, "name": segment.name}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+class SegmentSubstationUpdate(BaseModel):
+    """Тело запроса: назначить ТП в конце участка (отпайки)."""
+    to_substation_id: Optional[int] = None
+
+
+@router.patch("/{power_line_id}/segments/{segment_id}/substation", status_code=status.HTTP_200_OK)
+async def set_segment_end_substation(
+    power_line_id: int,
+    segment_id: int,
+    body: SegmentSubstationUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Назначить или снять подстанцию (ТП) в конце участка линии (отпайки)."""
+    power_line = await db.get(PowerLine, power_line_id)
+    if not power_line:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Power line not found")
+    result = await db.execute(
+        select(AClineSegment)
+        .where(
+            AClineSegment.id == segment_id,
+            AClineSegment.line_id == power_line_id,
+        )
+        .options(selectinload(AClineSegment.to_node))
+    )
+    segment = result.scalar_one_or_none()
+    if not segment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    segment.to_substation_id = body.to_substation_id
+    if body.to_substation_id is not None and segment.to_node and getattr(segment.to_node, "pole_id", None) is not None:
+        from app.core.line_auto_assembly import add_substation_span_from_last_pole
+        last_pole = await db.get(Pole, segment.to_node.pole_id)
+        if last_pole:
+            await add_substation_span_from_last_pole(
+                db, power_line_id, last_pole, body.to_substation_id, current_user.id
+            )
+    await db.commit()
+    return {"segment_id": segment_id, "to_substation_id": body.to_substation_id}
 
 
 @router.put("/{power_line_id}/poles/{pole_id}", response_model=PoleResponse)
@@ -889,6 +1215,7 @@ async def update_pole(
     )
     pole = result.scalar_one()
     
+    fill_pole_coordinates(pole)
     # Для обратной совместимости: connectivity_node доступен через @property
     # Не нужно устанавливать через setattr, так как это property
     # Pydantic получит его автоматически через from_attributes=True
@@ -1094,12 +1421,12 @@ async def get_span(
     db: AsyncSession = Depends(get_db)
 ):
     """Получение пролёта по ID"""
-    # Загружаем пролёт с связанными объектами
+    # Загружаем пролёт с связанными объектами; pole нужен для pole_number в ConnectivityNodeResponse (избегаем MissingGreenlet)
     result = await db.execute(
         select(Span)
         .options(
-            selectinload(Span.from_connectivity_node),
-            selectinload(Span.to_connectivity_node),
+            selectinload(Span.from_connectivity_node).selectinload(ConnectivityNode.pole),
+            selectinload(Span.to_connectivity_node).selectinload(ConnectivityNode.pole),
             selectinload(Span.line_section).selectinload(LineSection.acline_segment)
         )
         .where(Span.id == span_id)
@@ -1152,12 +1479,12 @@ async def update_span(
             detail="Power line not found"
         )
     
-    # Получаем существующий пролёт
+    # Получаем существующий пролёт (с pole для pole_number в ответе)
     result = await db.execute(
         select(Span)
         .options(
-            selectinload(Span.from_connectivity_node),
-            selectinload(Span.to_connectivity_node),
+            selectinload(Span.from_connectivity_node).selectinload(ConnectivityNode.pole),
+            selectinload(Span.to_connectivity_node).selectinload(ConnectivityNode.pole),
             selectinload(Span.line_section)
         )
         .where(Span.id == span_id)
@@ -1283,12 +1610,17 @@ async def update_span(
         span.line_id = span_data.line_id
     
     await db.commit()
-    await db.refresh(span)
-    
-    # Загружаем связанные объекты для ответа
-    await db.refresh(span, ['from_connectivity_node', 'to_connectivity_node', 'line_section'])
-    
-    # Устанавливаем from_pole_id и to_pole_id для обратной совместимости
+    # Перезагружаем пролёт с pole для сериализации (избегаем MissingGreenlet)
+    result = await db.execute(
+        select(Span)
+        .options(
+            selectinload(Span.from_connectivity_node).selectinload(ConnectivityNode.pole),
+            selectinload(Span.to_connectivity_node).selectinload(ConnectivityNode.pole),
+            selectinload(Span.line_section).selectinload(LineSection.acline_segment)
+        )
+        .where(Span.id == span_id)
+    )
+    span = result.scalar_one()
     if span.from_connectivity_node:
         span.from_pole_id = span.from_connectivity_node.pole_id
     if span.to_connectivity_node:
@@ -1363,6 +1695,7 @@ async def auto_create_spans(
     Автоматическое создание пролётов на основе последовательности опор.
     - mode=preserve (по умолчанию): существующие пролёты сохраняются, добавляются только недостающие.
     - mode=full: существующие пролёты и участки линии удаляются, топология строится с нуля.
+    Создаёт пролёты между соседними опорами, участки линии (AClineSegment) и секции линии (LineSection).
     """
     from app.models.base import generate_mrid
 
@@ -1375,6 +1708,14 @@ async def auto_create_spans(
         )
     
     if mode == "full":
+        # Сохраняем ТП в конце отпаек (to_substation_id), чтобы восстановить после пересборки
+        segs_with_tp = await db.execute(
+            select(AClineSegment.tap_pole_id, AClineSegment.tap_number, AClineSegment.to_substation_id).where(
+                AClineSegment.line_id == power_line_id,
+                AClineSegment.to_substation_id.isnot(None),
+            )
+        )
+        tap_substation_restore = [(r[0], r[1], r[2]) for r in segs_with_tp.all()]
         # Удаляем все пролёты и участки линии для пересборки с нуля
         from app.models.cim_line_structure import LineSection
         segment_ids_subq = select(AClineSegment.id).where(AClineSegment.line_id == power_line_id)
@@ -1383,13 +1724,19 @@ async def auto_create_spans(
         await db.execute(delete(LineSection).where(LineSection.acline_segment_id.in_(segment_ids_subq)))
         await db.execute(delete(AClineSegment).where(AClineSegment.line_id == power_line_id))
         await db.flush()
+    else:
+        tap_substation_restore = []
     
-    # Получаем опоры с sequence_number (все ветки)
+    # Получаем опоры с sequence_number (все ветки); подгружаем location/position_points для get_latitude (пересборка с подстанцией)
     result = await db.execute(
         select(Pole)
         .where(Pole.line_id == power_line_id)
         .where(Pole.sequence_number.isnot(None))
-        .options(selectinload(Pole.connectivity_nodes))
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.position_points),
+        )
     )
     all_poles = result.scalars().all()
 
@@ -1424,6 +1771,7 @@ async def auto_create_spans(
 
     poles = all_poles  # для создания узлов ниже
     
+    line_name = power_line.name
     if len(span_pairs) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1463,6 +1811,26 @@ async def auto_create_spans(
         # Сохраняем ConnectivityNode в опоре для использования ниже
         pole._connectivity_node = connectivity_node
     
+    # Перечитываем ЛЭП из БД, чтобы гарантированно иметь актуальные substation_start_id/substation_end_id
+    await db.refresh(power_line)
+    # Пролёты от/до подстанций (если заданы начало и/или конец линии)
+    from app.core.line_auto_assembly import link_line_to_substation, add_substation_span_from_last_pole
+    substation_start_id = getattr(power_line, "substation_start_id", None)
+    substation_end_id = getattr(power_line, "substation_end_id", None)
+    if main_poles:
+        if substation_start_id:
+            try:
+                await link_line_to_substation(
+                    db, power_line_id, main_poles[0].id, substation_start_id, current_user.id
+                )
+            except ValueError:
+                pass  # участок уже есть
+        if substation_end_id and len(main_poles) > 0:
+            await add_substation_span_from_last_pole(
+                db, power_line_id, main_poles[-1], substation_end_id, current_user.id
+            )
+    await db.flush()
+    
     # Используем ту же логику, что и при пошаговом добавлении опор: создаются
     # участки линии (AClineSegment) по ветвлениям/подстанциям и секции линии
     # (LineSection) по марке провода — через auto_create_span из line_auto_assembly
@@ -1495,7 +1863,57 @@ async def auto_create_spans(
         if span:
             created_spans.append(span)
 
+    # Восстанавливаем ТП в конце отпаек (после полной пересборки)
+    for (tap_pid, tap_num, sub_id) in tap_substation_restore:
+        if sub_id is None:
+            continue
+        q = select(AClineSegment).where(
+            AClineSegment.line_id == power_line_id,
+            AClineSegment.tap_pole_id == tap_pid,
+            AClineSegment.to_substation_id.is_(None),
+        )
+        if tap_num is not None:
+            q = q.where(AClineSegment.tap_number == tap_num)
+        else:
+            q = q.where(AClineSegment.tap_number.is_(None))
+        seg_result = await db.execute(
+            q.options(
+                selectinload(AClineSegment.to_node).selectinload(ConnectivityNode.pole),
+            )
+        )
+        seg = seg_result.scalar_one_or_none()
+        if not seg or not seg.to_node:
+            continue
+        to_node = seg.to_node
+        if getattr(to_node, "pole_id", None) is None:
+            continue
+        seg.to_substation_id = sub_id
+        await db.flush()
+        last_pole = await db.get(Pole, to_node.pole_id)
+        if last_pole:
+            await add_substation_span_from_last_pole(
+                db, power_line_id, last_pole, sub_id, current_user.id
+            )
+
     await db.commit()
+
+    # Запись в журнал изменений об автосборке топологии (созданные пролёты/участки)
+    if created_spans:
+        log_entry = ChangeLog(
+            user_id=current_user.id,
+            source="web",
+            action="create",
+            entity_type="power_line",
+            entity_id=power_line_id,
+            payload={
+                "topology_rebuild": True,
+                "message": "Автосборка топологии",
+                "created_spans": len(created_spans),
+                "line_name": line_name,
+            },
+        )
+        db.add(log_entry)
+        await db.commit()
 
     # Обновляем длину ЛЭП по сумме пролётов (авторасчёт)
     power_line = await db.get(PowerLine, power_line_id)
@@ -1589,7 +2007,17 @@ async def delete_power_line(
         spans_n = spans_count.scalar() or 0
         segments_n = segments_count.scalar() or 0
         
+        line_name = power_line.name
         print(f"DEBUG: Связанные объекты - Опоры: {poles_n}, Пролёты: {spans_n}, Сегменты: {segments_n}")
+        # Удаляем связанные Connection вручную (если они есть)
+        from app.models.substation import Connection
+        connections_result = await db.execute(
+            select(Connection).where(Connection.line_id == power_line_id)
+        )
+        connections = connections_result.scalars().all()
+        for conn in connections:
+            await db.delete(conn)
+            print(f"DEBUG: Удалено соединение {conn.id}")
         
         if not cascade and (poles_n > 0 or spans_n > 0 or segments_n > 0):
             raise HTTPException(
@@ -1683,6 +2111,25 @@ async def delete_power_line(
         # Используем delete через сессию для правильной работы каскадов
         await db.delete(power_line)
         await db.commit()
+        
+        # Запись в журнал изменений о каскадном удалении (линия + опоры, пролёты, участки)
+        if cascade and (poles_n > 0 or spans_n > 0 or segments_n > 0):
+            log_entry = ChangeLog(
+                user_id=current_user.id,
+                source="web",
+                action="delete",
+                entity_type="power_line",
+                entity_id=power_line_id,
+                payload={
+                    "name": line_name,
+                    "cascade": True,
+                    "deleted_poles": poles_n,
+                    "deleted_spans": spans_n,
+                    "deleted_segments": segments_n,
+                },
+            )
+            db.add(log_entry)
+            await db.commit()
         
         print(f"DEBUG: ЛЭП {power_line_id} успешно удалена")
         return {"message": "Power line deleted successfully"}

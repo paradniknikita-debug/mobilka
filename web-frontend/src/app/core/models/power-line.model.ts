@@ -10,6 +10,8 @@ export interface PowerLine {
   description?: string;
   created_at: string;
   updated_at?: string;
+  substation_start_id?: number | null;
+  substation_end_id?: number | null;
 }
 
 export interface PowerLineCreate {
@@ -21,5 +23,7 @@ export interface PowerLineCreate {
   status?: string;
   description?: string;
   mrid?: string; // Опциональный UID, если не указан - генерируется автоматически
+  substation_start_id?: number | null;
+  substation_end_id?: number | null;
 }
 

@@ -1,6 +1,7 @@
 # CI/CD: сборка при пуше в master и опциональный деплой на сервер.
 # - Backend: образ пушится в ghcr.io/<owner>/mobilka-backend:latest
-# - Flutter web и Angular: артефакты собираются и при наличии секретов деплоятся на сервер по SSH
+# - Flutter web и Angular: артефакты собираются; при заданных секретах деплоятся на сервер по SSH
+# Без секретов: скачать артефакты из Run → Artifacts и распаковать на сервер вручную.
 name: Build and Deploy
 
 on:
@@ -82,6 +83,12 @@ jobs:
           cd frontend
           flutter build web --release
 
+      - name: Build web (cache hit)
+        if: steps.flutter-cache.outputs.cache-hit == 'true'
+        run: |
+          cd frontend
+          flutter build web --release
+
       - name: Upload Flutter web artifact
         uses: actions/upload-artifact@v4
         with:
@@ -120,12 +127,10 @@ jobs:
           path: web-frontend/dist/lepm-web-frontend/
           retention-days: 14
 
-  # Деплой на сервер (выполняется только при заданных секретах)
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
     needs: [build-backend, build-flutter-web, build-angular]
-    # Включить деплой: в настройках репозитория Variables and secrets → Variables задать DEPLOY_ENABLED = true
     if: success() && vars.DEPLOY_ENABLED == 'true'
     env:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -172,7 +177,7 @@ jobs:
           H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           if [ -z "$P" ] || [ "${P#/}" = "$P" ]; then
-            echo "::error::DEPLOY_PATH must be an absolute path (e.g. /root/mobilka). Check Secrets: paste only the path, not the whole env file."
+            echo "::error::DEPLOY_PATH must be an absolute path (e.g. /root/mobilka)."
             exit 1
           fi
           if [ "$DEPLOY_AUTH" = "password" ]; then
@@ -180,8 +185,7 @@ jobs:
           else
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
-          rsync -avz --delete -e "$RSYNC_SSH" \
-            flutter-web/ "$U@$H:$P/frontend/build/web/"
+          rsync -avz --delete -e "$RSYNC_SSH" flutter-web/ "$U@$H:$P/frontend/build/web/"
 
       - name: Copy Angular to server
         env:
@@ -195,8 +199,7 @@ jobs:
           else
             RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
           fi
-          rsync -avz --delete -e "$RSYNC_SSH" \
-            angular-web/ "$U@$H:$P/web-frontend/dist/lepm-web-frontend/"
+          rsync -avz --delete -e "$RSYNC_SSH" angular-web/ "$U@$H:$P/web-frontend/dist/lepm-web-frontend/"
 
       - name: Copy compose and nginx to server
         env:

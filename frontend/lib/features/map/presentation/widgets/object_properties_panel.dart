@@ -44,7 +44,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final powerLineId = objectProperties['power_line_id'] as int?;
+    final lineId = objectProperties['line_id'] ?? objectProperties['power_line_id'] as int?;
 
     return Container(
       decoration: BoxDecoration(
@@ -119,7 +119,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  if (onStartLineFormation != null && powerLineId != null) ...[
+                  if (onStartLineFormation != null && lineId != null) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -134,7 +134,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  if (onAutoCreateSpans != null && powerLineId != null) ...[
+                  if (onAutoCreateSpans != null && lineId != null) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(

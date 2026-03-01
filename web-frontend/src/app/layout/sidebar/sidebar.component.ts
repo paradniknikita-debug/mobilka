@@ -281,13 +281,35 @@ export class SidebarComponent implements OnInit, OnDestroy {
   /** ID опоры, выбранной по клику на карте (для подсветки в дереве) */
   selectedPoleIdFromMap: number | null = null;
 
-  /** Подпись участка в формате «оп.1-оп.3» по номерам первой и последней опоры по порядку */
-  getSegmentDisplayName(segment: { segmentId: number | null; segmentName: string | null; poles: GeoJSONFeature[] }): string {
+  /** Подпись участка в формате «оп.4-оп.5»: убираем префикс «Опора » из номеров опор */
+  shortPoleLabelForSegment(s: string | number | undefined): string {
+    if (s == null) return '?';
+    const str = String(s).trim();
+    if (str.toLowerCase().startsWith('опора')) return str.slice(5).trim() || str;
+    return str;
+  }
+
+  /** Подпись участка в формате «оп.1-оп.3»: по пролётам (первая опора первого пролёта — последняя опора последнего) или по опорам */
+  getSegmentDisplayName(item: PowerLineTreeItem, segment: { segmentId: number | null; segmentName: string | null; poles: GeoJSONFeature[]; spans?: GeoJSONFeature[] }): string {
+    const spans = segment.spans ?? [];
+    if (spans.length >= 1) {
+      const sortedSpans = [...spans].sort((a, b) => (a.properties['sequence_number'] ?? 0) - (b.properties['sequence_number'] ?? 0));
+      const firstSpan = sortedSpans[0];
+      const lastSpan = sortedSpans[sortedSpans.length - 1];
+      const fromPoleId = firstSpan.properties['from_pole_id'];
+      const toPoleId = lastSpan.properties['to_pole_id'];
+      const allPoles = item.allPoles ?? [];
+      const fromPole = fromPoleId != null ? allPoles.find((p: GeoJSONFeature) => p.properties['id'] === fromPoleId) : undefined;
+      const toPole = toPoleId != null ? allPoles.find((p: GeoJSONFeature) => p.properties['id'] === toPoleId) : undefined;
+      const first = fromPole ? this.shortPoleLabelForSegment(fromPole.properties['pole_number'] ?? fromPole.properties['sequence_number']) : null;
+      const last = toPole ? this.shortPoleLabelForSegment(toPole.properties['pole_number'] ?? toPole.properties['sequence_number']) : null;
+      if (first != null && last != null) return `оп.${first}-оп.${last}`;
+    }
     const poles = segment.poles || [];
     if (poles.length === 0) return segment.segmentName || `Участок ${segment.segmentId ?? '?'}`;
     const sorted = [...poles].sort((a, b) => (a.properties['sequence_number'] ?? 0) - (b.properties['sequence_number'] ?? 0));
-    const first = sorted[0].properties['pole_number'] ?? sorted[0].properties['sequence_number'] ?? '?';
-    const last = sorted[sorted.length - 1].properties['pole_number'] ?? sorted[sorted.length - 1].properties['sequence_number'] ?? '?';
+    const first = this.shortPoleLabelForSegment(sorted[0].properties['pole_number'] ?? sorted[0].properties['sequence_number']);
+    const last = this.shortPoleLabelForSegment(sorted[sorted.length - 1].properties['pole_number'] ?? sorted[sorted.length - 1].properties['sequence_number']);
     return `оп.${first}-оп.${last}`;
   }
 
@@ -571,9 +593,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
         return;
       }
 
+      // Если это опора, применяем логику зума и показываем панель свойств опоры (как при клике на карте)
       if (feature.properties['pole_number']) {
-        // Опора: зум ~200 м (уровень 18)
         this.mapService.requestCenterOnFeature('pole', [lat, lng], 18);
+        this.mapService.requestShowPoleProperties(feature);
+        this.selectedPoleIdFromMap = feature.properties['id'] ?? null;
       } else if (feature.properties['dispatcher_name']) {
         this.mapService.requestCenterOnFeature('substation', [lat, lng], 18);
       } else {
@@ -614,7 +638,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   contextMenuPowerLineId: number | null = null;
   contextMenuSegmentId: number | null = null;
 
-  onFeatureRightClick(feature: GeoJSONFeature, event: MouseEvent): void {
+  onFeatureRightClick(feature: GeoJSONFeature, event: MouseEvent, forceType?: 'substation' | 'powerLine'): void {
     event.preventDefault();
     event.stopPropagation();
     
@@ -622,8 +646,14 @@ export class SidebarComponent implements OnInit, OnDestroy {
     this.contextMenuPosition.y = event.clientY + 'px';
     this.contextMenuFeature = feature;
     
-    // Определяем тип объекта и контекст
-    if (feature.properties['span_number']) {
+    // Явный тип из шаблона (подстанция/ЛЭП) имеет приоритет
+    if (forceType === 'substation') {
+      this.contextMenuType = 'substation';
+      this.contextMenuPowerLineId = null;
+    } else if (forceType === 'powerLine') {
+      this.contextMenuType = 'powerLine';
+      this.contextMenuPowerLineId = feature.properties['id'];
+    } else if (feature.properties['span_number']) {
       // Пролёт
       this.contextMenuType = 'span';
       this.contextMenuPowerLineId = feature.properties['power_line_id'];
@@ -633,7 +663,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       this.contextMenuType = 'pole';
       this.contextMenuPowerLineId = feature.properties['power_line_id'];
     } else if (feature.properties['name'] && feature.properties['dispatcher_name'] && !feature.properties['code']) {
-      // Подстанция
+      // Подстанция (по свойствам)
       this.contextMenuType = 'substation';
       this.contextMenuPowerLineId = null;
     } else if (feature.properties['name'] && !feature.properties['pole_number'] && !feature.properties['tap_number'] && !feature.properties['dispatcher_name']) {
@@ -782,7 +812,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   onCreateSubstation(): void {
     const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-      width: '600px',
+      width: '560px',
+      panelClass: 'create-object-dialog-panel',
       data: { defaultObjectType: 'substation' }
     });
     
@@ -797,7 +828,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
     if (this.contextMenuType === 'root') {
       // В корне - создаём только линию
       const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-        width: '600px',
+        width: '560px',
+        panelClass: 'create-object-dialog-panel',
         data: { defaultObjectType: 'powerline' }
       });
       
@@ -810,8 +842,9 @@ export class SidebarComponent implements OnInit, OnDestroy {
       // В линии - создаём опору
       console.log('Открытие диалога создания опоры для линии ID:', this.contextMenuPowerLineId);
       const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-        width: '600px',
-        data: { 
+        width: '560px',
+        panelClass: 'create-object-dialog-panel',
+        data: {
           defaultObjectType: 'pole',
           powerLineId: this.contextMenuPowerLineId
         }
@@ -841,8 +874,9 @@ export class SidebarComponent implements OnInit, OnDestroy {
     } else if (this.contextMenuType === 'folder' && this.contextMenuPowerLineId) {
       // В папке опор - создаём опору
       const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-        width: '600px',
-        data: { 
+        width: '560px',
+        panelClass: 'create-object-dialog-panel',
+        data: {
           defaultObjectType: 'pole',
           powerLineId: this.contextMenuPowerLineId
         }
@@ -913,8 +947,9 @@ export class SidebarComponent implements OnInit, OnDestroy {
       
       if (poleId && powerLineId) {
         const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-          width: '600px',
-          data: { 
+          width: '560px',
+          panelClass: 'create-object-dialog-panel',
+          data: {
             objectType: 'pole',
             poleId: poleId,
             powerLineId: powerLineId,
@@ -951,27 +986,46 @@ export class SidebarComponent implements OnInit, OnDestroy {
           }
         });
       }
+    } else if (this.contextMenuType === 'substation' && this.contextMenuFeature) {
+      const substationId = this.contextMenuFeature.properties['id'];
+      if (substationId) {
+        const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+          width: '700px',
+          maxWidth: '90vw',
+          data: {
+            objectType: 'substation',
+            substationId: substationId,
+            isEdit: true
+          }
+        });
+        dialogRef.afterClosed().subscribe(result => {
+          if (result && result.success) {
+            this.mapService.refreshData();
+          }
+        });
+      }
     }
   }
 
-  /** Отпаечная опора без построенной отпайки — показываем «Продолжить отпайку» */
-  isContextMenuPoleTapAndEmpty(): boolean {
+  /** Отпаечная опора — показываем «Начать отпайку» (создать новую ветку от этой опоры) */
+  isContextMenuPoleTap(): boolean {
     if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return false;
-    const p = this.contextMenuFeature.properties;
-    return !!p['is_tap_pole'] && !p['tap_branch_has_poles'];
+    return !!this.contextMenuFeature.properties['is_tap_pole'];
   }
 
-  onContinueTapFromPole(): void {
+  onStartTapFromPole(): void {
     if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return;
     const powerLineId = this.contextMenuFeature.properties['power_line_id'];
     const tapPoleId = this.contextMenuFeature.properties['id'];
     if (powerLineId == null || tapPoleId == null) return;
     const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-      width: '520px',
+      width: '560px',
+      panelClass: 'create-object-dialog-panel',
       data: {
         defaultObjectType: 'pole',
         powerLineId: powerLineId as number,
-        tapPoleId: tapPoleId as number
+        tapPoleId: tapPoleId as number,
+        startNewTap: true
       }
     });
     dialogRef.afterClosed().subscribe(result => {
@@ -1025,12 +1079,16 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
     if (!this.contextMenuFeature) return;
     
-    // Определяем тип объекта
+    // Определяем тип объекта по contextMenuType для надёжности (подстанция может без dispatcher_name)
     let objectType: 'pole' | 'powerLine' | 'substation' | 'tap' | 'span' = 'pole';
     let objectId: number | null = null;
     let objectName: string = '';
     
-    if (this.contextMenuFeature.properties['span_number']) {
+    if (this.contextMenuType === 'substation' && this.contextMenuFeature.properties['id'] != null) {
+      objectType = 'substation';
+      objectId = this.contextMenuFeature.properties['id'];
+      objectName = this.contextMenuFeature.properties['name'] || 'Подстанция';
+    } else if (this.contextMenuFeature.properties['span_number']) {
       objectType = 'span';
       objectId = this.contextMenuFeature.properties['id'];
       objectName = this.contextMenuFeature.properties['span_number'] || 'N/A';
@@ -1038,7 +1096,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       objectType = 'pole';
       objectId = this.contextMenuFeature.properties['id'];
       objectName = this.contextMenuFeature.properties['pole_number'] || 'N/A';
-    } else if (this.contextMenuFeature.properties['name'] && this.contextMenuFeature.properties['dispatcher_name']) {
+    } else if (this.contextMenuType !== 'substation' && this.contextMenuFeature.properties['name'] && this.contextMenuFeature.properties['dispatcher_name']) {
       objectType = 'substation';
       objectId = this.contextMenuFeature.properties['id'];
       objectName = this.contextMenuFeature.properties['name'] || 'N/A';

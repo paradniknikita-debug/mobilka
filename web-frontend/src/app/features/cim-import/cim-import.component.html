@@ -1,0 +1,116 @@
+<div class="cim-page">
+  <header class="page-header">
+    <div class="header-content">
+      <h1>
+        <mat-icon class="title-icon">schema</mat-icon>
+        CIM / IEC 61970‑552
+      </h1>
+      <p class="subtitle">
+        Обмен данными в форматах FullModel и DifferenceModel. После импорта можно просмотреть объекты на карте и записать 552-диф в базу.
+      </p>
+    </div>
+  </header>
+
+  <div class="cards">
+    <mat-card class="format-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar class="card-avatar fullmodel">description</mat-icon>
+        <mat-card-title>CIM XML (FullModel)</mat-card-title>
+        <mat-card-subtitle>Полная модель RDF/XML</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="file-area">
+          <input #fileInput type="file" accept=".xml" (change)="onFileChange($event)" class="file-input">
+          <button mat-stroked-button type="button" (click)="fileInput.click()" class="file-trigger">
+            <mat-icon>upload_file</mat-icon>
+            {{ selectedFile ? selectedFile.name : 'Выбрать файл' }}
+          </button>
+        </div>
+        <div class="card-actions">
+          <button mat-raised-button color="primary" (click)="import()" [disabled]="!selectedFile || isUploading">
+            <mat-icon *ngIf="isUploading" class="spinning">refresh</mat-icon>
+            <mat-icon *ngIf="!isUploading">upload</mat-icon>
+            {{ isUploading ? 'Импорт…' : 'Импортировать' }}
+          </button>
+          <button mat-stroked-button color="primary" (click)="exportXml()" matTooltip="Скачать текущие данные в CIM XML">
+            <mat-icon>download</mat-icon>
+            Экспорт CIM XML
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="format-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar class="card-avatar diff">merge_type</mat-icon>
+        <mat-card-title>552 DifferenceModel</mat-card-title>
+        <mat-card-subtitle>Один диф для внешних систем</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="file-area">
+          <input #diffFileInput type="file" accept=".xml" (change)="onDiffFileChange($event)" class="file-input">
+          <button mat-stroked-button type="button" (click)="diffFileInput.click()" class="file-trigger">
+            <mat-icon>upload_file</mat-icon>
+            {{ selectedDiffFile ? selectedDiffFile.name : 'Выбрать файл' }}
+          </button>
+        </div>
+        <div class="card-actions">
+          <button mat-raised-button color="primary" (click)="import552()" [disabled]="!selectedDiffFile || isUploading">
+            <mat-icon *ngIf="isUploading" class="spinning">refresh</mat-icon>
+            <mat-icon *ngIf="!isUploading">upload</mat-icon>
+            {{ isUploading ? 'Импорт 552…' : 'Импортировать 552 diff' }}
+          </button>
+          <button mat-stroked-button color="primary" (click)="export552()" matTooltip="Скачать данные как один 552-диф">
+            <mat-icon>download</mat-icon>
+            Экспорт 552 diff
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <mat-card *ngIf="error" class="error-card">
+    <mat-icon color="warn">error</mat-icon>
+    <span>{{ error }}</span>
+  </mat-card>
+
+  <mat-card *ngIf="summary" class="summary-card">
+    <mat-card-header>
+      <mat-card-title>Предпросмотр: сводка по объектам</mat-card-title>
+      <mat-card-subtitle *ngIf="totalCount">Всего: {{ totalCount }}</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>Тип объекта</th>
+            <th>Количество</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let key of (summary | keyvalue)">
+            <td>{{ key.key }}</td>
+            <td>{{ key.value }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="preview-actions">
+        <button mat-stroked-button color="primary" (click)="openPreviewMapDialog()">
+          <mat-icon>map</mat-icon>
+          Показать на карте
+        </button>
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="apply552ToDb()"
+          [disabled]="lastImportSource !== '552' || !selectedDiffFile || isApplying"
+          matTooltip="Доступно только для импорта 552 diff"
+        >
+          <mat-icon *ngIf="isApplying" class="spinning">refresh</mat-icon>
+          <mat-icon *ngIf="!isApplying">save</mat-icon>
+          {{ isApplying ? 'Запись…' : 'Записать в базу' }}
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

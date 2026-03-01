@@ -1,5 +1,5 @@
-<div class="create-object-dialog">
-  <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
+<div class="create-object-dialog" [class.substation-edit]="isEditMode && selectedObjectType === 'substation'">
+  <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : isEditMode && selectedObjectType === 'substation' ? 'Редактирование подстанции' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
 
   <mat-dialog-content>
     <!-- Шаг 1: Выбор типа объекта -->
@@ -48,12 +48,12 @@
             <mat-error>{{ getFieldError('power_line_id') }}</mat-error>
           </mat-form-field>
 
-          <!-- Ветка: магистраль или отпайка от конкретной опоры — подпись показывает выбранное значение -->
-          <mat-form-field *ngIf="showBranchChoice && tapPolesInLine.length" appearance="outline" class="full-width field-tap">
+          <!-- Ветка: магистраль или отпайка (несколько веток от одной опоры с разными подписями) -->
+          <mat-form-field *ngIf="showBranchChoice && (tapBranchesInLine.length || tapPolesInLine.length)" appearance="outline" class="full-width field-tap">
             <mat-label>{{ tapBranchLabel }}</mat-label>
-            <mat-select formControlName="tap_pole_id" placeholder="Магистраль или отпайка">
+            <mat-select formControlName="branch_selection" placeholder="Магистраль или отпайка">
               <mat-option [value]="null">Магистраль</mat-option>
-              <mat-option *ngFor="let tp of tapPolesInLine" [value]="tp.id">Отпайка от {{ tp.pole_number }}</mat-option>
+              <mat-option *ngFor="let tb of tapBranchesInLine" [value]="tb.value">{{ tb.label }}</mat-option>
             </mat-select>
           </mat-form-field>
 
@@ -291,6 +291,9 @@
           <mat-error *ngIf="substationForm.get('latitude')?.hasError('required')">
             Широта обязательна
           </mat-error>
+          <mat-error *ngIf="substationForm.get('latitude')?.hasError('invalidCoordinate')">
+            Широта от -90 до 90°
+          </mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
@@ -298,6 +301,9 @@
           <input matInput type="number" formControlName="longitude" step="any">
           <mat-error *ngIf="substationForm.get('longitude')?.hasError('required')">
             Долгота обязательна
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('longitude')?.hasError('invalidCoordinate')">
+            Долгота от -180 до 180°
           </mat-error>
         </mat-form-field>
 
@@ -310,6 +316,57 @@
           <mat-label>Описание</mat-label>
           <textarea matInput formControlName="description" rows="3"></textarea>
         </mat-form-field>
+
+        <!-- Связь подстанции с линиями (только в режиме редактирования) -->
+        <div *ngIf="isEditMode && substationId" class="form-section line-links-section">
+          <h3 class="section-title">Связь с линиями</h3>
+
+          <div class="line-link-block">
+            <h4>Подстанция в начале линии</h4>
+            <p *ngIf="linesWhereSubstationIsStart.length" class="current-link">
+              Сейчас в начале: <strong>{{ linesWhereSubstationIsStartNames }}</strong>
+              <button mat-button color="warn" (click)="clearSubstationFromLineStart(linesWhereSubstationIsStart[0].id)" [disabled]="linkingLineStart">Снять</button>
+            </p>
+            <p *ngIf="linesWhereSubstationIsStart.length > 1" class="current-link">
+              <button mat-button color="warn" *ngFor="let line of linesWhereSubstationIsStart.slice(1)" (click)="clearSubstationFromLineStart(line.id)" [disabled]="linkingLineStart">Снять с «{{ line.name }}»</button>
+            </p>
+            <div class="link-controls">
+              <mat-form-field appearance="outline" class="line-select">
+                <mat-label>ЛЭП</mat-label>
+                <mat-select [(ngModel)]="lineForStartId" [ngModelOptions]="{standalone: true}" placeholder="Выберите линию">
+                  <mat-option [value]="null">— не выбрано</mat-option>
+                  <mat-option *ngFor="let line of powerLines" [value]="line.id">{{ line.name }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-raised-button color="primary" (click)="setSubstationAsLineStart()" [disabled]="lineForStartId == null || linkingLineStart">
+                {{ linkingLineStart ? '...' : 'Установить' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="line-link-block">
+            <h4>Подстанция в конце линии</h4>
+            <p *ngIf="linesWhereSubstationIsEnd.length" class="current-link">
+              Сейчас в конце: <strong>{{ linesWhereSubstationIsEndNames }}</strong>
+              <button mat-button color="warn" (click)="clearSubstationFromLineEnd(linesWhereSubstationIsEnd[0].id)" [disabled]="linkingLineEnd">Снять</button>
+            </p>
+            <p *ngIf="linesWhereSubstationIsEnd.length > 1" class="current-link">
+              <button mat-button color="warn" *ngFor="let line of linesWhereSubstationIsEnd.slice(1)" (click)="clearSubstationFromLineEnd(line.id)" [disabled]="linkingLineEnd">Снять с «{{ line.name }}»</button>
+            </p>
+            <div class="link-controls">
+              <mat-form-field appearance="outline" class="line-select">
+                <mat-label>ЛЭП</mat-label>
+                <mat-select [(ngModel)]="lineForEndId" [ngModelOptions]="{standalone: true}" placeholder="Выберите линию">
+                  <mat-option [value]="null">— не выбрано</mat-option>
+                  <mat-option *ngFor="let line of powerLines" [value]="line.id">{{ line.name }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-raised-button color="primary" (click)="setSubstationAsLineEnd()" [disabled]="lineForEndId == null || linkingLineEnd">
+                {{ linkingLineEnd ? '...' : 'Установить' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </form>
     </div>
 
@@ -345,7 +402,7 @@
       (click)="onSubmit()"
       [disabled]="substationForm.invalid || isSubmitting">
       <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
-      {{ isSubmitting ? 'Создание...' : 'Создать' }}
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
     </button>
   </mat-dialog-actions>
 </div>

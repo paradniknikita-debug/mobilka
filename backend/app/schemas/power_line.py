@@ -28,6 +28,8 @@ class PoleCreate(PoleBase):
     is_tap: bool = False  # Является ли опора отпаечной (точкой отпайки)
     branch_type: Optional[str] = None  # 'main' — магистраль, 'tap' — отпайка (для опор после отпаечной)
     tap_pole_id: Optional[int] = None   # id отпаечной опоры, от которой идёт эта ветка (для отпайки)
+    tap_branch_index: Optional[int] = None  # Номер ветки от одной отпаечной (1, 2, …); при продолжении существующей отпайки
+    start_new_tap: bool = False  # True = начать новую отпайку от tap_pole_id (вторая/третья ветка), False = продолжить текущую
     conductor_type: Optional[str] = None
     conductor_material: Optional[str] = None
     conductor_section: Optional[str] = None
@@ -41,6 +43,7 @@ class PoleResponse(PoleBase):
     is_tap_pole: bool = False
     branch_type: Optional[str] = None
     tap_pole_id: Optional[int] = None
+    tap_branch_index: Optional[int] = None
     conductor_type: Optional[str] = None
     conductor_material: Optional[str] = None
     conductor_section: Optional[str] = None
@@ -80,6 +83,8 @@ class PowerLineUpdate(BaseModel):
     region_name: Optional[str] = None
     status: Optional[str] = None
     description: Optional[str] = None
+    substation_start_id: Optional[int] = None  # Подстанция в начале линии (пролёт ПС→первая опора)
+    substation_end_id: Optional[int] = None    # Подстанция в конце линии (пролёт последняя опора→ПС)
 
 
 class PowerLineResponse(PowerLineBase):
@@ -88,6 +93,8 @@ class PowerLineResponse(PowerLineBase):
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime]
+    substation_start_id: Optional[int] = None
+    substation_end_id: Optional[int] = None
     poles: List[PoleResponse] = []
     # CIM структура
     acline_segments: List[AClineSegmentResponse] = []
