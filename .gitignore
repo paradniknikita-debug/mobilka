@@ -61,3 +61,5 @@ frontend/build/
 web-frontend/dist/
 backend/static/
 
+# Экспорт CIM/временные XML в корне
+/*.xml

@@ -285,14 +285,14 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         id: drift.Value(localId),
         lineId: widget.lineId,
         poleNumber: _poleNumber,
-        xPosition: _longitude!,  // CIM: x = долгота
-        yPosition: _latitude!,   // CIM: y = широта
-        poleType: _poleType,
+        xPosition: drift.Value(_longitude!),  // CIM: x = долгота
+        yPosition: drift.Value(_latitude!),   // CIM: y = широта
+        poleType: drift.Value(_poleType),
         height: drift.Value(_height),
         foundationType: drift.Value(_foundationType),
         material: drift.Value(_material),
         yearInstalled: drift.Value(_yearInstalled),
-        condition: _condition,
+        condition: drift.Value(_condition),
         notes: drift.Value(_notes),
         cardComment: _cardCommentController.text.trim().isEmpty
             ? const drift.Value.absent()
@@ -321,7 +321,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           defectAttachment: eq.defectAttachment != null && eq.defectAttachment!.isNotEmpty
               ? drift.Value(eq.defectAttachment!)
               : const drift.Value.absent(),
-          condition: 'good',
+          condition: const drift.Value('good'),
           notes: drift.Value(null),
           createdBy: userId,
           createdAt: now,
@@ -483,14 +483,14 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           id: drift.Value(createdPole.id),
           lineId: dbLineId,
           poleNumber: createdPole.poleNumber,
-          xPosition: createdPole.xPosition,
-          yPosition: createdPole.yPosition,
-          poleType: createdPole.poleType,
+          xPosition: drift.Value(createdPole.xPosition),
+          yPosition: drift.Value(createdPole.yPosition),
+          poleType: drift.Value(createdPole.poleType),
           height: drift.Value(createdPole.height),
           foundationType: drift.Value(createdPole.foundationType),
           material: drift.Value(createdPole.material),
           yearInstalled: drift.Value(createdPole.yearInstalled),
-          condition: createdPole.condition,
+          condition: drift.Value(createdPole.condition),
           notes: drift.Value(createdPole.notes),
           cardComment: _cardCommentController.text.trim().isEmpty
               ? const drift.Value.absent()
