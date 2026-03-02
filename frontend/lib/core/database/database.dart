@@ -140,13 +140,17 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 3) {
-            // CIM: latitude -> y_position, longitude -> x_position
-            await migrator.issueCustomQuery(
-              'ALTER TABLE poles RENAME COLUMN latitude TO y_position',
-            );
-            await migrator.issueCustomQuery(
-              'ALTER TABLE poles RENAME COLUMN longitude TO x_position',
-            );
+            // CIM: latitude -> y_position, longitude -> x_position (безопасно: если колонки уже переименованы — пропускаем)
+            try {
+              await migrator.issueCustomQuery(
+                'ALTER TABLE poles RENAME COLUMN latitude TO y_position',
+              );
+            } catch (_) {}
+            try {
+              await migrator.issueCustomQuery(
+                'ALTER TABLE poles RENAME COLUMN longitude TO x_position',
+              );
+            } catch (_) {}
           }
           if (from < 4) {
             await migrator.addColumn(powerLines, powerLines.mrid);
@@ -163,16 +167,16 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 7) {
             // Единое именование: power_line_id -> line_id
-            await migrator.issueCustomQuery(
-              'ALTER TABLE poles RENAME COLUMN power_line_id TO line_id',
-            );
+            try {
+              await migrator.issueCustomQuery(
+                'ALTER TABLE poles RENAME COLUMN power_line_id TO line_id',
+              );
+            } catch (_) {}
             try {
               await migrator.issueCustomQuery(
                 'ALTER TABLE patrol_sessions RENAME COLUMN power_line_id TO line_id',
               );
-            } catch (_) {
-              // Таблица могла быть создана уже с line_id (v2)
-            }
+            } catch (_) {}
           }
           if (from < 8) {
             // Исправление NULL в is_local/needs_sync (Unexpected null value при map)
@@ -182,6 +186,19 @@ class AppDatabase extends _$AppDatabase {
             await migrator.issueCustomQuery(
               "UPDATE poles SET needs_sync = 0 WHERE needs_sync IS NULL",
             );
+          }
+          if (from < 9) {
+            // Повторно переименовать longitude/latitude в x_position/y_position для БД, где миграция 3 не сработала
+            try {
+              await migrator.issueCustomQuery(
+                'ALTER TABLE poles RENAME COLUMN longitude TO x_position',
+              );
+            } catch (_) {}
+            try {
+              await migrator.issueCustomQuery(
+                'ALTER TABLE poles RENAME COLUMN latitude TO y_position',
+              );
+            } catch (_) {}
           }
         },
       );
@@ -204,6 +221,44 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> deletePowerLine(int id) => 
       (delete(powerLines)..where((tbl) => tbl.id.equals(id))).go();
+
+  /// Удаляет дубликаты ЛЭП: одинаковые по (name, mrid) объединяются в одну запись.
+  /// Оставляем запись с приоритетом: серверная (id >= 0) с меньшим id, иначе локальная с меньшим id.
+  /// Опоры и сессии обхода с дубликатов перепривязываются к оставляемой линии.
+  /// Возвращает количество удалённых дубликатов.
+  Future<int> removeDuplicatePowerLines() async {
+    final all = await select(powerLines).get();
+    final key = (PowerLine pl) => (
+      pl.name.trim().toLowerCase(),
+      (pl.mrid ?? '').trim().toLowerCase(),
+    );
+    final groups = <(String, String), List<PowerLine>>{};
+    for (final pl in all) {
+      final k = key(pl);
+      groups.putIfAbsent(k, () => []).add(pl);
+    }
+    int removed = 0;
+    for (final list in groups.values) {
+      if (list.length <= 1) continue;
+      // Оставляем одну: предпочитаем id >= 0 с меньшим id, иначе с наименьшим id
+      list.sort((a, b) {
+        final aServer = a.id >= 0;
+        final bServer = b.id >= 0;
+        if (aServer != bServer) return aServer ? -1 : 1;
+        return a.id.compareTo(b.id);
+      });
+      final keepId = list.first.id;
+      for (var i = 1; i < list.length; i++) {
+        final dupId = list[i].id;
+        await updatePolesLineId(dupId, keepId);
+        await (update(patrolSessions)..where((tbl) => tbl.lineId.equals(dupId)))
+            .write(PatrolSessionsCompanion(lineId: Value(keepId)));
+        await deletePowerLine(dupId);
+        removed++;
+      }
+    }
+    return removed;
+  }
 
   /// Обновить line_id у всех опор с fromLineId на toLineId (при слиянии/маппинге ЛЭП).
   Future<int> updatePolesLineId(int fromLineId, int toLineId) =>
@@ -343,6 +398,10 @@ class AppDatabase extends _$AppDatabase {
   /// Удалить все сессии обхода по данной ЛЭП (при удалении линии).
   Future<int> deletePatrolSessionsByLineId(int lineId) =>
       (delete(patrolSessions)..where((tbl) => tbl.lineId.equals(lineId))).go();
+
+  /// Удалить все несинхронизированные сессии обхода (pending). После этого синхронизация не будет пытаться их отправить.
+  Future<int> deleteAllPendingPatrolSessions() =>
+      (delete(patrolSessions)..where((tbl) => tbl.syncStatus.equals('pending'))).go();
 }
 
 LazyDatabase _openConnection() {

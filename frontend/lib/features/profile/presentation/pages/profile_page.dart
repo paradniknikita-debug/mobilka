@@ -6,6 +6,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
+import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/theme/app_theme.dart';
 import '../../../home/presentation/pages/home_page.dart';
 
@@ -163,6 +164,18 @@ class ProfilePage extends ConsumerWidget {
                   onTap: () => _runSync(context, ref),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.merge_type, color: PatrolColors.accent),
+                  title: const Text('Очистить дубликаты ЛЭП', style: TextStyle(color: PatrolColors.textPrimary)),
+                  subtitle: const Text('Удалить повторяющиеся линии из офлайн-БД', style: TextStyle(color: PatrolColors.textSecondary)),
+                  onTap: () => _removeDuplicatePowerLines(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services, color: PatrolColors.accent),
+                  title: const Text('Очистить сессии обхода', style: TextStyle(color: PatrolColors.textPrimary)),
+                  subtitle: const Text('Удалить несинхронизированные сессии, чтобы убрать ошибки при синхронизации', style: TextStyle(color: PatrolColors.textSecondary)),
+                  onTap: () => _showClearPatrolSessionsDialog(context, ref),
+                ),
+                ListTile(
                   leading: const Icon(Icons.settings, color: PatrolColors.accent),
                   title: const Text('Настройки сервера', style: TextStyle(color: PatrolColors.textPrimary)),
                   subtitle: const Text('Настройка IP адреса сервера', style: TextStyle(color: PatrolColors.textSecondary)),
@@ -296,6 +309,69 @@ class ProfilePage extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _removeDuplicatePowerLines(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(drift_db.databaseProvider);
+    final removed = await db.removeDuplicatePowerLines();
+    if (!context.mounted) return;
+    if (removed > 0) {
+      ref.invalidate(recentPatrolsProvider);
+      ref.invalidate(pendingPatrolSessionsCountProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Удалено дубликатов ЛЭП: $removed', style: const TextStyle(color: PatrolColors.background)),
+          backgroundColor: PatrolColors.statusSynced,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Дубликатов ЛЭП не найдено', style: TextStyle(color: PatrolColors.textPrimary)),
+          backgroundColor: PatrolColors.surfaceCard,
+        ),
+      );
+    }
+  }
+
+  void _showClearPatrolSessionsDialog(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: PatrolColors.surfaceCard,
+        title: const Text('Очистить сессии обхода', style: TextStyle(color: PatrolColors.textPrimary)),
+        content: const Text(
+          'Удалить все несинхронизированные сессии обхода из офлайн-БД? Они перестанут отправляться на сервер, ошибки синхронизации из-за них исчезнут.',
+          style: TextStyle(color: PatrolColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена', style: TextStyle(color: PatrolColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              final db = ref.read(drift_db.databaseProvider);
+              final deleted = await db.deleteAllPendingPatrolSessions();
+              if (!context.mounted) return;
+              ref.invalidate(pendingPatrolSessionsCountProvider);
+              ref.invalidate(recentPatrolsProvider);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    deleted > 0 ? 'Удалено сессий: $deleted' : 'Нет несинхронизированных сессий',
+                    style: const TextStyle(color: PatrolColors.background),
+                  ),
+                  backgroundColor: PatrolColors.statusSynced,
+                ),
+              );
+            },
+            child: const Text('Удалить', style: TextStyle(color: PatrolColors.accent)),
+          ),
+        ],
+      ),
     );
   }
 

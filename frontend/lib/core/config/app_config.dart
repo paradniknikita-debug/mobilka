@@ -59,7 +59,7 @@ class AppConfig {
   
   // Database Configuration
   static const String databaseName = 'lepm_local.db';
-  static const int databaseVersion = 8;
+  static const int databaseVersion = 9;
   
   // Storage Keys
   static const String authTokenKey = 'auth_token';

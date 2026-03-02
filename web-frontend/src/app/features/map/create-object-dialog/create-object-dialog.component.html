@@ -366,6 +366,32 @@
               </button>
             </div>
           </div>
+
+          <div class="line-link-block">
+            <h4>Подстанция в конце отпайки</h4>
+            <p class="hint">Укажите подстанцию в конце участка-отпайки (связь с последней опорой отпайки).</p>
+            <p *ngIf="segmentsWhereSubstationIsTapEnd.length" class="current-link">
+              Сейчас в конце отпайки: <strong>{{ segmentsWhereSubstationIsTapEndNames }}</strong>
+              <span class="clear-buttons">
+                <button mat-button color="warn" *ngFor="let s of segmentsWhereSubstationIsTapEnd" (click)="clearSubstationFromTapEnd(s.lineId, s.segmentId)" [disabled]="linkingTapEnd">Снять с «{{ s.segmentName }}»</button>
+              </span>
+            </p>
+            <div class="link-controls" *ngIf="tapSegmentsOptions.length">
+              <mat-form-field appearance="outline" class="line-select">
+                <mat-label>Участок (отпайка)</mat-label>
+                <mat-select [(ngModel)]="selectedTapSegmentForEnd" [ngModelOptions]="{standalone: true}" placeholder="Выберите отпайку">
+                  <mat-option [value]="null">— не выбрано</mat-option>
+                  <mat-option *ngFor="let opt of tapSegmentsOptions" [value]="{ lineId: opt.lineId, segmentId: opt.segmentId }">
+                    {{ opt.lineName }} — {{ opt.segmentName }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-raised-button color="primary" (click)="setSubstationAsTapEnd()" [disabled]="!selectedTapSegmentForEnd || linkingTapEnd">
+                {{ linkingTapEnd ? '...' : 'Установить' }}
+              </button>
+            </div>
+            <p *ngIf="tapSegmentsOptions.length === 0 && isEditMode && substationId" class="no-taps">Нет отпаечных участков. Отпайки создаются при наличии опор с направлением «отпайка» и пересборке топологии по ЛЭП.</p>
+          </div>
         </div>
       </form>
     </div>

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:drift/drift.dart' as drift;
@@ -70,6 +71,8 @@ class SyncService extends StateNotifier<SyncState> {
         await _downloadServerChanges(useLastSync: lastSyncBeforeUpload);
       }
 
+      await _database.removeDuplicatePowerLines();
+
       // Локальные данные не удаляем: выгруженные сущности остаются в БД вместе с загруженными с сервера.
       if (uploadResult != null) {
         _clearPendingDeletePowerLineIds();
@@ -95,6 +98,7 @@ class SyncService extends StateNotifier<SyncState> {
 
   /// Выгрузить сессии обхода со статусом pending: POST на сервер, обновить локально serverId и synced.
   /// Сессии с line_id < 0 (локальная ЛЭП) пропускаем — линия ещё не на сервере.
+  /// При 400/404 (например, ЛЭП не найдена на сервере) пропускаем сессию и не прерываем синхронизацию.
   Future<void> _uploadPatrolSessions() async {
     final pending = await _database.getPendingPatrolSessions();
     for (final row in pending) {
@@ -104,14 +108,22 @@ class SyncService extends StateNotifier<SyncState> {
         'line_id': row.lineId,
         if (row.note != null && row.note!.isNotEmpty) 'note': row.note!,
       };
-      final response = await _apiService.createPatrolSession(body);
-      final serverId = (response['id'] as num?)?.toInt();
-      if (serverId == null) continue;
+      try {
+        final response = await _apiService.createPatrolSession(body);
+        final serverId = (response['id'] as num?)?.toInt();
+        if (serverId == null) continue;
 
-      await _database.setPatrolSessionSynced(row.id, serverId);
+        await _database.setPatrolSessionSynced(row.id, serverId);
 
-      if (row.endedAt != null) {
-        await _apiService.endPatrolSession(serverId);
+        if (row.endedAt != null) {
+          await _apiService.endPatrolSession(serverId);
+        }
+      } on DioException catch (e) {
+        // ЛЭП не найдена на сервере или неверные данные — пропускаем эту сессию, не ломаем всю синхронизацию
+        if (e.response?.statusCode == 400 || e.response?.statusCode == 404) {
+          continue;
+        }
+        rethrow;
       }
     }
   }

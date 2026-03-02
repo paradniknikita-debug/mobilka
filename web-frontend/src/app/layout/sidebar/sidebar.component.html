@@ -36,7 +36,6 @@
            (contextmenu)="onFeatureRightClick(item.powerLine, $event, 'powerLine')"
            [class.expanded]="isPowerLineExpanded(item.powerLine.properties['id'])">
         <mat-icon class="expand-icon" (click)="togglePowerLine(item.powerLine.properties['id']); $event.stopPropagation()">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
-        <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">electrical_services</mat-icon>
         <span class="node-label">{{ item.powerLine.properties['name'] || 'Без названия' }}</span>
         <span class="node-description">{{ item.powerLine.properties['voltage_level'] }} кВ</span>
       </div>

@@ -85,6 +85,10 @@ export class CreateObjectDialogComponent implements OnInit {
   linkingLineStart = false;
   linkingLineEnd = false;
 
+  /** Подстанция в конце отпайки: выбранный участок для установки ТП в конце */
+  selectedTapSegmentForEnd: { lineId: number; segmentId: number } | null = null;
+  linkingTapEnd = false;
+
   // Стандартные значения напряжения для подстанций (кВ)
   voltageLevels = [
     0.4,
@@ -346,13 +350,16 @@ export class CreateObjectDialogComponent implements OnInit {
   loadPowerLines(): void {
     this.apiService.getPowerLines().subscribe({
       next: (lines) => {
-        this.powerLines = lines;
-        console.log('Загружены ЛЭП, количество:', lines.length, 'powerLineId для установки:', this.powerLineId);
-        console.log('Все ЛЭП:', lines.map(l => ({ id: l.id, name: l.name })));
-        
+        this.powerLines = Array.isArray(lines) ? lines.filter(l => l != null && typeof l === 'object') : [];
+        const count = this.powerLines.length;
+        console.log('Загружены ЛЭП, количество:', count, 'powerLineId для установки:', this.powerLineId);
+        if (count > 0) {
+          console.log('Все ЛЭП:', this.powerLines.map(l => l && (typeof l === 'object') ? { id: l.id, name: (l as any).name } : null));
+        }
+
         // Если передан powerLineId (при создании опоры из контекстного меню линии), устанавливаем его в форму
         if (this.powerLineId && !this.isEditMode) {
-          const selectedLine = this.powerLines.find(line => line.id === this.powerLineId);
+          const selectedLine = this.powerLines.find(line => line && line.id === this.powerLineId);
           console.log('Поиск линии с ID', this.powerLineId, 'найден:', selectedLine);
           if (selectedLine) {
             // Используем setTimeout для гарантии, что форма готова
@@ -364,16 +371,20 @@ export class CreateObjectDialogComponent implements OnInit {
             }, 0);
           } else {
             console.warn('Линия с ID', this.powerLineId, 'не найдена в списке');
-            console.warn('Доступные ID линий:', lines.map(l => l.id));
+            if (count > 0) {
+              console.warn('Доступные ID линий:', this.powerLines.map(l => l?.id));
+            }
           }
         }
-        
+
         // Если режим редактирования, загружаем данные опоры после загрузки ЛЭП
         if (this.isEditMode && this.poleId && this.powerLineId) {
           setTimeout(() => {
             this.loadPole();
           }, 100);
         }
+
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Ошибка загрузки ЛЭП:', error);
@@ -505,7 +516,8 @@ export class CreateObjectDialogComponent implements OnInit {
 
   private _filterPowerLines(name: string): PowerLine[] {
     const filterValue = name.toLowerCase();
-    return this.powerLines.filter(line => line.name.toLowerCase().includes(filterValue));
+    const lines = this.powerLines || [];
+    return lines.filter(line => line && typeof line === 'object' && (line.name ?? '').toLowerCase().includes(filterValue));
   }
 
   onObjectTypeSelected(event: MatSelectChange): void {
@@ -1162,24 +1174,26 @@ export class CreateObjectDialogComponent implements OnInit {
 
   /** ЛЭП, у которых эта подстанция указана в начале линии */
   get linesWhereSubstationIsStart(): PowerLine[] {
-    if (!this.substationId || !this.powerLines.length) return [];
-    return this.powerLines.filter(l => l.substation_start_id === this.substationId);
+    if (!this.substationId) return [];
+    const lines = this.powerLines || [];
+    return lines.filter(l => l && typeof l === 'object' && l.substation_start_id === this.substationId);
   }
 
   /** Строка имён ЛЭП «в начале» для отображения в шаблоне */
   get linesWhereSubstationIsStartNames(): string {
-    return this.linesWhereSubstationIsStart.map(line => line.name).join(', ');
+    return this.linesWhereSubstationIsStart.map(line => (line as any).name ?? '').filter(Boolean).join(', ');
   }
 
   /** ЛЭП, у которых эта подстанция указана в конце линии */
   get linesWhereSubstationIsEnd(): PowerLine[] {
-    if (!this.substationId || !this.powerLines.length) return [];
-    return this.powerLines.filter(l => l.substation_end_id === this.substationId);
+    if (!this.substationId) return [];
+    const lines = this.powerLines || [];
+    return lines.filter(l => l && typeof l === 'object' && l.substation_end_id === this.substationId);
   }
 
   /** Строка имён ЛЭП «в конце» для отображения в шаблоне */
   get linesWhereSubstationIsEndNames(): string {
-    return this.linesWhereSubstationIsEnd.map(line => line.name).join(', ');
+    return this.linesWhereSubstationIsEnd.map(line => (line as any).name ?? '').filter(Boolean).join(', ');
   }
 
   setSubstationAsLineStart(): void {
@@ -1254,6 +1268,102 @@ export class CreateObjectDialogComponent implements OnInit {
       },
       error: (err) => {
         this.linkingLineEnd = false;
+        this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** Список отпаечных участков (сегментов) для выбора «ТП в конце отпайки» */
+  get tapSegmentsOptions(): { lineId: number; lineName: string; segmentId: number; segmentName: string }[] {
+    const lines = this.powerLines || [];
+    if (!lines.length) return [];
+    const out: { lineId: number; lineName: string; segmentId: number; segmentName: string }[] = [];
+    for (const line of lines) {
+      if (!line || typeof line !== 'object') continue;
+      const segments = (line as any).acline_segments;
+      const arr = Array.isArray(segments) ? segments : [];
+      for (const s of arr) {
+        if (!s || typeof s !== 'object') continue;
+        if (s.is_tap) {
+          out.push({
+            lineId: line.id,
+            lineName: (line as any).name ?? '',
+            segmentId: s.id,
+            segmentName: (s as any).name ?? `Участок ${s.id}`
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Участки (отпайки), в конце которых уже указана эта подстанция */
+  get segmentsWhereSubstationIsTapEnd(): { lineId: number; lineName: string; segmentId: number; segmentName: string }[] {
+    if (!this.substationId) return [];
+    const lines = this.powerLines || [];
+    if (!lines.length) return [];
+    const out: { lineId: number; lineName: string; segmentId: number; segmentName: string }[] = [];
+    for (const line of lines) {
+      if (!line || typeof line !== 'object') continue;
+      const segments = (line as any).acline_segments;
+      const arr = Array.isArray(segments) ? segments : [];
+      for (const s of arr) {
+        if (!s || typeof s !== 'object') continue;
+        if (s.is_tap && (s as any).to_substation_id === this.substationId) {
+          out.push({
+            lineId: line.id,
+            lineName: (line as any).name ?? '',
+            segmentId: s.id,
+            segmentName: (s as any).name ?? `Участок ${s.id}`
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Строка «ЛЭП — участок» для отображения текущих привязок ТП в конце отпаек */
+  get segmentsWhereSubstationIsTapEndNames(): string {
+    return this.segmentsWhereSubstationIsTapEnd
+      .map(seg => `${seg.lineName} — ${seg.segmentName}`)
+      .join(', ');
+  }
+
+  setSubstationAsTapEnd(): void {
+    if (!this.substationId || !this.selectedTapSegmentForEnd) return;
+    const { lineId, segmentId } = this.selectedTapSegmentForEnd;
+    this.linkingTapEnd = true;
+    this.apiService.setSegmentEndSubstation(lineId, segmentId, { to_substation_id: this.substationId }).subscribe({
+      next: () => {
+        this.linkingTapEnd = false;
+        this.selectedTapSegmentForEnd = null;
+        this.loadPowerLines();
+        this.mapService.refreshData();
+        this.snackBar.open('Подстанция установлена в конец отпайки', 'Закрыть', { duration: 3000 });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.linkingTapEnd = false;
+        this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  clearSubstationFromTapEnd(lineId: number, segmentId: number): void {
+    if (!this.substationId) return;
+    this.linkingTapEnd = true;
+    this.apiService.setSegmentEndSubstation(lineId, segmentId, { to_substation_id: null }).subscribe({
+      next: () => {
+        this.linkingTapEnd = false;
+        this.loadPowerLines();
+        this.mapService.refreshData();
+        this.snackBar.open('Связь «ТП в конце отпайки» снята', 'Закрыть', { duration: 3000 });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.linkingTapEnd = false;
         this.snackBar.open('Ошибка: ' + (err?.error?.detail || err?.message || 'Неизвестная ошибка'), 'Закрыть', { duration: 5000 });
         this.cdr.detectChanges();
       }
