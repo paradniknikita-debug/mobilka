@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' show BlendMode, ColorFilter;
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -283,8 +284,17 @@ class _MapPageState extends ConsumerState<MapPage> {
               final t = visibleEq.length == 1
                   ? 0.8
                   : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
-              final lng = p1.xPosition + (p2.xPosition - p1.xPosition) * t;
-              final lat = p1.yPosition + (p2.yPosition - p1.yPosition) * t;
+
+              final x1 = p1.xPosition;
+              final y1 = p1.yPosition;
+              final x2 = p2.xPosition;
+              final y2 = p2.yPosition;
+
+              final lng = x1 + (x2 - x1) * t;
+              final lat = y1 + (y2 - y1) * t;
+
+              // Угол направления пролёта, чтобы повернуть оборудование по линии.
+              final angleRad = math.atan2(y2 - y1, x2 - x1);
 
               lineEquipmentFeatures.add({
                 'type': 'Feature',
@@ -299,6 +309,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   'from_pole_id': p1.id,
                   'to_pole_id': p2.id,
                   'power_line_id': pl.id,
+                  'angle_rad': angleRad,
                 },
               });
               if (kDebugMode) {
@@ -588,12 +599,17 @@ class _MapPageState extends ConsumerState<MapPage> {
         final powerLineId = _toInt(props['power_line_id']);
         if (poleId == null || powerLineId == null) continue;
         final poleNumber = props['pole_number']?.toString() ?? '';
+
+        final x = (coords[0] as num?);
+        final y = (coords[1] as num?);
+        if (x == null || y == null) continue;
+
         serverPolesByLine.putIfAbsent(powerLineId, () => []).add({
           'id': poleId,
           'power_line_id': powerLineId,
           'pole_number': poleNumber,
-          'x_position': (coords[0] as num).toDouble(),
-          'y_position': (coords[1] as num).toDouble(),
+          'x_position': x.toDouble(),
+          'y_position': y.toDouble(),
           'sequence_number': _toInt(props['sequence_number']),
         });
       }
@@ -602,7 +618,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           final snA = a['sequence_number'] as int?;
           final snB = b['sequence_number'] as int?;
           if (snA != null && snB != null) return snA.compareTo(snB);
-          return (a['pole_number'] as String).compareTo(b['pole_number'] as String);
+          return ((a['pole_number']?.toString()) ?? '').compareTo((b['pole_number']?.toString()) ?? '');
         });
       }
 
@@ -630,12 +646,23 @@ class _MapPageState extends ConsumerState<MapPage> {
             final t = visibleEq.length == 1
                 ? 0.8
                 : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
-            final x1 = p1['x_position'] as double;
-            final y1 = p1['y_position'] as double;
-            final x2 = p2['x_position'] as double;
-            final y2 = p2['y_position'] as double;
+
+            final x1 = (p1['x_position'] as num?)?.toDouble();
+            final y1 = (p1['y_position'] as num?)?.toDouble();
+            final x2 = (p2['x_position'] as num?)?.toDouble();
+            final y2 = (p2['y_position'] as num?)?.toDouble();
+
+            // Если какие-то координаты отсутствуют, пропускаем этот пролёт.
+            if (x1 == null || y1 == null || x2 == null || y2 == null) {
+              continue;
+            }
+
             final lng = x1 + (x2 - x1) * t;
             final lat = y1 + (y2 - y1) * t;
+
+            // Угол направления пролёта, чтобы повернуть оборудование по линии.
+            final angleRad = math.atan2(y2 - y1, x2 - x1);
+
             lineEquipmentFeatures.add({
               'type': 'Feature',
               'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
@@ -646,6 +673,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'from_pole_id': p1Id,
                 'to_pole_id': p2Id,
                 'power_line_id': pl.id,
+                'angle_rad': angleRad,
               },
             });
           }
@@ -1066,6 +1094,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       objectProperties: _selectedObjectProperties!,
                       objectType: _selectedObjectType!,
                       onClose: _closeObjectProperties,
+                      onEdit: _selectedObjectType == ObjectType.pole ? _showEditPoleDialog : null,
                       onStartLineFormation: _selectedObjectType == ObjectType.pole
                           ? () {
                               final poleId = _selectedObjectProperties!['id'] as int?;
@@ -1225,7 +1254,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (type.contains('разрядник') || n.contains('опн')) {
       return 'assets/equipment/arrester/arrester.svg';
     }
-    if (kDebugMode) {
+    // Фундамент, изоляторы, траверсы, грозоотвод — на линии не отображаются по дизайну, не логируем.
+    final noIconTypes = ['фундамент', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
+    final skipLog = noIconTypes.any((t) => type.contains(t));
+    if (kDebugMode && !skipLog) {
       print('No SVG mapping for equipment: equipmentType=$equipmentType, name=$name');
     }
     return null;
@@ -1257,29 +1289,53 @@ class _MapPageState extends ConsumerState<MapPage> {
             final isCurrentPatrolLine = _currentPowerLineId != null && plId == _currentPowerLineId;
             final criticality = properties?['criticality'] as String?;
             final color = _poleColorByCriticality(criticality, isCurrentPatrolLine);
+            final poleNumber = properties?['pole_number']?.toString() ?? properties?['poleNumber']?.toString() ?? '';
 
             markers.add(
               Marker(
                 point: latLng,
+                width: 48,
+                height: 52,
                 child: GestureDetector(
                   onTap: () => _showPoleInfo(poleProperties),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white,
-                        width: isCurrentPatrolLine ? 3 : 2,
-                      ),
-                      boxShadow: isCurrentPatrolLine
-                          ? [BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 6, spreadRadius: 1)]
-                          : (criticality != null ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)] : null),
-                    ),
-                    child: Icon(
-                      MdiIcons.transmissionTower,
-                      color: Colors.white,
-                      size: 20,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white,
+                              width: isCurrentPatrolLine ? 3 : 2,
+                            ),
+                            boxShadow: isCurrentPatrolLine
+                                ? [BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 6, spreadRadius: 1)]
+                                : (criticality != null ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)] : null),
+                          ),
+                          child: Icon(
+                            MdiIcons.transmissionTower,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        if (poleNumber.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              poleNumber,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -1339,8 +1395,12 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
 
           const iconSize = 64.0;
-          final isZnOrArrester =
-              iconPath.contains('/zn/') || iconPath.contains('/arrester/');
+          // Отдельно распознаём ЗН и разрядник, чтобы можно было задать
+          // точные точки начала (якоря) в их SVG.
+          final isZn = iconPath.contains('/zn/');
+          final isArrester = iconPath.contains('/arrester/');
+          final isZnOrArrester = isZn || isArrester;
+
           // Иконка с заливкой (цвет по линии)
           Widget iconWidget = SvgPicture.asset(
             iconPath,
@@ -1349,13 +1409,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
           );
 
-          // Контур по границе разрядника и выключателя — отдельный SVG (белый, не перекрашивается)
-          final useOutlineContour =
-              iconPath.contains('/breaker/') || iconPath.contains('/arrester/');
+          // Контур по границе выключателя — отдельный SVG (белый, не перекрашивается)
+          final useOutlineContour = iconPath.contains('/breaker/');
           if (useOutlineContour) {
-            final outlinePath = iconPath.contains('/breaker/')
-                ? 'assets/equipment/breaker/breaker_outline.svg'
-                : 'assets/equipment/arrester/arrester_outline.svg';
+            final outlinePath = 'assets/equipment/breaker/breaker_outline.svg';
             iconWidget = Stack(
               alignment: Alignment.center,
               children: [
@@ -1365,20 +1422,45 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
 
-          // ЗН и разрядник: начало символа на линии, не по центру — сдвигаем иконку так, чтобы левый край (начало) был в точке маркера
-          if (isZnOrArrester) {
-            iconWidget = Transform.translate(
-              offset: Offset(iconSize / 2, 0),
-              child: iconWidget,
+          // У реклоузера поверх всегда белый квадрат в левом верхнем углу (не закрашивается)
+          final isRecloser = iconPath.contains('/recloser/');
+
+          Widget child = iconWidget;
+          // Для ЗН смещаем локальную систему координат так, чтобы «начало» символа
+          // (точка подключения к вертикальному проводу) совпадало с центром маркера.
+          // В SVG `zn.svg` (viewBox 0..200 x 0..80) эта точка — вход провода
+          // в символ по левой кромке viewBox: x=0, y≈40 (центр прямоугольника 35..45).
+          // Центр итогового виджета 64x64 — точка (32,32).
+          if (isZn) {
+            const double viewBoxWidth = 200.0;
+            const double viewBoxHeight = 80.0;
+            const double anchorX = 0.0;
+            const double anchorY = 40.0;
+            final double dx = 32.0 - (anchorX * iconSize / viewBoxWidth);
+            final double dy = 32.0 - (anchorY * iconSize / viewBoxHeight);
+            child = Transform.translate(
+              offset: Offset(dx, dy),
+              child: child,
+            );
+          } else if (isArrester) {
+            // Для разрядника используем «начало» в точке подключения к линии.
+            // В `arrester.svg` (viewBox 0..200 x 0..200, <g transform="translate(100,100)">)
+            // точка подключения — левый конец шины в команде "M -80 0 L -40 0",
+            // после трансформации имеющая координаты (20,100).
+            // Смещаем локальную систему координат так, чтобы эта точка совпала
+            // с центром маркера (32,32) в итоговом виджете 64x64.
+            const double viewBoxWidth = 200.0;
+            const double viewBoxHeight = 200.0;
+            const double anchorX = 20.0;
+            const double anchorY = 100.0;
+            final double dx = 32.0 - (anchorX * iconSize / viewBoxWidth);
+            final double dy = 32.0 - (anchorY * iconSize / viewBoxHeight);
+            child = Transform.translate(
+              offset: Offset(dx, dy),
+              child: child,
             );
           }
 
-          // У реклоузера поверх всегда белый квадрат в левом верхнем углу (не закрашивается)
-          final isRecloser = iconPath.contains('/recloser/');
-          // У разрядника белый квадрат внутри самого символа (не закрашивается)
-          final isArrester = iconPath.contains('/arrester/');
-
-          Widget child = iconWidget;
           if (isRecloser) {
             child = Stack(
               clipBehavior: Clip.none,
@@ -1399,24 +1481,38 @@ class _MapPageState extends ConsumerState<MapPage> {
               ],
             );
           }
-          if (isArrester) {
-            child = Stack(
-              clipBehavior: Clip.none,
-              children: [
-                child,
-                Positioned(
-                  left: 12,
-                  top: 12,
-                  width: 12,
-                  height: 12,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.white, width: 1),
-                    ),
-                  ),
-                ),
-              ],
+
+          // Для ЗН и разрядника поворачиваем символ так, чтобы шина была
+          // сонаправлена с пролётом (как на однолинейной схеме). Остальное
+          // оборудование оставляем без поворота.
+          final angleValue = props?['angle_rad'];
+          if (angleValue is num && isZn) {
+            final angleRad = angleValue.toDouble();
+            // Базовая ориентация SVG ЗН — «линия строго вверх».
+            // Поэтому, чтобы шина совпала с направлением пролёта, вращаем
+            // на разность между направлением «вверх» (π/2) и углом пролёта.
+            child = Transform.rotate(
+              angle: math.pi / 2 - angleRad,
+              alignment: Alignment.center,
+              child: child,
+            );
+            // Для ЗН не делаем дополнительный вынос: начало шины должно
+            // лежать прямо на линии.
+          } else if (angleValue is num && isArrester) {
+            final angleRad = angleValue.toDouble();
+            // Базовая ориентация SVG разрядника — «линия строго вверх».
+            // Поэтому, чтобы шина совпала с направлением пролёта, нужно
+            // повернуть на разность между направлением «вверх» (π/2) и углом пролёта.
+            child = Transform.rotate(
+              angle: math.pi / 2 - angleRad,
+              alignment: Alignment.center,
+              child: child,
+            );
+          } else if (isZnOrArrester) {
+            // Запасной вариант без угла: простое фиксированное смещение.
+            child = Transform.translate(
+              offset: const Offset(16, -8),
+              child: child,
             );
           }
 
@@ -2185,6 +2281,32 @@ class _MapPageState extends ConsumerState<MapPage> {
           backgroundColor: Colors.orange,
         ),
       );
+    }
+  }
+
+  Future<void> _showEditPoleDialog() async {
+    final poleId = _selectedObjectProperties?['id'] as int?;
+    final powerLineId = _selectedObjectProperties?['power_line_id'] as int?;
+    if (poleId == null || powerLineId == null) return;
+    _closeObjectProperties();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => CreatePoleDialog(
+        powerLineId: powerLineId,
+        poleId: poleId,
+        existingPolesCount: 0,
+      ),
+    );
+    if (mounted) {
+      await _loadMapData(forceFromServer: true);
+      if (result != null && result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Изменения опоры сохранены'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 

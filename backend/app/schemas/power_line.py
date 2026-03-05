@@ -48,6 +48,7 @@ class PoleResponse(PoleBase):
     # Переопределяем координаты - всегда должны быть заполнены (не None) для Flutter
     x_position: float = 0.0  # Долгота (longitude) - значение по умолчанию
     y_position: float = 0.0  # Широта (latitude) - значение по умолчанию
+    equipment: List["EquipmentResponse"] = []
 
     class Config:
         from_attributes = True
@@ -157,7 +158,10 @@ class EquipmentBase(BaseModel):
     notes: Optional[str] = None
 
 class EquipmentCreate(EquipmentBase):
-    pole_id: int
+    # pole_id оставляем опциональным:
+    # - для маршрута /poles/{pole_id}/equipment он берётся из URL и из тела игнорируется;
+    # - для маршрута /equipment клиент может передавать pole_id в теле.
+    pole_id: Optional[int] = None
 
 class EquipmentResponse(EquipmentBase):
     id: int

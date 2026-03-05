@@ -125,7 +125,7 @@ async def create_test_data():
                 await session.flush()
                 print("[OK] Создан РЭС: Минск-Запад")
 
-            # 4. Подстанция (dispatcher_name — диспетчерское наименование)
+            # 4. Подстанция (координаты в x_position = долгота, y_position = широта)
             result = await session.execute(
                 select(Substation).where(Substation.dispatcher_name == "SUB_110_1")
             )
@@ -135,8 +135,8 @@ async def create_test_data():
                     name="Подстанция 110/10 кВ №1",
                     dispatcher_name="SUB_110_1",
                     voltage_level=110.0,
-                    y_position=53.9045,
-                    x_position=27.5615,
+                    y_position=53.9045,   # широта
+                    x_position=27.5615,   # долгота
                     address="г. Минск, ул. Подстанционная, 1",
                     region_id=res_region.id,
                     branch_id=branch.id if branch else None,

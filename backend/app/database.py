@@ -147,6 +147,20 @@ async def init_db():
                         END IF;
                     END $$;
                 """))
+                # Обеспечиваем наличие колонок координат в substation (x_position = долгота, y_position = широта)
+                await conn.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'substation') THEN
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'substation' AND column_name = 'y_position') THEN
+                                ALTER TABLE substation ADD COLUMN y_position DOUBLE PRECISION;
+                            END IF;
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'substation' AND column_name = 'x_position') THEN
+                                ALTER TABLE substation ADD COLUMN x_position DOUBLE PRECISION;
+                            END IF;
+                        END IF;
+                    END $$;
+                """))
             
             logger.info("База данных успешно инициализирована")
             print("OK: База данных успешно инициализирована")

@@ -11,6 +11,7 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.branch import Branch
 from app.models.power_line import PowerLine, Pole, Equipment, Span, Tap
+from app.models.location import Location
 from app.models.substation import Substation, VoltageLevel, Bay, ConductingEquipment, ProtectionEquipment, Connection
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
@@ -286,6 +287,10 @@ async def _download_sync_data_impl(
     # Получаем измененные опоры
     poles_result = await db.execute(
         select(Pole)
+        .options(
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
         .where(
             or_(
                 Pole.created_at >= last_sync_dt,
@@ -296,12 +301,15 @@ async def _download_sync_data_impl(
     poles = poles_result.scalars().all()
     for pole in poles:
         pole_created = _ensure_utc(pole.created_at)
+        # Координаты берём из PositionPoint/Location через get_longitude/get_latitude
+        lon = getattr(pole, "get_longitude", None) and pole.get_longitude()
+        lat = getattr(pole, "get_latitude", None) and pole.get_latitude()
         pole_data = {
             "id": pole.id,
             "power_line_id": pole.line_id,
             "pole_number": pole.pole_number,
-            "x_position": pole.x_position,
-            "y_position": pole.y_position,
+            "x_position": float(lon) if lon is not None else None,
+            "y_position": float(lat) if lat is not None else None,
             "pole_type": pole.pole_type,
             "height": pole.height,
             "foundation_type": pole.foundation_type,

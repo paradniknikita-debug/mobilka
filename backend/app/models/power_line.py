@@ -47,6 +47,8 @@ class PowerLine(Base, ConnectivityNodeContainer):
     spans = relationship("Span", back_populates="line", cascade="all, delete-orphan")
     taps = relationship("Tap", back_populates="line", cascade="all, delete-orphan")
     connections = relationship("Connection", back_populates="line", cascade="all, delete-orphan")
+    # Сессии обхода: без cascade и lazy='noload' — при удалении ЛЭП не трогаем patrol_sessions (удаление в API).
+    patrol_sessions = relationship("PatrolSession", back_populates="power_line", lazy="noload", viewonly=True)
 
 class Pole(Base):
     """

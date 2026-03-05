@@ -17,4 +17,4 @@ class PatrolSession(Base):
     ended_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", backref="patrol_sessions")
-    power_line = relationship("PowerLine", backref="patrol_sessions")
+    power_line = relationship("PowerLine", back_populates="patrol_sessions")

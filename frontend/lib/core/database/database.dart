@@ -317,6 +317,11 @@ class AppDatabase extends _$AppDatabase {
         syncStatus: const Value('synced'),
       ));
 
+  /// Обновить powerLineId во всех сессиях обхода при маппинге локальной ЛЭП на серверную.
+  Future<int> updatePatrolSessionsPowerLineId(int fromPowerLineId, int toPowerLineId) =>
+      (update(patrolSessions)..where((tbl) => tbl.powerLineId.equals(fromPowerLineId)))
+          .write(PatrolSessionsCompanion(powerLineId: Value(toPowerLineId)));
+
   /// Удалить все сессии обхода по данной ЛЭП (при удалении линии).
   Future<int> deletePatrolSessionsByPowerLineId(int powerLineId) =>
       (delete(patrolSessions)..where((tbl) => tbl.powerLineId.equals(powerLineId))).go();

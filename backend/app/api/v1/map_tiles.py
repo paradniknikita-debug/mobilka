@@ -61,10 +61,17 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
     
     features = []
     for power_line in power_lines:
-        poles_with_coords = sum(
-            1 for p in power_line.poles
-            if getattr(p, 'longitude', None) is not None and getattr(p, 'latitude', None) is not None
-        )
+        # Считаем количество опор с валидными координатами, используя helper-методы модели
+        poles_with_coords = 0
+        for p in power_line.poles:
+            try:
+                lon = p.get_longitude() if hasattr(p, "get_longitude") else getattr(p, "x_position", None)
+                lat = p.get_latitude() if hasattr(p, "get_latitude") else getattr(p, "y_position", None)
+            except Exception:
+                lon = None
+                lat = None
+            if lon is not None and lat is not None:
+                poles_with_coords += 1
         logger.info(
             "map/power-lines/geojson: ЛЭП id=%d name=%r опор=%d с координатами=%d",
             power_line.id, power_line.name, len(power_line.poles), poles_with_coords
@@ -92,36 +99,13 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
         if len(power_line.poles) >= 2:
             coordinates = []
             for pole in sorted(power_line.poles, key=lambda t: t.pole_number):
-                # Получаем координаты из position_point (новая структура)
-                longitude = None
-                latitude = None
-                
-                # Пытаемся получить из position_points напрямую
+                # Получаем координаты опоры через helper-методы модели (учитывают Location/PositionPoint и колонки x_position/y_position)
                 try:
-                    if hasattr(pole, 'position_points') and pole.position_points:
-                        point = pole.position_points[0]
-                        longitude = point.x_position
-                        latitude = point.y_position
-                except (AttributeError, IndexError):
-                    pass
-                
-                # Fallback: пытаемся получить из старого поля или Location
-                if longitude is None or latitude is None:
-                    longitude = getattr(pole, 'longitude', None)
-                    latitude = getattr(pole, 'latitude', None)
-                    
-                    # Пытаемся получить из Location, если доступно (уже загружено через selectinload)
-                    if longitude is None or latitude is None:
-                        try:
-                            location = getattr(pole, 'location', None)
-                            if location:
-                                position_points = getattr(location, 'position_points', None)
-                                if position_points and len(position_points) > 0:
-                                    point = position_points[0]
-                                    longitude = getattr(point, 'x_position', None)
-                                    latitude = getattr(point, 'y_position', None)
-                        except (AttributeError, IndexError, TypeError):
-                            pass
+                    longitude = pole.get_longitude() if hasattr(pole, "get_longitude") else getattr(pole, "x_position", None)
+                    latitude = pole.get_latitude() if hasattr(pole, "get_latitude") else getattr(pole, "y_position", None)
+                except Exception:
+                    longitude = None
+                    latitude = None
                 
                 # Убеждаемся, что координаты - это числа
                 if longitude is not None and latitude is not None:
@@ -165,33 +149,13 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
         elif len(power_line.poles) == 1:
             # Если есть только одна опора, создаем Point
             pole = power_line.poles[0]
-            # Получаем координаты из position_point (новая структура)
-            longitude = None
-            latitude = None
-            
-            # Пытаемся получить из position_points напрямую
+            # Получаем координаты опоры через helper-методы модели
             try:
-                if hasattr(pole, 'position_points') and pole.position_points:
-                    point = pole.position_points[0]
-                    longitude = point.x_position
-                    latitude = point.y_position
-            except (AttributeError, IndexError):
-                pass
-            
-            # Fallback: пытаемся получить из старого поля или Location
-            if longitude is None or latitude is None:
-                longitude = getattr(pole, 'longitude', None)
-                latitude = getattr(pole, 'latitude', None)
-                
-                # Пытаемся получить из Location, если доступно
-                try:
-                    if hasattr(pole, 'location') and pole.location:
-                        if hasattr(pole.location, 'position_points') and pole.location.position_points:
-                            point = pole.location.position_points[0]
-                            longitude = point.x_position
-                            latitude = point.y_position
-                except (AttributeError, IndexError):
-                    pass
+                longitude = pole.get_longitude() if hasattr(pole, "get_longitude") else getattr(pole, "x_position", None)
+                latitude = pole.get_latitude() if hasattr(pole, "get_latitude") else getattr(pole, "y_position", None)
+            except Exception:
+                longitude = None
+                latitude = None
             
             if longitude is not None and latitude is not None:
                 try:
@@ -288,37 +252,13 @@ async def _get_poles_geojson_impl(db: AsyncSession):
     
     features = []
     for pole in poles:
-        # Получаем координаты из position_point (новая структура)
-        longitude = None
-        latitude = None
-        
-        # Пытаемся получить из position_points напрямую
+        # Получаем координаты опоры через helper-методы модели (учитывают Location/PositionPoint и колонки x_position/y_position)
         try:
-            if hasattr(pole, 'position_points') and pole.position_points:
-                point = pole.position_points[0]
-                longitude = point.x_position
-                latitude = point.y_position
-        except (AttributeError, IndexError):
-            pass
-        
-        # Fallback: пытаемся получить из старого поля или Location
-        if longitude is None or latitude is None:
-            longitude = getattr(pole, 'longitude', None)
-            latitude = getattr(pole, 'latitude', None)
-            
-            # Пытаемся получить из Location, если доступно (уже загружено через selectinload)
-            if longitude is None or latitude is None:
-                try:
-                    # Используем getattr для безопасного доступа
-                    location = getattr(pole, 'location', None)
-                    if location:
-                        position_points = getattr(location, 'position_points', None)
-                        if position_points and len(position_points) > 0:
-                            point = position_points[0]
-                            longitude = getattr(point, 'x_position', None)
-                            latitude = getattr(point, 'y_position', None)
-                except (AttributeError, IndexError, TypeError):
-                    pass
+            longitude = pole.get_longitude() if hasattr(pole, "get_longitude") else getattr(pole, "x_position", None)
+            latitude = pole.get_latitude() if hasattr(pole, "get_latitude") else getattr(pole, "y_position", None)
+        except Exception:
+            longitude = None
+            latitude = None
         
         # Включаем только объекты с валидными координатами
         if longitude is not None and latitude is not None:
