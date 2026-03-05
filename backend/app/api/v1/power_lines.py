@@ -4,7 +4,7 @@ import uuid
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete, update, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import ProgrammingError
 
@@ -13,13 +13,22 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
 from app.models.location import Location, PositionPoint
-from app.models.patrol_session import PatrolSession
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
 from app.models.change_log import ChangeLog
 from app.schemas.power_line import (
-    PowerLineCreate, PowerLineUpdate, PowerLineResponse, PoleCreate, PoleResponse,
-    SpanCreate, SpanUpdate, SpanResponse, TapCreate, TapResponse, EquipmentCreate, EquipmentResponse
+    PowerLineCreate,
+    PowerLineUpdate,
+    PowerLineResponse,
+    PoleCreate,
+    PoleResponse,
+    SpanCreate,
+    SpanUpdate,
+    SpanResponse,
+    TapCreate,
+    TapResponse,
+    EquipmentCreate,
+    EquipmentResponse,
 )
 from app.schemas.cim_line_structure import (
     ConnectivityNodeResponse,
@@ -415,6 +424,29 @@ async def _recompute_power_line_length(db: AsyncSession, power_line_id: int) -> 
     return round(float(total_m) / 1000.0, 6)
 
 
+def _fill_pole_coordinates(pole: Pole) -> None:
+    """
+    Гарантирует, что у ORM-объекта опоры атрибуты x_position/y_position заданы числом (не None),
+    используя CIM-координаты из PositionPoint/Location.
+    Нужно для корректной сериализации в PoleResponse, где поля x_position/y_position — float.
+    """
+    try:
+        lon = pole.get_longitude()
+        lat = pole.get_latitude()
+    except Exception:
+        lon = None
+        lat = None
+
+    if lon is None:
+        lon = 0.0
+    if lat is None:
+        lat = 0.0
+
+    # object.__setattr__ позволяет не трогать ORM-состояние (не помечать поле изменённым в сессии)
+    object.__setattr__(pole, "x_position", float(lon))
+    object.__setattr__(pole, "y_position", float(lat))
+
+
 class LinkLineToSubstationBody(BaseModel):
     """Тело запроса привязки первой опоры линии к подстанции."""
     first_pole_id: int
@@ -597,6 +629,8 @@ async def get_power_lines(
             fill_pole_coordinates(pole)
             if hasattr(pole, '_get_connectivity_node_safe'):
                 _ = pole._get_connectivity_node_safe()
+            _fill_pole_coordinates(pole)
+        # Длина линии — всегда по сумме пролётов (авторасчёт по Span.length)
         computed_length = await _recompute_power_line_length(db, power_line.id)
         object.__setattr__(power_line, "length", computed_length)
 
@@ -644,6 +678,9 @@ async def get_power_line(
     if getattr(power_line, "acline_segments", None) is None:
         object.__setattr__(power_line, "acline_segments", [])
     for pole in power_line.poles:
+        if hasattr(pole, '_get_connectivity_node_safe'):
+            _ = pole._get_connectivity_node_safe()
+        _fill_pole_coordinates(pole)
         fill_pole_coordinates(pole)
     # Длина линии — всегда по сумме пролётов (авторасчёт)
     computed_length = await _recompute_power_line_length(db, power_line_id)
@@ -967,10 +1004,9 @@ async def create_pole(
         .where(Pole.id == db_pole.id)
     )
     db_pole = result.scalar_one()
-    
-    # Заполняем x_position, y_position для ответа (из PositionPoint или 0.0), чтобы PoleResponse не получил None
+    # Для совместимости со схемой и GeoJSON: гарантируем числовые координаты x_position/y_position
+    _fill_pole_coordinates(db_pole)
     fill_pole_coordinates(db_pole)
-    
     return db_pole
 
 @router.get("/{power_line_id}/poles", response_model=List[PoleResponse])
@@ -993,6 +1029,7 @@ async def get_poles(
     poles = result.scalars().all()
     
     for pole in poles:
+        _fill_pole_coordinates(pole)
         fill_pole_coordinates(pole)
     return poles
 
@@ -1095,12 +1132,8 @@ async def get_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
+    _fill_pole_coordinates(pole)
     fill_pole_coordinates(pole)
-    # Для обратной совместимости: connectivity_node доступен через @property
-    # Не нужно устанавливать через setattr, так как это property
-    # Pydantic получит его автоматически через from_attributes=True
-    
-    
     return pole
 
 
@@ -1250,6 +1283,15 @@ async def update_pole(
     db: AsyncSession = Depends(get_db)
 ):
     """Обновление опоры"""
+    # Базовый лог для отладки обновления опор
+    try:
+        print(
+            f"DEBUG update_pole: power_line_id={power_line_id}, pole_id={pole_id}, "
+            f"payload={pole_data.dict(exclude_unset=False)}"
+        )
+    except Exception:
+        # Лог не должен ломать обработчик даже при проблемах сериализации
+        pass
     # Проверяем существование ЛЭП
     power_line = await db.get(PowerLine, power_line_id)
     if not power_line:
@@ -1280,10 +1322,10 @@ async def update_pole(
     # x_position и y_position будут обновлены в PositionPoint
     # CIM: координаты только в PositionPoint, не в pole
     pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid', 'x_position', 'y_position'})
+    # Координаты: приходят в теле, но в соответствии с CIM храним их в PositionPoint и ConnectivityNode,
+    # а также дублируем в полях x_position/y_position опоры для быстрого доступа и карты.
     x_position = getattr(pole_data, 'x_position', None) if 'x_position' in pole_data.dict(exclude_unset=True) else None
     y_position = getattr(pole_data, 'y_position', None) if 'y_position' in pole_data.dict(exclude_unset=True) else None
-
-    # Статус отпаечной опоры
     if "is_tap" in pole_data.dict(exclude_unset=True):
         pole.is_tap_pole = pole_data.is_tap
         # Если опору переводят обратно в магистральную, сбрасываем привязку к отпайке
@@ -2254,10 +2296,32 @@ async def delete_power_line(
         await db.execute(connectivity_node_stmt)
         print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
         
-        # Удаляем сессии обхода, привязанные к этой ЛЭП (line_id NOT NULL — обнулить нельзя)
-        patrol_sessions_stmt = delete(PatrolSession).where(PatrolSession.line_id == power_line_id)
-        await db.execute(patrol_sessions_stmt)
-        print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
+        # Удаляем сессии обхода, привязанные к этой ЛЭП.
+        # В БД колонка могла называться power_line_id (старые версии) или line_id (новые) —
+        # поддерживаем оба варианта через сырой SQL и nested-транзакцию.
+        try:
+            async with db.begin_nested():
+                try:
+                    await db.execute(
+                        text("DELETE FROM patrol_sessions WHERE power_line_id = :id"),
+                        {"id": power_line_id},
+                    )
+                except Exception as e1:
+                    err_str = str(e1).lower()
+                    if "power_line_id" in err_str and ("does not exist" in err_str or "undefinedcolumn" in err_str):
+                        await db.execute(
+                            text("DELETE FROM patrol_sessions WHERE line_id = :id"),
+                            {"id": power_line_id},
+                        )
+                    else:
+                        raise
+            print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
+        except Exception as patrol_err:
+            err_str = str(patrol_err).lower()
+            if "does not exist" in err_str or "undefinedcolumn" in err_str:
+                print(f"DEBUG: Не удалось удалить сессии обхода (колонка не найдена), продолжаем")
+            else:
+                raise
         
         # Убираем эту линию из connected_line_ids у всех подстанций (связь хранится в таблице подстанции)
         from app.models.substation import Substation

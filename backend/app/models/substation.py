@@ -18,12 +18,17 @@ class Substation(Base, ConnectivityNodeContainer):
     dispatcher_name = Column(String(100), nullable=True)  # Диспетчерское наименование (по желанию пользователя)
     voltage_level = Column(Float, nullable=False)  # кВ
     
-    # CIM Location - связь с Location для координат
+    # CIM Location - связь с Location для координат (опционально)
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
-    
-    # Координаты хранятся только в Location/PositionPoint (колонок y_position/x_position в таблице substation нет)
-    
-    address = Column(Text, nullable=True)  # Адрес теперь хранится в Location, но оставляем для обратной совместимости
+
+    # Координаты (CIM: x_position = долгота, y_position = широта).
+    # В БД они есть (миграции slave), но для совместимости с Location/PositionPoint
+    # get_latitude/get_longitude читают сначала колонки, затем Location.
+    y_position = Column(Float, nullable=True)  # широта (latitude)
+    x_position = Column(Float, nullable=True)  # долгота (longitude)
+
+    # Адрес: оставляем колонку для обратной совместимости (в будущем в Location).
+    address = Column(Text, nullable=True)
     # Заменяем branch_id на region_id для географической иерархии
     region_id = Column(Integer, ForeignKey("geographic_regions.id"), nullable=True)
     # Оставляем branch_id для обратной совместимости
@@ -45,18 +50,30 @@ class Substation(Base, ConnectivityNodeContainer):
     # CIM-структура: ConnectivityNodeContainer содержит множество ConnectivityNode
     # (для подстанций это узлы соединения в ячейках)
     connectivity_nodes = relationship("ConnectivityNode", back_populates="substation")
-    
+
     def get_latitude(self) -> float:
-        """Получить широту из Location/PositionPoint"""
-        if self.location and getattr(self.location, 'position_points', None):
+        """Широта: сначала колонка y_position, затем Location/PositionPoint."""
+        val = getattr(self, "y_position", None)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+        if self.location and getattr(self.location, "position_points", None):
             pts = self.location.position_points
             if pts:
                 return float(pts[0].y_position)
         return 0.0
 
     def get_longitude(self) -> float:
-        """Получить долготу из Location/PositionPoint"""
-        if self.location and getattr(self.location, 'position_points', None):
+        """Долгота: сначала колонка x_position, затем Location/PositionPoint."""
+        val = getattr(self, "x_position", None)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+        if self.location and getattr(self.location, "position_points", None):
             pts = self.location.position_points
             if pts:
                 return float(pts[0].x_position)
@@ -64,14 +81,13 @@ class Substation(Base, ConnectivityNodeContainer):
 
     @property
     def latitude(self) -> float:
-        """Широта для API-ответов (SubstationResponse)."""
+        """Широта для API-ответов (alias y_position)."""
         return self.get_latitude()
 
     @property
     def longitude(self) -> float:
-        """Долгота для API-ответов (SubstationResponse)."""
+        """Долгота для API-ответов (alias x_position)."""
         return self.get_longitude()
-
 
 class Connection(Base):
     """Связь подстанция–линия (для второго разработчика)."""

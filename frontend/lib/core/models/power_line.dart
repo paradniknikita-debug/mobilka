@@ -204,6 +204,13 @@ class Pole {
   final String? material;
   @JsonKey(name: 'year_installed', fromJson: _intFromJsonNullable)
   final int? yearInstalled;
+  // Параметры провода на опоре (используются при автоматическом создании пролётов)
+  @JsonKey(name: 'conductor_type')
+  final String? conductorType;
+  @JsonKey(name: 'conductor_material')
+  final String? conductorMaterial;
+  @JsonKey(name: 'conductor_section')
+  final String? conductorSection;
   @JsonKey(name: 'sequence_number', fromJson: _intFromJsonNullable)
   final int? sequenceNumber;
   @JsonKey(name: 'is_tap_pole', defaultValue: false)
@@ -230,6 +237,9 @@ class Pole {
     this.foundationType,
     this.material,
     this.yearInstalled,
+    this.conductorType,
+    this.conductorMaterial,
+    this.conductorSection,
     this.sequenceNumber,
     this.isTapPole = false,
     required this.condition,
@@ -254,6 +264,9 @@ class Pole {
     String? foundationType,
     String? material,
     int? yearInstalled,
+    String? conductorType,
+    String? conductorMaterial,
+    String? conductorSection,
     int? sequenceNumber,
     bool? isTapPole,
     String? condition,
@@ -274,6 +287,9 @@ class Pole {
       foundationType: foundationType ?? this.foundationType,
       material: material ?? this.material,
       yearInstalled: yearInstalled ?? this.yearInstalled,
+      conductorType: conductorType ?? this.conductorType,
+      conductorMaterial: conductorMaterial ?? this.conductorMaterial,
+      conductorSection: conductorSection ?? this.conductorSection,
       sequenceNumber: sequenceNumber ?? this.sequenceNumber,
       isTapPole: isTapPole ?? this.isTapPole,
       condition: condition ?? this.condition,

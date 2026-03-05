@@ -301,12 +301,15 @@ async def _download_sync_data_impl(
     poles = poles_result.scalars().all()
     for pole in poles:
         pole_created = _ensure_utc(pole.created_at)
+        # Координаты берём из PositionPoint/Location через get_longitude/get_latitude
+        lon = getattr(pole, "get_longitude", None) and pole.get_longitude()
+        lat = getattr(pole, "get_latitude", None) and pole.get_latitude()
         pole_data = {
             "id": pole.id,
             "power_line_id": pole.line_id,
             "pole_number": pole.pole_number,
-            "x_position": pole.x_position,
-            "y_position": pole.y_position,
+            "x_position": float(lon) if lon is not None else None,
+            "y_position": float(lat) if lat is not None else None,
             "pole_type": pole.pole_type,
             "height": pole.height,
             "foundation_type": pole.foundation_type,

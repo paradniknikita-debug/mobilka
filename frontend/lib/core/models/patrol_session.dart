@@ -23,16 +23,19 @@ class PatrolSession {
 
   factory PatrolSession.fromJson(Map<String, dynamic> json) {
     return PatrolSession(
-      id: (json['id'] as num).toInt(),
-      userId: (json['user_id'] as num).toInt(),
-      lineId: ((json['line_id'] ?? json['power_line_id']) as num).toInt(),
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      userId: (json['user_id'] as num?)?.toInt() ?? 0,
+      // Единое поле line_id, с поддержкой старого имени power_line_id
+      lineId: ((json['line_id'] ?? json['power_line_id']) as num?)?.toInt() ?? 0,
       note: json['note'] as String?,
-      startedAt: DateTime.parse(json['started_at'] as String),
+      startedAt: json['started_at'] != null
+          ? DateTime.tryParse(json['started_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
       endedAt: json['ended_at'] != null
-          ? DateTime.parse(json['ended_at'] as String)
+          ? DateTime.tryParse(json['ended_at'].toString())
           : null,
-      userName: json['user_name'] as String? ?? '',
-      powerLineName: json['power_line_name'] as String? ?? '',
+      userName: json['user_name']?.toString() ?? '',
+      powerLineName: json['power_line_name']?.toString() ?? '',
     );
   }
 

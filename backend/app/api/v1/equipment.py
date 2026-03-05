@@ -12,8 +12,8 @@ from app.schemas.power_line import EquipmentResponse, EquipmentCreate
 
 router = APIRouter()
 
-
 @router.get("", response_model=List[EquipmentResponse])
+@router.get("/", response_model=List[EquipmentResponse])
 async def get_all_equipment(
     skip: int = 0,
     limit: int = 100,

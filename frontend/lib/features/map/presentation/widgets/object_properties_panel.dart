@@ -8,6 +8,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback? onStartLineFormation;
   final VoidCallback? onAutoCreateSpans;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   const ObjectPropertiesPanel({
@@ -17,6 +18,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
     required this.onClose,
     this.onStartLineFormation,
     this.onAutoCreateSpans,
+    this.onEdit,
     this.onDelete,
   });
 
@@ -34,7 +36,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
   String get _title {
     switch (objectType) {
       case ObjectType.pole:
-        return 'Опора ${objectProperties['pole_number']?.toString() ?? 'N/A'}';
+        return 'Опора ${objectProperties['pole_number'] ?? objectProperties['poleNumber'] ?? 'N/A'}';
       case ObjectType.substation:
         return 'Подстанция ${objectProperties['name']?.toString() ?? 'N/A'}';
       case ObjectType.tap:
@@ -119,6 +121,21 @@ class ObjectPropertiesPanel extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  if (onEdit != null && lineId != null) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Редактировать'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   if (onStartLineFormation != null && lineId != null) ...[
                     SizedBox(
                       width: double.infinity,
@@ -217,7 +234,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
       _buildPropertyItem(
         context,
         'Название:',
-        objectProperties['pole_number']?.toString() ?? 'N/A',
+        objectProperties['pole_number']?.toString() ?? objectProperties['poleNumber']?.toString() ?? 'N/A',
       ),
       _buildPropertyItem(
         context,

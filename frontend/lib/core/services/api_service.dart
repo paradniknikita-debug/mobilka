@@ -48,6 +48,13 @@ abstract class ApiService {
   @POST('/power-lines/{id}/poles')
   Future<Pole> createPole(@Path('id') int powerLineId, @Body() PoleCreate poleData);
 
+  @PUT('/power-lines/{powerLineId}/poles/{poleId}')
+  Future<Pole> updatePole(
+    @Path('powerLineId') int powerLineId,
+    @Path('poleId') int poleId,
+    @Body() PoleCreate poleData,
+  );
+
   @GET('/power-lines/{id}/poles')
   Future<List<Pole>> getPoles(@Path('id') int powerLineId);
 
@@ -78,6 +85,12 @@ abstract class ApiService {
 
   @GET('/poles/{id}/equipment')
   Future<List<Equipment>> getPoleEquipment(@Path('id') int poleId);
+
+  @DELETE('/poles/{poleId}/equipment/{equipmentId}')
+  Future<void> deletePoleEquipment(
+    @Path('poleId') int poleId,
+    @Path('equipmentId') int equipmentId,
+  );
 
   // Equipment
   @GET('/equipment')
@@ -424,6 +437,10 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<Pole> createPole(int powerLineId, PoleCreate poleData) => _delegate.createPole(powerLineId, poleData);
 
   @override
+  Future<Pole> updatePole(int powerLineId, int poleId, PoleCreate poleData) =>
+      _delegate.updatePole(powerLineId, poleId, poleData);
+
+  @override
   Future<List<Pole>> getPoles(int powerLineId) => _delegate.getPoles(powerLineId);
 
   @override
@@ -450,6 +467,10 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<List<Equipment>> getPoleEquipment(int poleId) => _delegate.getPoleEquipment(poleId);
+
+  @override
+  Future<void> deletePoleEquipment(int poleId, int equipmentId) =>
+      _delegate.deletePoleEquipment(poleId, equipmentId);
 
   @override
   Future<List<Equipment>> getAllEquipment() => _delegate.getAllEquipment();

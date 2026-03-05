@@ -53,6 +53,8 @@ class PowerLine(Base, ConnectivityNodeContainer):
     connections = relationship("Connection", back_populates="line", cascade="all, delete-orphan")
     substation_start = relationship("Substation", foreign_keys=[substation_start_id])
     substation_end = relationship("Substation", foreign_keys=[substation_end_id])
+    # Сессии обхода: без cascade и lazy='noload' — при удалении ЛЭП не трогаем patrol_sessions (удаление в API).
+    patrol_sessions = relationship("PatrolSession", back_populates="power_line", lazy="noload", viewonly=True)
 
 class Pole(Base):
     """

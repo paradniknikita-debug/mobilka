@@ -211,7 +211,7 @@ class SyncService extends StateNotifier<SyncState> {
         if (idMapping['power_line'] is Map) {
           final plMapping = Map<String, dynamic>.from(idMapping['power_line'] as Map);
           _saveSyncPowerLineMapping(plMapping);
-          // Заменить локальные ЛЭП на серверные: перенос опор, вставка строки с server id, удаление локальной
+          // Заменить локальные ЛЭП на серверные: перенос опор, сессий обхода, вставка строки с server id, удаление локальной
           for (final pl in powerLines) {
             if (pl.id >= 0) continue;
             final serverIdRaw = plMapping[pl.id.toString()];
@@ -219,7 +219,9 @@ class SyncService extends StateNotifier<SyncState> {
                 ? serverIdRaw
                 : (serverIdRaw is num ? serverIdRaw.toInt() : int.tryParse(serverIdRaw?.toString() ?? ''));
             if (serverId == null || serverId <= 0) continue;
+            // Переносим опоры и локальные сессии обхода со старого id ЛЭП на новый серверный id
             await _database.updatePolesLineId(pl.id, serverId);
+            await _database.updatePatrolSessionsPowerLineId(pl.id, serverId);
             await _database.insertPowerLineOrReplace(
               PowerLinesCompanion.insert(
                 id: drift.Value(serverId),
@@ -455,18 +457,51 @@ class SyncService extends StateNotifier<SyncState> {
         final lineId = _toInt(data['line_id'] ?? data['power_line_id']);
         final createdAt = _parseDateTime(data['created_at']) ?? DateTime.now();
         final updatedAt = _parseDateTime(data['updated_at']);
+
+        // Координаты, пришедшие с сервера (или из longitude/latitude).
+        double? xPos =
+            data['x_position'] != null ? _toDouble(data['x_position']) : null;
+        if (data['longitude'] != null) {
+          xPos = _toDouble(data['longitude']);
+        }
+        double? yPos =
+            data['y_position'] != null ? _toDouble(data['y_position']) : null;
+        if (data['latitude'] != null) {
+          yPos = _toDouble(data['latitude']);
+        }
+
+        final serverSentCoords =
+            (xPos != null && yPos != null && (xPos != 0 || yPos != 0));
+
+        // Если сервер не прислал валидные координаты, пробуем сохранить локальные.
+        if (!serverSentCoords) {
+          final existing = await _database.getPole(id);
+          if (existing != null &&
+              (existing.xPosition != 0 || existing.yPosition != 0)) {
+            xPos = existing.xPosition;
+            yPos = existing.yPosition;
+          }
+        }
+
+        final xFinal = xPos ?? 0.0;
+        final yFinal = yPos ?? 0.0;
+
         await _database.insertPoleOrReplace(
           PolesCompanion.insert(
             id: drift.Value(id),
             lineId: lineId,
             poleNumber: data['pole_number'] as String? ?? '',
-            xPosition: drift.Value(_toDouble(data['x_position'] ?? data['longitude'])),
-            yPosition: drift.Value(_toDouble(data['y_position'] ?? data['latitude'])),
+            // Используем координаты с сервера или сохраняем локальные (xFinal/yFinal),
+            // оборачивая в Value для Drift.
+            xPosition: drift.Value(xFinal),
+            yPosition: drift.Value(yFinal),
             poleType: drift.Value(data['pole_type'] as String? ?? 'unknown'),
-            height: drift.Value(data['height'] != null ? _toDouble(data['height']) : null),
+            height: drift.Value(
+                data['height'] != null ? _toDouble(data['height']) : null),
             foundationType: drift.Value(data['foundation_type'] as String?),
             material: drift.Value(data['material'] as String?),
-            yearInstalled: drift.Value(data['year_installed'] != null ? _toInt(data['year_installed']) : null),
+            yearInstalled: drift.Value(
+                data['year_installed'] != null ? _toInt(data['year_installed']) : null),
             condition: drift.Value(data['condition'] as String? ?? 'good'),
             notes: drift.Value(data['notes'] as String?),
             createdBy: _toInt(data['created_by']),

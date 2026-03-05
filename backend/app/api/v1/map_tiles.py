@@ -82,10 +82,17 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
     features = []
     for power_line in power_lines:
         poles_list = list(power_line.poles or [])
-        poles_with_coords = sum(
-            1 for p in poles_list
-            if _pole_coords_from_position_point(p)[0] is not None
-        )
+        # Считаем количество опор с валидными координатами, используя helper-методы модели
+        poles_with_coords = 0
+        for p in poles_list:
+            try:
+                lon = p.get_longitude() if hasattr(p, "get_longitude") else getattr(p, "x_position", None)
+                lat = p.get_latitude() if hasattr(p, "get_latitude") else getattr(p, "y_position", None)
+            except Exception:
+                lon = None
+                lat = None
+            if lon is not None and lat is not None:
+                poles_with_coords += 1
         logger.info(
             "map/power-lines/geojson: ЛЭП id=%d name=%r опор=%d с координатами=%d",
             power_line.id, power_line.name, len(poles_list), poles_with_coords
@@ -306,7 +313,6 @@ async def _get_poles_geojson_impl(db: AsyncSession):
     for pole in poles:
         # CIM: координаты только из Location/PositionPoint
         longitude, latitude = _pole_coords_from_position_point(pole)
-
         if longitude is not None and latitude is not None:
             # Убеждаемся, что координаты - это числа, а не None
             try:

@@ -7,46 +7,56 @@ part of 'power_line.dart';
 // **************************************************************************
 
 PowerLine _$PowerLineFromJson(Map<String, dynamic> json) => PowerLine(
-  id: (json['id'] as num).toInt(),
-  name: _stringFromJson(json['name']),
-  mrid: json['mrid'] as String?,
-  voltageLevel: _doubleFromJsonNullable(json['voltage_level']),
-  length: _doubleFromJsonNullable(json['length']),
-  branchId: _intFromJsonNullable(json['branch_id']),
-  createdBy: (json['created_by'] as num).toInt(),
-  status: json['status'] == null ? 'active' : _stringFromJson(json['status']),
-  description: json['description'] as String?,
-  createdAt: _dateTimeFromJson(json['created_at']),
-  updatedAt: _dateTimeFromJsonNullable(json['updated_at']),
-  poles: (json['poles'] as List<dynamic>?)
-      ?.map((e) => Pole.fromJson(e as Map<String, dynamic>))
-      .toList(),
-  aclineSegments: json['acline_segments'] as List<dynamic>?,
-);
+      id: _intFromJson(json['id']),
+      name: _stringFromJson(json['name']),
+      mrid: json['mrid'] as String?,
+      voltageLevel: _doubleFromJsonNullable(json['voltage_level']),
+      length: _doubleFromJsonNullable(json['length']),
+      branchId: _intFromJsonNullable(json['branch_id']),
+      createdBy: _intFromJson(json['created_by']),
+      status: _stringFromJson(json['status'] ?? 'active'),
+      description: json['description'] as String?,
+      createdAt: _dateTimeFromJson(json['created_at']),
+      updatedAt: _dateTimeFromJsonNullable(json['updated_at']),
+      poles: (json['poles'] as List<dynamic>?)
+          ?.map((e) => Pole.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      aclineSegments: json['acline_segments'] as List<dynamic>?,
+    );
 
-Map<String, dynamic> _$PowerLineToJson(PowerLine instance) => <String, dynamic>{
-  'id': instance.id,
-  'name': instance.name,
-  'mrid': ?instance.mrid,
-  'voltage_level': ?instance.voltageLevel,
-  'length': ?instance.length,
-  'branch_id': ?instance.branchId,
-  'created_by': instance.createdBy,
-  'status': instance.status,
-  'description': ?instance.description,
-  'created_at': instance.createdAt.toIso8601String(),
-  'updated_at': ?instance.updatedAt?.toIso8601String(),
-  'poles': ?instance.poles?.map((e) => e.toJson()).toList(),
-  'acline_segments': ?instance.aclineSegments,
-};
+Map<String, dynamic> _$PowerLineToJson(PowerLine instance) {
+  final val = <String, dynamic>{
+    'id': instance.id,
+    'name': instance.name,
+    'created_by': instance.createdBy,
+    'status': instance.status,
+    'created_at': instance.createdAt.toIso8601String(),
+  };
+
+  void writeNotNull(String key, dynamic value) {
+    if (value != null) {
+      val[key] = value;
+    }
+  }
+
+  writeNotNull('mrid', instance.mrid);
+  writeNotNull('voltage_level', instance.voltageLevel);
+  writeNotNull('length', instance.length);
+  writeNotNull('branch_id', instance.branchId);
+  writeNotNull('description', instance.description);
+  writeNotNull('updated_at', instance.updatedAt?.toIso8601String());
+  writeNotNull('poles', instance.poles?.map((e) => e.toJson()).toList());
+  writeNotNull('acline_segments', instance.aclineSegments);
+  return val;
+}
 
 PowerLineCreate _$PowerLineCreateFromJson(Map<String, dynamic> json) =>
     PowerLineCreate(
-      name: json['name'] as String,
-      voltageLevel: (json['voltage_level'] as num).toDouble(),
-      length: (json['length'] as num?)?.toDouble(),
-      branchId: (json['branch_id'] as num).toInt(),
-      status: json['status'] as String? ?? 'active',
+      name: _stringFromJson(json['name']),
+      voltageLevel: _doubleFromJson(json['voltage_level']),
+      length: _doubleFromJsonNullable(json['length']),
+      branchId: _intFromJson(json['branch_id']),
+      status: _stringFromJson(json['status'] ?? 'active'),
       description: json['description'] as String?,
     );
 
@@ -61,136 +71,171 @@ Map<String, dynamic> _$PowerLineCreateToJson(PowerLineCreate instance) =>
     };
 
 Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
-  id: (json['id'] as num).toInt(),
-  lineId: (json['line_id'] as num).toInt(),
-  poleNumber: _stringFromJson(json['pole_number']),
-  xPosition: _doubleFromJson(json['x_position']),
-  yPosition: _doubleFromJson(json['y_position']),
-  poleType: _stringFromJson(json['pole_type']),
-  height: _doubleFromJsonNullable(json['height']),
-  foundationType: json['foundation_type'] as String?,
-  material: json['material'] as String?,
-  yearInstalled: _intFromJsonNullable(json['year_installed']),
-  sequenceNumber: _intFromJsonNullable(json['sequence_number']),
-  isTapPole: json['is_tap_pole'] as bool? ?? false,
-  condition: json['condition'] == null
-      ? 'good'
-      : _stringFromJson(json['condition']),
-  notes: json['notes'] as String?,
-  createdBy: (json['created_by'] as num).toInt(),
-  createdAt: _dateTimeFromJson(json['created_at']),
-  updatedAt: _dateTimeFromJsonNullable(json['updated_at']),
-  equipment: (json['equipment'] as List<dynamic>?)
-      ?.map((e) => Equipment.fromJson(e as Map<String, dynamic>))
-      .toList(),
-);
+      id: _intFromJson(json['id']),
+      lineId: _intFromJson(json['line_id']),
+      poleNumber: _stringFromJson(json['pole_number']),
+      xPosition: _doubleFromJson(json['x_position']),
+      yPosition: _doubleFromJson(json['y_position']),
+      poleType: _stringFromJson(json['pole_type']),
+      height: _doubleFromJsonNullable(json['height']),
+      foundationType: json['foundation_type'] as String?,
+      material: json['material'] as String?,
+      yearInstalled: _intFromJsonNullable(json['year_installed']),
+      conductorType: json['conductor_type'] as String?,
+      conductorMaterial: json['conductor_material'] as String?,
+      conductorSection: json['conductor_section'] as String?,
+      sequenceNumber: _intFromJsonNullable(json['sequence_number']),
+      isTapPole: json['is_tap_pole'] == true,
+      condition: _stringFromJson(json['condition'] ?? 'good'),
+      notes: json['notes'] as String?,
+      createdBy: _intFromJson(json['created_by']),
+      createdAt: _dateTimeFromJson(json['created_at']),
+      updatedAt: _dateTimeFromJsonNullable(json['updated_at']),
+      equipment: (json['equipment'] as List<dynamic>?)
+          ?.map((e) => Equipment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
 
-Map<String, dynamic> _$PoleToJson(Pole instance) => <String, dynamic>{
-  'id': instance.id,
-  'line_id': instance.lineId,
-  'pole_number': instance.poleNumber,
-  'x_position': instance.xPosition,
-  'y_position': instance.yPosition,
-  'pole_type': instance.poleType,
-  'height': ?instance.height,
-  'foundation_type': ?instance.foundationType,
-  'material': ?instance.material,
-  'year_installed': ?instance.yearInstalled,
-  'sequence_number': ?instance.sequenceNumber,
-  'is_tap_pole': instance.isTapPole,
-  'condition': instance.condition,
-  'notes': ?instance.notes,
-  'created_by': instance.createdBy,
-  'created_at': instance.createdAt.toIso8601String(),
-  'updated_at': ?instance.updatedAt?.toIso8601String(),
-  'equipment': ?instance.equipment?.map((e) => e.toJson()).toList(),
-};
+Map<String, dynamic> _$PoleToJson(Pole instance) {
+  final val = <String, dynamic>{
+    'id': instance.id,
+    'line_id': instance.lineId,
+    'pole_number': instance.poleNumber,
+    'x_position': instance.xPosition,
+    'y_position': instance.yPosition,
+    'pole_type': instance.poleType,
+  };
+
+  void writeNotNull(String key, dynamic value) {
+    if (value != null) {
+      val[key] = value;
+    }
+  }
+
+  writeNotNull('height', instance.height);
+  writeNotNull('foundation_type', instance.foundationType);
+  writeNotNull('material', instance.material);
+  writeNotNull('year_installed', instance.yearInstalled);
+  writeNotNull('conductor_type', instance.conductorType);
+  writeNotNull('conductor_material', instance.conductorMaterial);
+  writeNotNull('conductor_section', instance.conductorSection);
+  writeNotNull('sequence_number', instance.sequenceNumber);
+  val['is_tap_pole'] = instance.isTapPole;
+  val['condition'] = instance.condition;
+  writeNotNull('notes', instance.notes);
+  val['created_by'] = instance.createdBy;
+  val['created_at'] = instance.createdAt.toIso8601String();
+  writeNotNull('updated_at', instance.updatedAt?.toIso8601String());
+  writeNotNull(
+      'equipment', instance.equipment?.map((e) => e.toJson()).toList());
+  return val;
+}
 
 PoleCreate _$PoleCreateFromJson(Map<String, dynamic> json) => PoleCreate(
-  poleNumber: json['pole_number'] as String,
-  xPosition: _doubleFromJson(json['x_position']),
-  yPosition: _doubleFromJson(json['y_position']),
-  poleType: json['pole_type'] as String,
-  height: (json['height'] as num?)?.toDouble(),
-  foundationType: json['foundation_type'] as String?,
-  material: json['material'] as String?,
-  yearInstalled: (json['year_installed'] as num?)?.toInt(),
-  condition: json['condition'] as String? ?? 'good',
-  notes: json['notes'] as String?,
-  isTap: json['is_tap'] as bool? ?? false,
-  conductorType: json['conductor_type'] as String?,
-  conductorMaterial: json['conductor_material'] as String?,
-  conductorSection: json['conductor_section'] as String?,
-);
+      poleNumber: _stringFromJson(json['pole_number']),
+      xPosition: _doubleFromJson(json['x_position']),
+      yPosition: _doubleFromJson(json['y_position']),
+      poleType: _stringFromJson(json['pole_type']),
+      height: _doubleFromJsonNullable(json['height']),
+      foundationType: json['foundation_type'] as String?,
+      material: json['material'] as String?,
+      yearInstalled: _intFromJsonNullable(json['year_installed']),
+      condition: _stringFromJson(json['condition'] ?? 'good'),
+      notes: json['notes'] as String?,
+      isTap: json['is_tap'] == true,
+      conductorType: json['conductor_type'] as String?,
+      conductorMaterial: json['conductor_material'] as String?,
+      conductorSection: json['conductor_section'] as String?,
+    );
 
-Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) =>
-    <String, dynamic>{
-      'pole_number': instance.poleNumber,
-      'x_position': instance.xPosition,
-      'y_position': instance.yPosition,
-      'pole_type': instance.poleType,
-      'height': ?instance.height,
-      'foundation_type': ?instance.foundationType,
-      'material': ?instance.material,
-      'year_installed': ?instance.yearInstalled,
-      'condition': instance.condition,
-      'notes': ?instance.notes,
-      'is_tap': instance.isTap,
-      'conductor_type': ?instance.conductorType,
-      'conductor_material': ?instance.conductorMaterial,
-      'conductor_section': ?instance.conductorSection,
-    };
+Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) {
+  final val = <String, dynamic>{
+    'pole_number': instance.poleNumber,
+    'x_position': instance.xPosition,
+    'y_position': instance.yPosition,
+    'pole_type': instance.poleType,
+    'condition': instance.condition,
+    'is_tap': instance.isTap,
+  };
+
+  void writeNotNull(String key, dynamic value) {
+    if (value != null) {
+      val[key] = value;
+    }
+  }
+
+  writeNotNull('height', instance.height);
+  writeNotNull('foundation_type', instance.foundationType);
+  writeNotNull('material', instance.material);
+  writeNotNull('year_installed', instance.yearInstalled);
+  writeNotNull('notes', instance.notes);
+  writeNotNull('conductor_type', instance.conductorType);
+  writeNotNull('conductor_material', instance.conductorMaterial);
+  writeNotNull('conductor_section', instance.conductorSection);
+  return val;
+}
 
 Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(
-  id: (json['id'] as num).toInt(),
-  poleId: (json['poleId'] as num).toInt(),
-  equipmentType: json['equipmentType'] as String,
-  name: json['name'] as String,
-  manufacturer: json['manufacturer'] as String?,
-  model: json['model'] as String?,
-  serialNumber: json['serialNumber'] as String?,
-  yearManufactured: (json['yearManufactured'] as num?)?.toInt(),
-  installationDate: json['installationDate'] == null
-      ? null
-      : DateTime.parse(json['installationDate'] as String),
-  condition: json['condition'] as String,
-  notes: json['notes'] as String?,
-  createdBy: (json['createdBy'] as num).toInt(),
-  createdAt: DateTime.parse(json['createdAt'] as String),
-  updatedAt: json['updatedAt'] == null
-      ? null
-      : DateTime.parse(json['updatedAt'] as String),
-);
+      id: _intFromJson(json['id']),
+      poleId: _intFromJson(json['pole_id'] ?? json['poleId']),
+      equipmentType:
+          _stringFromJson(json['equipment_type'] ?? json['equipmentType']),
+      name: _stringFromJson(json['name']),
+      manufacturer: json['manufacturer'] as String?,
+      model: json['model'] as String?,
+      serialNumber:
+          json['serial_number'] as String? ?? json['serialNumber'] as String?,
+      yearManufactured: _intFromJsonNullable(
+          json['year_manufactured'] ?? json['yearManufactured']),
+      installationDate:
+          json['installation_date'] == null && json['installationDate'] == null
+              ? null
+              : _dateTimeFromJsonNullable(
+                  json['installation_date'] ?? json['installationDate']),
+      condition: _stringFromJson(json['condition'] ?? 'good'),
+      notes: json['notes'] as String?,
+      createdBy: _intFromJson(json['created_by'] ?? json['createdBy']),
+      createdAt:
+          _dateTimeFromJson(json['created_at'] ?? json['createdAt']),
+      updatedAt: _dateTimeFromJsonNullable(
+          json['updated_at'] ?? json['updatedAt']),
+    );
 
-Map<String, dynamic> _$EquipmentToJson(Equipment instance) => <String, dynamic>{
-  'id': instance.id,
-  'poleId': instance.poleId,
-  'equipmentType': instance.equipmentType,
-  'name': instance.name,
-  'manufacturer': instance.manufacturer,
-  'model': instance.model,
-  'serialNumber': instance.serialNumber,
-  'yearManufactured': instance.yearManufactured,
-  'installationDate': instance.installationDate?.toIso8601String(),
-  'condition': instance.condition,
-  'notes': instance.notes,
-  'createdBy': instance.createdBy,
-  'createdAt': instance.createdAt.toIso8601String(),
-  'updatedAt': instance.updatedAt?.toIso8601String(),
-};
+Map<String, dynamic> _$EquipmentToJson(Equipment instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'poleId': instance.poleId,
+      'equipmentType': instance.equipmentType,
+      'name': instance.name,
+      'manufacturer': instance.manufacturer,
+      'model': instance.model,
+      'serialNumber': instance.serialNumber,
+      'yearManufactured': instance.yearManufactured,
+      'installationDate': instance.installationDate?.toIso8601String(),
+      'condition': instance.condition,
+      'notes': instance.notes,
+      'createdBy': instance.createdBy,
+      'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt?.toIso8601String(),
+    };
 
 EquipmentCreate _$EquipmentCreateFromJson(Map<String, dynamic> json) =>
     EquipmentCreate(
-      equipmentType: json['equipmentType'] as String,
-      name: json['name'] as String,
+      equipmentType:
+          _stringFromJson(json['equipment_type'] ?? json['equipmentType']),
+      name: _stringFromJson(json['name']),
       manufacturer: json['manufacturer'] as String?,
       model: json['model'] as String?,
-      serialNumber: json['serialNumber'] as String?,
-      yearManufactured: (json['yearManufactured'] as num?)?.toInt(),
-      installationDate: json['installationDate'] == null
-          ? null
-          : DateTime.parse(json['installationDate'] as String),
-      condition: json['condition'] as String? ?? 'good',
+      serialNumber:
+          json['serial_number'] as String? ?? json['serialNumber'] as String?,
+      yearManufactured: _intFromJsonNullable(
+          json['year_manufactured'] ?? json['yearManufactured']),
+      installationDate:
+          json['installation_date'] == null && json['installationDate'] == null
+              ? null
+              : _dateTimeFromJsonNullable(
+                  json['installation_date'] ?? json['installationDate']),
+      condition: _stringFromJson(json['condition'] ?? 'good'),
       notes: json['notes'] as String?,
     );
 
@@ -206,3 +251,4 @@ Map<String, dynamic> _$EquipmentCreateToJson(EquipmentCreate instance) =>
       'condition': instance.condition,
       'notes': instance.notes,
     };
+

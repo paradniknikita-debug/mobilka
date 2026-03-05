@@ -1,5 +1,6 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
@@ -8,6 +9,7 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import Pole, Equipment
+from app.models.location import Location
 from app.schemas.power_line import EquipmentCreate, EquipmentResponse, PoleResponse
 
 router = APIRouter()
@@ -24,7 +26,7 @@ async def get_all_poles(
         select(Pole)
         .options(
             selectinload(Pole.equipment),
-            selectinload(Pole.position_points)  # Загружаем position_points для координат
+            selectinload(Pole.location).selectinload(Location.position_points),
         )
         .offset(skip)
         .limit(limit)
@@ -32,9 +34,9 @@ async def get_all_poles(
     poles = result.scalars().all()
     
     # Заполняем координаты для каждой опоры
-    from app.api.v1.power_lines import fill_pole_coordinates
+    from app.api.v1.power_lines import _fill_pole_coordinates
     for pole in poles:
-        fill_pole_coordinates(pole)
+        _fill_pole_coordinates(pole)
     
     return poles
 
@@ -49,7 +51,7 @@ async def get_pole(
         select(Pole)
         .options(
             selectinload(Pole.equipment),
-            selectinload(Pole.position_points)  # Загружаем position_points для координат
+            selectinload(Pole.location).selectinload(Location.position_points),
         )
         .where(Pole.id == pole_id)
     )
@@ -61,34 +63,57 @@ async def get_pole(
         )
     
     # Заполняем координаты
-    from app.api.v1.power_lines import fill_pole_coordinates
-    fill_pole_coordinates(pole)
+    from app.api.v1.power_lines import _fill_pole_coordinates
+    _fill_pole_coordinates(pole)
     
     return pole
 
 @router.post("/{pole_id}/equipment", response_model=EquipmentResponse)
 async def create_equipment(
     pole_id: int,
-    equipment_data: EquipmentCreate,
+    equipment_data: dict = Body(...),
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Добавление оборудования к опоре"""
+    """Добавление оборудования к опоре.
+
+    Принимает как поля в snake_case (equipment_type, x_position, y_position, direction_angle),
+    так и в camelCase (equipmentType, xPosition, yPosition, directionAngle) из Flutter-клиента.
+    pole_id берётся из URL.
+    """
 
     # Проверка существования опоры
     pole = await db.get(Pole, pole_id)
     if not pole:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pole not found"
+            detail="Pole not found",
         )
 
-    # Определяем координаты оборудования:
+    data = equipment_data or {}
+    equipment_type = data.get("equipment_type") or data.get("equipmentType")
+    name = data.get("name")
+    if not equipment_type or not name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="equipment_type (equipmentType) и name обязательны для оборудования",
+        )
+
+    serial_number = data.get("serial_number") or data.get("serialNumber")
+    year_manufactured = data.get("year_manufactured") or data.get("yearManufactured")
+    installation_date_raw = data.get("installation_date") or data.get("installationDate")
+    installation_date: datetime | None = None
+    if installation_date_raw:
+        try:
+            installation_date = datetime.fromisoformat(str(installation_date_raw).replace("Z", "+00:00"))
+        except Exception:
+            installation_date = None
+
+    # Координаты оборудования:
     # - если явно переданы в теле запроса — используем их;
     # - иначе размещаем оборудование в координатах опоры.
-    body_dict = equipment_data.model_dump() if hasattr(equipment_data, "model_dump") else equipment_data.dict()
-    raw_lon = body_dict.get("x_position")
-    raw_lat = body_dict.get("y_position")
+    raw_lon = data.get("x_position") or data.get("xPosition")
+    raw_lat = data.get("y_position") or data.get("yPosition")
 
     if raw_lon is None or raw_lat is None:
         lat_from_pole = getattr(pole, "get_latitude", None) and pole.get_latitude()
@@ -96,20 +121,36 @@ async def create_equipment(
         raw_lon = lon_from_pole
         raw_lat = lat_from_pole
 
-    # pole_id приходит и в пути, и в теле — берём из пути, из тела исключаем, чтобы не было дублирования аргумента
-    payload = equipment_data.dict(exclude={"pole_id", "x_position", "y_position"})
+    direction_angle = data.get("direction_angle") or data.get("directionAngle")
 
     db_equipment = Equipment(
-        **payload,
+        equipment_type=equipment_type,
+        name=name,
+        manufacturer=data.get("manufacturer"),
+        model=data.get("model"),
+        serial_number=serial_number,
+        year_manufactured=year_manufactured,
+        installation_date=installation_date,
+        condition=data.get("condition") or "good",
+        notes=data.get("notes"),
         pole_id=pole_id,
         x_position=float(raw_lon) if raw_lon is not None else None,
         y_position=float(raw_lat) if raw_lat is not None else None,
-        created_by=current_user.id
+        direction_angle=direction_angle,
+        created_by=current_user.id,
     )
-    db.add(db_equipment)
-    await db.commit()
-    await db.refresh(db_equipment)
-    return db_equipment
+
+    try:
+        db.add(db_equipment)
+        await db.commit()
+        await db.refresh(db_equipment)
+        return db_equipment
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка БД при добавлении оборудования: {str(e)}",
+        )
 
 @router.get("/{pole_id}/equipment", response_model=List[EquipmentResponse])
 async def get_pole_equipment(
@@ -123,6 +164,28 @@ async def get_pole_equipment(
     )
     equipment = result.scalars().all()
     return equipment
+
+
+@router.delete("/{pole_id}/equipment/{equipment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pole_equipment(
+    pole_id: int,
+    equipment_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удаление оборудования с опоры."""
+    print(f"DEBUG delete_pole_equipment: pole_id={pole_id}, equipment_id={equipment_id}")
+    equipment = await db.get(Equipment, equipment_id)
+    if not equipment or equipment.pole_id != pole_id:
+        print("DEBUG delete_pole_equipment: equipment not found or pole mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Equipment not found",
+        )
+    await db.delete(equipment)
+    await db.commit()
+    print("DEBUG delete_pole_equipment: deleted successfully")
+
 
 @router.delete("/{pole_id}", status_code=status.HTTP_200_OK)
 async def delete_pole(
