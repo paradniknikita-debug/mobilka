@@ -17,6 +17,7 @@ import { EditPowerLineDialogComponent } from '../../features/map/edit-power-line
 import { RebuildTopologyDialogComponent } from '../../features/map/rebuild-topology-dialog/rebuild-topology-dialog.component';
 import { ApiService } from '../../core/services/api.service';
 import { PowerLine } from '../../core/models/power-line.model';
+import { Equipment } from '../../core/models/equipment.model';
 
 // Структура данных для иерархичного дерева
 interface PowerLineTreeItem {
@@ -60,7 +61,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
     private mapService: MapService,
     private dialog: MatDialog,
     private cdr: ChangeDetectorRef,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private apiService: ApiService
   ) {}
 
   ngOnInit(): void {
@@ -83,6 +85,14 @@ export class SidebarComponent implements OnInit, OnDestroy {
         }
         this.expandedPolesFolders.add(`${powerLineId}-all-poles`);
         this.selectedPoleIdFromMap = poleId;
+        this.cdr.detectChanges();
+      });
+
+    // При клике на подстанцию на карте — выделяем её в дереве
+    this.mapService.requestSelectSubstationInTree$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ substationId }) => {
+        this.selectedSubstationIdFromMap = substationId;
         this.cdr.detectChanges();
       });
 
@@ -109,6 +119,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
           // Сбрасываем кэш при обновлении данных
           this.powerLinesWithPolesCache = null;
           this.isLoading = false;
+          // Загружаем оборудование для дерева (группировка по опорам)
+          this.loadAllEquipmentForTree();
         },
         error: (error) => {
           const detail = error?.error?.detail || error?.message || String(error);
@@ -118,6 +130,41 @@ export class SidebarComponent implements OnInit, OnDestroy {
           this.isLoading = false;
         }
       });
+  }
+
+  // ===== Оборудование для дерева по опорам =====
+
+  allEquipment: Equipment[] = [];
+  private equipmentByPoleId = new Map<number, Equipment[]>();
+  contextMenuEquipment: Equipment | null = null;
+
+  private loadAllEquipmentForTree(): void {
+    this.apiService.getAllEquipment().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (list: Equipment[]) => {
+        this.allEquipment = Array.isArray(list) ? list : [];
+        const map = new Map<number, Equipment[]>();
+        for (const eq of this.allEquipment) {
+          if (!eq || typeof eq !== 'object' || eq.pole_id == null) continue;
+          const arr = map.get(eq.pole_id) || [];
+          arr.push(eq);
+          map.set(eq.pole_id, arr);
+        }
+        this.equipmentByPoleId = map;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        // Не критично для работы дерева
+      }
+    });
+  }
+
+  getPoleEquipment(poleId: number): Equipment[] {
+    return this.equipmentByPoleId.get(poleId) ?? [];
+  }
+
+  getPoleEquipmentByType(poleId: number, type: 'breaker' | 'disconnector' | 'recloser' | 'grounding_switch' | 'surge_arrester'): Equipment[] {
+    const list = this.getPoleEquipment(poleId);
+    return list.filter(eq => (eq.equipment_type || '').toLowerCase() === type);
   }
 
   get powerLinesFeatures(): GeoJSONFeature[] {
@@ -142,10 +189,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   // Группировка опор по ЛЭП (backend может отдавать power_line_id или line_id)
   getPolesByPowerLine(powerLineId: number): GeoJSONFeature[] {
-    return this.polesFeatures.filter(feature => {
+    const poles = this.polesFeatures.filter(feature => {
       const plId = feature.properties['power_line_id'] ?? feature.properties['line_id'];
       return plId === powerLineId;
     });
+    return this.sortPolesByNumber(poles);
   }
 
   /** Фича для дерева: из GeoJSON с геометрией, если есть, иначе минимальная из модели ЛЭП. */
@@ -245,10 +293,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
         return a.segmentId - b.segmentId;
       });
 
-      const allPoles = [
+      // Опоры внутри линии сортируем по номеру/алфавиту, чтобы в папке «Опоры» не было хаоса
+      const allPoles = this.sortPolesByNumber([
         ...segments.flatMap(s => s.poles),
         ...polesWithoutSegment
-      ];
+      ]);
       result.push({
         powerLine,
         segments,
@@ -260,6 +309,19 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
     this.powerLinesWithPolesCache = result;
     return result;
+  }
+
+  /** Сортировка опор по номеру (естественная: 1, 2, 3, 10; учитывает буквы). */
+  private sortPolesByNumber(poles: GeoJSONFeature[]): GeoJSONFeature[] {
+    if (!poles || poles.length <= 1) {
+      return poles;
+    }
+    const collator = new Intl.Collator('ru', { numeric: true, sensitivity: 'base' });
+    return [...poles].sort((a, b) => {
+      const aVal = a.properties['pole_number'] ?? a.properties['sequence_number'] ?? '';
+      const bVal = b.properties['pole_number'] ?? b.properties['sequence_number'] ?? '';
+      return collator.compare(String(aVal ?? ''), String(bVal ?? ''));
+    });
   }
   
   // Старый метод для обратной совместимости (можно удалить, если не используется)
@@ -280,6 +342,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
   expandedPolesFolders = new Set<string>();
   /** ID опоры, выбранной по клику на карте (для подсветки в дереве) */
   selectedPoleIdFromMap: number | null = null;
+  /** ID подстанции, выбранной по клику на карте (для подсветки в дереве) */
+  selectedSubstationIdFromMap: number | null = null;
 
   /** Подпись участка в формате «оп.4-оп.5»: убираем префикс «Опора » из номеров опор */
   shortPoleLabelForSegment(s: string | number | undefined): string {
@@ -634,7 +698,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   contextMenuPosition = { x: '0px', y: '0px' };
   contextMenuFeature: GeoJSONFeature | null = null;
-  contextMenuType: 'powerLine' | 'segment' | 'span' | 'pole' | 'substation' | 'folder' | 'root' | null = null;
+  contextMenuType: 'powerLine' | 'segment' | 'span' | 'pole' | 'substation' | 'folder' | 'root' | 'equipment' | null = null;
   contextMenuPowerLineId: number | null = null;
   contextMenuSegmentId: number | null = null;
 
@@ -1031,6 +1095,92 @@ export class SidebarComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.success) {
         this.mapService.refreshData();
+      }
+    });
+  }
+
+  /** Создать оборудование на опоре из контекстного меню по опоре */
+  onCreateEquipmentFromPole(): void {
+    if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return;
+    const poleId = this.contextMenuFeature.properties['id'];
+    const powerLineId = this.contextMenuFeature.properties['power_line_id'] || this.contextMenuPowerLineId;
+    if (poleId == null || powerLineId == null) {
+      return;
+    }
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      panelClass: 'create-object-dialog-panel',
+      data: {
+        defaultObjectType: 'equipment',
+        poleId: poleId as number,
+        powerLineId: powerLineId as number
+      }
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        this.mapService.refreshData();
+      }
+    });
+  }
+
+  /** Правый клик по оборудованию в дереве */
+  onEquipmentRightClick(eq: Equipment, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.contextMenuPosition.x = event.clientX + 'px';
+    this.contextMenuPosition.y = event.clientY + 'px';
+    this.contextMenuType = 'equipment';
+    this.contextMenuEquipment = eq;
+    this.contextMenuPowerLineId = null;
+    this.contextMenuSegmentId = null;
+
+    this.cdr.detectChanges();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (this.menuTrigger) {
+          try {
+            const element = (this.menuTrigger as any)._element?.nativeElement ||
+              (this.menuTrigger as any)._elementRef?.nativeElement;
+            if (element) {
+              element.click();
+            } else if (this.menuTrigger.menu) {
+              this.menuTrigger.openMenu();
+            }
+          } catch (error) {
+            console.error('Ошибка открытия меню оборудования:', error);
+          }
+        }
+      }, 10);
+    });
+  }
+
+  onEditEquipment(): void {
+    if (!this.contextMenuEquipment) return;
+    const eq = this.contextMenuEquipment;
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      panelClass: 'create-object-dialog-panel',
+      data: { objectType: 'equipment', isEdit: true, equipmentId: eq.id, poleId: eq.pole_id }
+    });
+    dialogRef.afterClosed().subscribe(res => {
+      if (res && res.success) {
+        this.mapService.refreshData();
+        this.loadAllEquipmentForTree();
+      }
+    });
+  }
+
+  onDeleteEquipment(): void {
+    if (!this.contextMenuEquipment) return;
+    const eq = this.contextMenuEquipment;
+    this.apiService.deleteEquipment(eq.id).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.snackBar.open('Оборудование удалено', 'Закрыть', { duration: 2500 });
+        this.mapService.refreshData();
+        this.loadAllEquipmentForTree();
+      },
+      error: () => {
+        this.snackBar.open('Ошибка удаления оборудования', 'Закрыть', { duration: 4000 });
       }
     });
   }

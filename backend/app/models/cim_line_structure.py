@@ -62,11 +62,16 @@ class ConnectivityNode(Base, IdentifiedObject):
     
     # Связь с подстанцией (для ConnectivityNode в подстанциях)
     substation_id = Column(Integer, ForeignKey("substation.id"), nullable=True)
+    # Виртуальный узел: для обочных опор (не отпаечных), только для пролётов; не экспортируется в CIM
+    is_virtual = Column(Boolean, default=False, nullable=False, server_default="false")
+    # Связь с оборудованием (для CN на главном коммутационном оборудовании)
+    equipment_id = Column(Integer, ForeignKey("equipment.id"), nullable=True)
     
     # Связи (pole может быть None для узла на подстанции)
     pole = relationship("Pole", foreign_keys=[pole_id], back_populates="connectivity_nodes")
     line = relationship("PowerLine", foreign_keys=[line_id], back_populates="connectivity_nodes")
     substation = relationship("Substation", foreign_keys=[substation_id], back_populates="connectivity_nodes")
+    equipment = relationship("Equipment", foreign_keys=[equipment_id], back_populates="connectivity_nodes")
     
     # CIM-структура: ConnectivityNodeContainer содержит ConnectivityNode
     # ConnectivityNodeContainer.ConnectivityNodes - обратная связь

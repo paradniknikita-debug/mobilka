@@ -136,6 +136,8 @@ class AClineSegmentResponse(AClineSegmentBase):
     to_connectivity_node_id: Optional[int] = None
     to_terminal_id: Optional[int] = None
     to_substation_id: Optional[int] = None  # ТП в конце участка (отпайки)
+    to_pole_id: Optional[int] = None       # Конечная опора участка (для отображения в выборе «ТП в конце отпайки»)
+    to_pole_display_name: Optional[str] = None  # Номер/имя конечной опоры
     created_by: int
     created_at: datetime
     updated_at: Optional[datetime] = None

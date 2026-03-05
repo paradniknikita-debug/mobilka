@@ -5,11 +5,11 @@ import { MatSelectChange } from '@angular/material/select';
 import { ApiService } from '../../../core/services/api.service';
 import { MapService } from '../../../core/services/map.service';
 import { PowerLine, PowerLineCreate } from '../../../core/models/power-line.model';
-import { PoleCreate } from '../../../core/models/pole.model';
+import { Pole, PoleCreate } from '../../../core/models/pole.model';
 import { SubstationCreate } from '../../../core/models/substation.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Observable } from 'rxjs';
-import { map, startWith } from 'rxjs/operators';
+import { Observable, forkJoin, of } from 'rxjs';
+import { map, startWith, switchMap, catchError } from 'rxjs/operators';
 
 export type ObjectType = 'substation' | 'pole' | 'equipment' | 'powerline';
 
@@ -23,6 +23,7 @@ export class CreateObjectDialogComponent implements OnInit {
   poleForm: FormGroup;
   powerLineForm: FormGroup;
   substationForm: FormGroup;
+  equipmentForm: FormGroup;
   
   selectedObjectType: ObjectType | null = null;
   powerLines: PowerLine[] = [];
@@ -88,6 +89,16 @@ export class CreateObjectDialogComponent implements OnInit {
   /** Подстанция в конце отпайки: выбранный участок для установки ТП в конце */
   selectedTapSegmentForEnd: { lineId: number; segmentId: number } | null = null;
   linkingTapEnd = false;
+
+  // Кэшированные вычисления для карточки подстанции,
+  // чтобы не гонять тяжёлые циклы в геттерах при каждом цикле change detection
+  private _linesWhereSubstationIsStart: PowerLine[] = [];
+  private _linesWhereSubstationIsEnd: PowerLine[] = [];
+  private _linesWhereSubstationIsStartNames = '';
+  private _linesWhereSubstationIsEndNames = '';
+  private _tapSegmentsOptions: { lineId: number; lineName: string; segmentId: number; segmentName: string; toPoleDisplayName?: string }[] = [];
+  private _segmentsWhereSubstationIsTapEnd: { lineId: number; lineName: string; segmentId: number; segmentName: string; toPoleDisplayName?: string }[] = [];
+  private _segmentsWhereSubstationIsTapEndNames = '';
 
   // Стандартные значения напряжения для подстанций (кВ)
   voltageLevels = [
@@ -189,6 +200,27 @@ export class CreateObjectDialogComponent implements OnInit {
       description: ['']
     });
     this.generateSubstationUID();
+
+    this.equipmentForm = this.fb.group({
+      name: ['', [Validators.required, Validators.maxLength(100)]],
+      equipment_type: ['', Validators.required],
+      pole_id: [data?.poleId ?? null, Validators.required],
+      nominal_current: [''],
+      nominal_voltage: [''],
+      mark: [''],
+      manufacturer: [''],
+      model: [''],
+      serial_number: [''],
+      year_manufactured: [null],
+      installation_date: [''],
+      condition: ['good'],
+      notes: ['']
+    });
+    // Если пришёл poleId из контекстного меню, фиксируем его и не даём менять
+    if (data?.poleId) {
+      this.equipmentForm.get('pole_id')?.patchValue(data.poleId);
+      this.equipmentForm.get('pole_id')?.disable({ emitEvent: false });
+    }
   }
 
   ngOnInit(): void {
@@ -210,6 +242,12 @@ export class CreateObjectDialogComponent implements OnInit {
       this.selectedObjectType = 'substation';
       this.objectTypeForm.patchValue({ objectType: 'substation' });
       this.loadSubstation();
+      this.cdr.detectChanges();
+    } else if (this.data?.isEdit && this.data?.objectType === 'equipment' && this.data?.equipmentId) {
+      this.isEditMode = true;
+      this.selectedObjectType = 'equipment';
+      this.objectTypeForm.patchValue({ objectType: 'equipment' });
+      this.loadEquipment(this.data.equipmentId);
       this.cdr.detectChanges();
     } else if (this.data?.defaultObjectType) {
       // Автоматически выбираем тип объекта, если передан defaultObjectType
@@ -258,6 +296,38 @@ export class CreateObjectDialogComponent implements OnInit {
       } else {
         this.lastPoleInLine = null;
         this.showBranchChoice = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private loadEquipment(equipmentId: number): void {
+    this.isLoading = true;
+    this.apiService.getEquipment(equipmentId).subscribe({
+      next: (eq) => {
+        // pole_id редактировать не даём
+        this.equipmentForm.patchValue({
+          name: eq.name || '',
+          equipment_type: eq.equipment_type || '',
+          pole_id: eq.pole_id,
+          nominal_current: '',
+          nominal_voltage: '',
+          mark: '',
+          manufacturer: eq.manufacturer || '',
+          model: eq.model || '',
+          serial_number: eq.serial_number || '',
+          year_manufactured: eq.year_manufactured ?? null,
+          installation_date: eq.installation_date ? (eq.installation_date as any).toString().slice(0, 10) : '',
+          condition: eq.condition || 'good',
+          notes: eq.notes || ''
+        });
+        this.equipmentForm.get('pole_id')?.disable({ emitEvent: false });
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoading = false;
+        this.snackBar.open('Ошибка загрузки оборудования', 'Закрыть', { duration: 4000 });
         this.cdr.detectChanges();
       }
     });
@@ -384,6 +454,9 @@ export class CreateObjectDialogComponent implements OnInit {
           }, 100);
         }
 
+        // Для карточки подстанции пересчитываем связи «подстанция ↔ линии/отпайки»
+        this.recomputeSubstationLinks();
+
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -401,6 +474,85 @@ export class CreateObjectDialogComponent implements OnInit {
         }
       }
     });
+  }
+
+  /** Пересчитывает кэшированные списки/строки для блока связей подстанции с линиями и отпаечными участками. */
+  private recomputeSubstationLinks(): void {
+    if (!this.substationId || !Array.isArray(this.powerLines) || !this.powerLines.length) {
+      this._linesWhereSubstationIsStart = [];
+      this._linesWhereSubstationIsEnd = [];
+      this._linesWhereSubstationIsStartNames = '';
+      this._linesWhereSubstationIsEndNames = '';
+      this._tapSegmentsOptions = [];
+      this._segmentsWhereSubstationIsTapEnd = [];
+      this._segmentsWhereSubstationIsTapEndNames = '';
+      return;
+    }
+
+    const start: PowerLine[] = [];
+    const end: PowerLine[] = [];
+    const tapOpts: { lineId: number; lineName: string; segmentId: number; segmentName: string; toPoleDisplayName?: string }[] = [];
+    const tapEnd: { lineId: number; lineName: string; segmentId: number; segmentName: string; toPoleDisplayName?: string }[] = [];
+
+    const sid = this.substationId;
+
+    for (const line of this.powerLines) {
+      if (!line || typeof line !== 'object') continue;
+      const anyLine = line as any;
+
+      if (anyLine.substation_start_id === sid) {
+        start.push(line);
+      }
+      if (anyLine.substation_end_id === sid) {
+        end.push(line);
+      }
+
+      const segments = anyLine.acline_segments;
+      const arr = Array.isArray(segments) ? segments : [];
+      for (const s of arr) {
+        if (!s || typeof s !== 'object') continue;
+        const anySeg = s as any;
+        // Отпаечные участки всегда считаем кандидатами, но только настоящие отпайки (branch_type === 'tap' или есть tap_pole_id).
+        if (anySeg.is_tap && ((anySeg.branch_type ?? '') === 'tap' || anySeg.tap_pole_id != null)) {
+          // Человек должен видеть нормальное имя отпайки, а не внутренний ID/служебный tap_number.
+          let segLabel = anySeg.name ?? `Участок ${anySeg.id}`;
+          const tapNumber = (anySeg.tap_number ?? '').toString().trim();
+          const toPoleDisplayName = (anySeg.to_pole_display_name ?? '').toString().trim();
+          if (toPoleDisplayName) {
+            segLabel = `отпайка к ${toPoleDisplayName}`;
+          } else if (tapNumber) {
+            segLabel = `отпайка ${tapNumber}`;
+          }
+
+          tapOpts.push({
+            lineId: line.id,
+            lineName: anyLine.name ?? '',
+            segmentId: anySeg.id,
+            segmentName: segLabel,
+            toPoleDisplayName: anySeg.to_pole_display_name ?? undefined
+          });
+          if (anySeg.to_substation_id === sid) {
+            tapEnd.push({
+              lineId: line.id,
+              lineName: anyLine.name ?? '',
+              segmentId: anySeg.id,
+              segmentName: segLabel,
+              toPoleDisplayName: anySeg.to_pole_display_name ?? undefined
+            });
+          }
+        }
+      }
+    }
+
+    this._linesWhereSubstationIsStart = start;
+    this._linesWhereSubstationIsEnd = end;
+    this._linesWhereSubstationIsStartNames = start.map(l => (l as any).name ?? '').filter(Boolean).join(', ');
+    this._linesWhereSubstationIsEndNames = end.map(l => (l as any).name ?? '').filter(Boolean).join(', ');
+    this._tapSegmentsOptions = tapOpts;
+    this._segmentsWhereSubstationIsTapEnd = tapEnd;
+    this._segmentsWhereSubstationIsTapEndNames = tapEnd
+      .map(seg => `${seg.lineName} — ${seg.segmentName}`)
+      .join(', ');
   }
   
   loadPole(): void {
@@ -471,6 +623,8 @@ export class CreateObjectDialogComponent implements OnInit {
           description: (sub as any).description ?? ''
         });
         this.isLoading = false;
+        // После загрузки подстанции можно пересчитать связи с линиями
+        this.recomputeSubstationLinks();
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -537,7 +691,239 @@ export class CreateObjectDialogComponent implements OnInit {
       this.createPowerLine();
     } else if (this.selectedObjectType === 'substation' && this.substationForm.valid) {
       this.createSubstation();
+    } else if (this.selectedObjectType === 'equipment' && this.equipmentForm.valid) {
+      if (this.isEditMode && this.data?.equipmentId) {
+        this.updateEquipment(this.data.equipmentId);
+      } else {
+        this.createEquipment();
+      }
     }
+  }
+
+  createEquipment(): void {
+    if (this.equipmentForm.invalid) {
+      this.markFormGroupTouched(this.equipmentForm);
+      return;
+    }
+    this.isSubmitting = true;
+    // В getRawValue() попадают значения и отключённых контролов (pole_id фиксируем из контекстного меню)
+    const formValue = this.equipmentForm.getRawValue();
+
+    let notes: string = (formValue.notes || '').trim();
+    const techParts: string[] = [];
+    if (formValue.nominal_current) {
+      techParts.push(`Iном=${String(formValue.nominal_current).trim()}`);
+    }
+    if (formValue.nominal_voltage) {
+      techParts.push(`Uном=${String(formValue.nominal_voltage).trim()}`);
+    }
+    if (formValue.mark) {
+      techParts.push(`Марка=${String(formValue.mark).trim()}`);
+    }
+    if (techParts.length) {
+      const techLine = `Характеристики: ${techParts.join(', ')}`;
+      notes = notes ? `${techLine}\n${notes}` : techLine;
+    }
+
+    const resolvedPoleId = this.data?.poleId != null ? this.data.poleId : formValue.pole_id;
+
+    const body = {
+      pole_id: resolvedPoleId,
+      name: String(formValue.name || '').trim(),
+      equipment_type: String(formValue.equipment_type || '').trim(),
+      manufacturer: formValue.manufacturer?.trim() || undefined,
+      model: formValue.model?.trim() || undefined,
+      serial_number: formValue.serial_number?.trim() || undefined,
+      year_manufactured: formValue.year_manufactured != null && formValue.year_manufactured !== '' ? Number(formValue.year_manufactured) : undefined,
+      installation_date: formValue.installation_date || undefined,
+      condition: formValue.condition || undefined,
+      notes: notes || undefined
+    };
+
+    if (!body.name) {
+      this.snackBar.open('Укажите наименование оборудования', 'Закрыть', { duration: 4000 });
+      this.isSubmitting = false;
+      return;
+    }
+    if (!body.equipment_type) {
+      this.snackBar.open('Укажите тип оборудования', 'Закрыть', { duration: 4000 });
+      this.isSubmitting = false;
+      return;
+    }
+    const poleId = Number(resolvedPoleId);
+    if (!poleId || isNaN(poleId)) {
+      this.snackBar.open('Не удалось определить опору для оборудования', 'Закрыть', { duration: 4000 });
+      this.isSubmitting = false;
+      return;
+    }
+    // Автоматически рассчитываем положение оборудования относительно опоры:
+    // берём соседнюю опору по последовательности и размещаем оборудование
+    // между ними (на небольшом расстоянии от текущей опоры вдоль линии).
+    this.apiService.getPole(poleId).pipe(
+      switchMap(pole => {
+        if (!pole || pole.line_id == null) {
+          return of({ pole, poles: [] as Pole[] });
+        }
+        return this.apiService.getPolesByPowerLine(pole.line_id).pipe(
+          map(poles => ({ pole, poles }))
+        );
+      }),
+      catchError(err => {
+        console.error('Ошибка загрузки опор для расчёта положения оборудования:', err);
+        // В случае ошибки размещаем оборудование в точке опоры (без смещения).
+        return of(null);
+      }),
+      switchMap(result => {
+        let x_position: number | undefined;
+        let y_position: number | undefined;
+
+        if (result && result.pole) {
+          const pole = result.pole as any;
+          const poles = (result.poles || []) as any[];
+          const lat0 = Number(pole.y_position ?? pole.latitude ?? 0);
+          const lng0 = Number(pole.x_position ?? pole.longitude ?? 0);
+
+          // Находим соседа по sequence_number в пределах одной ветки (магистраль или отпайка)
+          let neighborLat = lat0;
+          let neighborLng = lng0;
+          const sameBranch = poles.filter(p => {
+            // Опоры принадлежат одной линии
+            if (p.id === pole.id) return false;
+            const tapPoleId = p.tap_pole_id ?? null;
+            const tapBranchIndex = p.tap_branch_index ?? null;
+            const curTapPoleId = pole.tap_pole_id ?? null;
+            const curTapBranchIndex = pole.tap_branch_index ?? null;
+            // Для отпайки: та же отпаечная опора и ветка
+            if (curTapPoleId != null) {
+              return tapPoleId === curTapPoleId && (tapBranchIndex ?? 1) === (curTapBranchIndex ?? 1);
+            }
+            // Для магистрали: только магистральные опоры (без tap_pole_id)
+            return tapPoleId == null;
+          });
+
+          const withSeq = sameBranch
+            .filter(p => p.sequence_number != null)
+            .sort((a, b) => (a.sequence_number ?? 0) - (b.sequence_number ?? 0));
+
+          const idx = withSeq.findIndex(p => p.id === pole.id);
+          let neighbor: any | null = null;
+          if (idx >= 0) {
+            // Пытаемся взять следующую по последовательности, иначе предыдущую
+            neighbor = withSeq[idx + 1] ?? withSeq[idx - 1] ?? null;
+          } else if (withSeq.length > 0) {
+            neighbor = withSeq[0];
+          }
+
+          if (neighbor) {
+            neighborLat = Number(neighbor.y_position ?? neighbor.latitude ?? lat0);
+            neighborLng = Number(neighbor.x_position ?? neighbor.longitude ?? lng0);
+            // Смещаем оборудование на 25% отрезка от текущей опоры к соседней
+            const k = 0.25;
+            y_position = lat0 + (neighborLat - lat0) * k;
+            x_position = lng0 + (neighborLng - lng0) * k;
+          } else {
+            // Нет соседей — небольшое смещение на север от опоры
+            y_position = lat0 + 0.00005;
+            x_position = lng0;
+          }
+        } else {
+          x_position = undefined;
+          y_position = undefined;
+        }
+
+        const bodyWithPos: any = {
+          ...body,
+          x_position,
+          y_position
+        };
+
+        return this.apiService.createEquipment(poleId, bodyWithPos as any);
+      })
+    ).subscribe({
+      next: (created) => {
+        this.isSubmitting = false;
+        this.snackBar.open('Оборудование создано', 'Закрыть', { duration: 3000 });
+        this.mapService.refreshData();
+        this.dialogRef.close({ success: true, data: created });
+      },
+      error: (error) => {
+        console.error('Ошибка создания оборудования:', error);
+        this.isSubmitting = false;
+        let errorMessage = 'Ошибка создания оборудования';
+        if (error.error?.detail) {
+          if (typeof error.error.detail === 'string') {
+            errorMessage = error.error.detail;
+          } else {
+            errorMessage = JSON.stringify(error.error.detail);
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        this.snackBar.open(errorMessage, 'Закрыть', { duration: 6000, panelClass: ['error-snackbar'] });
+      }
+    });
+  }
+
+  updateEquipment(equipmentId: number): void {
+    if (this.equipmentForm.invalid) {
+      this.markFormGroupTouched(this.equipmentForm);
+      return;
+    }
+    this.isSubmitting = true;
+    const formValue = this.equipmentForm.getRawValue();
+
+    let notes: string = (formValue.notes || '').trim();
+    const techParts: string[] = [];
+    if (formValue.nominal_current) {
+      techParts.push(`Iном=${String(formValue.nominal_current).trim()}`);
+    }
+    if (formValue.nominal_voltage) {
+      techParts.push(`Uном=${String(formValue.nominal_voltage).trim()}`);
+    }
+    if (formValue.mark) {
+      techParts.push(`Марка=${String(formValue.mark).trim()}`);
+    }
+    if (techParts.length) {
+      const techLine = `Характеристики: ${techParts.join(', ')}`;
+      notes = notes ? `${techLine}\n${notes}` : techLine;
+    }
+
+    const body = {
+      pole_id: formValue.pole_id,
+      name: String(formValue.name || '').trim(),
+      equipment_type: String(formValue.equipment_type || '').trim(),
+      manufacturer: formValue.manufacturer?.trim() || undefined,
+      model: formValue.model?.trim() || undefined,
+      serial_number: formValue.serial_number?.trim() || undefined,
+      year_manufactured: formValue.year_manufactured != null && formValue.year_manufactured !== '' ? Number(formValue.year_manufactured) : undefined,
+      installation_date: formValue.installation_date || undefined,
+      condition: formValue.condition || undefined,
+      notes: notes || undefined
+    };
+
+    this.apiService.updateEquipment(equipmentId, body as any).subscribe({
+      next: (updated) => {
+        this.isSubmitting = false;
+        this.snackBar.open('Оборудование обновлено', 'Закрыть', { duration: 3000 });
+        this.mapService.refreshData();
+        this.dialogRef.close({ success: true, data: updated });
+      },
+      error: (error) => {
+        console.error('Ошибка обновления оборудования:', error);
+        this.isSubmitting = false;
+        let errorMessage = 'Ошибка обновления оборудования';
+        if (error.error?.detail) {
+          if (typeof error.error.detail === 'string') {
+            errorMessage = error.error.detail;
+          } else {
+            errorMessage = JSON.stringify(error.error.detail);
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        this.snackBar.open(errorMessage, 'Закрыть', { duration: 6000, panelClass: ['error-snackbar'] });
+      }
+    });
   }
 
   createPole(): void {
@@ -1050,6 +1436,8 @@ export class CreateObjectDialogComponent implements OnInit {
       form = this.powerLineForm;
     } else if (this.selectedObjectType === 'substation') {
       form = this.substationForm;
+    } else if (this.selectedObjectType === 'equipment') {
+      form = this.equipmentForm;
     } else {
       form = this.poleForm;
     }
@@ -1174,26 +1562,22 @@ export class CreateObjectDialogComponent implements OnInit {
 
   /** ЛЭП, у которых эта подстанция указана в начале линии */
   get linesWhereSubstationIsStart(): PowerLine[] {
-    if (!this.substationId) return [];
-    const lines = this.powerLines || [];
-    return lines.filter(l => l && typeof l === 'object' && l.substation_start_id === this.substationId);
+    return this._linesWhereSubstationIsStart;
   }
 
   /** Строка имён ЛЭП «в начале» для отображения в шаблоне */
   get linesWhereSubstationIsStartNames(): string {
-    return this.linesWhereSubstationIsStart.map(line => (line as any).name ?? '').filter(Boolean).join(', ');
+    return this._linesWhereSubstationIsStartNames;
   }
 
   /** ЛЭП, у которых эта подстанция указана в конце линии */
   get linesWhereSubstationIsEnd(): PowerLine[] {
-    if (!this.substationId) return [];
-    const lines = this.powerLines || [];
-    return lines.filter(l => l && typeof l === 'object' && l.substation_end_id === this.substationId);
+    return this._linesWhereSubstationIsEnd;
   }
 
   /** Строка имён ЛЭП «в конце» для отображения в шаблоне */
   get linesWhereSubstationIsEndNames(): string {
-    return this.linesWhereSubstationIsEnd.map(line => (line as any).name ?? '').filter(Boolean).join(', ');
+    return this._linesWhereSubstationIsEndNames;
   }
 
   setSubstationAsLineStart(): void {
@@ -1275,59 +1659,18 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   /** Список отпаечных участков (сегментов) для выбора «ТП в конце отпайки» */
-  get tapSegmentsOptions(): { lineId: number; lineName: string; segmentId: number; segmentName: string }[] {
-    const lines = this.powerLines || [];
-    if (!lines.length) return [];
-    const out: { lineId: number; lineName: string; segmentId: number; segmentName: string }[] = [];
-    for (const line of lines) {
-      if (!line || typeof line !== 'object') continue;
-      const segments = (line as any).acline_segments;
-      const arr = Array.isArray(segments) ? segments : [];
-      for (const s of arr) {
-        if (!s || typeof s !== 'object') continue;
-        if (s.is_tap) {
-          out.push({
-            lineId: line.id,
-            lineName: (line as any).name ?? '',
-            segmentId: s.id,
-            segmentName: (s as any).name ?? `Участок ${s.id}`
-          });
-        }
-      }
-    }
-    return out;
+  get tapSegmentsOptions(): { lineId: number; lineName: string; segmentId: number; segmentName: string; toPoleDisplayName?: string }[] {
+    return this._tapSegmentsOptions;
   }
 
   /** Участки (отпайки), в конце которых уже указана эта подстанция */
-  get segmentsWhereSubstationIsTapEnd(): { lineId: number; lineName: string; segmentId: number; segmentName: string }[] {
-    if (!this.substationId) return [];
-    const lines = this.powerLines || [];
-    if (!lines.length) return [];
-    const out: { lineId: number; lineName: string; segmentId: number; segmentName: string }[] = [];
-    for (const line of lines) {
-      if (!line || typeof line !== 'object') continue;
-      const segments = (line as any).acline_segments;
-      const arr = Array.isArray(segments) ? segments : [];
-      for (const s of arr) {
-        if (!s || typeof s !== 'object') continue;
-        if (s.is_tap && (s as any).to_substation_id === this.substationId) {
-          out.push({
-            lineId: line.id,
-            lineName: (line as any).name ?? '',
-            segmentId: s.id,
-            segmentName: (s as any).name ?? `Участок ${s.id}`
-          });
-        }
-      }
-    }
-    return out;
+  get segmentsWhereSubstationIsTapEnd(): { lineId: number; lineName: string; segmentId: number; segmentName: string; toPoleDisplayName?: string }[] {
+    return this._segmentsWhereSubstationIsTapEnd;
   }
 
   /** Строка «ЛЭП — участок» для отображения текущих привязок ТП в конце отпаек */
   get segmentsWhereSubstationIsTapEndNames(): string {
-    return this.segmentsWhereSubstationIsTapEnd
-      .map(seg => `${seg.lineName} — ${seg.segmentName}`)
-      .join(', ');
+    return this._segmentsWhereSubstationIsTapEndNames;
   }
 
   setSubstationAsTapEnd(): void {

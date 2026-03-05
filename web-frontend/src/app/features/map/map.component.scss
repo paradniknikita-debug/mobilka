@@ -202,6 +202,35 @@
       font-size: 11px;
       word-break: break-all;
     }
+
+    .cn-name {
+      margin-left: 6px;
+      font-weight: 500;
+    }
+
+    .cn-uid {
+      display: block;
+      font-size: 11px;
+      color: rgba(0, 0, 0, 0.6);
+      margin-top: 2px;
+      word-break: break-all;
+    }
+
+    .terminal-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      margin: 0 2px;
+      border-radius: 10px;
+      background: rgba(33, 150, 243, 0.08);
+      border: 1px solid rgba(33, 150, 243, 0.3);
+      font-size: 11px;
+
+      .terminal-dir {
+        margin-left: 4px;
+        color: rgba(0, 0, 0, 0.6);
+      }
+    }
   }
 }
 
@@ -270,5 +299,176 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(33, 150, 243, 0.3);
   }
+}
+
+// Оборудование как элементы линии (рядом с опорой)
+::ng-deep .equipment-inline-marker {
+  pointer-events: none !important;
+}
+
+::ng-deep .equipment-inline-group {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  transform: translateY(4px); // чуть ниже линии, как на схеме
+}
+
+::ng-deep .equipment-inline {
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+}
+
+// Базовый цвет схемы (как на скрине — фиолетовый)
+$equip-color: #ba68c8;
+
+// Выключатель: прямоугольник с ножом
+::ng-deep .equipment-inline--breaker {
+  border: 2px solid $equip-color;
+  border-radius: 1px;
+  position: relative;
+}
+
+::ng-deep .equipment-inline--breaker::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 3px;
+  border-top: 1.5px solid $equip-color;
+  transform: rotate(20deg);
+  transform-origin: left center;
+}
+
+// Разъединитель: нож на двух опорах
+::ng-deep .equipment-inline--disconnector {
+  position: relative;
+}
+
+::ng-deep .equipment-inline--disconnector::before,
+::ng-deep .equipment-inline--disconnector::after {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 6px;
+  bottom: 0;
+  background: $equip-color;
+}
+
+::ng-deep .equipment-inline--disconnector::before {
+  left: 0;
+}
+
+::ng-deep .equipment-inline--disconnector::after {
+  right: 0;
+}
+
+::ng-deep .equipment-inline--disconnector {
+  &:after {
+    box-shadow: none;
+  }
+}
+
+::ng-deep .equipment-inline--disconnector::marker {
+  display: none;
+}
+
+::ng-deep .equipment-inline--disconnector::before,
+::ng-deep .equipment-inline--disconnector::after {
+  border-radius: 1px;
+}
+
+::ng-deep .equipment-inline--disconnector::marker {
+  display: none;
+}
+
+::ng-deep .equipment-inline--disconnector::before {
+  box-shadow: 0 0 0 0 transparent;
+}
+
+::ng-deep .equipment-inline--disconnector::after {
+  box-shadow: 0 0 0 0 transparent;
+}
+
+::ng-deep .equipment-inline--disconnector::before,
+::ng-deep .equipment-inline--disconnector::after {
+  background-clip: padding-box;
+}
+
+::ng-deep .equipment-inline--disconnector {
+  &::marker {
+    display: none;
+  }
+}
+
+::ng-deep .equipment-inline--disconnector {
+  &::before {
+    box-shadow: none;
+  }
+}
+
+// Реклозер: круг с дугой
+::ng-deep .equipment-inline--recloser {
+  border-radius: 50%;
+  border: 2px solid $equip-color;
+  position: relative;
+}
+
+::ng-deep .equipment-inline--recloser::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  border-bottom: 1.5px solid $equip-color;
+  border-radius: 50%;
+}
+
+// Заземляющий нож: стойка и «земля»
+::ng-deep .equipment-inline--grounding {
+  position: relative;
+}
+
+::ng-deep .equipment-inline--grounding::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 0;
+  bottom: 3px;
+  border-left: 1.5px solid $equip-color;
+}
+
+::ng-deep .equipment-inline--grounding::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  border-top: 1.5px solid $equip-color;
+}
+
+// Разрядник: маленькая молния
+::ng-deep .equipment-inline--arrester {
+  position: relative;
+}
+
+::ng-deep .equipment-inline--arrester::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 2px;
+  height: 8px;
+  background: transparent;
+  border-left: 1.5px solid $equip-color;
+  border-bottom: 1.5px solid $equip-color;
+  transform: skewX(-20deg);
+}
+
+// Универсальный значок
+::ng-deep .equipment-inline--generic {
+  border-radius: 1px;
+  border: 2px solid $equip-color;
 }
 

@@ -107,7 +107,9 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
     else:
         base_voltage_ref = None
     
-    # 2. Создаём ConnectivityNode для всех опор с Location и PositionPoint
+    # 2. Создаём ConnectivityNode для «реальных» узлов (подстанции и отпаечные опоры).
+    # Узлы, связанные только с обычными опорами (промежуточные точки линии), считаем
+    # виртуальными для CIM и не экспортируем их.
     connectivity_nodes_dict = {}  # mrid -> ConnectivityNodeCIMObject
     
     # 3. Обрабатываем ACLineSegment с полной структурой
@@ -119,10 +121,16 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
         to_node_ref = None
         
         if segment.from_node:
-            if segment.from_node.mrid not in connectivity_nodes_dict:
+            # Экспортируем только реальные CN (не виртуальные): подстанция, отпаечная опора, оборудование
+            from_pole = getattr(segment.from_node, "pole", None)
+            is_real_cn = bool(getattr(segment.from_node, "substation_id", None))
+            if from_pole is not None:
+                is_real_cn = is_real_cn or bool(getattr(from_pole, "is_tap_pole", False))
+            is_real_cn = is_real_cn and not getattr(segment.from_node, "is_virtual", False)
+            if is_real_cn and segment.from_node.mrid not in connectivity_nodes_dict:
                 # Создаём Location и PositionPoint для опоры
                 location = None
-                if segment.from_node.pole and segment.from_node.pole.position_points:
+                if from_pole and from_pole.position_points:
                     position_points = []
                     for pp in segment.from_node.pole.position_points:
                         position_points.append({
@@ -132,14 +140,14 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                             "zPosition": pp.z_position if pp.z_position is not None else None
                         })
                     
-                    location_mrid = segment.from_node.pole.location.mrid if segment.from_node.pole.location else f"LOC_{segment.from_node.mrid}"
+                    location_mrid = from_pole.location.mrid if from_pole.location else f"LOC_{segment.from_node.mrid}"
                     location = LocationCIMObject(
                         mrid=location_mrid,
                         position_points=position_points
                     )
                     cim_objects.append(location)
                     # Добавляем PositionPoint как отдельные объекты
-                    for pp in segment.from_node.pole.position_points:
+                    for pp in from_pole.position_points:
                         cim_objects.append(PositionPointCIMObject(
                             mrid=pp.mrid,
                             x_position=pp.x_position,
@@ -155,13 +163,18 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                 connectivity_nodes_dict[segment.from_node.mrid] = cn
                 cim_objects.append(cn)
             
-            from_node_ref = {"mRID": segment.from_node.mrid}
+            from_node_ref = {"mRID": segment.from_node.mrid} if is_real_cn else None
         
         if segment.to_node:
-            if segment.to_node.mrid not in connectivity_nodes_dict:
+            to_pole = getattr(segment.to_node, "pole", None)
+            is_real_cn = bool(getattr(segment.to_node, "substation_id", None))
+            if to_pole is not None:
+                is_real_cn = is_real_cn or bool(getattr(to_pole, "is_tap_pole", False))
+            is_real_cn = is_real_cn and not getattr(segment.to_node, "is_virtual", False)
+            if is_real_cn and segment.to_node.mrid not in connectivity_nodes_dict:
                 # Создаём Location и PositionPoint для опоры
                 location = None
-                if segment.to_node.pole and segment.to_node.pole.position_points:
+                if to_pole and to_pole.position_points:
                     position_points = []
                     for pp in segment.to_node.pole.position_points:
                         position_points.append({
@@ -171,14 +184,14 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                             "zPosition": pp.z_position if pp.z_position is not None else None
                         })
                     
-                    location_mrid = segment.to_node.pole.location.mrid if segment.to_node.pole.location else f"LOC_{segment.to_node.mrid}"
+                    location_mrid = to_pole.location.mrid if to_pole.location else f"LOC_{segment.to_node.mrid}"
                     location = LocationCIMObject(
                         mrid=location_mrid,
                         position_points=position_points
                     )
                     cim_objects.append(location)
                     # Добавляем PositionPoint как отдельные объекты
-                    for pp in segment.to_node.pole.position_points:
+                    for pp in to_pole.position_points:
                         cim_objects.append(PositionPointCIMObject(
                             mrid=pp.mrid,
                             x_position=pp.x_position,
@@ -194,7 +207,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                 connectivity_nodes_dict[segment.to_node.mrid] = cn
                 cim_objects.append(cn)
             
-            to_node_ref = {"mRID": segment.to_node.mrid}
+            to_node_ref = {"mRID": segment.to_node.mrid} if is_real_cn else None
         
         # Обрабатываем LineSection с Span
         line_sections_list = []
@@ -218,14 +231,20 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
             # Обрабатываем Span
             spans_list = []
             for span in line_section.spans:
-                # Создаём ConnectivityNode для опор пролёта (если ещё не созданы)
+                # Создаём ConnectivityNode для опор пролёта (если ещё не созданы).
+                # Аналогично выше, экспортируем только реальные узлы (ПС и отпаечные опоры).
                 span_from_node_ref = None
                 span_to_node_ref = None
                 
                 if span.from_connectivity_node:
-                    if span.from_connectivity_node.mrid not in connectivity_nodes_dict:
+                    from_pole = getattr(span.from_connectivity_node, "pole", None)
+                    is_real_cn = bool(getattr(span.from_connectivity_node, "substation_id", None))
+                    if from_pole is not None:
+                        is_real_cn = is_real_cn or bool(getattr(from_pole, "is_tap_pole", False))
+                    is_real_cn = is_real_cn and not getattr(span.from_connectivity_node, "is_virtual", False)
+                    if is_real_cn and span.from_connectivity_node.mrid not in connectivity_nodes_dict:
                         location = None
-                        if span.from_connectivity_node.pole and span.from_connectivity_node.pole.position_points:
+                        if from_pole and from_pole.position_points:
                             position_points = []
                             for pp in span.from_connectivity_node.pole.position_points:
                                 position_points.append({
@@ -235,13 +254,13 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                                     "zPosition": pp.z_position if pp.z_position is not None else None
                                 })
                             
-                            location_mrid = span.from_connectivity_node.pole.location.mrid if span.from_connectivity_node.pole.location else f"LOC_{span.from_connectivity_node.mrid}"
+                            location_mrid = from_pole.location.mrid if from_pole.location else f"LOC_{span.from_connectivity_node.mrid}"
                             location = LocationCIMObject(
                                 mrid=location_mrid,
                                 position_points=position_points
                             )
                             cim_objects.append(location)
-                            for pp in span.from_connectivity_node.pole.position_points:
+                            for pp in from_pole.position_points:
                                 cim_objects.append(PositionPointCIMObject(
                                     mrid=pp.mrid,
                                     x_position=pp.x_position,
@@ -257,12 +276,17 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                         connectivity_nodes_dict[span.from_connectivity_node.mrid] = cn
                         cim_objects.append(cn)
                     
-                    span_from_node_ref = {"mRID": span.from_connectivity_node.mrid}
+                    span_from_node_ref = {"mRID": span.from_connectivity_node.mrid} if is_real_cn else None
                 
                 if span.to_connectivity_node:
-                    if span.to_connectivity_node.mrid not in connectivity_nodes_dict:
+                    to_pole = getattr(span.to_connectivity_node, "pole", None)
+                    is_real_cn = bool(getattr(span.to_connectivity_node, "substation_id", None))
+                    if to_pole is not None:
+                        is_real_cn = is_real_cn or bool(getattr(to_pole, "is_tap_pole", False))
+                    is_real_cn = is_real_cn and not getattr(span.to_connectivity_node, "is_virtual", False)
+                    if is_real_cn and span.to_connectivity_node.mrid not in connectivity_nodes_dict:
                         location = None
-                        if span.to_connectivity_node.pole and span.to_connectivity_node.pole.position_points:
+                        if to_pole and to_pole.position_points:
                             position_points = []
                             for pp in span.to_connectivity_node.pole.position_points:
                                 position_points.append({
@@ -272,13 +296,13 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                                     "zPosition": pp.z_position if pp.z_position is not None else None
                                 })
                             
-                            location_mrid = span.to_connectivity_node.pole.location.mrid if span.to_connectivity_node.pole.location else f"LOC_{span.to_connectivity_node.mrid}"
+                            location_mrid = to_pole.location.mrid if to_pole.location else f"LOC_{span.to_connectivity_node.mrid}"
                             location = LocationCIMObject(
                                 mrid=location_mrid,
                                 position_points=position_points
                             )
                             cim_objects.append(location)
-                            for pp in span.to_connectivity_node.pole.position_points:
+                            for pp in to_pole.position_points:
                                 cim_objects.append(PositionPointCIMObject(
                                     mrid=pp.mrid,
                                     x_position=pp.x_position,
@@ -294,7 +318,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                         connectivity_nodes_dict[span.to_connectivity_node.mrid] = cn
                         cim_objects.append(cn)
                     
-                    span_to_node_ref = {"mRID": span.to_connectivity_node.mrid}
+                    span_to_node_ref = {"mRID": span.to_connectivity_node.mrid} if is_real_cn else None
                 
                 # Создаём Span объект
                 span_obj = SpanCIMObject(

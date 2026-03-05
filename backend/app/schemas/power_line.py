@@ -51,6 +51,8 @@ class PoleResponse(PoleBase):
     created_at: datetime
     updated_at: Optional[datetime]
     connectivity_node: Optional[ConnectivityNodeResponse] = None
+    # Оборудование, установленное на опоре
+    equipment: List['EquipmentResponse'] = []
     # Переопределяем координаты - всегда должны быть заполнены (не None) для Flutter
     x_position: float = 0.0  # Долгота (longitude) - значение по умолчанию
     y_position: float = 0.0  # Широта (latitude) - значение по умолчанию
@@ -182,6 +184,13 @@ class EquipmentBase(BaseModel):
     installation_date: Optional[datetime] = None
     condition: str = "good"
     notes: Optional[str] = None
+
+    # Координаты оборудования как отдельного объекта на карте
+    # (CIM: x_position = longitude, y_position = latitude)
+    x_position: Optional[float] = None  # Долгота
+    y_position: Optional[float] = None  # Широта
+    # Направление от опоры для отрисовки (градусы 0–360); задаёт, в какую сторону от опоры ставится участок до оборудования
+    direction_angle: Optional[float] = None
 
 class EquipmentCreate(EquipmentBase):
     pole_id: int

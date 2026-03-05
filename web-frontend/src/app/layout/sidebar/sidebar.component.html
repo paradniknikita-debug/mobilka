@@ -91,6 +91,26 @@
                     [class.tap-pole-dot--filled]="pole.properties['tap_branch_has_poles']"
                     [class.tap-pole-dot--empty]="!pole.properties['tap_branch_has_poles']"
                     [matTooltip]="pole.properties['tap_branch_has_poles'] ? 'Отпайка построена' : 'Отпайка не начата'"></span>
+              <!-- Оборудование на опоре: показываем по типам -->
+              <div class="tree-children equipment-list" *ngIf="getPoleEquipment(pole.properties['id']).length">
+                <div class="tree-node equipment-node" 
+                     *ngFor="let eq of getPoleEquipment(pole.properties['id'])"
+                     (contextmenu)="onEquipmentRightClick(eq, $event)"
+                     [matTooltip]="eq.mrid ? 'UID: ' + eq.mrid : ''">
+                  <mat-icon class="node-icon equipment-icon" [ngSwitch]="eq.equipment_type">
+                    <ng-container *ngSwitchCase="'breaker'">power_settings_new</ng-container>
+                    <ng-container *ngSwitchCase="'disconnector'">switch_left</ng-container>
+                    <ng-container *ngSwitchCase="'recloser'">autorenew</ng-container>
+                    <ng-container *ngSwitchCase="'grounding_switch'">south</ng-container>
+                    <ng-container *ngSwitchCase="'surge_arrester'">bolt</ng-container>
+                    <ng-container *ngSwitchDefault>electrical_services</ng-container>
+                  </mat-icon>
+                  <span class="node-label">
+                    {{ eq.name || 'Оборудование' }}
+                    <span class="node-description-small">({{ eq.equipment_type }})</span>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -183,11 +203,15 @@
       <span>Создать опору</span>
     </button>
   </ng-container>
-  
+
   <ng-container *ngIf="contextMenuType === 'pole' || contextMenuType === 'span'">
     <button mat-menu-item *ngIf="contextMenuType === 'pole' && isContextMenuPoleTap()" (click)="onStartTapFromPole()">
       <mat-icon>call_split</mat-icon>
       <span>Начать отпайку</span>
+    </button>
+    <button mat-menu-item *ngIf="contextMenuType === 'pole'" (click)="onCreateEquipmentFromPole()">
+      <mat-icon>electrical_services</mat-icon>
+      <span>Создать оборудование</span>
     </button>
     <button mat-menu-item (click)="onEditObject()">
       <mat-icon>edit</mat-icon>
@@ -196,6 +220,17 @@
     <button mat-menu-item (click)="onDeleteObject()">
       <mat-icon>delete</mat-icon>
       <span>Удалить</span>
+    </button>
+  </ng-container>
+
+  <ng-container *ngIf="contextMenuType === 'equipment'">
+    <button mat-menu-item (click)="onEditEquipment()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать оборудование</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteEquipment()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить оборудование</span>
     </button>
   </ng-container>
   

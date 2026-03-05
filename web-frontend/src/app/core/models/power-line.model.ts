@@ -13,7 +13,14 @@ export interface PowerLine {
   substation_start_id?: number | null;
   substation_end_id?: number | null;
   /** Сегменты линии (участки), в т.ч. отпайки — для привязки ТП в конце отпайки */
-  acline_segments?: Array<{ id: number; name?: string; is_tap?: boolean; to_substation_id?: number | null }>;
+  acline_segments?: Array<{
+    id: number;
+    name?: string;
+    is_tap?: boolean;
+    to_substation_id?: number | null;
+    to_pole_id?: number | null;
+    to_pole_display_name?: string | null;
+  }>;
 }
 
 export interface PowerLineCreate {

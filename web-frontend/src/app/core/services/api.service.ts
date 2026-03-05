@@ -161,6 +161,14 @@ export class ApiService {
     return this.http.post<Equipment>(`${this.apiUrl}/poles/${poleId}/equipment`, equipment);
   }
 
+  updateEquipment(id: number, equipment: Partial<EquipmentCreate>): Observable<Equipment> {
+    return this.http.put<Equipment>(`${this.apiUrl}/equipment/${id}`, equipment);
+  }
+
+  deleteEquipment(id: number): Observable<{message: string}> {
+    return this.http.delete<{message: string}>(`${this.apiUrl}/equipment/${id}`);
+  }
+
   // ========== Substations ==========
   getSubstations(): Observable<Substation[]> {
     return this.http.get<Substation[]>(`${this.apiUrl}/substations`);
@@ -209,6 +217,10 @@ export class ApiService {
 
   getAclineSegment(segmentId: number): Observable<AClineSegment> {
     return this.http.get<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${segmentId}`);
+  }
+
+  getPoleTerminals(poleId: number): Observable<Terminal[]> {
+    return this.http.get<Terminal[]>(`${this.apiUrl}/cim/poles/${poleId}/terminals`);
   }
 
   // ========== Sync ==========

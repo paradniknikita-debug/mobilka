@@ -153,6 +153,49 @@ mat-dialog-content {
   margin: 0;
 }
 
+.terminals-list {
+  margin-top: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.terminal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  padding: 2px 0;
+
+  &:not(:last-child) {
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.06);
+  }
+}
+
+.terminal-name {
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.terminal-dir {
+  color: rgba(0, 0, 0, 0.6);
+  margin-right: 6px;
+}
+
+.terminal-uid {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.7);
+  margin-right: 6px;
+  word-break: break-all;
+}
+
+.terminal-desc {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
 mat-dialog-actions {
   padding: 16px 20px 12px 0;
   margin: 0;

@@ -325,10 +325,75 @@ class Equipment(Base):
     installation_date = Column(DateTime, nullable=True)
     condition = Column(String(20), default="good")  # good, satisfactory, poor
     notes = Column(Text, nullable=True)
+
+    # CIM Location - связь с Location для координат оборудования (как отдельного объекта на карте)
+    location_id = Column(Integer, ForeignKey("location.id"), nullable=True)
+
+    # Координаты (CIM: x_position = долгота, y_position = широта) для обратной совместимости.
+    # Основным источником координат в перспективе должна быть Location/PositionPoint.
+    y_position = Column(Float, nullable=True)
+    x_position = Column(Float, nullable=True)
+
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Направление от опоры для отрисовки на карте (градусы 0–360; если задано — участок до оборудования в этом направлении)
+    direction_angle = Column(Float, nullable=True)
+    
     # Связи
     pole = relationship("Pole", back_populates="equipment")
     creator = relationship("User")
+    location = relationship("Location", foreign_keys=[location_id])
+    connectivity_nodes = relationship("ConnectivityNode", back_populates="equipment")
+
+    def get_latitude(self) -> float:
+        """
+        Получить широту оборудования:
+        Используем только собственную колонку y_position, без загрузки связанных объектов,
+        чтобы избежать MissingGreenlet при сериализации через Pydantic.
+        """
+        # Читаем напрямую из __dict__, чтобы не вызывать property и не триггерить lazy-load
+        val = self.__dict__.get("y_position", None)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+        return 0.0
+
+    def get_longitude(self) -> float:
+        """
+        Получить долготу оборудования:
+        Используем только собственную колонку x_position, без загрузки связанных объектов,
+        чтобы избежать MissingGreenlet при сериализации через Pydantic.
+        """
+        # Собственная колонка (из БД) — читаем напрямую из __dict__, чтобы не вызывать property
+        val = self.__dict__.get("x_position", None)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+        return 0.0
+
+    @property
+    def x_position(self) -> float:
+        """Долгота (CIM x_position) для оборудования."""
+        val = self.get_longitude()
+        return float(val) if val is not None else 0.0
+
+    @x_position.setter
+    def x_position(self, value: float) -> None:
+        # Сеттер нужен для корректной работы ORM при записи в колонку
+        self.__dict__["x_position"] = value
+
+    @property
+    def y_position(self) -> float:
+        """Широта (CIM y_position) для оборудования."""
+        val = self.get_latitude()
+        return float(val) if val is not None else 0.0
+
+    @y_position.setter
+    def y_position(self, value: float) -> None:
+        self.__dict__["y_position"] = value

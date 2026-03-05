@@ -72,6 +72,19 @@
     <ng-template #noSections>
       <p class="no-sections">Секции не заданы.</p>
     </ng-template>
+
+    <h3 class="sections-title">Терминалы участка</h3>
+    <div class="terminals-list" *ngIf="segment?.terminals?.length; else noTerminals">
+      <div class="terminal-row" *ngFor="let t of segment?.terminals">
+        <span class="terminal-name">{{ t.name || ('T' + t.sequence_number) }}</span>
+        <span class="terminal-dir">({{ t.connection_direction }})</span>
+        <span class="terminal-uid">{{ t.mrid }}</span>
+        <span class="terminal-desc" *ngIf="t.description">&mdash; {{ t.description }}</span>
+      </div>
+    </div>
+    <ng-template #noTerminals>
+      <p class="no-sections">Терминалы для участка ещё не созданы.</p>
+    </ng-template>
   </mat-dialog-content>
 
   <mat-dialog-actions align="end">

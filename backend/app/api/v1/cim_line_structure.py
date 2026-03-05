@@ -246,6 +246,31 @@ async def delete_connectivity_node_from_pole(
         await db.commit()
 
 
+@router.get("/poles/{pole_id}/terminals", response_model=List[TerminalResponse])
+async def get_pole_terminals(
+    pole_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить все терминалы, связанные с узлом(ами) соединения опоры.
+    Возвращаются терминалы, у которых connectivity_node_id указывает на ConnectivityNode с pole_id = pole_id.
+    """
+    # Ищем все узлы соединения для указанной опоры
+    nodes_result = await db.execute(
+        select(ConnectivityNode.id).where(ConnectivityNode.pole_id == pole_id)
+    )
+    node_ids = [row[0] for row in nodes_result.all()]
+    if not node_ids:
+        return []
+
+    result = await db.execute(
+        select(Terminal).where(Terminal.connectivity_node_id.in_(node_ids))
+    )
+    terminals = result.scalars().all()
+    return terminals
+
+
 # ==================== AClineSegment ====================
 
 @router.post("/acline-segments", response_model=AClineSegmentResponse)

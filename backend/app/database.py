@@ -191,6 +191,33 @@ async def init_db():
                         THEN
                             ALTER TABLE acline_segment ADD COLUMN to_substation_id INTEGER NULL REFERENCES substation(id);
                         END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'equipment' AND column_name = 'direction_angle')
+                        THEN
+                            ALTER TABLE equipment ADD COLUMN direction_angle DOUBLE PRECISION NULL;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'connectivity_node')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'connectivity_node' AND column_name = 'is_virtual')
+                        THEN
+                            ALTER TABLE connectivity_node ADD COLUMN is_virtual BOOLEAN NOT NULL DEFAULT false;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'connectivity_node')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'connectivity_node' AND column_name = 'equipment_id')
+                        THEN
+                            ALTER TABLE connectivity_node ADD COLUMN equipment_id INTEGER NULL REFERENCES equipment(id);
+                        END IF;
+                        -- Обновляем существующие ConnectivityNode: для обочных опор (не отпаечных) помечаем узлы как виртуальные.
+                        -- Отпаечные опоры (is_tap_pole = true) и узлы подстанций (pole_id IS NULL) остаются реальными.
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'connectivity_node')
+                           AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'connectivity_node' AND column_name = 'is_virtual')
+                           AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                        THEN
+                            UPDATE connectivity_node AS cn
+                            SET is_virtual = true
+                            FROM pole AS p
+                            WHERE cn.pole_id = p.id
+                              AND (p.is_tap_pole IS NULL OR p.is_tap_pole = false);
+                        END IF;
                     END $$;
                 """))
                 await conn.execute(text('CREATE INDEX IF NOT EXISTS idx_line_substation_start_id ON "line"(substation_start_id)'))

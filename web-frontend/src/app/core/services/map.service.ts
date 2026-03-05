@@ -159,5 +159,16 @@ export class MapService {
   get clearSegmentSelection$(): Observable<void> {
     return this.clearSegmentSelectionSubject$.asObservable();
   }
+
+  // Выбор подстанции в дереве объектов (при клике на подстанцию на карте)
+  private requestSelectSubstationInTreeSubject$ = new Subject<{ substationId: number }>();
+
+  requestSelectSubstationInTree(substationId: number): void {
+    this.requestSelectSubstationInTreeSubject$.next({ substationId });
+  }
+
+  get requestSelectSubstationInTree$(): Observable<{ substationId: number }> {
+    return this.requestSelectSubstationInTreeSubject$.asObservable();
+  }
 }
 

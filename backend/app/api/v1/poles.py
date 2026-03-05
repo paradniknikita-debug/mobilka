@@ -74,7 +74,7 @@ async def create_equipment(
     db: AsyncSession = Depends(get_db)
 ):
     """Добавление оборудования к опоре"""
-    
+
     # Проверка существования опоры
     pole = await db.get(Pole, pole_id)
     if not pole:
@@ -82,10 +82,28 @@ async def create_equipment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
-    
+
+    # Определяем координаты оборудования:
+    # - если явно переданы в теле запроса — используем их;
+    # - иначе размещаем оборудование в координатах опоры.
+    body_dict = equipment_data.model_dump() if hasattr(equipment_data, "model_dump") else equipment_data.dict()
+    raw_lon = body_dict.get("x_position")
+    raw_lat = body_dict.get("y_position")
+
+    if raw_lon is None or raw_lat is None:
+        lat_from_pole = getattr(pole, "get_latitude", None) and pole.get_latitude()
+        lon_from_pole = getattr(pole, "get_longitude", None) and pole.get_longitude()
+        raw_lon = lon_from_pole
+        raw_lat = lat_from_pole
+
+    # pole_id приходит и в пути, и в теле — берём из пути, из тела исключаем, чтобы не было дублирования аргумента
+    payload = equipment_data.dict(exclude={"pole_id", "x_position", "y_position"})
+
     db_equipment = Equipment(
-        **equipment_data.dict(),
+        **payload,
         pole_id=pole_id,
+        x_position=float(raw_lon) if raw_lon is not None else None,
+        y_position=float(raw_lat) if raw_lat is not None else None,
         created_by=current_user.id
     )
     db.add(db_equipment)
