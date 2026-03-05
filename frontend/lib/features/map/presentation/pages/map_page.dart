@@ -2346,7 +2346,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
-        powerLineId: powerLineId,
+        lineId: powerLineId,
         poleId: poleId,
         existingPolesCount: 0,
       ),

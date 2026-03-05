@@ -1,4 +1,4 @@
-name: iOS Build
+name: iOS Build (disabled)
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 
 jobs:
   build:
+    if: false  # временно отключено по запросу, iOS билд не нужен
     runs-on: macos-latest
     steps:
       - name: Checkout code
