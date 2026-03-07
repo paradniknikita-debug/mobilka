@@ -65,7 +65,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   // Режим навигатора для формирования линии
   bool _isNavigatorMode = false;
   int? _startingPoleId; // ID опоры, от которой начинаем формирование линии
-  int? _currentLineId; // ID текущей ЛЭП
+  int? _currentLineId; // ID текущей ЛЭП (lineId в БД и API)
+  /// Номер исходной опоры текущей отпайки (например "3") — пока не завершён обход, новые опоры получают 3/2, 3/3, ...
+  String? _currentTapRoot;
   StreamSubscription<Position>? _positionSubscription; // Подписка на обновления GPS
   
   // Настройки для быстрого создания опоры в режиме навигатора
@@ -94,6 +96,21 @@ class _MapPageState extends ConsumerState<MapPage> {
     final match = _powerLinesList!.where((pl) => pl.id == _currentLineId);
     return match.isEmpty ? 'ЛЭП' : match.first.name;
   }
+
+  /// Можно ли начать отпайку от текущей выбранной опоры:
+  /// допускается только при обходе той ЛЭП, к которой относится эта опора.
+  bool get _canStartTapFromSelectedPole {
+    if (_currentLineId == null || _selectedObjectProperties == null) {
+      return false;
+    }
+    final lineId = _toInt(
+      _selectedObjectProperties!['line_id'] ??
+          _selectedObjectProperties!['power_line_id'],
+    );
+    if (lineId == null) return false;
+    return lineId == _currentLineId;
+  }
+
   /// Отложенное центрирование на текущее местоположение (пока карта не готова).
   LatLng? _pendingCenterOnLocation;
 
@@ -244,6 +261,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             'y_position': p.yPosition ?? 0.0,
             'is_local': p.isLocal,
             'needs_sync': p.needsSync,
+            'is_tap': p.poleNumber.contains('/'),
             if (criticality != null) 'criticality': criticality,
           },
         });
@@ -254,21 +272,90 @@ class _MapPageState extends ConsumerState<MapPage> {
       for (final pl in allPowerLines) {
         final plPoles = allPoles.where((p) => p.lineId == pl.id).toList()
           ..sort((a, b) => a.poleNumber.compareTo(b.poleNumber));
-        if (plPoles.length >= 2) {
+
+        // Локальные линии с одной опорой: показываем как точку (дублируем координаты в LineString).
+        if (plPoles.length == 1) {
+          final p = plPoles.first;
           powerLineFeatures.add({
             'type': 'Feature',
             'geometry': {
               'type': 'LineString',
-              'coordinates': plPoles.map((p) => [p.xPosition ?? 0.0, p.yPosition ?? 0.0]).toList(),
+              'coordinates': [
+                [p.xPosition ?? 0.0, p.yPosition ?? 0.0],
+                [p.xPosition ?? 0.0, p.yPosition ?? 0.0],
+              ],
             },
-            'properties': {'id': pl.id, 'name': pl.name, 'is_local': pl.isLocal},
+            'properties': {'id': pl.id, 'name': pl.name, 'is_local': pl.isLocal, 'is_tap': false},
           });
+          continue;
+        }
+        if (plPoles.length < 2) continue;
 
-          // Линейное оборудование между опорами: ищем оборудование на «второй» опоре пары
-          // и ставим иконку на линии между предыдущей и текущей опорами.
-          for (var i = 0; i < plPoles.length - 1; i++) {
-            final p1 = plPoles[i];
-            final p2 = plPoles[i + 1];
+        // Магистраль: одна линия только по основным опорам (без "/"), как при отрисовке.
+        final mainPoles = plPoles.where((p) => !p.poleNumber.contains('/')).toList()
+          ..sort((a, b) {
+            final na = a.poleNumber.trim();
+            final nb = b.poleNumber.trim();
+            final ia = int.tryParse(na);
+            final ib = int.tryParse(nb);
+            if (ia != null && ib != null) return ia.compareTo(ib);
+            return na.compareTo(nb);
+          });
+        if (mainPoles.length >= 2) {
+          powerLineFeatures.add({
+            'type': 'Feature',
+            'geometry': {
+              'type': 'LineString',
+              'coordinates': mainPoles.map((p) => [p.xPosition, p.yPosition]).toList(),
+            },
+            'properties': {'id': pl.id, 'name': pl.name, 'is_local': pl.isLocal, 'is_tap': false},
+          });
+        }
+
+        // Отпайки: отдельные отрезки только между соседями по ветке (как с сервера после синхронизации).
+        final tapPoles = plPoles.where((p) => p.poleNumber.contains('/')).toList();
+        if (tapPoles.isNotEmpty) {
+          final byPoleNumber = {for (final p in plPoles) p.poleNumber.trim(): p};
+          final segmentKeys = <String>{};
+          for (final p in tapPoles) {
+            final pn = p.poleNumber.trim();
+            final parts = pn.split('/');
+            if (parts.length < 2) continue;
+            final root = parts[0].trim();
+            final suffix = int.tryParse(parts[1].trim());
+            if (suffix == null || suffix < 1) continue;
+            final prevKey = suffix == 1 ? root : '$root/${suffix - 1}';
+            final nextKey = '$root/${suffix + 1}';
+            final otherKeys = <String>[];
+            if (byPoleNumber.containsKey(prevKey)) otherKeys.add(prevKey);
+            else if (byPoleNumber.containsKey(root)) otherKeys.add(root);
+            if (byPoleNumber.containsKey(nextKey)) otherKeys.add(nextKey);
+            for (final ok in otherKeys) {
+              final key = pn.compareTo(ok) < 0 ? '$pn|$ok' : '$ok|$pn';
+              if (segmentKeys.contains(key)) continue;
+              segmentKeys.add(key);
+              final other = byPoleNumber[ok]!;
+              powerLineFeatures.add({
+                'type': 'Feature',
+                'geometry': {
+                  'type': 'LineString',
+                  'coordinates': [
+                    [p.xPosition, p.yPosition],
+                    [other.xPosition, other.yPosition],
+                  ],
+                },
+                'properties': {'id': pl.id, 'name': pl.name, 'is_local': pl.isLocal, 'is_tap': true},
+              });
+            }
+          }
+        }
+
+        // Линейное оборудование: только между соседними по порядку (после сортировки по poleNumber).
+        final plPolesSorted = List<drift_db.Pole>.from(plPoles)
+          ..sort((a, b) => a.poleNumber.compareTo(b.poleNumber));
+        for (var i = 0; i < plPolesSorted.length - 1; i++) {
+          final p1 = plPolesSorted[i];
+          final p2 = plPolesSorted[i + 1];
             // Оборудование, добавленное на текущей (второй) опоре пары, отображаем на пролёте от предыдущей к текущей.
             final eqList = equipmentByPole[p2.id] ?? const <drift_db.EquipmentData>[];
 
@@ -317,7 +404,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                     'type=${e.equipmentType}, name=${e.name}, icon=$iconPath, t=$t');
               }
             }
-          }
         }
       }
 
@@ -346,6 +432,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         });
         _applyActiveSessionIfNeeded();
         _centerOnObjects();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -444,7 +533,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     ref.invalidate(hasPendingSyncProvider);
     ref.invalidate(activeSessionProvider);
     if (!mounted) return;
-    setState(() => _currentLineId = null);
+    setState(() {
+      _currentLineId = null;
+      _currentTapRoot = null;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Обход завершён'),
@@ -515,11 +607,16 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
         return;
       }
-      
+
+      // Сначала показываем локальные данные, чтобы карта и дерево не были пустыми при открытии.
+      // Затем подгружаем с сервера и объединяем — так слои гарантированно отрисовываются.
+      await _loadMapDataFromLocal();
+      if (!mounted) return;
+
       final apiService = ref.read(apiServiceProvider);
       final db = ref.read(drift_db.databaseProvider);
       
-      // Загружаем данные параллельно:
+      // Загружаем данные с сервера параллельно:
       // - геоданные ЛЭП/опор/отпаек/подстанций
       // - список ЛЭП для дерева
       // - всё оборудование (для отображения линейного оборудования на карте)
@@ -543,6 +640,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Выпадающий список берёт данные из локальной БД; дополняем список с сервера локальными ЛЭП.
       final localPowerLines = await db.getAllPowerLines();
       final serverIds = powerLinesList.map((pl) => pl.id).toSet();
+      final serverPlFeatures = List<dynamic>.from(powerLinesData['features'] ?? []);
+
       for (final pl in localPowerLines) {
         if (!serverIds.contains(pl.id)) {
           powerLinesList.add(PowerLine(
@@ -559,8 +658,82 @@ class _MapPageState extends ConsumerState<MapPage> {
             poles: null,
             aclineSegments: null,
           ));
+          // Геометрия локальных линий: добавляем сегменты на карту (в онлайн-режиме сервер отдаёт только свои ЛЭП).
+          final plPoles = await db.getPolesByLine(pl.id);
+          if (plPoles.length == 1) {
+            final p = plPoles.first;
+            serverPlFeatures.add({
+              'type': 'Feature',
+              'geometry': {
+                'type': 'LineString',
+                'coordinates': [
+                  [p.xPosition, p.yPosition],
+                  [p.xPosition, p.yPosition],
+                ],
+              },
+              'properties': {'id': pl.id, 'name': pl.name, 'is_local': true, 'is_tap': false},
+            });
+          } else if (plPoles.length >= 2) {
+            final mainPoles = plPoles.where((p) => !p.poleNumber.contains('/')).toList()
+              ..sort((a, b) {
+                final na = a.poleNumber.trim();
+                final nb = b.poleNumber.trim();
+                final ia = int.tryParse(na);
+                final ib = int.tryParse(nb);
+                if (ia != null && ib != null) return ia.compareTo(ib);
+                return na.compareTo(nb);
+              });
+            if (mainPoles.length >= 2) {
+              serverPlFeatures.add({
+                'type': 'Feature',
+                'geometry': {
+                  'type': 'LineString',
+                  'coordinates': mainPoles.map((p) => [p.xPosition, p.yPosition]).toList(),
+                },
+                'properties': {'id': pl.id, 'name': pl.name, 'is_local': true, 'is_tap': false},
+              });
+            }
+            final tapPoles = plPoles.where((p) => p.poleNumber.contains('/')).toList();
+            if (tapPoles.isNotEmpty) {
+              final byPoleNumber = {for (final p in plPoles) p.poleNumber.trim(): p};
+              final segmentKeys = <String>{};
+              for (final p in tapPoles) {
+                final pn = p.poleNumber.trim();
+                final parts = pn.split('/');
+                if (parts.length < 2) continue;
+                final root = parts[0].trim();
+                final suffix = int.tryParse(parts[1].trim());
+                if (suffix == null || suffix < 1) continue;
+                final prevKey = suffix == 1 ? root : '$root/${suffix - 1}';
+                final nextKey = '$root/${suffix + 1}';
+                final otherKeys = <String>[];
+                if (byPoleNumber.containsKey(prevKey)) otherKeys.add(prevKey);
+                else if (byPoleNumber.containsKey(root)) otherKeys.add(root);
+                if (byPoleNumber.containsKey(nextKey)) otherKeys.add(nextKey);
+                for (final ok in otherKeys) {
+                  final key = pn.compareTo(ok) < 0 ? '$pn|$ok' : '$ok|$pn';
+                  if (segmentKeys.contains(key)) continue;
+                  segmentKeys.add(key);
+                  final other = byPoleNumber[ok]!;
+                  serverPlFeatures.add({
+                    'type': 'Feature',
+                    'geometry': {
+                      'type': 'LineString',
+                      'coordinates': [
+                        [p.xPosition, p.yPosition],
+                        [other.xPosition, other.yPosition],
+                      ],
+                    },
+                    'properties': {'id': pl.id, 'name': pl.name, 'is_local': true, 'is_tap': true},
+                  });
+                }
+              }
+            }
+          }
         }
       }
+      powerLinesData = {'type': 'FeatureCollection', 'features': serverPlFeatures};
+
       // Перед построением линейного оборудования дополняем локальную БД оборудованием с сервера,
       // чтобы и в онлайн-режиме, и после синхронизации отображались все устройства.
       for (final eq in serverEquipment) {
@@ -696,6 +869,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             'y_position': p.yPosition ?? 0.0,
             'is_local': true,
             'needs_sync': true,
+            'is_tap': p.poleNumber.contains('/'),
           };
           if (criticality != null) props['criticality'] = criticality;
           serverFeatures.add({
@@ -726,8 +900,11 @@ class _MapPageState extends ConsumerState<MapPage> {
           _errorMessage = null;
         });
         _applyActiveSessionIfNeeded();
-
         _centerOnObjects();
+        // Повторная отрисовка после установки данных — чтобы слои ЛЭП/опор гарантированно появились на карте.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
       }
     } catch (e) {
       print('❌ Ошибка загрузки данных карты: $e');
@@ -944,11 +1121,13 @@ class _MapPageState extends ConsumerState<MapPage> {
                     
                     if (_powerLinesData != null)
                       PolylineLayer(
+                        key: ValueKey<Object?>(_powerLinesData),
                         polylines: _buildPowerLinePolylines(),
                       ),
                     
                     if (_polesData != null)
                       MarkerLayer(
+                        key: ValueKey<Object?>(_polesData),
                         markers: _buildPoleMarkers(),
                       ),
                     
@@ -1108,6 +1287,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                               }
                             }
                           : null,
+                      onStartTapPole: _selectedObjectType == ObjectType.pole && _canStartTapFromSelectedPole
+                          ? _showCreatePoleFromTapPoleDialog
+                          : null,
+                      onAddPoleToTap: _selectedObjectType == ObjectType.pole &&
+                          _currentLineId != null &&
+                          _toInt(_selectedObjectProperties?['power_line_id'] ?? _selectedObjectProperties?['line_id']) == _currentLineId
+                      ? _showAddPoleToTapDialog
+                      : null,
                       onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
                       onDelete: _handleDeleteObject,
                     ),
@@ -1137,11 +1324,16 @@ class _MapPageState extends ConsumerState<MapPage> {
               _toDouble(coord[0]),
             )).toList();
             final isCurrentPatrol = id != null && id == _currentLineId;
+            final isTap = props?['is_tap'] == true;
+            // Магистраль — красная, отпайка — зелёная; при обходе текущей ЛЭП — зелёная и толще
+            final color = isCurrentPatrol
+                ? Colors.green
+                : (isTap ? Colors.green : Colors.red);
             polylines.add(
               Polyline(
                 points: points,
                 strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
-                color: isCurrentPatrol ? Colors.green : Colors.red,
+                color: color,
               ),
             );
           }
@@ -1151,7 +1343,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
 
-    // Опоры без связи: ЛЭП есть в опорах, но геометрии линии нет на сервере — строим линию по точкам опор
+    // Опоры без геометрии с сервера: строим магистраль и отпайки по номерам (N — магистраль, N/1, N/2 — отпайка от N)
     final poleFeatures = _polesData?['features'] as List<dynamic>? ?? [];
     final polesByPowerLine = <int, List<Map<String, dynamic>>>{};
     for (final feature in poleFeatures) {
@@ -1162,10 +1354,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (plId == null || geom == null || geom['type'] != 'Point') continue;
         final coords = geom['coordinates'] as List<dynamic>?;
         if (coords == null || coords.length < 2) continue;
+        final pn = props!['pole_number']?.toString() ?? '';
         polesByPowerLine.putIfAbsent(plId, () => []).add({
           'lat': _toDouble(coords[1]),
           'lng': _toDouble(coords[0]),
-          'pole_number': props!['pole_number']?.toString() ?? '',
+          'pole_number': pn,
         });
       } catch (_) {}
     }
@@ -1174,16 +1367,85 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (lineIdsWithGeometry.contains(lineId)) continue;
       final list = entry.value;
       if (list.length < 2) continue;
-      list.sort((a, b) => (a['pole_number'] as String).compareTo(b['pole_number'] as String));
-      final points = list.map((e) => LatLng(_toDouble(e['lat']), _toDouble(e['lng']))).toList();
       final isCurrentPatrol = lineId == _currentLineId;
-      polylines.add(
-        Polyline(
-          points: points,
-          strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
-          color: isCurrentPatrol ? Colors.green : Colors.orange,
-        ),
-      );
+      // Магистраль: только опоры без "/" в номере, линия не включает опоры отпаек
+      final mainList = list.where((e) => !(e['pole_number'] as String).contains('/')).toList();
+      mainList.sort((a, b) {
+        final na = (a['pole_number'] as String).trim();
+        final nb = (b['pole_number'] as String).trim();
+        final ia = int.tryParse(na);
+        final ib = int.tryParse(nb);
+        if (ia != null && ib != null) return ia.compareTo(ib);
+        return na.compareTo(nb);
+      });
+      if (mainList.length >= 2) {
+        final points = mainList.map((e) => LatLng(_toDouble(e['lat']), _toDouble(e['lng']))).toList();
+        polylines.add(
+          Polyline(
+            points: points,
+            strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
+            color: isCurrentPatrol ? Colors.green : Colors.red,
+          ),
+        );
+      }
+      // Отпайки: для каждой N/M — линия к корню/предыдущей (2/1→2; 2/2→2/1) и к следующей при наличии (2/1→2/2).
+      final tapList = list.where((e) => (e['pole_number'] as String).contains('/')).toList();
+      if (tapList.isEmpty) continue;
+      final byPoleNumber = {for (var e in list) (e['pole_number'] as String).trim(): e};
+      final segmentKeys = <String>{};
+      bool areNeighborsInBranch(String a, String b) {
+        final hasSlashA = a.contains('/');
+        final hasSlashB = b.contains('/');
+        if (!hasSlashA && !hasSlashB) return false;
+        if (hasSlashA != hasSlashB) {
+          final tap = hasSlashA ? a : b;
+          final main = hasSlashA ? b : a;
+          return main == tap.split('/').first.trim();
+        }
+        final partsA = a.split('/');
+        final partsB = b.split('/');
+        if (partsA.length < 2 || partsB.length < 2 || partsA[0].trim() != partsB[0].trim()) return false;
+        final sufA = int.tryParse(partsA[1].trim());
+        final sufB = int.tryParse(partsB[1].trim());
+        if (sufA == null || sufB == null) return false;
+        return (sufA - sufB).abs() == 1;
+      }
+      void addSegment(String keyA, String keyB) {
+        if (keyA == keyB) return;
+        if (!areNeighborsInBranch(keyA, keyB)) return;
+        final key = keyA.compareTo(keyB) < 0 ? '$keyA|$keyB' : '$keyB|$keyA';
+        if (segmentKeys.contains(key)) return;
+        segmentKeys.add(key);
+        final a = byPoleNumber[keyA];
+        final b = byPoleNumber[keyB];
+        if (a == null || b == null) return;
+        polylines.add(
+          Polyline(
+            points: [
+              LatLng(_toDouble(a['lat']), _toDouble(a['lng'])),
+              LatLng(_toDouble(b['lat']), _toDouble(b['lng'])),
+            ],
+            strokeWidth: isCurrentPatrol ? 5.5 : 4.0,
+            color: Colors.teal,
+          ),
+        );
+      }
+      for (final e in tapList) {
+        final pn = (e['pole_number'] as String).trim();
+        final parts = pn.split('/');
+        if (parts.length < 2) continue;
+        final root = parts[0].trim();
+        final suffix = int.tryParse(parts[1].trim());
+        if (suffix == null || suffix < 1) continue;
+        final prevKey = suffix == 1 ? root : '$root/${suffix - 1}';
+        final nextKey = '$root/${suffix + 1}';
+        if (byPoleNumber.containsKey(prevKey)) {
+          addSegment(pn, prevKey);
+        } else if (byPoleNumber.containsKey(root)) {
+          addSegment(pn, root);
+        }
+        if (byPoleNumber.containsKey(nextKey)) addSegment(pn, nextKey);
+      }
     }
 
     return polylines;
@@ -1301,7 +1563,12 @@ class _MapPageState extends ConsumerState<MapPage> {
             final plId = _toInt(properties?['line_id'] ?? properties?['power_line_id']);
             final isCurrentPatrolLine = _currentLineId != null && plId == _currentLineId;
             final criticality = properties?['criticality'] as String?;
-            final color = _poleColorByCriticality(criticality, isCurrentPatrolLine);
+            final isTap = properties?['is_tap'] == true ||
+                properties?['is_tap_pole'] == true ||
+                (properties?['pole_number']?.toString() ?? '').contains('/');
+            final color = isTap
+                ? Colors.teal
+                : _poleColorByCriticality(criticality, isCurrentPatrolLine);
             final poleNumber = properties?['pole_number']?.toString() ?? properties?['poleNumber']?.toString() ?? '';
 
             markers.add(
@@ -1324,24 +1591,13 @@ class _MapPageState extends ConsumerState<MapPage> {
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: Colors.white,
-                              width: isCurrentPatrolLine ? 3 : 2,
+                              width: isTap ? 3 : (isCurrentPatrolLine ? 3 : 2),
                             ),
-                            boxShadow: isCurrentPatrolLine
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.green.withOpacity(0.5),
-                                      blurRadius: 6,
-                                      spreadRadius: 1,
-                                    )
-                                  ]
-                                : (criticality != null
-                                    ? [
-                                        BoxShadow(
-                                          color: color.withOpacity(0.5),
-                                          blurRadius: 4,
-                                        )
-                                      ]
-                                    : null),
+                            boxShadow: isTap
+                                ? [BoxShadow(color: Colors.teal.withOpacity(0.6), blurRadius: 6, spreadRadius: 1)]
+                                : isCurrentPatrolLine
+                                    ? [BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 6, spreadRadius: 1)]
+                                    : (criticality != null ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)] : null),
                           ),
                           child: Icon(
                             MdiIcons.transmissionTower,
@@ -1429,10 +1685,10 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
 
           const iconSize = 64.0;
-          // Отдельно распознаём ЗН и разрядник, чтобы можно было задать
-          // точные точки начала (якоря) в их SVG.
+          // Отдельно распознаём ЗН, разрядник и разъединитель (якоря и/или поворот по пролёту).
           final isZn = iconPath.contains('/zn/');
           final isArrester = iconPath.contains('/arrester/');
+          final isDisconnector = iconPath.contains('/disconnector/');
           final isZnOrArrester = isZn || isArrester;
 
           // Иконка с заливкой (цвет по линии)
@@ -1522,28 +1778,26 @@ class _MapPageState extends ConsumerState<MapPage> {
           final angleValue = props?['angle_rad'];
           if (angleValue is num && isZn) {
             final angleRad = angleValue.toDouble();
-            // Базовая ориентация SVG ЗН — «линия строго вверх».
-            // Поэтому, чтобы шина совпала с направлением пролёта, вращаем
-            // на разность между направлением «вверх» (π/2) и углом пролёта.
             child = Transform.rotate(
               angle: math.pi / 2 - angleRad,
               alignment: Alignment.center,
               child: child,
             );
-            // Для ЗН не делаем дополнительный вынос: начало шины должно
-            // лежать прямо на линии.
           } else if (angleValue is num && isArrester) {
             final angleRad = angleValue.toDouble();
-            // Базовая ориентация SVG разрядника — «линия строго вверх».
-            // Поэтому, чтобы шина совпала с направлением пролёта, нужно
-            // повернуть на разность между направлением «вверх» (π/2) и углом пролёта.
             child = Transform.rotate(
               angle: math.pi / 2 - angleRad,
+              alignment: Alignment.center,
+              child: child,
+            );
+          } else if (angleValue is num && isDisconnector) {
+            final angleRad = angleValue.toDouble();
+            child = Transform.rotate(
+              angle: angleRad,
               alignment: Alignment.center,
               child: child,
             );
           } else if (isZnOrArrester) {
-            // Запасной вариант без угла: простое фиксированное смещение.
             child = Transform.translate(
               offset: const Offset(16, -8),
               child: child,
@@ -2351,12 +2605,173 @@ class _MapPageState extends ConsumerState<MapPage> {
         existingPolesCount: 0,
       ),
     );
-    if (mounted) {
-      await _loadMapData(forceFromServer: true);
-      if (result != null && result['success'] == true) {
+    if (!mounted) return;
+    if (result != null && result['action'] == 'start_tap') {
+      final tapPoleId = _toInt(result['tapPoleId']);
+      final lineId = _toInt(result['powerLineId']);
+      final tapPoleNumber = result['tapPoleNumber']?.toString();
+      if (tapPoleId != null && lineId != null) {
+        await _openCreatePoleFromTapPole(lineId, tapPoleId, tapPoleNumber);
+      }
+      return;
+    }
+    await _loadMapData(forceFromServer: true);
+    if (result != null && result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Изменения опоры сохранены'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  /// Открыть диалог создания опоры «Начать отпайку» по явным lineId и tapPoleId.
+  /// [tapPoleNumber] — номер исходной опоры (например "3") для нумерации опор отпайки как "3/1", "3/2".
+  Future<void> _openCreatePoleFromTapPole(int lineId, int tapPoleId, [String? tapPoleNumber]) async {
+    if (_currentLineId == null || _currentLineId != lineId) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Изменения опоры сохранены'),
+            content: Text('Начать отпайку можно только при обходе линии, к которой относится эта опора.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    if (_currentLocation == null) {
+      await _getCurrentLocation();
+    }
+    if (_currentLocation == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось получить местоположение для новой опоры.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final db = ref.read(drift_db.databaseProvider);
+    final linePoles = await db.getPolesByLine(lineId);
+    final existingPolesCount = linePoles.length;
+    if (!mounted) return;
+    // Запоминаем контекст отпайки: до завершения обхода следующие опоры будут 3/2, 3/3, ...
+    if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
+      setState(() => _currentTapRoot = tapPoleNumber);
+    }
+    // Нумерация опор отпайки: «номер исходной опоры/номер в отпайке» (3/1, 3/2, ...)
+    final String? initialPoleNumberForTap = (tapPoleNumber != null && tapPoleNumber.isNotEmpty)
+        ? '$tapPoleNumber/1'
+        : null;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => CreatePoleDialog(
+        lineId: lineId,
+        tapPoleId: tapPoleId,
+        startNewTap: true,
+        initialLatitude: _currentLocation?.latitude,
+        initialLongitude: _currentLocation?.longitude,
+        initialPoleNumber: initialPoleNumberForTap,
+        poleSequenceNumber: 1,
+        existingPolesCount: existingPolesCount,
+      ),
+    );
+    if (result != null && result['success'] == true && mounted) {
+      await _loadMapData();
+      final latRaw = result['y_position'] ?? result['latitude'];
+      final lngRaw = result['x_position'] ?? result['longitude'];
+      final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
+      final lng = lngRaw is num ? lngRaw.toDouble() : (lngRaw is double ? lngRaw : null);
+      if (lat != null && lng != null && _mapReady) {
+        _mapController.move(LatLng(lat, lng), 18.0);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Опора отпайки создана'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Открыть диалог создания опоры «Начать отпайку» от выбранной опоры на карте.
+  Future<void> _showCreatePoleFromTapPoleDialog() async {
+    final lineId = _toInt(_selectedObjectProperties?['line_id'] ?? _selectedObjectProperties?['power_line_id']);
+    final tapPoleId = _toInt(_selectedObjectProperties?['id']);
+    final tapPoleNumber = _selectedObjectProperties?['pole_number']?.toString();
+    if (lineId == null || tapPoleId == null) return;
+    _closeObjectProperties();
+    await _openCreatePoleFromTapPole(lineId, tapPoleId, tapPoleNumber);
+  }
+
+  /// Открыть диалог добавления следующей опоры в отпайку (выбрана опора с номером N/M).
+  /// Доступно только при обходе линии; номер новой опоры = N/(M+1), например 2/2 → 2/3.
+  Future<void> _showAddPoleToTapDialog() async {
+    final lineId = _toInt(_selectedObjectProperties?['line_id'] ?? _selectedObjectProperties?['power_line_id']);
+    final tapPoleId = _toInt(_selectedObjectProperties?['id']);
+    final poleNumber = _selectedObjectProperties?['pole_number']?.toString() ?? '';
+    if (lineId == null || tapPoleId == null || !poleNumber.contains('/')) return;
+    if (_currentLineId == null || _currentLineId != lineId) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Добавить опору в отпайку можно только при обходе линии, к которой относится эта опора.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    if (_currentLocation == null) await _getCurrentLocation();
+    if (_currentLocation == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось получить местоположение для новой опоры.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    // Номер новой опоры = N/(M+1), например при нажатии на 2/2 создаём 2/3.
+    final parts = poleNumber.split('/');
+    if (parts.length < 2) return;
+    final root = parts[0].trim();
+    final suffix = int.tryParse(parts[1].trim());
+    if (suffix == null) return;
+    final nextPoleNumber = '$root/${suffix + 1}';
+    final db = ref.read(drift_db.databaseProvider);
+    final linePoles = await db.getPolesByLine(lineId);
+    if (!mounted) return;
+    _closeObjectProperties();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => CreatePoleDialog(
+        lineId: lineId,
+        tapPoleId: tapPoleId,
+        startNewTap: false,
+        initialLatitude: _currentLocation?.latitude,
+        initialLongitude: _currentLocation?.longitude,
+        initialPoleNumber: nextPoleNumber,
+        poleSequenceNumber: linePoles.length + 1,
+        existingPolesCount: linePoles.length,
+      ),
+    );
+    if (result != null && result['success'] == true && mounted) {
+      await _loadMapData();
+      final latRaw = result['y_position'] ?? result['latitude'];
+      final lngRaw = result['x_position'] ?? result['longitude'];
+      final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
+      final lng = lngRaw is num ? lngRaw.toDouble() : (lngRaw is double ? lngRaw : null);
+      if (lat != null && lng != null && _mapReady) {
+        _mapController.move(LatLng(lat, lng), 18.0);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Опора отпайки добавлена'),
             backgroundColor: Colors.green,
           ),
         );
@@ -2401,15 +2816,40 @@ class _MapPageState extends ConsumerState<MapPage> {
     final linePoles = await db.getPolesByLine(selectedLineId);
     final existingPolesCount = linePoles.length;
 
-    // Номер опоры не подставляется по умолчанию — пользователь вводит сам.
-    // Показываем диалог создания опоры с текущими GPS координатами
+    // Подстановка номера: при отпайке — следующий в отпайке (3/2, 3/3, ...); иначе — следующий по магистрали (1, 2, 3, ...)
+    String? initialPoleNumber;
+    if (_currentTapRoot != null && _currentTapRoot!.isNotEmpty) {
+      final prefix = '${_currentTapRoot!.trim()}/';
+      int maxSuffix = 0;
+      for (final p in linePoles) {
+        final n = p.poleNumber;
+        if (n.startsWith(prefix)) {
+          final suffixStr = n.substring(prefix.length).trim();
+          final suffix = int.tryParse(suffixStr);
+          if (suffix != null && suffix > maxSuffix) maxSuffix = suffix;
+        }
+      }
+      initialPoleNumber = '$_currentTapRoot/${maxSuffix + 1}';
+    } else {
+      // Опоры магистрали (без "/" в номере): следующий номер = max(номера магистрали) + 1
+      int maxMainNum = 0;
+      for (final p in linePoles) {
+        final n = p.poleNumber;
+        if (!n.contains('/')) {
+          final numVal = int.tryParse(n.trim());
+          if (numVal != null && numVal > maxMainNum) maxMainNum = numVal;
+        }
+      }
+      initialPoleNumber = (maxMainNum + 1).toString();
+    }
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
         lineId: selectedLineId,
         initialLatitude: _currentLocation!.latitude,
         initialLongitude: _currentLocation!.longitude,
-        initialPoleNumber: null,
+        initialPoleNumber: initialPoleNumber,
         poleSequenceNumber: existingPolesCount + 1,
         existingPolesCount: existingPolesCount,
       ),
@@ -2661,6 +3101,25 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // Выполняем удаление
     try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOffline = connectivityResult == ConnectivityResult.none;
+
+      if (isOffline && _selectedObjectType == ObjectType.pole) {
+        await _deletePoleOfflineById(objectId);
+        _closeObjectProperties();
+        await _loadMapDataFromLocal();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$objectTypeLabel "$objectName" удалена (офлайн). Изменения синхронизируются при подключении.'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
       final apiService = ref.read(apiServiceProvider);
       
       switch (_selectedObjectType!) {
@@ -2708,7 +3167,37 @@ class _MapPageState extends ConsumerState<MapPage> {
         );
       }
     } on DioException catch (e) {
-      // Обработка ошибок Dio
+      // Офлайн: удаляем опору локально
+      final isConnectionError = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout;
+      if (isConnectionError && _selectedObjectType == ObjectType.pole && mounted) {
+        try {
+          await _deletePoleOfflineById(objectId);
+          _closeObjectProperties();
+          await _loadMapDataFromLocal();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Опора удалена локально. Синхронизация при подключении.'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Ошибка удаления опоры в офлайн-режиме'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      // Обработка ошибок Dio (онлайн)
       String errorMessage = 'Ошибка удаления объекта';
       
       if (e.response != null) {
@@ -3352,6 +3841,16 @@ class _MapPageState extends ConsumerState<MapPage> {
         );
       }
     }
+  }
+
+  /// Удаление опоры локально (офлайн): оборудование + опора из Drift.
+  Future<void> _deletePoleOfflineById(int poleId) async {
+    final db = ref.read(drift_db.databaseProvider);
+    final equipmentList = await db.getEquipmentByPole(poleId);
+    for (final eq in equipmentList) {
+      await db.deleteEquipment(eq.id);
+    }
+    await db.deletePole(poleId);
   }
 
   /// Удаление линии локально (офлайн): из Drift и при необходимости в очередь на удаление на сервере.

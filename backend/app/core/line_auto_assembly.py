@@ -232,6 +232,51 @@ async def find_previous_pole(
     return nearest_pole
 
 
+async def find_previous_pole_in_tap_branch(
+    db: AsyncSession,
+    power_line_id: int,
+    new_pole: Pole,
+) -> Optional[Pole]:
+    """
+    Для отпаечной опоры (номер вида N/M) найти предыдущую опору в рамках той же отпайки:
+    - для N/1 — опора N (корень отпайки);
+    - для N/M при M > 1 — опора N/(M-1).
+    Вспомогательные опоры отпаек соединяются последовательно в рамках одного обхода (одной ветки).
+    """
+    pn = (new_pole.pole_number or "").strip()
+    if "/" not in pn:
+        return None
+    parts = pn.split("/", 1)
+    root = parts[0].strip()
+    try:
+        suffix = int(parts[1].strip())
+    except (ValueError, IndexError):
+        return None
+    if suffix <= 0:
+        return None
+    # Корневая опора N (всегда может понадобиться как запасной вариант)
+    root_result = await db.execute(
+        select(Pole).where(
+            Pole.line_id == power_line_id,
+            Pole.pole_number == root,
+        ).options(selectinload(Pole.connectivity_nodes))
+    )
+    root_pole = root_result.scalar_one_or_none()
+    if suffix == 1:
+        # Первая опора отпайки: соединяем с корневой опорой N
+        return root_pole
+    # Иначе предыдущая в ветке — N/(M-1); если такой опоры нет — соединяем с корнем N
+    prev_number = f"{root}/{suffix - 1}"
+    result = await db.execute(
+        select(Pole).where(
+            Pole.line_id == power_line_id,
+            Pole.pole_number == prev_number,
+        ).options(selectinload(Pole.connectivity_nodes))
+    )
+    prev_in_branch = result.scalar_one_or_none()
+    return prev_in_branch if prev_in_branch is not None else root_pole
+
+
 async def is_branching_pole(db: AsyncSession, pole_id: int, power_line_id: int) -> bool:
     """
     Определить, является ли опора точкой ветвления
@@ -552,11 +597,12 @@ async def auto_create_span(
     conductor_material: Optional[str] = None,
     conductor_section: Optional[str] = None,
     is_tap: bool = False,
-    current_user_id: int = 1
+    current_user_id: int = 1,
+    from_pole_id: Optional[int] = None,
 ) -> Optional[Span]:
     """
     Автоматически создать пролёт от предыдущей опоры к новой опоре.
-    ConnectivityNode для опор создаётся по требованию (только отпаечные получают узел при создании опоры).
+    При «Начать отпайку» from_pole_id задаёт исходную опору — пролёт всегда от неё; последующие опоры ищут соседей.
     """
     from app.models.power_line import PowerLine
 

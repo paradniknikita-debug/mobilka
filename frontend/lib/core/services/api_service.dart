@@ -46,7 +46,11 @@ abstract class ApiService {
   Future<void> deletePowerLine(@Path('id') int id);
 
   @POST('/power-lines/{id}/poles')
-  Future<Pole> createPole(@Path('id') int powerLineId, @Body() PoleCreate poleData);
+  Future<Pole> createPole(
+    @Path('id') int powerLineId,
+    @Body() PoleCreate poleData, {
+    @Query('from_pole_id') int? fromPoleId,
+  });
 
   @PUT('/power-lines/{powerLineId}/poles/{poleId}')
   Future<Pole> updatePole(
@@ -434,7 +438,8 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<void> deletePowerLine(int id) => _delegate.deletePowerLine(id);
 
   @override
-  Future<Pole> createPole(int powerLineId, PoleCreate poleData) => _delegate.createPole(powerLineId, poleData);
+  Future<Pole> createPole(int powerLineId, PoleCreate poleData, {int? fromPoleId}) =>
+      _delegate.createPole(powerLineId, poleData, fromPoleId: fromPoleId);
 
   @override
   Future<Pole> updatePole(int powerLineId, int poleId, PoleCreate poleData) =>

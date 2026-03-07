@@ -377,7 +377,7 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["is_tap_pole"] = True
                 # Оранжевый = отпайка не начата, зелёный = от отпаечной уже есть опоры
                 properties["tap_branch_has_poles"] = pole.id in tap_pole_ids_with_branch
-            
+
             # Убеждаемся, что координаты - это числа, а не None
             feature = {
                 "type": "Feature",

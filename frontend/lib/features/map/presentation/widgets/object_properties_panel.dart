@@ -10,6 +10,10 @@ class ObjectPropertiesPanel extends StatelessWidget {
   final VoidCallback? onAutoCreateSpans;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  /// Открыть диалог создания опоры «Начать отпайку» от этой опоры.
+  final VoidCallback? onStartTapPole;
+  /// Открыть диалог добавления следующей опоры в отпайку (только для опор с номером вида N/M).
+  final VoidCallback? onAddPoleToTap;
 
   const ObjectPropertiesPanel({
     super.key,
@@ -20,9 +24,11 @@ class ObjectPropertiesPanel extends StatelessWidget {
     this.onAutoCreateSpans,
     this.onEdit,
     this.onDelete,
+    this.onStartTapPole,
+    this.onAddPoleToTap,
   });
 
-  /// Безопасное форматирование числа для отображения координат (избегаем "null is not a subtype of num").
+  /// Безопасное форматирование числа для отображения координат.
   static String _formatCoord(dynamic v) {
     if (v == null) return 'N/A';
     if (v is num) return v.toStringAsFixed(6);
@@ -31,6 +37,19 @@ class ObjectPropertiesPanel extends StatelessWidget {
       return n != null ? n.toStringAsFixed(6) : v;
     }
     return v.toString();
+  }
+
+  static bool _isTapPole(Map<String, dynamic> props) {
+    final n = props['pole_number'] ?? props['poleNumber'];
+    return n is String && n.contains('/');
+  }
+
+  static int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
   }
 
   String get _title {
@@ -46,7 +65,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lineId = objectProperties['line_id'] ?? objectProperties['power_line_id'] as int?;
+    final lineId = _toInt(objectProperties['line_id'] ?? objectProperties['power_line_id']);
 
     return Container(
       decoration: BoxDecoration(
@@ -145,6 +164,41 @@ class ObjectPropertiesPanel extends StatelessWidget {
                         label: const Text('Начать формирование линии'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (onStartTapPole != null &&
+                      lineId != null &&
+                      objectProperties['id'] != null) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onStartTapPole,
+                        icon: const Icon(Icons.call_split),
+                        label: const Text('Начать отпайку'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (onAddPoleToTap != null &&
+                      lineId != null &&
+                      objectProperties['id'] != null &&
+                      _isTapPole(objectProperties)) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onAddPoleToTap,
+                        icon: const Icon(Icons.add_road),
+                        label: const Text('Добавить опору в отпайку'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
                           foregroundColor: Colors.white,
                         ),
                       ),

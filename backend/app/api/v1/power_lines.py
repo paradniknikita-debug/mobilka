@@ -825,6 +825,7 @@ async def update_power_line(
 async def create_pole(
     power_line_id: int,
     pole_data: PoleCreate,
+    from_pole_id: Optional[int] = Query(None, description="При «Начать отпайку» — ID исходной опоры, с которой связываем новую"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1340,6 +1341,9 @@ async def update_pole(
         pole.tap_pole_id = pole_dict.get("tap_pole_id")
     if "pole_number" in pole_dict and pole_dict["pole_number"] is not None:
         pole_dict["pole_number"] = normalize_pole_number(pole_dict["pole_number"])
+    # Явно обновляем название опоры (pole_number), чтобы оно всегда сохранялось при редактировании
+    if pole_data.pole_number is not None:
+        pole.pole_number = pole_data.pole_number
     for key, value in pole_dict.items():
         if hasattr(pole, key) and key != "is_tap" and value is not None:
             setattr(pole, key, value)
