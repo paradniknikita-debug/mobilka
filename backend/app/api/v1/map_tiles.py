@@ -95,56 +95,126 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                 "geometry": {"type": "Point", "coordinates": [27.5615, 53.9045]},
             }
 
-        # Создаем LineString из координат опор, если есть минимум 2 опоры с валидными координатами
+        # Строим геометрию: магистраль (опоры без "/" в номере) и отпайки (от опоры N линия N -> N/1 -> N/2 ...)
         if len(power_line.poles) >= 2:
-            coordinates = []
-            for pole in sorted(power_line.poles, key=lambda t: t.pole_number):
-                # Получаем координаты опоры через helper-методы модели (учитывают Location/PositionPoint и колонки x_position/y_position)
+
+            def _pole_coords(pole):
                 try:
-                    longitude = pole.get_longitude() if hasattr(pole, "get_longitude") else getattr(pole, "x_position", None)
-                    latitude = pole.get_latitude() if hasattr(pole, "get_latitude") else getattr(pole, "y_position", None)
-                except Exception:
-                    longitude = None
-                    latitude = None
-                
-                # Убеждаемся, что координаты - это числа
-                if longitude is not None and latitude is not None:
-                    try:
-                        longitude = float(longitude)
-                        latitude = float(latitude)
-                        # Проверяем, что координаты валидны (не NaN, не Infinity)
-                        if isinstance(longitude, (int, float)) and isinstance(latitude, (int, float)):
-                            if (longitude != float('inf') and latitude != float('inf') and 
-                                longitude != float('-inf') and latitude != float('-inf') and
-                                not math.isnan(longitude) and not math.isnan(latitude)):
-                                coordinates.append([float(longitude), float(latitude)])  # Явное приведение к float
-                    except (TypeError, ValueError):
-                        continue  # Пропускаем опоры с невалидными координатами
-            
-            # Включаем только если есть минимум 2 точки с валидными координатами; иначе — в дереве показываем как Point по умолчанию
-            if len(coordinates) >= 2:
-                # Создаем properties, исключая None значения для числовых полей
-                properties = {
-                    "id": int(power_line.id),
-                    "name": str(power_line.name) if power_line.name else "",
-                    "status": str(power_line.status) if power_line.status else "active",
-                    "pole_count": int(len(power_line.poles))
-                }
-                # Добавляем voltage_level только если он не None
-                if power_line.voltage_level is not None:
-                    properties["voltage_level"] = float(power_line.voltage_level)
-                
-                feature = {
+                    lon = pole.get_longitude() if hasattr(pole, "get_longitude") else getattr(pole, "x_position", None)
+                    lat = pole.get_latitude() if hasattr(pole, "get_latitude") else getattr(pole, "y_position", None)
+                    if lon is not None and lat is not None:
+                        lon, lat = float(lon), float(lat)
+                        if not (math.isnan(lon) or math.isnan(lat) or abs(lon) == float('inf') or abs(lat) == float('inf')):
+                            return [lon, lat]
+                except (TypeError, ValueError):
+                    pass
+                return None
+
+            base_props = {
+                "id": int(power_line.id),
+                "name": str(power_line.name) if power_line.name else "",
+                "status": str(power_line.status) if power_line.status else "active",
+                "pole_count": int(len(power_line.poles)),
+            }
+            if power_line.voltage_level is not None:
+                base_props["voltage_level"] = float(power_line.voltage_level)
+
+            added_any = False
+            # Магистраль: только опоры с номером без "/" (1, 2, 3 ...), линия не включает опоры отпаек
+            main_poles = [p for p in power_line.poles if "/" not in (p.pole_number or "")]
+            def _main_pole_sort_key(p):
+                n = (p.pole_number or "").strip()
+                try:
+                    return (0, int(n))  # числовая сортировка: 1, 2, 3, 10
+                except ValueError:
+                    return (1, n)  # не число — в конец, по строке
+            main_coords = []
+            for pole in sorted(main_poles, key=_main_pole_sort_key):
+                c = _pole_coords(pole)
+                if c:
+                    main_coords.append(c)
+            if len(main_coords) >= 2:
+                features.append({
                     "type": "Feature",
-                    "properties": properties,
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": coordinates
-                    }
-                }
-                features.append(feature)
-            else:
-                # Мало точек с координатами — ЛЭП всё равно показываем в дереве (геометрия по умолчанию)
+                    "properties": {**base_props, "is_tap": False},
+                    "geometry": {"type": "LineString", "coordinates": main_coords},
+                })
+                added_any = True
+
+            # Отпайки: для каждой N/M — отрезок к корню/предыдущей (2/1→2, 2/2→2/1) и к следующей при наличии (2/1→2/2).
+            # 2/18: если 2/17 есть — к 2/17, если 2/19 есть — к 2/19; иначе к 2.
+            tap_poles = [p for p in power_line.poles if p.pole_number and "/" in p.pole_number]
+            if tap_poles:
+                poles_by_num = {(p.pole_number or "").strip(): p for p in power_line.poles if (p.pole_number or "").strip()}
+                seen_segments = set()
+
+                def are_neighbors(key_a: str, key_b: str) -> bool:
+                    """От опор отпайки не строим линии к основным; только к корню своей ветки (2/1 — только с 2)."""
+                    parts_a, parts_b = key_a.split("/", 1), key_b.split("/", 1)
+                    root_a, root_b = parts_a[0].strip(), parts_b[0].strip()
+                    tap_a = len(parts_a) >= 2
+                    tap_b = len(parts_b) >= 2
+                    if tap_a and tap_b:
+                        if root_a != root_b:
+                            return False
+                        try:
+                            suf_a, suf_b = int(parts_a[1].strip()), int(parts_b[1].strip())
+                            return abs(suf_a - suf_b) == 1
+                        except ValueError:
+                            return False
+                    if not tap_a and not tap_b:
+                        return False
+                    tap_key, main_key = (key_a, key_b) if tap_a else (key_b, key_a)
+                    root_tap = (tap_key.split("/", 1)[0] or "").strip()
+                    return main_key == root_tap
+
+                def add_segment(key_a, key_b):
+                    if key_a == key_b:
+                        return
+                    if not are_neighbors(key_a, key_b):
+                        return
+                    seg = (key_a, key_b) if key_a < key_b else (key_b, key_a)
+                    if seg in seen_segments:
+                        return
+                    seen_segments.add(seg)
+                    pa, pb = poles_by_num.get(key_a), poles_by_num.get(key_b)
+                    if not pa or not pb:
+                        return
+                    ca, cb = _pole_coords(pa), _pole_coords(pb)
+                    if not ca or not cb:
+                        return
+                    features.append({
+                        "type": "Feature",
+                        "properties": {**base_props, "is_tap": True},
+                        "geometry": {"type": "LineString", "coordinates": [ca, cb]},
+                    })
+
+                for p in tap_poles:
+                    pn = (p.pole_number or "").strip()
+                    parts = pn.split("/", 1)
+                    if len(parts) < 2:
+                        continue
+                    root, suffix_str = parts[0].strip(), parts[1].strip()
+                    try:
+                        suffix = int(suffix_str)
+                    except ValueError:
+                        continue
+                    if suffix < 1:
+                        continue
+                    prev_key = root if suffix == 1 else f"{root}/{suffix - 1}"
+                    next_key = f"{root}/{suffix + 1}"
+                    if prev_key in poles_by_num:
+                        add_segment(pn, prev_key)
+                    elif root in poles_by_num:
+                        # Нет предыдущей в ветке (например 2/16) — связываем с корнем 2
+                        add_segment(pn, root)
+                    if next_key in poles_by_num:
+                        add_segment(pn, next_key)
+
+                if seen_segments:
+                    added_any = True
+
+            if not added_any:
                 features.append(_default_point_feature())
         elif len(power_line.poles) == 1:
             # Если есть только одна опора, создаем Point
@@ -301,7 +371,10 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["material"] = str(pole.material)
             if pole.year_installed is not None:
                 properties["year_installed"] = int(pole.year_installed)
-            
+            # Отпаечная опора — показывать кнопку «Начать отпайку» в панели и карточке
+            if getattr(pole, 'is_tap_pole', False):
+                properties["is_tap_pole"] = True
+
             # Убеждаемся, что координаты - это числа, а не None
             feature = {
                 "type": "Feature",

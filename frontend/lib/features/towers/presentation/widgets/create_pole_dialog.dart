@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../../core/services/api_service.dart';
-import '../../../../core/database/database.dart' hide Equipment;
+import '../../../../core/database/database.dart' hide Equipment, Pole;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/pole_reference_data.dart';
@@ -46,6 +46,10 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
   final int? poleSequenceNumber;
   final String? initialPoleNumber;
   final int existingPolesCount;
+  /// ID отпаечной опоры: при открытии сценария «Начать отпайку».
+  final int? tapPoleId;
+  /// true = открыт сценарий «Начать новую отпайку» от отпаечной опоры.
+  final bool startNewTap;
 
   const CreatePoleDialog({
     super.key,
@@ -56,6 +60,8 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
     this.poleSequenceNumber,
     this.initialPoleNumber,
     this.existingPolesCount = 0,
+    this.tapPoleId,
+    this.startNewTap = false,
   });
 
   bool get isEditMode => poleId != null;
@@ -257,10 +263,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
     if (widget.initialPoleNumber != null && widget.initialPoleNumber!.isNotEmpty) {
       _poleNumber = widget.initialPoleNumber!;
-      _poleNumberController.text = _poleNumber;
+      _poleNumberController.text = 'Опора $_poleNumber';
     } else if (widget.poleSequenceNumber != null) {
       _poleNumber = widget.poleSequenceNumber!.toString();
-      _poleNumberController.text = _poleNumber;
+      _poleNumberController.text = 'Опора $_poleNumber';
     }
     if (widget.initialLatitude != null && widget.initialLongitude != null) {
       _latitude = widget.initialLatitude;
@@ -275,6 +281,44 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _loadAutofillTemplate();
       });
     }
+    if (widget.startNewTap) {
+      _isTap = true;
+    }
+  }
+
+  void _applyLoadedPoleToState(Pole pole, List<Equipment> equipmentList) {
+    if (!mounted) return;
+    setState(() {
+      _poleNumber = pole.poleNumber;
+      _poleNumberController.text = 'Опора ${pole.poleNumber}';
+      _materialController.text = pole.material ?? '';
+      _poleType = pole.poleType;
+      _latitude = pole.yPosition;
+      _longitude = pole.xPosition;
+      _height = pole.height;
+      _foundationType = pole.foundationType;
+      _material = pole.material;
+      _yearInstalled = pole.yearInstalled;
+      _condition = pole.condition;
+      _notes = pole.notes;
+      _conductorType = pole.conductorType;
+      _conductorMaterial = pole.conductorMaterial;
+      _conductorSection = pole.conductorSection;
+      _isTap = pole.isTapPole;
+      _loadedEquipment = equipmentList;
+      for (final eq in equipmentList) {
+        final typeLower = eq.equipmentType.trim().toLowerCase();
+        for (var i = 0; i < _equipmentCategories.length; i++) {
+          final catTitle = _equipmentCategories[i].title;
+          final catType = EquipmentReferenceData.categoryToEquipmentType[catTitle]?.trim().toLowerCase();
+          if (catType != null && (typeLower == catType || typeLower.contains(catType) || catType.contains(typeLower))) {
+            _equipmentInstalled[i] = true;
+            break;
+          }
+        }
+      }
+      _isLoading = false;
+    });
   }
 
   Future<void> _loadPoleForEdit() async {
@@ -295,46 +339,211 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           }
         }
       }
-      if (!mounted) return;
-      setState(() {
-        _poleNumber = pole.poleNumber;
-        _poleNumberController.text = pole.poleNumber;
-        _materialController.text = pole.material ?? '';
-        _poleType = pole.poleType;
-        _latitude = pole.yPosition;
-        _longitude = pole.xPosition;
-        _height = pole.height;
-        _foundationType = pole.foundationType;
-        _material = pole.material;
-        _yearInstalled = pole.yearInstalled;
-        _condition = pole.condition;
-        _notes = pole.notes;
-        _conductorType = pole.conductorType;
-        _conductorMaterial = pole.conductorMaterial;
-        _conductorSection = pole.conductorSection;
-        _isTap = pole.isTapPole;
-        _loadedEquipment = equipmentList;
-        for (final eq in equipmentList) {
-          final typeLower = eq.equipmentType.trim().toLowerCase();
-          for (var i = 0; i < _equipmentCategories.length; i++) {
-            final catTitle = _equipmentCategories[i].title;
-            final catType = EquipmentReferenceData.categoryToEquipmentType[catTitle]?.trim().toLowerCase();
-            if (catType != null && (typeLower == catType || typeLower.contains(catType) || catType.contains(typeLower))) {
-              _equipmentInstalled[i] = true;
-              break;
-            }
-          }
-        }
-        _isLoading = false;
-      });
+      _applyLoadedPoleToState(pole, equipmentList);
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки опоры: $e'), backgroundColor: Colors.red),
+      // Офлайн или ошибка API — загружаем из локальной БД
+      if (kDebugMode) {
+        print('CreatePoleDialog: загрузка опоры из БД (офлайн): $e');
+      }
+      try {
+        final db = ref.read(databaseProvider);
+        final driftPole = await db.getPole(widget.poleId!);
+        if (driftPole == null || !mounted) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Опора не найдена в локальных данных'), backgroundColor: Colors.red),
+            );
+          }
+          return;
+        }
+        final equipmentDataList = await db.getEquipmentByPole(widget.poleId!);
+        final equipmentList = equipmentDataList.map((eq) => Equipment(
+          id: eq.id,
+          poleId: eq.poleId,
+          equipmentType: eq.equipmentType,
+          name: eq.name,
+          manufacturer: eq.manufacturer,
+          model: eq.model,
+          serialNumber: eq.serialNumber,
+          yearManufactured: eq.yearManufactured,
+          installationDate: eq.installationDate,
+          condition: eq.condition,
+          notes: eq.notes,
+          createdBy: eq.createdBy,
+          createdAt: eq.createdAt,
+          updatedAt: eq.updatedAt,
+        )).toList();
+        final poleApi = Pole(
+          id: driftPole.id,
+          powerLineId: driftPole.powerLineId,
+          poleNumber: driftPole.poleNumber,
+          xPosition: driftPole.xPosition,
+          yPosition: driftPole.yPosition,
+          poleType: driftPole.poleType,
+          height: driftPole.height,
+          foundationType: driftPole.foundationType,
+          material: driftPole.material,
+          yearInstalled: driftPole.yearInstalled,
+          condition: driftPole.condition,
+          notes: driftPole.notes,
+          createdBy: driftPole.createdBy,
+          createdAt: driftPole.createdAt,
+          updatedAt: driftPole.updatedAt,
+          isTapPole: driftPole.poleNumber.contains('/'),
         );
+        _applyLoadedPoleToState(poleApi, equipmentList);
+      } catch (dbErr) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка загрузки опоры: $dbErr'), backgroundColor: Colors.red),
+          );
+        }
       }
     }
+  }
+
+  /// Сохранить редактирование опоры в локальную БД (офлайн).
+  Future<void> _savePoleEditToLocalDb() async {
+    final db = ref.read(databaseProvider);
+    final prefs = ref.read(prefsProvider);
+    final userId = prefs.getInt(AppConfig.userIdKey) ?? 0;
+    final now = DateTime.now();
+    final poleId = widget.poleId!;
+
+    final existing = await db.getPole(poleId);
+    if (existing == null) return;
+
+    await db.updatePole(PolesCompanion(
+      id: drift.Value(poleId),
+      powerLineId: drift.Value(widget.powerLineId),
+      poleNumber: drift.Value(_poleNumber),
+      xPosition: drift.Value(_longitude!),
+      yPosition: drift.Value(_latitude!),
+      poleType: drift.Value(_poleType),
+      height: drift.Value(_height),
+      foundationType: drift.Value(_foundationType),
+      material: drift.Value(_material),
+      yearInstalled: drift.Value(_yearInstalled),
+      condition: drift.Value(_condition),
+      notes: drift.Value(_notes),
+      cardComment: _cardCommentController.text.trim().isEmpty
+          ? const drift.Value.absent()
+          : drift.Value(_cardCommentController.text.trim()),
+      cardCommentAttachment: _cardCommentAttachments.isEmpty
+          ? const drift.Value.absent()
+          : drift.Value(jsonEncode(_cardCommentAttachments)),
+      createdBy: drift.Value(existing.createdBy),
+      createdAt: drift.Value(existing.createdAt),
+      updatedAt: drift.Value(now),
+      isLocal: drift.Value(existing.isLocal),
+      needsSync: const drift.Value(true),
+    ));
+
+    // Удаляем оборудование, снятое с опоры
+    for (final eq in _loadedEquipment) {
+      final kept = _pendingEquipment.any((p) =>
+          p.equipmentType == eq.equipmentType && p.name == eq.name);
+      if (!kept) {
+        await db.deleteEquipment(eq.id);
+      }
+    }
+
+    // Обновляем или добавляем оборудование
+    for (final eq in _pendingEquipment) {
+      final matching = _loadedEquipment.where((e) =>
+          e.equipmentType == eq.equipmentType && e.name == eq.name).toList();
+      final existingEq = matching.isEmpty ? null : matching.first;
+      final existingEqData = existingEq != null ? await db.getEquipment(existingEq.id) : null;
+      final notesParts = <String>[];
+      if (eq.quantity > 1) notesParts.add('количество: ${eq.quantity}');
+      if (eq.defect != null && eq.defect!.isNotEmpty) {
+        notesParts.add('дефект: ${eq.defect}');
+        if (eq.criticality != null) notesParts.add('критичность: ${eq.criticality}');
+      }
+      final notesStr = notesParts.isEmpty ? null : notesParts.join('; ');
+
+      if (existingEqData != null) {
+        await db.updateEquipment(EquipmentCompanion(
+          id: drift.Value(existingEqData.id),
+          poleId: drift.Value(poleId),
+          equipmentType: drift.Value(eq.equipmentType),
+          name: drift.Value(eq.name),
+          quantity: drift.Value(eq.quantity),
+          defect: eq.defect != null && eq.defect!.isNotEmpty
+              ? drift.Value(eq.defect!)
+              : const drift.Value.absent(),
+          criticality: eq.criticality != null && eq.criticality!.isNotEmpty
+              ? drift.Value(eq.criticality!)
+              : const drift.Value.absent(),
+          defectAttachment: eq.defectAttachment != null && eq.defectAttachment!.isNotEmpty
+              ? drift.Value(eq.defectAttachment!)
+              : const drift.Value.absent(),
+          manufacturer: drift.Value(existingEqData.manufacturer),
+          model: drift.Value(existingEqData.model),
+          serialNumber: drift.Value(existingEqData.serialNumber),
+          yearManufactured: drift.Value(existingEqData.yearManufactured),
+          installationDate: drift.Value(existingEqData.installationDate),
+          condition: const drift.Value('good'),
+          notes: drift.Value(notesStr),
+          createdBy: drift.Value(existingEqData.createdBy),
+          createdAt: drift.Value(existingEqData.createdAt),
+          updatedAt: drift.Value(now),
+          isLocal: drift.Value(existingEqData.isLocal),
+          needsSync: const drift.Value(true),
+        ));
+      } else {
+        int eqLocalId = prefs.getInt(AppConfig.lastLocalEquipmentIdKey) ?? -1;
+        eqLocalId--;
+        await prefs.setInt(AppConfig.lastLocalEquipmentIdKey, eqLocalId);
+        await db.insertEquipment(EquipmentCompanion.insert(
+          id: drift.Value(eqLocalId),
+          poleId: poleId,
+          equipmentType: eq.equipmentType,
+          name: eq.name,
+          quantity: drift.Value(eq.quantity),
+          defect: eq.defect != null && eq.defect!.isNotEmpty
+              ? drift.Value(eq.defect!)
+              : const drift.Value.absent(),
+          criticality: eq.criticality != null && eq.criticality!.isNotEmpty
+              ? drift.Value(eq.criticality!)
+              : const drift.Value.absent(),
+          defectAttachment: eq.defectAttachment != null && eq.defectAttachment!.isNotEmpty
+              ? drift.Value(eq.defectAttachment!)
+              : const drift.Value.absent(),
+          condition: 'good',
+          notes: drift.Value(notesStr),
+          createdBy: userId,
+          createdAt: now,
+          updatedAt: drift.Value(now),
+          isLocal: const drift.Value(true),
+          needsSync: const drift.Value(true),
+        ));
+      }
+    }
+
+    if (mounted) {
+      _saveAutofillTemplate();
+      Navigator.of(context).pop(<String, dynamic>{'success': true, 'x_position': _longitude!, 'y_position': _latitude!});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Изменения опоры сохранены (офлайн). Синхронизация при подключении.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  /// Из текста поля «Название опоры» извлекает номер для API (например «Опора 3» → «3», «Опора 3/1» → «3/1»).
+  static String _parsePoleNumberFromField(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return '';
+    const prefix = 'Опора ';
+    if (t.length > prefix.length && t.toLowerCase().startsWith(prefix.toLowerCase())) {
+      return t.substring(prefix.length).trim();
+    }
+    return t;
   }
 
   @override
@@ -530,7 +739,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     setState(() => _isLoading = true);
     try {
       final apiService = ref.read(apiServiceProvider);
-      _poleNumber = _poleNumberController.text.trim();
+      _poleNumber = _parsePoleNumberFromField(_poleNumberController.text);
       _material = _materialController.text.trim().isEmpty ? null : _materialController.text.trim();
       final poleData = PoleCreate(
         poleNumber: _poleNumber,
@@ -543,97 +752,115 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         yearInstalled: _yearInstalled,
         condition: _condition,
         notes: _notes?.isEmpty ?? true ? null : _notes,
-        isTap: _isTap,
+        isTap: widget.startNewTap ? true : _isTap,
         conductorType: _conductorType,
         conductorMaterial: _conductorMaterial,
         conductorSection: _conductorSection,
       );
 
       if (widget.isEditMode && widget.poleId != null) {
-        // Редактирование: обновляем существующую опору, не создаём новую
-        final updatedPole = await apiService.updatePole(widget.powerLineId, widget.poleId!, poleData);
+        // Редактирование: обновляем существующую опору (API или локально при офлайне)
         try {
-          final db = ref.read(databaseProvider);
-          await db.updatePole(PolesCompanion(
-            id: drift.Value(updatedPole.id),
-            powerLineId: drift.Value(updatedPole.powerLineId),
-            poleNumber: drift.Value(updatedPole.poleNumber),
-            xPosition: drift.Value(updatedPole.xPosition),
-            yPosition: drift.Value(updatedPole.yPosition),
-            poleType: drift.Value(updatedPole.poleType),
-            height: drift.Value(updatedPole.height),
-            foundationType: drift.Value(updatedPole.foundationType),
-            material: drift.Value(updatedPole.material),
-            yearInstalled: drift.Value(updatedPole.yearInstalled),
-            condition: drift.Value(updatedPole.condition),
-            notes: drift.Value(updatedPole.notes),
-            cardComment: _cardCommentController.text.trim().isEmpty
-                ? const drift.Value.absent()
-                : drift.Value(_cardCommentController.text.trim()),
-            cardCommentAttachment: _cardCommentAttachments.isEmpty
-                ? const drift.Value.absent()
-                : drift.Value(jsonEncode(_cardCommentAttachments)),
-            createdBy: drift.Value(updatedPole.createdBy),
-            createdAt: drift.Value(updatedPole.createdAt),
-            updatedAt: drift.Value(updatedPole.updatedAt),
-            isLocal: const drift.Value(false),
-            needsSync: const drift.Value(false),
-          ));
-          for (final eq in _pendingEquipment) {
-            try {
-              final notesParts = <String>[];
-              if (eq.quantity > 1) notesParts.add('количество: ${eq.quantity}');
-              if (eq.defect != null && eq.defect!.isNotEmpty) {
-                notesParts.add('дефект: ${eq.defect}');
-                if (eq.criticality != null) notesParts.add('критичность: ${eq.criticality}');
-              }
-              final createdEq = await apiService.createEquipment(
-                updatedPole.id,
-                EquipmentCreate(
-                  equipmentType: eq.equipmentType,
-                  name: eq.name,
-                  condition: 'good',
-                  notes: notesParts.isEmpty ? null : notesParts.join('; '),
-                ),
-              );
-              final db = ref.read(databaseProvider);
-              await db.insertEquipmentOrReplace(EquipmentCompanion.insert(
-                id: drift.Value(createdEq.id),
-                poleId: createdEq.poleId,
-                equipmentType: createdEq.equipmentType,
-                name: createdEq.name,
-                quantity: drift.Value(eq.quantity),
-                defect: eq.defect != null && eq.defect!.isNotEmpty
-                    ? drift.Value(eq.defect!)
-                    : const drift.Value.absent(),
-                criticality: eq.criticality != null && eq.criticality!.isNotEmpty
-                    ? drift.Value(eq.criticality!)
-                    : const drift.Value.absent(),
-                defectAttachment: eq.defectAttachment != null && eq.defectAttachment!.isNotEmpty
-                    ? drift.Value(eq.defectAttachment!)
-                    : const drift.Value.absent(),
-                condition: createdEq.condition,
-                notes: drift.Value(createdEq.notes),
-                createdBy: createdEq.createdBy,
-                createdAt: createdEq.createdAt,
-                updatedAt: drift.Value(createdEq.updatedAt),
-                isLocal: const drift.Value(false),
-                needsSync: const drift.Value(false),
-              ));
-            } catch (_) {}
+          final updatedPole = await apiService.updatePole(widget.powerLineId, widget.poleId!, poleData);
+          try {
+            final db = ref.read(databaseProvider);
+            await db.updatePole(PolesCompanion(
+              id: drift.Value(updatedPole.id),
+              powerLineId: drift.Value(updatedPole.powerLineId),
+              poleNumber: drift.Value(updatedPole.poleNumber),
+              xPosition: drift.Value(updatedPole.xPosition),
+              yPosition: drift.Value(updatedPole.yPosition),
+              poleType: drift.Value(updatedPole.poleType),
+              height: drift.Value(updatedPole.height),
+              foundationType: drift.Value(updatedPole.foundationType),
+              material: drift.Value(updatedPole.material),
+              yearInstalled: drift.Value(updatedPole.yearInstalled),
+              condition: drift.Value(updatedPole.condition),
+              notes: drift.Value(updatedPole.notes),
+              cardComment: _cardCommentController.text.trim().isEmpty
+                  ? const drift.Value.absent()
+                  : drift.Value(_cardCommentController.text.trim()),
+              cardCommentAttachment: _cardCommentAttachments.isEmpty
+                  ? const drift.Value.absent()
+                  : drift.Value(jsonEncode(_cardCommentAttachments)),
+              createdBy: drift.Value(updatedPole.createdBy),
+              createdAt: drift.Value(updatedPole.createdAt),
+              updatedAt: drift.Value(updatedPole.updatedAt),
+              isLocal: const drift.Value(false),
+              needsSync: const drift.Value(false),
+            ));
+            for (final eq in _pendingEquipment) {
+              try {
+                final notesParts = <String>[];
+                if (eq.quantity > 1) notesParts.add('количество: ${eq.quantity}');
+                if (eq.defect != null && eq.defect!.isNotEmpty) {
+                  notesParts.add('дефект: ${eq.defect}');
+                  if (eq.criticality != null) notesParts.add('критичность: ${eq.criticality}');
+                }
+                final createdEq = await apiService.createEquipment(
+                  updatedPole.id,
+                  EquipmentCreate(
+                    equipmentType: eq.equipmentType,
+                    name: eq.name,
+                    condition: 'good',
+                    notes: notesParts.isEmpty ? null : notesParts.join('; '),
+                  ),
+                );
+                final db2 = ref.read(databaseProvider);
+                await db2.insertEquipmentOrReplace(EquipmentCompanion.insert(
+                  id: drift.Value(createdEq.id),
+                  poleId: createdEq.poleId,
+                  equipmentType: createdEq.equipmentType,
+                  name: createdEq.name,
+                  quantity: drift.Value(eq.quantity),
+                  defect: eq.defect != null && eq.defect!.isNotEmpty
+                      ? drift.Value(eq.defect!)
+                      : const drift.Value.absent(),
+                  criticality: eq.criticality != null && eq.criticality!.isNotEmpty
+                      ? drift.Value(eq.criticality!)
+                      : const drift.Value.absent(),
+                  defectAttachment: eq.defectAttachment != null && eq.defectAttachment!.isNotEmpty
+                      ? drift.Value(eq.defectAttachment!)
+                      : const drift.Value.absent(),
+                  condition: createdEq.condition,
+                  notes: drift.Value(createdEq.notes),
+                  createdBy: createdEq.createdBy,
+                  createdAt: createdEq.createdAt,
+                  updatedAt: drift.Value(createdEq.updatedAt),
+                  isLocal: const drift.Value(false),
+                  needsSync: const drift.Value(false),
+                ));
+              } catch (_) {}
+            }
+          } catch (_) {}
+          if (mounted) {
+            _saveAutofillTemplate();
+            Navigator.of(context).pop(<String, dynamic>{'success': true, 'x_position': _longitude!, 'y_position': _latitude!});
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Изменения опоры сохранены'), backgroundColor: Colors.green),
+            );
           }
-        } catch (_) {}
-        if (mounted) {
-          _saveAutofillTemplate();
-          Navigator.of(context).pop(<String, dynamic>{'success': true, 'x_position': _longitude!, 'y_position': _latitude!});
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Изменения опоры сохранены'), backgroundColor: Colors.green),
-          );
+          return;
+        } on DioException catch (e) {
+          final isOffline = e.type == DioExceptionType.connectionError ||
+              e.type == DioExceptionType.connectionTimeout;
+          if (isOffline) {
+            await _savePoleEditToLocalDb();
+            return;
+          }
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Ошибка сохранения опоры: ${e.message ?? e.toString()}'), backgroundColor: Colors.red),
+            );
+          }
+          return;
         }
-        return;
       }
 
-      final createdPole = await apiService.createPole(widget.powerLineId, poleData);
+      // При «Начать отпайку» или «Добавить в отпайку» новая опора связывается с опорой tapPoleId.
+      final fromPoleId = widget.tapPoleId;
+      final createdPole = await apiService.createPole(widget.powerLineId, poleData, fromPoleId: fromPoleId);
       // Сохраняем опору и оборудование в локальную БД, чтобы сразу после возврата на карту
       // они участвовали в отрисовке (в т.ч. SVG-иконки на линии).
       try {
@@ -780,7 +1007,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                           radius: 22,
                           backgroundColor: PatrolColors.accentBlue,
                           child: Text(
-                            widget.isEditMode ? (_poleNumber.isEmpty ? '...' : _poleNumber) : '$seq',
+                            widget.isEditMode ? (_poleNumber.isEmpty ? '...' : _poleNumber) : (_poleNumber.isNotEmpty ? _poleNumber : '$seq'),
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ),
@@ -904,19 +1131,22 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Номер опоры (скрытое поле для валидации)
+                      // Название опоры: отображается как «Опора N», в API уходит только номер (N или N/1, N/2)
                       TextFormField(
                         controller: _poleNumberController,
                         decoration: const InputDecoration(
-                          labelText: 'Номер опоры *',
-                          hintText: 'ОП-001',
+                          labelText: 'Название опоры *',
+                          hintText: 'Опора 1',
                           filled: true,
                           fillColor: PatrolColors.surfaceCard,
                         ),
                         style: const TextStyle(color: PatrolColors.textPrimary),
-                        validator: (v) => (v ?? '').trim().isEmpty ? 'Введите номер опоры' : null,
-                        onSaved: (v) => _poleNumber = (v ?? '').trim(),
-                        onChanged: (v) => _poleNumber = v.trim(),
+                        validator: (v) {
+                          final raw = _parsePoleNumberFromField(v ?? '');
+                          return raw.isEmpty ? 'Введите название опоры (например: Опора 3)' : null;
+                        },
+                        onSaved: (v) => _poleNumber = _parsePoleNumberFromField(v ?? ''),
+                        onChanged: (v) => _poleNumber = _parsePoleNumberFromField(v),
                       ),
                       const SizedBox(height: 12),
 
@@ -1050,13 +1280,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                               final catType = EquipmentReferenceData.categoryToEquipmentType[cat.title]?.trim().toLowerCase();
                                               return catType != null && (t == catType || t.contains(catType) || catType.contains(t));
                                             }).toList();
-                                            final apiService = ref.read(apiServiceProvider);
+                                            final db = ref.read(databaseProvider);
                                             for (final eq in toRemove) {
                                               try {
+                                                final apiService = ref.read(apiServiceProvider);
                                                 await apiService.deletePoleEquipment(widget.poleId!, eq.id);
-                                                final db = ref.read(databaseProvider);
-                                                await db.deleteEquipment(eq.id);
-                                              } catch (_) {}
+                                              } catch (_) {
+                                                // Офлайн — удаление только локально
+                                              }
+                                              await db.deleteEquipment(eq.id);
                                             }
                                             if (mounted) setState(() {
                                               for (final eq in toRemove) _loadedEquipment.remove(eq);
@@ -1253,6 +1485,35 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                 ),
               ),
 
+              // Кнопка «Начать отпайку» — в режиме редактирования любой опоры (добавить первую опору отпайки от этой)
+              if (widget.isEditMode && widget.poleId != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              Navigator.of(context).pop(<String, dynamic>{
+                                'action': 'start_tap',
+                                'tapPoleId': widget.poleId,
+                                'powerLineId': widget.powerLineId,
+                                'tapPoleNumber': _parsePoleNumberFromField(_poleNumberController.text),
+                              });
+                            },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.teal,
+                        side: const BorderSide(color: Colors.teal),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      icon: const Icon(Icons.call_split, size: 20),
+                      label: const Text('Начать отпайку'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               // Подвал: ОТМЕНА, ЗАФИКСИРОВАТЬ ОПОРУ
               Padding(
                 padding: const EdgeInsets.all(16),

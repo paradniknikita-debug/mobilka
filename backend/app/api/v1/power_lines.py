@@ -371,6 +371,7 @@ async def update_power_line(
 async def create_pole(
     power_line_id: int,
     pole_data: PoleCreate,
+    from_pole_id: Optional[int] = Query(None, description="При «Начать отпайку» — ID исходной опоры, с которой связываем новую"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -456,7 +457,7 @@ async def create_pole(
         await db.flush()
         db_pole.connectivity_node_id = connectivity_node.id
 
-    # Автоматическое создание пролёта от предыдущей опоры к новой (узлы создаются по требованию)
+    # Автоматическое создание пролёта: при «Начать отпайку» — всегда от исходной опоры (from_pole_id); последующие — по соседям.
     try:
         from app.core.line_auto_assembly import auto_create_span
 
@@ -469,7 +470,8 @@ async def create_pole(
             conductor_material=pole_data.conductor_material,
             conductor_section=pole_data.conductor_section,
             is_tap=pole_data.is_tap,
-            current_user_id=current_user.id
+            current_user_id=current_user.id,
+            from_pole_id=from_pole_id,
         )
     except Exception as e:
         # Логируем ошибку, но не прерываем создание опоры
@@ -642,6 +644,9 @@ async def update_pole(
     
     if "is_tap" in pole_data.dict(exclude_unset=True):
         pole.is_tap_pole = pole_data.is_tap
+    # Явно обновляем название опоры (pole_number), чтобы оно всегда сохранялось при редактировании
+    if pole_data.pole_number is not None:
+        pole.pole_number = pole_data.pole_number
     for key, value in pole_dict.items():
         if hasattr(pole, key) and key != "is_tap" and value is not None:
             setattr(pole, key, value)

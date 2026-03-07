@@ -258,10 +258,12 @@ class _ApiService implements ApiService {
   @override
   Future<Pole> createPole(
     int powerLineId,
-    PoleCreate poleData,
-  ) async {
+    PoleCreate poleData, {
+    int? fromPoleId,
+  }) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
+    if (fromPoleId != null) queryParameters[r'from_pole_id'] = fromPoleId;
     final _headers = <String, dynamic>{};
     final _data = <String, dynamic>{};
     _data.addAll(poleData.toJson());

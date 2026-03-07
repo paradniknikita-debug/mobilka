@@ -2,35 +2,84 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/patrol_session.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 
-/// Провайдер списка сессий обхода (с сервера).
+/// Провайдер списка сессий обхода: с сервера + локальные (офлайн и ожидающие синхронизации).
+/// В офлайне отображаются только локальные сессии; при наличии сети — объединённый список.
+/// Для администратора — все сессии, для остальных — только свои.
 final patrolSessionsProvider = FutureProvider<List<PatrolSession>>((ref) async {
-  final api = ref.read(apiServiceProvider);
-  return api.getPatrolSessions(null, null, 200, 0);
+  try {
+    final authState = ref.watch(authStateProvider);
+    final api = ref.read(apiServiceProvider);
+    final db = ref.read(drift_db.databaseProvider);
+    final isAdmin = authState is AuthStateAuthenticated && authState.user.role == 'admin';
+    final userId = authState is AuthStateAuthenticated ? authState.user.id : 0;
+
+    List<PatrolSession> apiSessions = [];
+    try {
+      apiSessions = await api.getPatrolSessions(
+        isAdmin ? null : userId,
+        null,
+        200,
+        0,
+      );
+    } catch (_) {
+      // Офлайн или ошибка — будем показывать только локальные
+    }
+
+    final localRows = await db.getRecentPatrolSessionsFromDb(300);
+    final apiIds = apiSessions.map((s) => s.id).toSet();
+
+    final List<PatrolSession> result = List<PatrolSession>.from(apiSessions);
+    for (final row in localRows) {
+      if (!isAdmin && row.userId != null && row.userId != userId) continue;
+      final displayId = row.serverId ?? -row.id;
+      if (apiIds.contains(displayId)) continue;
+      final pl = await db.getPowerLine(row.powerLineId);
+      if (pl == null) continue;
+      final powerLineDisplayName = pl.mrid != null && pl.mrid!.trim().isNotEmpty
+          ? '${pl.name} (${pl.mrid})'
+          : pl.name;
+      result.add(PatrolSession(
+        id: displayId,
+        userId: row.userId ?? userId,
+        powerLineId: row.powerLineId,
+        note: row.note,
+        startedAt: row.startedAt,
+        endedAt: row.endedAt,
+        userName: '',
+        powerLineName: powerLineDisplayName,
+      ));
+    }
+    result.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    return result;
+  } catch (_) {
+    return [];
+  }
 });
 
-/// Страница «Данные по обходам» — только для администратора.
-class PatrolsListPage extends ConsumerWidget {
+/// Страница «Данные по обходам» / «История обходов» — для всех пользователей (админ видит все, остальные — свои).
+class PatrolsListPage extends ConsumerStatefulWidget {
   const PatrolsListPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
-    final isAdmin = authState is AuthStateAuthenticated &&
-        authState.user.role == 'admin';
+  ConsumerState<PatrolsListPage> createState() => _PatrolsListPageState();
+}
 
-    if (!isAdmin) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Обходы')),
-        body: const Center(
-          child: Text('Доступ только для администратора'),
-        ),
-      );
-    }
+class _PatrolsListPageState extends ConsumerState<PatrolsListPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(patrolSessionsProvider);
+    });
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Данные по обходам'),
@@ -154,6 +203,14 @@ class _PatrolSessionCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 4),
+            if (session.id < 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'Ожидает синхронизации',
+                  style: TextStyle(fontSize: 12, color: Colors.orange[700], fontWeight: FontWeight.w500),
+                ),
+              ),
             Text('Исполнитель: ${session.userName.isNotEmpty ? session.userName : "id ${session.userId}"}'),
             Text('Начало: $startedStr'),
             Text('Окончание: $endedStr'),

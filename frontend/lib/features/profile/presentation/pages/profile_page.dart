@@ -149,13 +149,12 @@ class ProfilePage extends ConsumerWidget {
           _profileCard(
             child: Column(
               children: [
-                if (user.role == 'admin')
-                  ListTile(
-                    leading: const Icon(Icons.assignment, color: PatrolColors.accent),
-                    title: const Text('Данные по обходам', style: TextStyle(color: PatrolColors.textPrimary)),
-                    subtitle: const Text('Просмотр сессий обхода ЛЭП', style: TextStyle(color: PatrolColors.textSecondary)),
-                    onTap: () => context.push('/patrols'),
-                  ),
+                ListTile(
+                  leading: const Icon(Icons.assignment, color: PatrolColors.accent),
+                  title: const Text('История обходов', style: TextStyle(color: PatrolColors.textPrimary)),
+                  subtitle: const Text('Просмотр сессий обхода ЛЭП', style: TextStyle(color: PatrolColors.textSecondary)),
+                  onTap: () => context.push('/patrols'),
+                ),
                 ListTile(
                   leading: const Icon(Icons.cloud_upload, color: PatrolColors.accent),
                   title: const Text('Синхронизировать сейчас', style: TextStyle(color: PatrolColors.textPrimary)),

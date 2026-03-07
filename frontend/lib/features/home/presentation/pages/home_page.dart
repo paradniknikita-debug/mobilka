@@ -97,47 +97,56 @@ class RecentPatrolItem {
 
 /// Последние обходы: с сервера + локальные с ожиданием синхронизации (офлайн).
 final recentPatrolsProvider = FutureProvider<List<RecentPatrolItem>>((ref) async {
-  final authState = ref.watch(authStateProvider);
-  if (authState is! AuthStateAuthenticated) return [];
-  final api = ref.read(apiServiceProvider);
-  final db = ref.read(drift_db.databaseProvider);
-
-  List<PatrolSession> apiSessions = [];
   try {
-    apiSessions = await api.getPatrolSessions(authState.user.id, null, 10, 0);
+    final authState = ref.watch(authStateProvider);
+    if (authState is! AuthStateAuthenticated) return [];
+    final api = ref.read(apiServiceProvider);
+    final db = ref.read(drift_db.databaseProvider);
+    final userId = authState.user.id;
+
+    List<PatrolSession> apiSessions = [];
+    try {
+      apiSessions = await api.getPatrolSessions(userId, null, 10, 0);
+    } catch (_) {
+      // Офлайн или ошибка — только локальные
+    }
+
+    final localRecent = await db.getRecentPatrolSessionsFromDb(15);
+    final localPending = localRecent.where((r) => r.syncStatus == 'pending').toList();
+    final apiIds = apiSessions.map((s) => s.id).toSet();
+
+    final List<RecentPatrolItem> items = [];
+    for (final row in apiSessions.isEmpty ? localRecent : localPending) {
+      if (row.userId != null && row.userId != userId) continue;
+      final pl = await db.getPowerLine(row.powerLineId);
+      if (pl == null) continue;
+      if (apiSessions.isNotEmpty && apiIds.contains(row.serverId ?? -row.id)) continue;
+      final powerLineDisplayName = pl.mrid != null && pl.mrid!.trim().isNotEmpty
+          ? '${pl.name} (${pl.mrid})'
+          : pl.name;
+      items.add(RecentPatrolItem(
+        session: PatrolSession(
+          id: row.serverId ?? -row.id,
+          userId: row.userId ?? userId,
+          powerLineId: row.powerLineId,
+          note: row.note,
+          startedAt: row.startedAt,
+          endedAt: row.endedAt,
+          userName: '',
+          powerLineName: powerLineDisplayName,
+        ),
+        isPendingSync: row.syncStatus == 'pending',
+      ));
+    }
+
+    for (final s in apiSessions) {
+      items.add(RecentPatrolItem(session: s, isPendingSync: false));
+    }
+    items.sort((a, b) => b.session.startedAt.compareTo(a.session.startedAt));
+    return items.take(10).toList();
   } catch (_) {
-    // Офлайн или ошибка — только локальные
+    return [];
   }
-
-  final localRecent = await db.getRecentPatrolSessionsFromDb(15);
-  final localPending = localRecent.where((r) => r.syncStatus == 'pending').toList();
-  final userId = authState.user.id;
-
-  final List<RecentPatrolItem> items = [];
-  for (final row in localPending) {
-    final pl = await db.getPowerLine(row.powerLineId);
-    if (pl == null) continue; // Линия удалена — не показываем сессию в списке
-    final powerLineDisplayName = pl.mrid != null && pl.mrid!.trim().isNotEmpty
-        ? '${pl.name} (${pl.mrid})'
-        : pl.name;
-    final session = PatrolSession(
-      id: row.serverId ?? -row.id,
-      userId: row.userId ?? userId,
-      powerLineId: row.powerLineId,
-      note: row.note,
-      startedAt: row.startedAt,
-      endedAt: row.endedAt,
-      userName: '',
-      powerLineName: powerLineDisplayName,
-    );
-    items.add(RecentPatrolItem(session: session, isPendingSync: true));
-  }
-
-  for (final s in apiSessions) {
-    items.add(RecentPatrolItem(session: s, isPendingSync: false));
-  }
-  items.sort((a, b) => b.session.startedAt.compareTo(a.session.startedAt));
-  return items.take(10).toList();
 });
 
 class HomePage extends ConsumerStatefulWidget {
@@ -193,8 +202,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final activeSessionAsync = ref.watch(activeSessionProvider);
     final activeSession = activeSessionAsync.asData?.value;
     final authState = ref.watch(authStateProvider);
-    final isAdmin = authState is AuthStateAuthenticated &&
-        authState.user.role == 'admin';
 
     return Scaffold(
       backgroundColor: PatrolColors.background,
@@ -203,12 +210,11 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         elevation: 0,
         title: const Text('Главная', style: TextStyle(color: PatrolColors.textPrimary)),
         actions: [
-          if (isAdmin)
-            IconButton(
-              icon: const Icon(Icons.assignment, color: PatrolColors.textPrimary),
-              onPressed: () => context.push('/patrols'),
-              tooltip: 'Данные по обходам',
-            ),
+          IconButton(
+            icon: const Icon(Icons.assignment, color: PatrolColors.textPrimary),
+            onPressed: () => context.push('/patrols'),
+            tooltip: 'История обходов',
+          ),
           IconButton(
             icon: const Icon(Icons.person, color: PatrolColors.textPrimary),
             onPressed: () => context.go('/settings'),

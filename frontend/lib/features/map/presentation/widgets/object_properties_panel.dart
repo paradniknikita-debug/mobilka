@@ -10,6 +10,10 @@ class ObjectPropertiesPanel extends StatelessWidget {
   final VoidCallback? onAutoCreateSpans;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  /// Открыть диалог создания опоры «Начать отпайку» от этой опоры.
+  final VoidCallback? onStartTapPole;
+  /// Открыть диалог добавления следующей опоры в отпайку (только для опор с номером вида N/M).
+  final VoidCallback? onAddPoleToTap;
 
   const ObjectPropertiesPanel({
     super.key,
@@ -20,7 +24,14 @@ class ObjectPropertiesPanel extends StatelessWidget {
     this.onAutoCreateSpans,
     this.onEdit,
     this.onDelete,
+    this.onStartTapPole,
+    this.onAddPoleToTap,
   });
+
+  static bool _isTapPole(Map<String, dynamic> props) {
+    final n = props['pole_number'] ?? props['poleNumber'];
+    return n is String && n.contains('/');
+  }
 
   String get _title {
     switch (objectType) {
@@ -35,7 +46,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final powerLineId = objectProperties['power_line_id'] as int?;
+    final powerLineId = (objectProperties['power_line_id'] ?? objectProperties['line_id']) as int?;
 
     return Container(
       decoration: BoxDecoration(
@@ -134,6 +145,41 @@ class ObjectPropertiesPanel extends StatelessWidget {
                         label: const Text('Начать формирование линии'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (onStartTapPole != null &&
+                      powerLineId != null &&
+                      objectProperties['id'] != null) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onStartTapPole,
+                        icon: const Icon(Icons.call_split),
+                        label: const Text('Начать отпайку'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (onAddPoleToTap != null &&
+                      powerLineId != null &&
+                      objectProperties['id'] != null &&
+                      _isTapPole(objectProperties)) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onAddPoleToTap,
+                        icon: const Icon(Icons.add_road),
+                        label: const Text('Добавить опору в отпайку'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
                           foregroundColor: Colors.white,
                         ),
                       ),

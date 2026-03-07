@@ -66,7 +66,8 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
         final mrid = pl.mrid != null && pl.mrid!.trim().isNotEmpty ? pl.mrid : null;
         final name = pl.name.trim().isEmpty ? 'ЛЭП' : pl.name.trim();
         final localDup = await db.getLocalPowerLineByMridOrName(mrid, name);
-        if (localDup != null && localDup.id < 0) {
+        final nameNorm = name.trim().toLowerCase();
+        if (localDup != null && localDup.id < 0 && (mrid != null || nameNorm != 'лэп')) {
           await db.updatePolesPowerLineId(localDup.id, pl.id);
           await db.deletePowerLine(localDup.id);
         }

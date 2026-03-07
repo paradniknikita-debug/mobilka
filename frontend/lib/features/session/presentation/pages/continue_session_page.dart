@@ -37,7 +37,9 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
         final mrid = pl.mrid != null && pl.mrid!.trim().isNotEmpty ? pl.mrid : null;
         final name = pl.name.trim().isEmpty ? 'ЛЭП' : pl.name.trim();
         final localDup = await db.getLocalPowerLineByMridOrName(mrid, name);
-        if (localDup != null && localDup.id < 0) {
+        // Не заменяем локальную линию, если совпадение только по умолчанию «ЛЭП» — чтобы локально созданные линии не пропадали.
+        final nameNorm = name.trim().toLowerCase();
+        if (localDup != null && localDup.id < 0 && (mrid != null || nameNorm != 'лэп')) {
           await db.updatePolesPowerLineId(localDup.id, pl.id);
           await db.deletePowerLine(localDup.id);
         }
