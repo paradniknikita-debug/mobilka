@@ -612,11 +612,20 @@ async def auto_create_span(
             db, new_pole, power_line_id
         )
 
-    # Находим предыдущую опору по sequence_number (или отпаечную опору, если tap_pole_id задан)
+    # Находим предыдущую опору по sequence_number (или отпаечную опору, если tap_pole_id задан).
+    # Опоры магистрали (номер без "/") всегда соединяем с предыдущей опорой магистрали — иначе может
+    # получиться пролёт 3/2->4 вместо 3->4, если у новой опоры ошибочно был tap_pole_id.
+    use_tap_pole_id = getattr(new_pole, "tap_pole_id", None)
+    use_tap_branch_index = getattr(new_pole, "tap_branch_index", None)
+    pn = (getattr(new_pole, "pole_number", None) or "").strip()
+    if pn and "/" not in pn:
+        use_tap_pole_id = None
+        use_tap_branch_index = None
+
     previous_pole = await find_previous_pole(
         db, power_line_id, new_pole.sequence_number, exclude_pole_id=new_pole.id,
-        tap_pole_id=getattr(new_pole, "tap_pole_id", None),
-        tap_branch_index=getattr(new_pole, "tap_branch_index", None)
+        tap_pole_id=use_tap_pole_id,
+        tap_branch_index=use_tap_branch_index
     )
 
     if not previous_pole:

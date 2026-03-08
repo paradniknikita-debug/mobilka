@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/attachment_reader.dart';
 import '../../../../core/database/database.dart' hide Equipment, Pole;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/config/app_config.dart';
@@ -47,9 +48,11 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
   final int? poleSequenceNumber;
   final String? initialPoleNumber;
   final int existingPolesCount;
-  /// ID отпаечной опоры: при открытии сценария «Начать отпайку».
+  /// ID отпаечной опоры: при открытии сценария «Начать отпайку» или «Добавить в отпайку».
   final int? tapPoleId;
-  /// true = открыт сценарий «Начать новую отпайку» от отпаечной опоры.
+  /// Номер ветки от одной отпаечной (1, 2, …); при «Добавить в отпайку» — ветка выбранной опоры.
+  final int? tapBranchIndex;
+  /// true = открыт сценарий «Начать новую отпайку» от отпаечной опоры (вторая/третья ветка).
   final bool startNewTap;
 
   const CreatePoleDialog({
@@ -62,6 +65,7 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
     this.initialPoleNumber,
     this.existingPolesCount = 0,
     this.tapPoleId,
+    this.tapBranchIndex,
     this.startNewTap = false,
   });
 
@@ -91,6 +95,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   String? _conductorMaterial = PoleReferenceData.defaultConductorMaterial;
   String? _conductorSection = PoleReferenceData.defaultConductorSection;
   bool _isTap = false;
+
+  /// Показывать выбор «Магистраль» / «Отпайка от X — ветка N» (как в Angular).
+  bool _showBranchChoice = false;
+  /// Список веток для выбора: value = "tapPoleId:tapBranchIndex", label = "Отпайка от X — ветка N".
+  List<MapEntry<String, String>> _tapBranchesInLine = [];
+  /// Отпаечные опоры линии (id, pole_number) для подписей.
+  List<MapEntry<int, String>> _tapPolesInLine = [];
+  /// Выбранная ветка: null = магистраль, иначе "tapPoleId:tapBranchIndex".
+  String? _branchSelection;
 
   final _cardCommentController = TextEditingController();
   final List<Map<String, String>> _cardCommentAttachments = [];
@@ -184,6 +197,37 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
   }
 
+  /// Загружает вложения с локальным путём (p) на сервер и возвращает список с url.
+  Future<List<Map<String, dynamic>>> _resolveCardCommentAttachments(
+    ApiServiceWithExport api,
+    int? poleId,
+  ) async {
+    if (poleId == null) return List.from(_cardCommentAttachments);
+    final resolved = <Map<String, dynamic>>[];
+    for (final m in _cardCommentAttachments) {
+      if (m['url'] != null) {
+        resolved.add(Map<String, dynamic>.from(m));
+        continue;
+      }
+      final path = m['p'] as String?;
+      if (path == null || path.isEmpty) continue;
+      final type = m['t'] as String? ?? 'photo';
+      try {
+        final bytes = await readAttachmentBytes(path);
+        if (bytes.isEmpty) continue;
+        final ext = path.contains('.') ? path.split('.').last : 'jpg';
+        final result = await api.uploadPoleAttachment(poleId, type, bytes, 'upload.$ext');
+        final url = result['url'] as String?;
+        if (url != null) {
+          final entry = <String, dynamic>{'t': type, 'url': url};
+          if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+          resolved.add(entry);
+        }
+      } catch (_) {}
+    }
+    return resolved;
+  }
+
   Future<void> _recordCommentVoice() async {
     if (_cardCommentRecording) {
       try {
@@ -268,6 +312,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     } else if (widget.poleSequenceNumber != null) {
       _poleNumber = widget.poleSequenceNumber!.toString();
       _poleNumberController.text = 'Опора $_poleNumber';
+    } else if (widget.existingPolesCount > 0) {
+      // Fallback: автоподставление номера, если вызывающий код не передал (например, старая точка входа)
+      _poleNumber = (widget.existingPolesCount + 1).toString();
+      _poleNumberController.text = 'Опора $_poleNumber';
     }
     if (widget.initialLatitude != null && widget.initialLongitude != null) {
       _latitude = widget.initialLatitude;
@@ -284,6 +332,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
     if (widget.startNewTap) {
       _isTap = true;
+    }
+    if (!widget.isEditMode && !widget.startNewTap) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _loadTapBranchesForLine();
+      });
+    }
+    if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
+      _branchSelection = '${widget.tapPoleId}:${widget.tapBranchIndex}';
     }
   }
 
@@ -306,6 +363,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       _conductorMaterial = pole.conductorMaterial;
       _conductorSection = pole.conductorSection;
       _isTap = pole.isTapPole;
+      if (pole.tapPoleId != null && pole.tapBranchIndex != null) {
+        _branchSelection = '${pole.tapPoleId}:${pole.tapBranchIndex}';
+      } else {
+        _branchSelection = null;
+      }
       _loadedEquipment = equipmentList;
       for (final eq in equipmentList) {
         final typeLower = eq.equipmentType.trim().toLowerCase();
@@ -320,6 +382,45 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       }
       _isLoading = false;
     });
+  }
+
+  /// Загружает список отпаечных опор и веток линии для выбора «Магистраль / Отпайка» (как в Angular).
+  Future<void> _loadTapBranchesForLine() async {
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final poles = await apiService.getPoles(widget.lineId);
+      if (!mounted) return;
+      final tapPoles = poles.where((p) => p.isTapPole).toList();
+      final tapPoleNames = <int, String>{};
+      for (final p in tapPoles) {
+        tapPoleNames[p.id] = p.poleNumber;
+      }
+      final branchSet = <String>{};
+      for (final p in poles) {
+        if (p.tapPoleId != null) {
+          final bi = p.tapBranchIndex ?? 1;
+          branchSet.add('${p.tapPoleId}:$bi');
+        }
+      }
+      final branches = branchSet.map((s) {
+        final parts = s.split(':');
+        final pid = int.tryParse(parts[0]) ?? 0;
+        final bi = int.tryParse(parts[1]) ?? 1;
+        final label = 'Отпайка от ${tapPoleNames[pid] ?? 'опора $pid'} — ветка $bi';
+        return MapEntry(s, label);
+      }).toList()..sort((a, b) => a.key.compareTo(b.key));
+      setState(() {
+        _tapPolesInLine = tapPoles.map((p) => MapEntry(p.id, p.poleNumber)).toList();
+        _tapBranchesInLine = branches;
+        _showBranchChoice = _tapBranchesInLine.isNotEmpty || _tapPolesInLine.isNotEmpty;
+      });
+    } catch (_) {
+      if (mounted) setState(() {
+        _tapBranchesInLine = [];
+        _tapPolesInLine = [];
+        _showBranchChoice = false;
+      });
+    }
   }
 
   Future<void> _loadPoleForEdit() async {
@@ -341,6 +442,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         }
       }
       _applyLoadedPoleToState(pole, equipmentList);
+      if (mounted) _loadTapBranchesForLine();
     } catch (e) {
       // Офлайн или ошибка API — загружаем из локальной БД
       if (kDebugMode) {
@@ -394,6 +496,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           isTapPole: (driftPole.poleNumber ?? '').contains('/'),
         );
         _applyLoadedPoleToState(poleApi, equipmentList);
+        if (mounted) _loadTapBranchesForLine();
       } catch (dbErr) {
         if (mounted) {
           setState(() => _isLoading = false);
@@ -742,6 +845,29 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final apiService = ref.read(apiServiceProvider);
       _poleNumber = _parsePoleNumberFromField(_poleNumberController.text);
       _material = _materialController.text.trim().isEmpty ? null : _materialController.text.trim();
+      final cardCommentText = _cardCommentController.text.trim();
+
+      // Логика ветки как в Angular: startNewTap | tapPoleId+tapBranchIndex | branch_selection
+      int? tapPoleId;
+      int? tapBranchIndex;
+      String? branchType;
+      bool startNewTap = false;
+      if (widget.startNewTap && widget.tapPoleId != null) {
+        tapPoleId = widget.tapPoleId;
+        startNewTap = true;
+        branchType = 'tap';
+      } else if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
+        tapPoleId = widget.tapPoleId;
+        tapBranchIndex = widget.tapBranchIndex;
+        branchType = 'tap';
+      } else if (_branchSelection != null && _branchSelection!.contains(':')) {
+        final parts = _branchSelection!.split(':');
+        tapPoleId = int.tryParse(parts[0]);
+        tapBranchIndex = parts.length > 1 ? int.tryParse(parts[1]) : 1;
+        if (tapPoleId != null) branchType = 'tap';
+      }
+      if (branchType == null) branchType = 'main';
+
       final poleData = PoleCreate(
         poleNumber: _poleNumber,
         xPosition: _longitude!,  // x_position = долгота
@@ -757,12 +883,41 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         conductorType: _conductorType,
         conductorMaterial: _conductorMaterial,
         conductorSection: _conductorSection,
+        cardComment: cardCommentText.isEmpty ? null : cardCommentText,
+        cardCommentAttachment: null, // заполняется после загрузки вложений
+        tapPoleId: tapPoleId,
+        branchType: branchType,
+        tapBranchIndex: tapBranchIndex,
+        startNewTap: startNewTap,
       );
 
       if (widget.isEditMode && widget.poleId != null) {
-        // Редактирование: обновляем существующую опору, не создаём новую
+        // Редактирование: загружаем вложения, затем обновляем опору
+        final resolvedAttachments = await _resolveCardCommentAttachments(apiService, widget.poleId);
+        final poleDataWithAttachments = PoleCreate(
+          poleNumber: poleData.poleNumber,
+          xPosition: poleData.xPosition,
+          yPosition: poleData.yPosition,
+          poleType: poleData.poleType,
+          height: poleData.height,
+          foundationType: poleData.foundationType,
+          material: poleData.material,
+          yearInstalled: poleData.yearInstalled,
+          condition: poleData.condition,
+          notes: poleData.notes,
+          isTap: poleData.isTap,
+          conductorType: poleData.conductorType,
+          conductorMaterial: poleData.conductorMaterial,
+          conductorSection: poleData.conductorSection,
+          cardComment: poleData.cardComment,
+          cardCommentAttachment: resolvedAttachments.isEmpty ? null : jsonEncode(resolvedAttachments),
+          tapPoleId: poleData.tapPoleId,
+          branchType: poleData.branchType,
+          tapBranchIndex: poleData.tapBranchIndex,
+          startNewTap: poleData.startNewTap,
+        );
         final updatedPole =
-            await apiService.updatePole(widget.lineId, widget.poleId!, poleData);
+            await apiService.updatePole(widget.lineId, widget.poleId!, poleDataWithAttachments);
         try {
           final db = ref.read(databaseProvider);
           await db.updatePole(PolesCompanion(
@@ -778,12 +933,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             yearInstalled: drift.Value(updatedPole.yearInstalled),
             condition: drift.Value(updatedPole.condition),
             notes: drift.Value(updatedPole.notes),
-            cardComment: _cardCommentController.text.trim().isEmpty
+            cardComment: cardCommentText.isEmpty
                 ? const drift.Value.absent()
-                : drift.Value(_cardCommentController.text.trim()),
-            cardCommentAttachment: _cardCommentAttachments.isEmpty
+                : drift.Value(cardCommentText),
+            cardCommentAttachment: resolvedAttachments.isEmpty
                 ? const drift.Value.absent()
-                : drift.Value(jsonEncode(_cardCommentAttachments)),
+                : drift.Value(jsonEncode(resolvedAttachments)),
             createdBy: drift.Value(updatedPole.createdBy),
             createdAt: drift.Value(updatedPole.createdAt),
             updatedAt: drift.Value(updatedPole.updatedAt),
@@ -845,9 +1000,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             'y_position': _latitude!,
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Изменения опоры сохранены'),
+            SnackBar(
+              content: Text(_showBranchChoice
+                  ? 'Изменения опоры сохранены. При смене направления выполните «Пересборка топологии» по ЛЭП.'
+                  : 'Изменения опоры сохранены'),
               backgroundColor: Colors.green,
+              duration: _showBranchChoice ? const Duration(seconds: 5) : const Duration(seconds: 3),
             ),
           );
         }
@@ -860,6 +1018,38 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         poleData,
         fromPoleId: widget.tapPoleId,
       );
+      // Загружаем вложения на сервер и обновляем опору
+      List<Map<String, dynamic>> resolvedAttachmentsCreate = [];
+      if (_cardCommentAttachments.isNotEmpty) {
+        resolvedAttachmentsCreate = await _resolveCardCommentAttachments(apiService, createdPole.id);
+        if (resolvedAttachmentsCreate.isNotEmpty) {
+          try {
+            final poleDataWithAttachments = PoleCreate(
+              poleNumber: createdPole.poleNumber,
+              xPosition: createdPole.xPosition,
+              yPosition: createdPole.yPosition,
+              poleType: createdPole.poleType,
+              height: createdPole.height,
+              foundationType: createdPole.foundationType,
+              material: createdPole.material,
+              yearInstalled: createdPole.yearInstalled,
+              condition: createdPole.condition,
+              notes: createdPole.notes,
+              isTap: poleData.isTap,
+              conductorType: poleData.conductorType,
+              conductorMaterial: poleData.conductorMaterial,
+              conductorSection: poleData.conductorSection,
+              cardComment: cardCommentText.isEmpty ? null : cardCommentText,
+              cardCommentAttachment: jsonEncode(resolvedAttachmentsCreate),
+              tapPoleId: poleData.tapPoleId,
+              branchType: poleData.branchType,
+              tapBranchIndex: poleData.tapBranchIndex,
+              startNewTap: poleData.startNewTap,
+            );
+            await apiService.updatePole(widget.lineId, createdPole.id, poleDataWithAttachments);
+          } catch (_) {}
+        }
+      }
       // Сохраняем опору и оборудование в локальную БД, чтобы сразу после возврата на карту
       // они участвовали в отрисовке (в т.ч. SVG-иконки на линии).
       try {
@@ -881,12 +1071,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           yearInstalled: drift.Value(createdPole.yearInstalled),
           condition: drift.Value(createdPole.condition),
           notes: drift.Value(createdPole.notes),
-          cardComment: _cardCommentController.text.trim().isEmpty
+          cardComment: cardCommentText.isEmpty
               ? const drift.Value.absent()
-              : drift.Value(_cardCommentController.text.trim()),
-          cardCommentAttachment: _cardCommentAttachments.isEmpty
+              : drift.Value(cardCommentText),
+          cardCommentAttachment: resolvedAttachmentsCreate.isEmpty
               ? const drift.Value.absent()
-              : drift.Value(jsonEncode(_cardCommentAttachments)),
+              : drift.Value(jsonEncode(resolvedAttachmentsCreate)),
           createdBy: createdPole.createdBy,
           createdAt: createdPole.createdAt,
           updatedAt: drift.Value(createdPole.updatedAt),
@@ -1156,6 +1346,34 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                         onChanged: (v) => _poleNumber = _parsePoleNumberFromField(v),
                       ),
                       const SizedBox(height: 12),
+
+                      // Ветка: магистраль или отпайка (как в Angular)
+                      if (_showBranchChoice && !(widget.tapPoleId != null && widget.startNewTap)) ...[
+                        Text('Ветка', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: PatrolColors.surfaceCard,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String?>(
+                              value: _branchSelection,
+                              isExpanded: true,
+                              hint: const Text('Магистраль'),
+                              items: [
+                                DropdownMenuItem<String?>(value: null, child: Text('Магистраль', style: TextStyle(color: PatrolColors.textPrimary))),
+                                ..._tapBranchesInLine.map((e) => DropdownMenuItem<String?>(value: e.key, child: Text(e.value, style: TextStyle(color: PatrolColors.textPrimary)))),
+                              ],
+                              onChanged: (widget.tapPoleId != null && widget.tapBranchIndex != null)
+                                  ? null
+                                  : (v) => setState(() => _branchSelection = v),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // Тип опоры: 3 кнопки по макету
                       Text('Тип опоры', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),

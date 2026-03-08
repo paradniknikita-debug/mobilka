@@ -129,14 +129,15 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                 "pole_count": len(poles_list),
             }
 
-        def _default_point_feature():
+        def _line_feature_no_geometry():
+            """ЛЭП — не точка в пространстве; без опор или без координат у опор геометрия отсутствует."""
             props = _default_properties()
             if power_line.voltage_level is not None:
                 props["voltage_level"] = float(power_line.voltage_level)
             return {
                 "type": "Feature",
                 "properties": props,
-                "geometry": {"type": "Point", "coordinates": [27.5615, 53.9045]},
+                "geometry": None,
             }
 
         # Создаем LineString из координат опор по CIM (только Location/PositionPoint)
@@ -225,72 +226,29 @@ async def _get_power_lines_geojson_impl(db: AsyncSession):
                         properties["voltage_level"] = float(power_line.voltage_level)
                     _add_line_feature(coords, properties, "tap", tpid)
 
-            # Если не добавили ни одной линии (например, все опоры без координат), оставляем одну точку по умолчанию
+            # Если не добавили ни одной линии (например, все опоры без координат), ЛЭП без геометрии
             if not features or features[-1].get("properties", {}).get("id") != int(power_line.id):
                 if len(poles_list) >= 2:
-                    features.append(_default_point_feature())
+                    features.append(_line_feature_no_geometry())
         elif len(poles_list) == 1:
-            pole = poles_list[0]
-            longitude, latitude = _pole_coords_from_position_point(pole)
-            if longitude is not None and latitude is not None:
-                try:
-                    longitude = float(longitude)
-                    latitude = float(latitude)
-                    # Проверяем, что координаты валидны
-                    if not (isinstance(longitude, (int, float)) and isinstance(latitude, (int, float))):
-                        raise ValueError("Invalid coordinates")
-                    if longitude == float('inf') or latitude == float('inf') or longitude == float('-inf') or latitude == float('-inf'):
-                        raise ValueError("Invalid coordinates")
-                    
-                    # Создаем properties, исключая None значения для числовых полей
-                    properties = {
-                        "id": int(power_line.id),
-                        "name": str(power_line.name) if power_line.name else "",
-                        "status": str(power_line.status) if power_line.status else "active",
-                        "pole_count": len(poles_list)
-                    }
-                    # Добавляем voltage_level только если он не None
-                    if power_line.voltage_level is not None:
-                        properties["voltage_level"] = float(power_line.voltage_level)
-                    
-                    feature = {
-                        "type": "Feature",
-                        "properties": properties,
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [longitude, latitude]
-                        }
-                    }
-                    features.append(feature)
-                except (TypeError, ValueError):
-                    pass  # Пропускаем объекты с невалидными координатами
-            # Одна опора без валидных координат — всё равно показываем ЛЭП в дереве
+            # Одна опора: линия не является точкой в пространстве — только свойства, без геометрии
             if not features or features[-1].get("properties", {}).get("id") != int(power_line.id):
-                features.append(_default_point_feature())
+                features.append(_line_feature_no_geometry())
         else:
-            # Если опор нет, создаем пустую геометрию (но все равно возвращаем ЛЭП)
-            # Используем координаты по умолчанию (центр Минска) для отображения в дереве
-            # Для ЛЭП без опор используем координаты по умолчанию
-            # Создаем properties, исключая None значения для числовых полей
+            # Ноль опор: ЛЭП без геометрии (линия не точка в пространстве)
             properties = {
                 "id": int(power_line.id),
                 "name": str(power_line.name) if power_line.name else "",
                 "status": str(power_line.status) if power_line.status else "active",
                 "pole_count": 0
             }
-            # Добавляем voltage_level только если он не None
             if power_line.voltage_level is not None:
                 properties["voltage_level"] = float(power_line.voltage_level)
-            
-            feature = {
+            features.append({
                 "type": "Feature",
                 "properties": properties,
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [27.5615, 53.9045]  # Центр Минска по умолчанию
-                }
-            }
-            features.append(feature)
+                "geometry": None,
+            })
 
     return {
         "type": "FeatureCollection",
@@ -364,8 +322,11 @@ async def _get_poles_geojson_impl(db: AsyncSession):
             # Добавляем опциональные поля только если они не None
             if pole.height is not None:
                 properties["height"] = float(pole.height)
-            if getattr(pole, 'line_id', None) is not None:
-                properties["power_line_id"] = int(pole.line_id)
+            line_id_val = getattr(pole, 'line_id', None)
+            if line_id_val is None and pole.line is not None:
+                line_id_val = getattr(pole.line, 'id', None)
+            if line_id_val is not None:
+                properties["line_id"] = int(line_id_val)
             if pole.line and pole.line.name:
                 properties["power_line_name"] = str(pole.line.name)
             if pole.connectivity_node_id is not None:
@@ -396,6 +357,8 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["branch_type"] = str(pole.branch_type)
             if getattr(pole, "tap_pole_id", None) is not None:
                 properties["tap_pole_id"] = int(pole.tap_pole_id)
+            if getattr(pole, "tap_branch_index", None) is not None:
+                properties["tap_branch_index"] = int(pole.tap_branch_index)
             if getattr(pole, "is_tap_pole", None) is True:
                 properties["is_tap_pole"] = True
                 # Оранжевый = отпайка не начата, зелёный = от отпаечной уже есть опоры
@@ -489,7 +452,7 @@ async def get_taps_geojson(
             if tap.power_rating is not None:
                 properties["power_rating"] = float(tap.power_rating)
             if getattr(tap, 'line_id', None) is not None:
-                properties["power_line_id"] = int(tap.line_id)
+                properties["line_id"] = int(tap.line_id)
             if tap.pole_id is not None:
                 properties["pole_id"] = int(tap.pole_id)
             
@@ -894,7 +857,7 @@ async def get_spans_geojson(
                         "conductor_section": str(span.conductor_section) if span.conductor_section else None,
                         "tension": float(span.tension) if span.tension is not None else None,
                         "sag": float(span.sag) if span.sag is not None else None,
-                        "power_line_id": int(getattr(span, 'line_id', None)) if getattr(span, 'line_id', None) is not None else None,
+                        "line_id": int(getattr(span, 'line_id', None)) if getattr(span, 'line_id', None) is not None else None,
                         "power_line_name": str(span.line.name) if span.line and span.line.name else None,
                         "from_connectivity_node_id": int(span.from_connectivity_node_id) if span.from_connectivity_node_id is not None else None,
                         "to_connectivity_node_id": int(span.to_connectivity_node_id) if span.to_connectivity_node_id is not None else None,

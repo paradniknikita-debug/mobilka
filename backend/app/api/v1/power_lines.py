@@ -16,6 +16,7 @@ from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
 from app.models.change_log import ChangeLog
+from app.models.patrol_session import PatrolSession
 from app.schemas.power_line import (
     PowerLineCreate,
     PowerLineUpdate,
@@ -857,9 +858,14 @@ async def create_pole(
     pole_dict.pop('id', None)
     if pole_dict.get('pole_number') is not None:
         pole_dict['pole_number'] = normalize_pole_number(pole_dict['pole_number'])
+    # Номер магистрали (без "/") — опора всегда магистральная, даже если передан tap_pole_id
+    pole_number_str = (pole_dict.get('pole_number') or "").strip()
+    if pole_number_str and "/" not in pole_number_str:
+        pole_dict.pop("tap_pole_id", None)
+        pole_dict.pop("tap_branch_index", None)
     if getattr(pole_data, 'branch_type', None) is not None:
         pole_dict['branch_type'] = pole_data.branch_type
-    if getattr(pole_data, 'tap_pole_id', None) is not None:
+    if "/" in (pole_number_str or "") and getattr(pole_data, 'tap_pole_id', None) is not None:
         pole_dict['tap_pole_id'] = pole_data.tap_pole_id
     pole_dict.pop('start_new_tap', None)  # не поле БД, только флаг для логики
 
@@ -876,7 +882,11 @@ async def create_pole(
             line_id=power_line_id,
             created_by=current_user.id
         )
-        db_pole.is_tap_pole = getattr(pole_data, "is_tap", False)
+        # Опора в отпайке (3/1, 3/2) — всегда обычная; отпаечной (is_tap_pole=True) бывает только опора, ОТ которой идёт ветка (опора 3).
+        if getattr(db_pole, "tap_pole_id", None) is not None:
+            db_pole.is_tap_pole = False
+        else:
+            db_pole.is_tap_pole = getattr(pole_data, "is_tap", False)
         db.add(db_pole)
         await db.flush()  # Получаем ID опоры
 
@@ -979,6 +989,16 @@ async def create_pole(
             import traceback
             print(f"Ошибка автоматического создания пролёта: {e}")
             print(traceback.format_exc())
+
+        # При создании первой опоры отпайки (3/1) помечаем опору 3 как отпаечную (is_tap_pole=True), как в Angular
+        tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
+        if tap_pole_id_val is not None:
+            await db.execute(
+                update(Pole)
+                .where(Pole.id == tap_pole_id_val, Pole.line_id == power_line_id)
+                .values(is_tap_pole=True)
+            )
+            await db.flush()
 
         await db.commit()
     except ProgrammingError as e:
@@ -2300,32 +2320,9 @@ async def delete_power_line(
         await db.execute(connectivity_node_stmt)
         print(f"DEBUG: Удалены ConnectivityNode для ЛЭП {power_line_id}")
         
-        # Удаляем сессии обхода, привязанные к этой ЛЭП.
-        # В БД колонка могла называться power_line_id (старые версии) или line_id (новые) —
-        # поддерживаем оба варианта через сырой SQL и nested-транзакцию.
-        try:
-            async with db.begin_nested():
-                try:
-                    await db.execute(
-                        text("DELETE FROM patrol_sessions WHERE power_line_id = :id"),
-                        {"id": power_line_id},
-                    )
-                except Exception as e1:
-                    err_str = str(e1).lower()
-                    if "power_line_id" in err_str and ("does not exist" in err_str or "undefinedcolumn" in err_str):
-                        await db.execute(
-                            text("DELETE FROM patrol_sessions WHERE line_id = :id"),
-                            {"id": power_line_id},
-                        )
-                    else:
-                        raise
-            print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
-        except Exception as patrol_err:
-            err_str = str(patrol_err).lower()
-            if "does not exist" in err_str or "undefinedcolumn" in err_str:
-                print(f"DEBUG: Не удалось удалить сессии обхода (колонка не найдена), продолжаем")
-            else:
-                raise
+        # Удаляем сессии обхода, привязанные к этой ЛЭП (колонка line_id).
+        await db.execute(delete(PatrolSession).where(PatrolSession.line_id == power_line_id))
+        print(f"DEBUG: Удалены сессии обхода для ЛЭП {power_line_id}")
         
         # Убираем эту линию из connected_line_ids у всех подстанций (связь хранится в таблице подстанции)
         from app.models.substation import Substation

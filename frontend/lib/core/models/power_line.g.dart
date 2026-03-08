@@ -86,6 +86,9 @@ Pole _$PoleFromJson(Map<String, dynamic> json) => Pole(
       conductorSection: json['conductor_section'] as String?,
       sequenceNumber: _intFromJsonNullable(json['sequence_number']),
       isTapPole: json['is_tap_pole'] == true,
+      branchType: json['branch_type'] as String?,
+      tapPoleId: _intFromJsonNullable(json['tap_pole_id']),
+      tapBranchIndex: _intFromJsonNullable(json['tap_branch_index']),
       condition: _stringFromJson(json['condition'] ?? 'good'),
       notes: json['notes'] as String?,
       createdBy: _intFromJson(json['created_by']),
@@ -146,6 +149,12 @@ PoleCreate _$PoleCreateFromJson(Map<String, dynamic> json) => PoleCreate(
       conductorType: json['conductor_type'] as String?,
       conductorMaterial: json['conductor_material'] as String?,
       conductorSection: json['conductor_section'] as String?,
+      cardComment: json['card_comment'] as String?,
+      cardCommentAttachment: json['card_comment_attachment'] as String?,
+      tapPoleId: _intFromJsonNullable(json['tap_pole_id']),
+      branchType: json['branch_type'] as String?,
+      tapBranchIndex: _intFromJsonNullable(json['tap_branch_index']),
+      startNewTap: json['start_new_tap'] == true,
     );
 
 Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) {
@@ -172,6 +181,12 @@ Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) {
   writeNotNull('conductor_type', instance.conductorType);
   writeNotNull('conductor_material', instance.conductorMaterial);
   writeNotNull('conductor_section', instance.conductorSection);
+  writeNotNull('card_comment', instance.cardComment);
+  writeNotNull('card_comment_attachment', instance.cardCommentAttachment);
+  writeNotNull('tap_pole_id', instance.tapPoleId);
+  writeNotNull('branch_type', instance.branchType);
+  writeNotNull('tap_branch_index', instance.tapBranchIndex);
+  if (instance.startNewTap) val['start_new_tap'] = instance.startNewTap;
   return val;
 }
 

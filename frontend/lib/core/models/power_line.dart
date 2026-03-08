@@ -215,6 +215,15 @@ class Pole {
   final int? sequenceNumber;
   @JsonKey(name: 'is_tap_pole', defaultValue: false)
   final bool isTapPole;
+  /** 'main' — магистраль, 'tap' — отпайка */
+  @JsonKey(name: 'branch_type')
+  final String? branchType;
+  /** id отпаечной опоры, от которой идёт эта ветка */
+  @JsonKey(name: 'tap_pole_id')
+  final int? tapPoleId;
+  /** Номер ветки от одной отпаечной (1, 2, …) */
+  @JsonKey(name: 'tap_branch_index')
+  final int? tapBranchIndex;
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
@@ -242,6 +251,9 @@ class Pole {
     this.conductorSection,
     this.sequenceNumber,
     this.isTapPole = false,
+    this.branchType,
+    this.tapPoleId,
+    this.tapBranchIndex,
     required this.condition,
     this.notes,
     required this.createdBy,
@@ -269,6 +281,9 @@ class Pole {
     String? conductorSection,
     int? sequenceNumber,
     bool? isTapPole,
+    String? branchType,
+    int? tapPoleId,
+    int? tapBranchIndex,
     String? condition,
     String? notes,
     int? createdBy,
@@ -290,9 +305,12 @@ class Pole {
       conductorType: conductorType ?? this.conductorType,
       conductorMaterial: conductorMaterial ?? this.conductorMaterial,
       conductorSection: conductorSection ?? this.conductorSection,
-      sequenceNumber: sequenceNumber ?? this.sequenceNumber,
-      isTapPole: isTapPole ?? this.isTapPole,
-      condition: condition ?? this.condition,
+    sequenceNumber: sequenceNumber ?? this.sequenceNumber,
+    isTapPole: isTapPole ?? this.isTapPole,
+    branchType: branchType ?? this.branchType,
+    tapPoleId: tapPoleId ?? this.tapPoleId,
+    tapBranchIndex: tapBranchIndex ?? this.tapBranchIndex,
+    condition: condition ?? this.condition,
       notes: notes ?? this.notes,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
@@ -332,6 +350,21 @@ class PoleCreate {
   final String? conductorMaterial;
   @JsonKey(name: 'conductor_section') // Сечение, мм²
   final String? conductorSection;
+  @JsonKey(name: 'card_comment')
+  final String? cardComment;
+  @JsonKey(name: 'card_comment_attachment')
+  final String? cardCommentAttachment;
+  @JsonKey(name: 'tap_pole_id')
+  final int? tapPoleId;
+  /** 'main' — магистраль, 'tap' — отпайка */
+  @JsonKey(name: 'branch_type')
+  final String? branchType;
+  /** Номер ветки от одной отпаечной (1, 2, …); при продолжении существующей отпайки */
+  @JsonKey(name: 'tap_branch_index')
+  final int? tapBranchIndex;
+  /** Начать новую отпайку от tap_pole_id (вторая/третья ветка от одной опоры) */
+  @JsonKey(name: 'start_new_tap')
+  final bool startNewTap;
 
   const PoleCreate({
     required this.poleNumber,
@@ -348,6 +381,12 @@ class PoleCreate {
     this.conductorType,
     this.conductorMaterial,
     this.conductorSection,
+    this.cardComment,
+    this.cardCommentAttachment,
+    this.tapPoleId,
+    this.branchType,
+    this.tapBranchIndex,
+    this.startNewTap = false,
   });
 
   factory PoleCreate.fromJson(Map<String, dynamic> json) => _$PoleCreateFromJson(json);

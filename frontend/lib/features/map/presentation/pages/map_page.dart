@@ -105,7 +105,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
     final lineId = _toInt(
       _selectedObjectProperties!['line_id'] ??
-          _selectedObjectProperties!['power_line_id'],
+          _selectedObjectProperties!['line_id'],
     );
     if (lineId == null) return false;
     return lineId == _currentLineId;
@@ -273,18 +273,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         final plPoles = allPoles.where((p) => p.lineId == pl.id).toList()
           ..sort((a, b) => a.poleNumber.compareTo(b.poleNumber));
 
-        // Локальные линии с одной опорой: показываем как точку (дублируем координаты в LineString).
+        // Линия с одной опорой: линия не точка в пространстве — геометрия отсутствует (рисуется по опорам при 2+).
         if (plPoles.length == 1) {
-          final p = plPoles.first;
           powerLineFeatures.add({
             'type': 'Feature',
-            'geometry': {
-              'type': 'LineString',
-              'coordinates': [
-                [p.xPosition ?? 0.0, p.yPosition ?? 0.0],
-                [p.xPosition ?? 0.0, p.yPosition ?? 0.0],
-              ],
-            },
+            'geometry': null,
             'properties': {'id': pl.id, 'name': pl.name, 'is_local': pl.isLocal, 'is_tap': false},
           });
           continue;
@@ -451,6 +444,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// Устанавливает текущую ЛЭП из активной сессии обхода, если она есть в списке линий.
+  /// При перезаходе в сессию (линия подставляется из сохранённой) контекст отпайки сбрасывается — новые опоры на магистрали.
   void _applyActiveSessionIfNeeded() {
     final prefs = ref.read(prefsProvider);
     if (prefs == null) return;
@@ -458,7 +452,11 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (sessionLineId == null) return;
     if (_powerLinesList != null &&
         _powerLinesList!.any((pl) => pl.id == sessionLineId)) {
-      setState(() => _currentLineId = sessionLineId);
+      setState(() {
+        final restoringSession = _currentLineId != sessionLineId;
+        _currentLineId = sessionLineId;
+        if (restoringSession) _currentTapRoot = null;
+      });
     }
   }
 
@@ -665,19 +663,12 @@ class _MapPageState extends ConsumerState<MapPage> {
             poles: null,
             aclineSegments: null,
           ));
-          // Геометрия локальных линий: добавляем сегменты на карту (в онлайн-режиме сервер отдаёт только свои ЛЭП).
+          // Геометрия локальных линий: только LineString по опорам; линия не точка в пространстве.
           final plPoles = await db.getPolesByLine(pl.id);
           if (plPoles.length == 1) {
-            final p = plPoles.first;
             serverPlFeatures.add({
               'type': 'Feature',
-              'geometry': {
-                'type': 'LineString',
-                'coordinates': [
-                  [p.xPosition, p.yPosition],
-                  [p.xPosition, p.yPosition],
-                ],
-              },
+              'geometry': null,
               'properties': {'id': pl.id, 'name': pl.name, 'is_local': true, 'is_tap': false},
             });
           } else if (plPoles.length >= 2) {
@@ -776,7 +767,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         final coords = geom['coordinates'] as List?;
         if (coords == null || coords.length < 2) continue;
         final poleId = _toInt(props['id']);
-        final lineId = _toInt(props['line_id'] ?? props['power_line_id']);
+        final lineId = _toInt(props['line_id']);
         if (poleId == null || lineId == null) continue;
         seenPoleIdsByLine.putIfAbsent(lineId, () => <int>{});
         if (seenPoleIdsByLine[lineId]!.contains(poleId)) continue;
@@ -1276,13 +1267,53 @@ class _MapPageState extends ConsumerState<MapPage> {
                             ),
                           ],
                         )
-                      : FloatingActionButton.extended(
-                          onPressed: _currentLineId != null ? _showCreatePoleDialog : null,
-                          icon: const Icon(Icons.add_location_alt),
-                          label: const Text('Создать опору'),
-                          tooltip: _currentLineId != null
-                              ? 'Создать опору в линии текущего обхода'
-                              : 'Начните обход ЛЭП, чтобы создавать опоры',
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (_currentTapRoot != null && _currentTapRoot!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Material(
+                                  color: Colors.teal.withValues(alpha: 0.95),
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() => _currentTapRoot = null);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Режим магистрали: следующие опоры будут 4, 5, 6…'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.call_merge, color: Colors.white, size: 20),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Отпайка $_currentTapRoot • К магистрали',
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            FloatingActionButton.extended(
+                              onPressed: _currentLineId != null ? _showCreatePoleDialog : null,
+                              icon: const Icon(Icons.add_location_alt),
+                              label: const Text('Создать опору'),
+                              tooltip: _currentLineId != null
+                                  ? 'Создать опору в линии текущего обхода'
+                                  : 'Начните обход ЛЭП, чтобы создавать опоры',
+                            ),
+                          ],
                         ),
                 ),
                 
@@ -1300,19 +1331,19 @@ class _MapPageState extends ConsumerState<MapPage> {
                       onStartLineFormation: _selectedObjectType == ObjectType.pole
                           ? () {
                               final poleId = _selectedObjectProperties!['id'] as int?;
-                              final lineId = _selectedObjectProperties!['line_id'] ?? _selectedObjectProperties!['power_line_id'] as int?;
+                              final lineId = _selectedObjectProperties!['line_id'] as int?;
                               if (poleId != null && lineId != null) {
                                 _closeObjectProperties();
                                 _startLineFormation(poleId, lineId);
                               }
                             }
                           : null,
-                      onStartTapPole: _selectedObjectType == ObjectType.pole && _canStartTapFromSelectedPole
+                      onStartTapPole: _selectedObjectType == ObjectType.pole
                           ? _showCreatePoleFromTapPoleDialog
                           : null,
                       onAddPoleToTap: _selectedObjectType == ObjectType.pole &&
                           _currentLineId != null &&
-                          _toInt(_selectedObjectProperties?['power_line_id'] ?? _selectedObjectProperties?['line_id']) == _currentLineId
+                          _toInt(_selectedObjectProperties?['line_id']) == _currentLineId
                       ? _showAddPoleToTapDialog
                       : null,
                       onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
@@ -1370,7 +1401,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       try {
         final props = feature['properties'] as Map<String, dynamic>?;
         final geom = feature['geometry'] as Map<String, dynamic>?;
-        final plId = props != null ? _toInt(props['line_id'] ?? props['power_line_id']) : null;
+        final plId = props != null ? _toInt(props['line_id']) : null;
         if (plId == null || geom == null || geom['type'] != 'Point') continue;
         final coords = geom['coordinates'] as List<dynamic>?;
         if (coords == null || coords.length < 2) continue;
@@ -1582,7 +1613,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             poleProperties['x_position'] = latLng.longitude;
             poleProperties['y_position'] = latLng.latitude;
 
-            final plId = _toInt(properties?['line_id'] ?? properties?['power_line_id']);
+            final plId = _toInt(properties?['line_id']);
             final isCurrentPatrolLine = _currentLineId != null && plId == _currentLineId;
             final criticality = properties?['criticality'] as String?;
             final isTap = properties?['is_tap'] == true ||
@@ -1696,7 +1727,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             continue;
           }
 
-          final lineId = props?['line_id'] ?? props?['power_line_id'];
+          final lineId = props?['line_id'];
           final lineIdInt = lineId is int ? lineId : (lineId is num ? lineId.toInt() : null);
           final isActive = lineIdInt != null && lineIdInt == _currentLineId;
           final color = isActive ? Colors.green : Colors.red;
@@ -2616,7 +2647,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   Future<void> _showEditPoleDialog() async {
     final poleId = _selectedObjectProperties?['id'] as int?;
-    final powerLineId = _selectedObjectProperties?['power_line_id'] as int?;
+    final powerLineId = _selectedObjectProperties?['line_id'] as int?;
     if (poleId == null || powerLineId == null) return;
     _closeObjectProperties();
     final result = await showDialog<Map<String, dynamic>>(
@@ -2630,7 +2661,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (!mounted) return;
     if (result != null && result['action'] == 'start_tap') {
       final tapPoleId = _toInt(result['tapPoleId']);
-      final lineId = _toInt(result['powerLineId']);
+      final lineId = _toInt(result['lineId']);
       final tapPoleNumber = result['tapPoleNumber']?.toString();
       if (tapPoleId != null && lineId != null) {
         await _openCreatePoleFromTapPole(lineId, tapPoleId, tapPoleNumber);
@@ -2721,7 +2752,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Открыть диалог создания опоры «Начать отпайку» от выбранной опоры на карте.
   Future<void> _showCreatePoleFromTapPoleDialog() async {
-    final lineId = _toInt(_selectedObjectProperties?['line_id'] ?? _selectedObjectProperties?['power_line_id']);
+    final lineId = _toInt(_selectedObjectProperties?['line_id']);
     final tapPoleId = _toInt(_selectedObjectProperties?['id']);
     final tapPoleNumber = _selectedObjectProperties?['pole_number']?.toString();
     if (lineId == null || tapPoleId == null) return;
@@ -2729,13 +2760,22 @@ class _MapPageState extends ConsumerState<MapPage> {
     await _openCreatePoleFromTapPole(lineId, tapPoleId, tapPoleNumber);
   }
 
-  /// Открыть диалог добавления следующей опоры в отпайку (выбрана опора с номером N/M).
-  /// Доступно только при обходе линии; номер новой опоры = N/(M+1), например 2/2 → 2/3.
+  /// Открыть диалог добавления следующей опоры в отпайку (выбрана опора 3/1, 3/2 и т.д.).
+  /// tap_pole_id = id отпаечной опоры (опора 3), не id выбранной опоры. Новая опора: N/(M+1).
   Future<void> _showAddPoleToTapDialog() async {
-    final lineId = _toInt(_selectedObjectProperties?['line_id'] ?? _selectedObjectProperties?['power_line_id']);
-    final tapPoleId = _toInt(_selectedObjectProperties?['id']);
+    final lineId = _toInt(_selectedObjectProperties?['line_id']);
     final poleNumber = _selectedObjectProperties?['pole_number']?.toString() ?? '';
-    if (lineId == null || tapPoleId == null || !poleNumber.contains('/')) return;
+    if (lineId == null || !poleNumber.contains('/')) return;
+    // Отпаечная опора (точка ветвления) — опора 3; у опор 3/1, 3/2 в properties есть tap_pole_id = id(опора 3)
+    int? tapPoleId = _toInt(_selectedObjectProperties?['tap_pole_id']);
+    if (tapPoleId == null) {
+      final root = poleNumber.split('/').first.trim();
+      final db = ref.read(drift_db.databaseProvider);
+      final linePoles = await db.getPolesByLine(lineId);
+      final rootList = linePoles.where((p) => p.poleNumber.trim() == root).toList();
+      tapPoleId = rootList.isNotEmpty ? rootList.first.id : null;
+    }
+    if (tapPoleId == null) return;
     if (_currentLineId == null || _currentLineId != lineId) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2768,11 +2808,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     final linePoles = await db.getPolesByLine(lineId);
     if (!mounted) return;
     _closeObjectProperties();
+    final tapBranchIndex = _toInt(_selectedObjectProperties?['tap_branch_index']) ?? 1;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
         lineId: lineId,
         tapPoleId: tapPoleId,
+        tapBranchIndex: tapBranchIndex,
         startNewTap: false,
         initialLatitude: _currentLocation?.latitude,
         initialLongitude: _currentLocation?.longitude,
@@ -2790,11 +2832,14 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (lat != null && lng != null && _mapReady) {
         _mapController.move(LatLng(lat, lng), 18.0);
       }
+      // Показываем снова кнопку «К магистрали», чтобы можно было вернуться к магистрали перед добавлением опоры 4
+      setState(() => _currentTapRoot = root);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Опора отпайки добавлена'),
+            content: Text('Опора отпайки добавлена. Нажмите «К магистрали», чтобы добавить следующую опору на магистраль.'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
           ),
         );
       }
@@ -2840,11 +2885,14 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // Подстановка номера: при отпайке — следующий в отпайке (3/2, 3/3, ...); иначе — следующий по магистрали (1, 2, 3, ...)
     String? initialPoleNumber;
+    int? tapPoleIdForFab;
+    int? tapBranchIndexForFab;
     if (_currentTapRoot != null && _currentTapRoot!.isNotEmpty) {
       final prefix = '${_currentTapRoot!.trim()}/';
       int maxSuffix = 0;
       for (final p in linePoles) {
         final n = p.poleNumber;
+        if (n == _currentTapRoot!.trim()) tapPoleIdForFab = p.id;
         if (n.startsWith(prefix)) {
           final suffixStr = n.substring(prefix.length).trim();
           final suffix = int.tryParse(suffixStr);
@@ -2852,6 +2900,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
       }
       initialPoleNumber = '$_currentTapRoot/${maxSuffix + 1}';
+      tapBranchIndexForFab = 1; // первая ветка от данной отпаечной опоры
     } else {
       // Опоры магистрали (без "/" в номере): следующий номер = max(номера магистрали) + 1
       int maxMainNum = 0;
@@ -2869,6 +2918,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       context: context,
       builder: (context) => CreatePoleDialog(
         lineId: selectedLineId,
+        tapPoleId: tapPoleIdForFab,
+        tapBranchIndex: tapBranchIndexForFab,
         initialLatitude: _currentLocation!.latitude,
         initialLongitude: _currentLocation!.longitude,
         initialPoleNumber: initialPoleNumber,
@@ -2934,7 +2985,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       _showObjectProperties = true;
       // При клике на опору — раскрываем её ЛЭП в дереве объектов
       if (objectType == ObjectType.pole) {
-        final lineId = _toInt(properties['line_id'] ?? properties['power_line_id']);
+        final lineId = _toInt(properties['line_id']);
         if (lineId != null) {
           _expandedPowerLineIds.add(lineId);
         }
@@ -2999,7 +3050,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
   
   Future<void> _handleAutoCreateSpans() async {
-    final lineId = _selectedObjectProperties?['line_id'] ?? _selectedObjectProperties?['power_line_id'] as int?;
+    final lineId = _selectedObjectProperties?['line_id'] as int?;
     if (lineId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3945,10 +3996,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     final nameController = TextEditingController();
     final voltageController = TextEditingController();
     final descriptionController = TextEditingController();
+    // Сохраняем ссылки из контекста страницы: после Navigator.pop() контекст диалога недействителен
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Создать линию'),
         content: SingleChildScrollView(
           child: Column(
@@ -3985,13 +4039,13 @@ class _MapPageState extends ConsumerState<MapPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => navigator.pop(),
             child: const Text('Отмена'),
           ),
           ElevatedButton(
             onPressed: () async {
               if (nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(
                     content: Text('Название обязательно для заполнения'),
                     backgroundColor: Colors.red,
@@ -4008,8 +4062,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                 try {
                   final existing = await apiService.getPowerLines();
                   final duplicate = existing.any((pl) => pl.name.trim().toLowerCase() == nameLower);
-                  if (duplicate && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                  if (duplicate && dialogContext.mounted) {
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('ЛЭП с таким названием уже существует'),
                         backgroundColor: Colors.red,
@@ -4022,8 +4076,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                   final db = ref.read(drift_db.databaseProvider);
                   final localLines = await db.getAllPowerLines();
                   final duplicate = localLines.any((pl) => pl.name.trim().toLowerCase() == nameLower);
-                  if (duplicate && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                  if (duplicate && dialogContext.mounted) {
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('ЛЭП с таким названием уже существует'),
                         backgroundColor: Colors.red,
@@ -4052,10 +4106,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                 try {
                   await apiService.createPowerLine(powerLineData);
                   if (!mounted) return;
-                  Navigator.of(context).pop();
+                  navigator.pop();
                   await _loadMapData();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('Линия успешно создана'),
                         backgroundColor: Colors.green,
@@ -4079,7 +4133,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       message = 'Ошибка создания линии: ${e.message}';
                     }
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         SnackBar(
                           content: Text(message),
                           backgroundColor: Colors.red,
@@ -4113,10 +4167,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                     needsSync: const drift.Value(true),
                   ));
                   if (!mounted) return;
-                  Navigator.of(context).pop();
+                  navigator.pop();
                   await _loadMapDataFromLocal();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text(
                           'ЛЭП сохранена локально. Будет синхронизирована при появлении связи.',
@@ -4129,7 +4183,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('Ошибка создания линии: ${e.toString()}'),
                       backgroundColor: Colors.red,
