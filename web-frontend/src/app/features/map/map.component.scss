@@ -102,6 +102,11 @@
   display: none !important;
 }
 
+// Убираем артефакт/контрол Leaflet в левом верхнем углу (рядом со стрелкой дерева объектов)
+::ng-deep .leaflet-top.leaflet-left {
+  display: none !important;
+}
+
 // Панель свойств опоры — компактная, в стиле дерева объектов (шрифт 12px, отступы как в сайдбаре)
 .pole-properties-panel {
   position: absolute;
@@ -229,6 +234,97 @@
       .terminal-dir {
         margin-left: 4px;
         color: rgba(0, 0, 0, 0.6);
+      }
+    }
+
+    &.card-comment {
+      white-space: pre-wrap;
+      text-align: left;
+    }
+  }
+
+  &.property-item--attachments .attachments-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+
+    .attachment-img {
+      max-width: 64px;
+      max-height: 64px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .attachment-audio {
+      max-width: 100%;
+      height: 28px;
+    }
+  }
+
+  &.property-item--equipment-list .equipment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+    text-align: right;
+
+    .equipment-block {
+      width: 100%;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+
+      .equipment-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 10px;
+        background: rgba(33, 150, 243, 0.08);
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        font-size: 11px;
+
+        .equipment-type {
+          margin-left: 4px;
+          color: rgba(0, 0, 0, 0.6);
+        }
+      }
+
+      .equipment-defect {
+        margin-top: 4px;
+        font-size: 11px;
+        color: rgba(0, 0, 0, 0.75);
+
+        .defect-label {
+          font-weight: 500;
+          color: rgba(0, 0, 0, 0.6);
+        }
+      }
+
+      .criticality-badge {
+        display: inline-block;
+        margin-top: 2px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 500;
+
+        &.criticality-badge--high {
+          background: rgba(244, 67, 54, 0.2);
+          color: #c62828;
+        }
+
+        &.criticality-badge--medium {
+          background: rgba(255, 152, 0, 0.2);
+          color: #e65100;
+        }
+
+        &.criticality-badge--low {
+          background: rgba(76, 175, 80, 0.2);
+          color: #2e7d32;
+        }
       }
     }
   }
@@ -470,5 +566,50 @@ $equip-color: #ba68c8;
 ::ng-deep .equipment-inline--generic {
   border-radius: 1px;
   border: 2px solid $equip-color;
+}
+
+// Оборудование на линии — красные иконки как во Flutter (в тон линии)
+::ng-deep .equipment-on-line {
+  position: relative;
+  .equipment-on-line-outline {
+    position: absolute;
+    left: 0;
+    top: 0;
+    object-fit: contain;
+    pointer-events: none;
+  }
+  .equipment-on-line-img {
+    position: relative;
+    object-fit: contain;
+    filter: brightness(0) saturate(100%) invert(27%) sepia(98%) saturate(5000%) hue-rotate(0deg);
+  }
+  .equipment-icon-zn {
+    object-fit: contain;
+    transform: scale(0.48);
+  }
+  .equipment-recloser-badge {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border: 1px solid #fff;
+    pointer-events: none;
+  }
+  svg {
+    line, path, polyline {
+      stroke: #f44336 !important;
+      fill: none !important;
+    }
+    rect {
+      stroke: #f44336 !important;
+      fill: #ffffff !important;
+    }
+    circle {
+      stroke: #f44336 !important;
+      fill: #ffffff !important;
+    }
+  }
 }
 

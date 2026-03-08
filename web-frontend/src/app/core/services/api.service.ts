@@ -26,6 +26,11 @@ export class ApiService {
 
   constructor(private http: HttpClient) {}
 
+  /** Параметр для обхода кэша браузера при загрузке данных карты. */
+  private cacheBustParams(): HttpParams {
+    return new HttpParams().set('_', String(Date.now()));
+  }
+
   // ========== Authentication ==========
   login(username: string, password: string): Observable<AuthResponse> {
     const formData = new URLSearchParams();
@@ -47,7 +52,7 @@ export class ApiService {
 
   // ========== Power Lines ==========
   getPowerLines(): Observable<PowerLine[]> {
-    return this.http.get<PowerLine[]>(`${this.apiUrl}/power-lines`);
+    return this.http.get<PowerLine[]>(`${this.apiUrl}/power-lines`, { params: this.cacheBustParams() });
   }
 
   getPowerLine(id: number): Observable<PowerLine> {
@@ -114,6 +119,24 @@ export class ApiService {
     return this.http.delete<{message: string, details?: string}>(`${this.apiUrl}/poles/${id}`);
   }
 
+  /** Полный URL вложения карточки опоры (для img/audio src). relativeUrl — путь от бэкенда, например /api/v1/attachments/poles/1/file.jpg */
+  getAttachmentUrl(relativeUrl: string): string {
+    const path = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const base = this.apiUrl.replace(/\/api\/v1\/?$/, '');
+    return `${base}${path}`;
+  }
+
+  /** Загрузить вложение к карточке опоры (фото, голос, схема). Возвращает url для сохранения в card_comment_attachment. */
+  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema', file: File): Observable<{ url: string; type: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('attachment_type', attachmentType);
+    formData.append('file', file);
+    return this.http.post<{ url: string; type: string; filename: string }>(
+      `${this.apiUrl}/attachments/poles/${poleId}/attachments`,
+      formData
+    );
+  }
+
   // ========== Spans ==========
   getSpansByPowerLine(powerLineId: number): Observable<Span[]> {
     return this.http.get<Span[]>(`${this.apiUrl}/power-lines/${powerLineId}/spans`);
@@ -146,7 +169,7 @@ export class ApiService {
 
   // ========== Equipment ==========
   getAllEquipment(): Observable<Equipment[]> {
-    return this.http.get<Equipment[]>(`${this.apiUrl}/equipment`);
+    return this.http.get<Equipment[]>(`${this.apiUrl}/equipment`, { params: this.cacheBustParams() });
   }
 
   getEquipment(id: number): Observable<Equipment> {
@@ -192,23 +215,28 @@ export class ApiService {
 
   // ========== Map ==========
   getPowerLinesGeoJSON(): Observable<GeoJSONCollection> {
-    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/power-lines/geojson`);
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/power-lines/geojson`, { params: this.cacheBustParams() });
   }
 
   getPolesGeoJSON(): Observable<GeoJSONCollection> {
-    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/poles/geojson`);
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/poles/geojson`, { params: this.cacheBustParams() });
   }
 
   getTapsGeoJSON(): Observable<GeoJSONCollection> {
-    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/taps/geojson`);
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/taps/geojson`, { params: this.cacheBustParams() });
   }
 
   getSubstationsGeoJSON(): Observable<GeoJSONCollection> {
-    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/substations/geojson`);
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/substations/geojson`, { params: this.cacheBustParams() });
   }
 
   getSpansGeoJSON(): Observable<GeoJSONCollection> {
-    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/spans/geojson`);
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/spans/geojson`, { params: this.cacheBustParams() });
+  }
+
+  /** Оборудование на карте: точки между опорами с иконкой и углом (как во Flutter). */
+  getEquipmentGeoJSON(): Observable<GeoJSONCollection> {
+    return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/equipment/geojson`, { params: this.cacheBustParams() });
   }
 
   getDataBounds(): Observable<any> {

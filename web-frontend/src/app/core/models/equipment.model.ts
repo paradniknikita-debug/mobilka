@@ -17,6 +17,10 @@ export interface Equipment {
   condition?: string;
   /** Доп. описание и характеристики (в т.ч. ном. ток/напряжение, марка) */
   notes?: string;
+  /** Описание дефекта */
+  defect?: string | null;
+  /** Критичность: low | medium | high */
+  criticality?: string | null;
   /** Координаты оборудования как отдельного объекта (CIM: x_position = longitude, y_position = latitude) */
   x_position?: number;
   y_position?: number;
@@ -35,6 +39,8 @@ export interface EquipmentCreate {
   installation_date?: string;
   condition?: string;
   notes?: string;
+  defect?: string | null;
+  criticality?: string | null;
   x_position?: number;
   y_position?: number;
 }

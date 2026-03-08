@@ -123,6 +123,8 @@ async def create_equipment(
 
     direction_angle = data.get("direction_angle") or data.get("directionAngle")
 
+    defect = data.get("defect")
+    criticality = data.get("criticality")
     db_equipment = Equipment(
         equipment_type=equipment_type,
         name=name,
@@ -133,6 +135,8 @@ async def create_equipment(
         installation_date=installation_date,
         condition=data.get("condition") or "good",
         notes=data.get("notes"),
+        defect=defect,
+        criticality=criticality,
         pole_id=pole_id,
         x_position=float(raw_lon) if raw_lon is not None else None,
         y_position=float(raw_lat) if raw_lat is not None else None,

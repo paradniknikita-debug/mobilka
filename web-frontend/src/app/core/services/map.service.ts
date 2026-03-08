@@ -11,6 +11,7 @@ export interface MapData {
   taps: GeoJSONCollection;
   substations: GeoJSONCollection;
   spans: GeoJSONCollection;
+  equipment: GeoJSONCollection;
 }
 
 @Injectable({
@@ -28,7 +29,8 @@ export class MapService {
       poles: this.apiService.getPolesGeoJSON(),
       taps: this.apiService.getTapsGeoJSON(),
       substations: this.apiService.getSubstationsGeoJSON(),
-      spans: this.apiService.getSpansGeoJSON()
+      spans: this.apiService.getSpansGeoJSON(),
+      equipment: this.apiService.getEquipmentGeoJSON()
     });
   }
 

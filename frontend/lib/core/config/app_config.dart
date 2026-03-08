@@ -33,9 +33,9 @@ class AppConfig {
   /// Проверить, используется ли HTTP (после fallback)
   static bool get isUsingHttp => _urlManager.isUsingHttp;
   
-  // Map Configuration
+  // Map Configuration (minZoom 3 — не отдалять до дублирования континентов)
   static const double defaultZoom = 10.0;
-  static const double minZoom = 1.0;
+  static const double minZoom = 3.0;
   static const double maxZoom = 18.0;
 
   /// Офлайн-карта: границы Беларуси (юг, запад, север, восток) для загрузки тайлов

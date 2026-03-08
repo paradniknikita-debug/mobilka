@@ -30,10 +30,10 @@ export const environment = {
     return `${protocol}://${backendHost}/api/${this.apiVersion}`;
   },
   
-  // Настройки карты
+  // Настройки карты (minZoom 3 — не даём отдалять до дублирования континентов)
   map: {
     defaultZoom: 10,
-    minZoom: 1,
+    minZoom: 3,
     maxZoom: 18,
     defaultCenter: {
       lat: 53.9045,

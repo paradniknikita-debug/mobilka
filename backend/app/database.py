@@ -218,6 +218,27 @@ async def init_db():
                             WHERE cn.pole_id = p.id
                               AND (p.is_tap_pole IS NULL OR p.is_tap_pole = false);
                         END IF;
+                        -- Карточка опоры (комментарий и вложения) и дефекты оборудования
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'card_comment')
+                        THEN
+                            ALTER TABLE pole ADD COLUMN card_comment TEXT;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'card_comment_attachment')
+                        THEN
+                            ALTER TABLE pole ADD COLUMN card_comment_attachment TEXT;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'equipment' AND column_name = 'defect')
+                        THEN
+                            ALTER TABLE equipment ADD COLUMN defect TEXT;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'equipment' AND column_name = 'criticality')
+                        THEN
+                            ALTER TABLE equipment ADD COLUMN criticality VARCHAR(20);
+                        END IF;
                     END $$;
                 """))
                 await conn.execute(text('CREATE INDEX IF NOT EXISTS idx_line_substation_start_id ON "line"(substation_start_id)'))

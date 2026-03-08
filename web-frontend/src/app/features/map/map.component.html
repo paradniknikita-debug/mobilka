@@ -36,39 +36,28 @@
       </button>
     </div>
     <div class="pole-properties-content">
+      <!-- Как во Flutter: Название, UID, Участок линии, Позиция, Порядок, Узел соединения, затем остальное -->
       <div class="property-item">
         <span class="property-label">Название:</span>
-        <span class="property-value">{{ selectedPole.pole_number || 'N/A' }}</span>
+        <span class="property-value">{{ selectedPole.pole_number ?? selectedPole.poleNumber ?? '—' }}</span>
       </div>
       <div class="property-item">
         <span class="property-label">UID:</span>
-        <span class="property-value uid-value">{{ selectedPole.mrid || 'N/A' }}</span>
-      </div>
-      <div class="property-item" *ngIf="selectedPole.sequence_number != null">
-        <span class="property-label">Порядок:</span>
-        <span class="property-value">{{ selectedPole.sequence_number }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">Тип:</span>
-        <span class="property-value">{{ selectedPole.pole_type || 'N/A' }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">Высота:</span>
-        <span class="property-value">{{ selectedPole.height != null ? selectedPole.height + ' м' : 'N/A' }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">Состояние:</span>
-        <span class="property-value">{{ selectedPole.condition || 'N/A' }}</span>
+        <span class="property-value uid-value">{{ selectedPole.mrid ?? '—' }}</span>
       </div>
       <div class="property-item">
         <span class="property-label">Участок линии:</span>
-        <span class="property-value">{{ selectedPole.segment_name || selectedPole.power_line_name || 'N/A' }}</span>
+        <span class="property-value">{{ selectedPole.segment_name ?? selectedPole.power_line_name ?? '—' }}</span>
       </div>
       <div class="property-item">
-        <span class="property-label">Координаты (ш,д):</span>
+        <span class="property-label">Координаты (x, y / ш, д):</span>
         <span class="property-value coord">
-          {{ getPoleLat() != null ? (getPoleLat() | number:'1.6-6') : 'N/A' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.6-6') : 'N/A' }}
+          {{ getPoleLat() != null ? (getPoleLat() | number:'1.6-6') : '—' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.6-6') : '—' }}
         </span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.sequence_number != null">
+        <span class="property-label">Порядок в линии:</span>
+        <span class="property-value">{{ selectedPole.sequence_number }}</span>
       </div>
       <div class="property-item">
         <span class="property-label">Узел соединения:</span>
@@ -85,6 +74,38 @@
           </span>
         </ng-template>
       </div>
+      <div class="property-item">
+        <span class="property-label">Тип:</span>
+        <span class="property-value">{{ selectedPole.pole_type ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Высота:</span>
+        <span class="property-value">{{ selectedPole.height != null ? selectedPole.height + ' м' : '—' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.foundation_type">
+        <span class="property-label">Фундамент:</span>
+        <span class="property-value">{{ selectedPole.foundation_type }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Состояние:</span>
+        <span class="property-value">{{ selectedPole.condition ?? '—' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.card_comment">
+        <span class="property-label">Комментарий карточки:</span>
+        <span class="property-value card-comment">{{ selectedPole.card_comment }}</span>
+      </div>
+      <div class="property-item property-item--attachments" *ngIf="parseCardAttachments(selectedPole.card_comment_attachment).length">
+        <span class="property-label">Вложения:</span>
+        <span class="property-value attachments-list">
+          <ng-container *ngFor="let att of parseCardAttachments(selectedPole.card_comment_attachment)">
+            <ng-container [ngSwitch]="att.t">
+              <img *ngSwitchCase="'photo'" [src]="getAttachmentUrl(att.url)" alt="Фото" class="attachment-img" />
+              <img *ngSwitchCase="'schema'" [src]="getAttachmentUrl(att.url)" alt="Схема" class="attachment-img" />
+              <audio *ngSwitchCase="'voice'" [src]="getAttachmentUrl(att.url)" controls class="attachment-audio"></audio>
+            </ng-container>
+          </ng-container>
+        </span>
+      </div>
       <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">
         <span class="property-label">Терминалы:</span>
         <span class="property-value">
@@ -96,14 +117,22 @@
           </ng-container>
         </span>
       </div>
-      <div class="property-item" *ngIf="selectedPole.equipment && selectedPole.equipment.length">
+      <div class="property-item property-item--equipment-list" *ngIf="getPoleEquipmentForCard().length">
         <span class="property-label">Оборудование:</span>
-        <span class="property-value">
-          <ng-container *ngFor="let eq of selectedPole.equipment; let i = index">
-            <span class="equipment-chip">
-              {{ eq.name || eq.equipment_type }}
-              <span class="equipment-type">({{ eq.equipment_type }})</span>
-            </span><span *ngIf="i < selectedPole.equipment.length - 1">, </span>
+        <span class="property-value equipment-list">
+          <ng-container *ngFor="let eq of getPoleEquipmentForCard()">
+            <div class="equipment-block">
+              <span class="equipment-chip">
+                {{ eq.name || eq.equipment_type }}
+                <span class="equipment-type">({{ eq.equipment_type }})</span>
+              </span>
+              <div class="equipment-defect" *ngIf="eq.defect">
+                <span class="defect-label">Дефект:</span> {{ eq.defect }}
+              </div>
+              <span class="criticality-badge" *ngIf="eq.criticality" [class]="'criticality-badge--' + eq.criticality">
+                {{ eq.criticality === 'high' ? 'Высокая' : eq.criticality === 'medium' ? 'Средняя' : 'Низкая' }}
+              </span>
+            </div>
           </ng-container>
         </span>
       </div>

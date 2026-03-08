@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments
 # Временно закомментировано до применения миграции
 # from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
@@ -169,6 +169,7 @@ app.include_router(pole_sequence.router, prefix="/api/v1", tags=["pole-sequence"
 app.include_router(cim_export.router, prefix="/api/v1/cim", tags=["cim-export"])
 app.include_router(patrol_sessions.router, prefix="/api/v1/patrol-sessions", tags=["patrol-sessions"])
 app.include_router(change_log.router, prefix="/api/v1/change-log", tags=["change-log"])
+app.include_router(attachments.router, prefix="/api/v1/attachments", tags=["attachments"])
 # Временно закомментировано до применения миграции
 # app.include_router(base_voltage.router, prefix="/api/v1/base-voltages", tags=["base-voltages"])
 # app.include_router(wire_info.router, prefix="/api/v1/wire-infos", tags=["wire-infos"])

@@ -71,6 +71,29 @@ export class ChangeLogComponent implements OnInit {
   getName(entry: ChangeLogEntry): string {
     const p = entry.payload;
     if (!p) return entry.entity_name ?? '—';
+    // Обходы (сессии): из payload показываем линию и время
+    if (entry.entity_type === 'patrol_session') {
+      const lineName = (p['line_name'] as string) || 'ЛЭП';
+      if (entry.action === 'session_start') {
+        return `Обход: «${lineName}» (начало)`;
+      }
+      if (entry.action === 'session_end') {
+        const started = p['started_at'] as string | undefined;
+        const ended = p['ended_at'] as string | undefined;
+        const note = p['note'] as string | undefined;
+        let s = `Обход: «${lineName}» (завершён)`;
+        if (started && ended) {
+          try {
+            const startDate = new Date(started).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+            const endDate = new Date(ended).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+            s += ` ${startDate} — ${endDate}`;
+          } catch (_) {}
+        }
+        if (note && String(note).trim()) s += ` • ${String(note).trim()}`;
+        return s;
+      }
+      return lineName;
+    }
     if (p['cascade'] === true && p['name']) {
       const parts = [`Линия «${p['name']}»`];
       if (p['deleted_poles']) parts.push(`${p['deleted_poles']} опор`);
@@ -119,7 +142,8 @@ export class ChangeLogComponent implements OnInit {
       equipment: 'Оборудование',
       acline_segment: 'Участок линии',
       line_section: 'Секция линии',
-      session: 'Сессия'
+      session: 'Сессия',
+      patrol_session: 'Обход ЛЭП'
     };
     return labels[type] ?? type;
   }

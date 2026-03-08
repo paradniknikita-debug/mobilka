@@ -1,4 +1,4 @@
-"""API сессий обхода ЛЭП. Администратор видит все обходы, инженер — только свои."""
+"""API сессий обхода ЛЭП. Администратор видит все обходы, инженер — только свои. События обходов пишутся в журнал изменений."""
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timezone
@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.patrol_session import PatrolSession
 from app.models.user import User
 from app.models.power_line import PowerLine
+from app.models.change_log import ChangeLog
 from app.core.security import get_current_active_user
 from app.schemas.patrol_session import (
     PatrolSessionCreate,
@@ -101,6 +102,27 @@ async def create_patrol_session(
     db.add(session)
     await db.commit()
     await db.refresh(session)
+
+    # Запись в журнал изменений: начало обхода
+    pl_result = await db.execute(select(PowerLine).where(PowerLine.id == body.line_id))
+    pl = pl_result.scalar_one_or_none()
+    change_entry = ChangeLog(
+        user_id=current_user.id,
+        source="flutter",
+        action="session_start",
+        entity_type="patrol_session",
+        entity_id=session.id,
+        payload={
+            "line_id": body.line_id,
+            "line_name": pl.name if pl else None,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "note": body.note,
+        },
+        session_id=str(session.id),
+    )
+    db.add(change_entry)
+    await db.commit()
+
     return session
 
 
@@ -128,6 +150,29 @@ async def end_patrol_session(
     session.ended_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(session)
+
+    # Запись в журнал изменений: завершение обхода
+    pl_result = await db.execute(select(PowerLine).where(PowerLine.id == session.line_id))
+    pl = pl_result.scalar_one_or_none()
+    change_entry = ChangeLog(
+        user_id=current_user.id,
+        source="flutter",
+        action="session_end",
+        entity_type="patrol_session",
+        entity_id=session.id,
+        payload={
+            "line_id": session.line_id,
+            "line_name": pl.name if pl else None,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+            "note": session.note,
+        },
+        session_id=str(session.id),
+    )
+    db.add(change_entry)
+    await db.commit()
+    await db.refresh(session)
+
     return session
 
 

@@ -18,6 +18,8 @@ class PoleBase(BaseModel):
     year_installed: Optional[int] = None
     condition: str = "good"
     notes: Optional[str] = None
+    card_comment: Optional[str] = None
+    card_comment_attachment: Optional[str] = None  # JSON: [{"t":"voice"|"photo"|"schema","url":...}]
     sequence_number: Optional[int] = None
     conductor_type: Optional[str] = None
     conductor_material: Optional[str] = None
@@ -192,6 +194,8 @@ class EquipmentBase(BaseModel):
     y_position: Optional[float] = None  # Широта
     # Направление от опоры для отрисовки (градусы 0–360); задаёт, в какую сторону от опоры ставится участок до оборудования
     direction_angle: Optional[float] = None
+    defect: Optional[str] = None
+    criticality: Optional[str] = None  # low | medium | high
 
 class EquipmentCreate(EquipmentBase):
     # pole_id оставляем опциональным:

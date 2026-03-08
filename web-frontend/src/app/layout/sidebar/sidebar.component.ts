@@ -159,12 +159,56 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
   getPoleEquipment(poleId: number): Equipment[] {
-    return this.equipmentByPoleId.get(poleId) ?? [];
+    const list = this.equipmentByPoleId.get(poleId) ?? [];
+    return list.filter(eq => !this.isFoundationEquipment(eq));
+  }
+
+  /** Фундамент не показываем в дереве объектов — только в карточке опоры. */
+  private isFoundationEquipment(eq: Equipment): boolean {
+    const t = (eq.equipment_type || '').toLowerCase().trim();
+    return t === 'фундамент' || t === 'foundation';
   }
 
   getPoleEquipmentByType(poleId: number, type: 'breaker' | 'disconnector' | 'recloser' | 'grounding_switch' | 'surge_arrester'): Equipment[] {
     const list = this.getPoleEquipment(poleId);
     return list.filter(eq => (eq.equipment_type || '').toLowerCase() === type);
+  }
+
+  /** Ключ иконки оборудования для дерева (те же типы, что на карте). */
+  getEquipmentIconKey(eq: Equipment): string | null {
+    const t = (eq.equipment_type || '').toLowerCase().trim();
+    const n = (eq.name || '').toLowerCase();
+    if (t.includes('реклоузер') || n.includes('реклоузер') || t === 'recloser' || n.includes('recloser')) return 'recloser';
+    if (t.includes('выключател') || n.includes('выключател') || t === 'breaker' || n.includes('breaker')) return 'breaker';
+    if (t.includes('зн') || t.includes('заземлен') || t === 'grounding_switch' || t.includes('grounding')) return 'zn';
+    if (t.includes('разъединитель') || t.includes('разъеденитель') || t.includes('разъедин') || t === 'disconnector' || t.includes('disconnector')) return 'disconnector';
+    if (t.includes('разрядник') || n.includes('опн') || t === 'surge_arrester' || t.includes('arrester') || t.includes('surge')) return 'arrester';
+    const noIcon = ['фундамент', 'foundation', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
+    if (noIcon.some(x => t.includes(x))) return null;
+    return null;
+  }
+
+  /** Путь к SVG-ассету оборудования (те же файлы, что на карте). */
+  getEquipmentAssetPath(iconKey: string): string {
+    const sub: Record<string, string> = {
+      recloser: 'recloser/recloser.svg',
+      breaker: 'breaker/breaker.svg',
+      zn: 'zn/zn.svg',
+      disconnector: 'disconnector/disconnector.svg',
+      arrester: 'arrester/arrester.svg'
+    };
+    return sub[iconKey] ? `assets/equipment/${sub[iconKey]}` : '';
+  }
+
+  /** Название типа оборудования по CIM-модели (для дерева и формирования CIM). */
+  getEquipmentCimName(eq: Equipment): string {
+    const key = this.getEquipmentIconKey(eq);
+    if (key === 'zn') return 'ground_disconnector';
+    if (key === 'arrester') return 'surge_arrester';
+    if (key === 'breaker') return 'breaker';
+    if (key === 'disconnector') return 'disconnector';
+    if (key === 'recloser') return 'recloser';
+    return eq.equipment_type || 'equipment';
   }
 
   get powerLinesFeatures(): GeoJSONFeature[] {

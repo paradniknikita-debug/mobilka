@@ -356,39 +356,25 @@ class _MapPageState extends ConsumerState<MapPage> {
         for (var i = 0; i < plPolesSorted.length - 1; i++) {
           final p1 = plPolesSorted[i];
           final p2 = plPolesSorted[i + 1];
-            // Оборудование, добавленное на текущей (второй) опоре пары, отображаем на пролёте от предыдущей к текущей.
-            final eqList = equipmentByPole[p2.id] ?? const <drift_db.EquipmentData>[];
+          final x1 = (p1.xPosition ?? 0.0);
+          final y1 = (p1.yPosition ?? 0.0);
+          final x2 = (p2.xPosition ?? 0.0);
+          final y2 = (p2.yPosition ?? 0.0);
+          final angleRad = math.atan2(y2 - y1, x2 - x1);
 
-            final visibleEq = eqList.where((e) => _lineEquipmentIconForEquipment(e) != null).toList();
-            if (visibleEq.isEmpty) continue;
-
-            for (var j = 0; j < visibleEq.length; j++) {
-              final e = visibleEq[j];
+          // Оборудование первой опоры линии — только на первом сегменте (i == 0)
+          if (i == 0) {
+            final eqListP1 = equipmentByPole[p1.id] ?? const <drift_db.EquipmentData>[];
+            final visibleEqP1 = eqListP1.where((e) => _lineEquipmentIconForEquipment(e) != null).toList();
+            for (var j = 0; j < visibleEqP1.length; j++) {
+              final e = visibleEqP1[j];
               final iconPath = _lineEquipmentIconForEquipment(e)!;
-
-              // Несколько устройств на одном пролёте: раскладываем ближе ко второй опоре (от 0.6 до 0.9),
-              // чтобы на карте было видно, к какой опоре привязано оборудование.
-              final t = visibleEq.length == 1
-                  ? 0.8
-                  : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
-
-              final x1 = (p1.xPosition ?? 0.0);
-              final y1 = (p1.yPosition ?? 0.0);
-              final x2 = (p2.xPosition ?? 0.0);
-              final y2 = (p2.yPosition ?? 0.0);
-
+              final t = visibleEqP1.length == 1 ? 0.2 : 0.15 + (0.15 * (j / (visibleEqP1.length - 1)));
               final lng = x1 + (x2 - x1) * t;
               final lat = y1 + (y2 - y1) * t;
-
-              // Угол направления пролёта, чтобы повернуть оборудование по линии.
-              final angleRad = math.atan2(y2 - y1, x2 - x1);
-
               lineEquipmentFeatures.add({
                 'type': 'Feature',
-                'geometry': {
-                  'type': 'Point',
-                  'coordinates': [lng, lat],
-                },
+                'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
                 'properties': {
                   'icon': iconPath,
                   'equipment_type': e.equipmentType,
@@ -399,11 +385,32 @@ class _MapPageState extends ConsumerState<MapPage> {
                   'angle_rad': angleRad,
                 },
               });
-              if (kDebugMode) {
-                print('SVG equipment feature (online): line=${pl.id}, fromPole=${p1.id}, toPole=${p2.id}, '
-                    'type=${e.equipmentType}, name=${e.name}, icon=$iconPath, t=$t');
-              }
             }
+          }
+
+          // Оборудование второй опоры сегмента — ближе к p2 (t ≈ 0.8)
+          final eqList = equipmentByPole[p2.id] ?? const <drift_db.EquipmentData>[];
+          final visibleEq = eqList.where((e) => _lineEquipmentIconForEquipment(e) != null).toList();
+          for (var j = 0; j < visibleEq.length; j++) {
+            final e = visibleEq[j];
+            final iconPath = _lineEquipmentIconForEquipment(e)!;
+            final t = visibleEq.length == 1 ? 0.8 : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
+            final lng = x1 + (x2 - x1) * t;
+            final lat = y1 + (y2 - y1) * t;
+            lineEquipmentFeatures.add({
+              'type': 'Feature',
+              'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
+              'properties': {
+                'icon': iconPath,
+                'equipment_type': e.equipmentType,
+                'name': e.name,
+                'from_pole_id': p1.id,
+                'to_pole_id': p2.id,
+                'line_id': pl.id,
+                'angle_rad': angleRad,
+              },
+            });
+          }
         }
       }
 
@@ -761,6 +768,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       // т.к. локальная БД может не содержать опор с сервера (они не сохранялись при загрузке карты).
       final serverPoleFeatures = (polesData['features'] as List<dynamic>? ?? []);
       final serverPolesByLine = <int, List<Map<String, dynamic>>>{};
+      final seenPoleIdsByLine = <int, Set<int>>{};
       for (final f in serverPoleFeatures) {
         final props = f['properties'] as Map<String, dynamic>?;
         final geom = f['geometry'] as Map<String, dynamic>?;
@@ -770,6 +778,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         final poleId = _toInt(props['id']);
         final lineId = _toInt(props['line_id'] ?? props['power_line_id']);
         if (poleId == null || lineId == null) continue;
+        seenPoleIdsByLine.putIfAbsent(lineId, () => <int>{});
+        if (seenPoleIdsByLine[lineId]!.contains(poleId)) continue;
+        seenPoleIdsByLine[lineId]!.add(poleId);
         final poleNumber = props['pole_number']?.toString() ?? '';
 
         final x = (coords[0] as num?);
@@ -808,33 +819,49 @@ class _MapPageState extends ConsumerState<MapPage> {
           final p2 = plPoles[i + 1];
           final p1Id = p1['id'] as int;
           final p2Id = p2['id'] as int;
+          final x1 = (p1['x_position'] as num?)?.toDouble();
+          final y1 = (p1['y_position'] as num?)?.toDouble();
+          final x2 = (p2['x_position'] as num?)?.toDouble();
+          final y2 = (p2['y_position'] as num?)?.toDouble();
+          if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+
+          final angleRad = math.atan2(y2 - y1, x2 - x1);
+
+          // Оборудование первой опоры линии рисуем только на первом сегменте (i == 0), иначе дублируется
+          if (i == 0) {
+            final eqListP1 = equipmentByPoleServer[p1Id] ?? <Equipment>[];
+            final visibleEqP1 = eqListP1.where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null).toList();
+            for (var j = 0; j < visibleEqP1.length; j++) {
+              final e = visibleEqP1[j];
+              final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
+              final t = visibleEqP1.length == 1 ? 0.2 : 0.15 + (0.15 * (j / (visibleEqP1.length - 1)));
+              final lng = x1 + (x2 - x1) * t;
+              final lat = y1 + (y2 - y1) * t;
+              lineEquipmentFeatures.add({
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
+                'properties': {
+                  'icon': iconPath,
+                  'equipment_type': e.equipmentType,
+                  'name': e.name,
+                  'from_pole_id': p1Id,
+                  'to_pole_id': p2Id,
+                  'line_id': pl.id,
+                  'angle_rad': angleRad,
+                },
+              });
+            }
+          }
+
+          // Оборудование второй опоры сегмента — ближе к p2 (t ≈ 0.8); каждая опора рисуется один раз
           final eqList = equipmentByPoleServer[p2Id] ?? <Equipment>[];
           final visibleEq = eqList.where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null).toList();
-          if (visibleEq.isEmpty) continue;
-
           for (var j = 0; j < visibleEq.length; j++) {
             final e = visibleEq[j];
             final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
-            final t = visibleEq.length == 1
-                ? 0.8
-                : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
-
-            final x1 = (p1['x_position'] as num?)?.toDouble();
-            final y1 = (p1['y_position'] as num?)?.toDouble();
-            final x2 = (p2['x_position'] as num?)?.toDouble();
-            final y2 = (p2['y_position'] as num?)?.toDouble();
-
-            // Если какие-то координаты отсутствуют, пропускаем этот пролёт.
-            if (x1 == null || y1 == null || x2 == null || y2 == null) {
-              continue;
-            }
-
+            final t = visibleEq.length == 1 ? 0.8 : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
             final lng = x1 + (x2 - x1) * t;
             final lat = y1 + (y2 - y1) * t;
-
-            // Угол направления пролёта, чтобы повернуть оборудование по линии.
-            final angleRad = math.atan2(y2 - y1, x2 - x1);
-
             lineEquipmentFeatures.add({
               'type': 'Feature',
               'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
@@ -1008,7 +1035,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _mapReady) {
           try {
-            _mapController.move(center!, AppConfig.defaultZoom);
+            // Сохраняем текущий зум пользователя, не сбрасываем на defaultZoom
+            final zoom = _mapController.camera.zoom;
+            _mapController.move(center!, zoom);
           } catch (e) {
             print('Ошибка центрирования на объектах: $e');
           }
@@ -1021,23 +1050,8 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   Widget build(BuildContext context) {
-    // После успешной синхронизации обновляем карту (локальные ЛЭП/опоры уже в Drift и на сервере)
-    ref.listen<SyncState>(syncStateProvider, (prev, next) {
-      final nextCompleted = next.when(idle: () => false, syncing: () => false, completed: () => true, error: (_) => false);
-      final prevCompleted = prev?.when(idle: () => false, syncing: () => false, completed: () => true, error: (_) => false) ?? false;
-      if (!nextCompleted) _hasRefreshedAfterSyncCompleted = false;
-      if (nextCompleted && !prevCompleted && mounted) {
-        _hasRefreshedAfterSyncCompleted = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _loadMapData());
-      }
-    });
-    // Если открыли карту, а синхронизация уже завершена — один раз обновить данные
-    final syncState = ref.watch(syncStateProvider);
-    final syncCompleted = syncState.when(idle: () => false, syncing: () => false, completed: () => true, error: (_) => false);
-    if (syncCompleted && !_hasRefreshedAfterSyncCompleted && mounted) {
-      _hasRefreshedAfterSyncCompleted = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMapData());
-    }
+    // Автообновление карты после синхронизации отключено — зум и данные не сбрасываются.
+    // Обновить данные можно вручную кнопкой «Обновить».
     return Scaffold(
       appBar: AppBar(
         title: const Text('Карта'),
@@ -1081,6 +1095,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                     initialZoom: AppConfig.defaultZoom,
                     minZoom: AppConfig.minZoom,
                     maxZoom: AppConfig.maxZoom,
+                    cameraConstraint: CameraConstraint.contain(
+                      bounds: LatLngBounds(
+                        const LatLng(-85, -180),
+                        const LatLng(85, 180),
+                      ),
+                    ),
                     onMapReady: () {
                       _mapReady = true;
                       try {
@@ -1508,29 +1528,31 @@ class _MapPageState extends ConsumerState<MapPage> {
     return _lineEquipmentIconForType(e.equipmentType, e.name ?? '');
   }
 
-  /// То же по типу и имени (для API Equipment).
+  /// То же по типу и имени (для API Equipment). Учитываем и русские, и английские типы с сервера.
   String? _lineEquipmentIconForType(String equipmentType, String name) {
-    final type = equipmentType.toLowerCase();
+    final type = equipmentType.toLowerCase().trim();
     final n = name.toLowerCase();
 
-    if (type.contains('реклоузер') || n.contains('реклоузер') || n.contains('recloser')) {
+    if (type.contains('реклоузер') || n.contains('реклоузер') || type == 'recloser' || n.contains('recloser')) {
       return 'assets/equipment/recloser/recloser.svg';
     }
-    if (type.contains('выключател') || n.contains('выключател') || n.contains('breaker')) {
+    if (type.contains('выключател') || n.contains('выключател') || type == 'breaker' || n.contains('breaker')) {
       return 'assets/equipment/breaker/breaker.svg';
     }
-    if (type.contains('зн') || type.contains('заземлен')) {
+    // ЗН / заземление: русские названия и API-тип grounding_switch
+    if (type.contains('зн') || type.contains('заземлен') || type == 'grounding_switch' || type.contains('grounding')) {
       return 'assets/equipment/zn/zn.svg';
     }
     if (type.contains('разъединитель') || type.contains('разъеденитель') ||
-        type.contains('разъедин') || type.contains('disconnector')) {
+        type.contains('разъедин') || type == 'disconnector' || type.contains('disconnector')) {
       return 'assets/equipment/disconnector/disconnector.svg';
     }
-    if (type.contains('разрядник') || n.contains('опн')) {
+    // Разрядник / ОПН: русские названия и API-тип surge_arrester
+    if (type.contains('разрядник') || n.contains('опн') || type == 'surge_arrester' || type.contains('arrester') || type.contains('surge')) {
       return 'assets/equipment/arrester/arrester.svg';
     }
     // Фундамент, изоляторы, траверсы, грозоотвод — на линии не отображаются по дизайну, не логируем.
-    final noIconTypes = ['фундамент', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
+    final noIconTypes = ['фундамент', 'foundation', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
     final skipLog = noIconTypes.any((t) => type.contains(t));
     if (kDebugMode && !skipLog) {
       print('No SVG mapping for equipment: equipmentType=$equipmentType, name=$name');
@@ -3821,6 +3843,28 @@ class _MapPageState extends ConsumerState<MapPage> {
           e.type == DioExceptionType.connectionTimeout;
       if (isOffline) {
         await _deletePowerLineOffline(powerLine);
+        return;
+      }
+      // На сервере линии уже нет (404) — удаляем только локально, чтобы убрать «призрак»
+      if (e.response?.statusCode == 404) {
+        final db = ref.read(drift_db.databaseProvider);
+        await db.deletePatrolSessionsByLineId(powerLine.id);
+        await db.deletePowerLine(powerLine.id);
+        final linePoles = await db.getPolesByLine(powerLine.id);
+        for (final p in linePoles) {
+          await db.deletePole(p.id);
+        }
+        await _clearActiveSessionIfLine(powerLine.id);
+        ref.invalidate(recentPatrolsProvider);
+        await _loadMapData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Линия убрана с устройства (на сервере уже отсутствовала)'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
         return;
       }
       if (mounted) {

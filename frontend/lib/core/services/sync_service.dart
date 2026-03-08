@@ -96,6 +96,31 @@ class SyncService extends StateNotifier<SyncState> {
     return 'Ошибка сети или сервера. Проверьте подключение.';
   }
 
+  /// Удаляет из локальной БД ЛЭП, которых уже нет на сервере (например, после пересоздания БД).
+  /// Возвращает количество удалённых линий.
+  Future<int> removeStalePowerLines() async {
+    final serverLines = await _apiService.getPowerLines();
+    final serverIds = serverLines.map((l) => l.id).toSet();
+    final local = await _database.getAllPowerLines();
+    int removed = 0;
+    for (final pl in local) {
+      if (pl.id < 0) continue;
+      if (serverIds.contains(pl.id)) continue;
+      final poles = await _database.getPolesByLine(pl.id);
+      for (final p in poles) {
+        final eqList = await _database.getEquipmentByPole(p.id);
+        for (final eq in eqList) {
+          await _database.deleteEquipment(eq.id);
+        }
+        await _database.deletePole(p.id);
+      }
+      await _database.deletePatrolSessionsByLineId(pl.id);
+      await _database.deletePowerLine(pl.id);
+      removed++;
+    }
+    return removed;
+  }
+
   /// Выгрузить сессии обхода со статусом pending: POST на сервер, обновить локально serverId и synced.
   /// Сессии с line_id < 0 (локальная ЛЭП) пропускаем — линия ещё не на сервере.
   /// При 400/404 (например, ЛЭП не найдена на сервере) пропускаем сессию и не прерываем синхронизацию.

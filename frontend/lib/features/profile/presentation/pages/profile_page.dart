@@ -175,6 +175,12 @@ class ProfilePage extends ConsumerWidget {
                   onTap: () => _showClearPatrolSessionsDialog(context, ref),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.delete_sweep, color: PatrolColors.accent),
+                  title: const Text('Очистить устаревшие данные', style: TextStyle(color: PatrolColors.textPrimary)),
+                  subtitle: const Text('Удалить с устройства линии и сессии, которых уже нет на сервере', style: TextStyle(color: PatrolColors.textSecondary)),
+                  onTap: () => _removeStaleData(context, ref),
+                ),
+                ListTile(
                   leading: const Icon(Icons.settings, color: PatrolColors.accent),
                   title: const Text('Настройки сервера', style: TextStyle(color: PatrolColors.textPrimary)),
                   subtitle: const Text('Настройка IP адреса сервера', style: TextStyle(color: PatrolColors.textSecondary)),
@@ -329,6 +335,37 @@ class ProfilePage extends ConsumerWidget {
         const SnackBar(
           content: Text('Дубликатов ЛЭП не найдено', style: TextStyle(color: PatrolColors.textPrimary)),
           backgroundColor: PatrolColors.surfaceCard,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeStaleData(BuildContext context, WidgetRef ref) async {
+    try {
+      final sync = ref.read(syncStateProvider.notifier);
+      final removed = await sync.removeStalePowerLines();
+      if (!context.mounted) return;
+      ref.invalidate(recentPatrolsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removed > 0
+                ? 'Удалено устаревших линий: $removed. Обновите карту или перезайдите в раздел.'
+                : 'Устаревших данных не найдено',
+            style: const TextStyle(color: PatrolColors.background),
+          ),
+          backgroundColor: PatrolColors.statusSynced,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ошибка: ${e.toString().replaceFirst(RegExp(r'^Exception: '), '')}',
+            style: const TextStyle(color: PatrolColors.background),
+          ),
+          backgroundColor: Colors.red,
         ),
       );
     }

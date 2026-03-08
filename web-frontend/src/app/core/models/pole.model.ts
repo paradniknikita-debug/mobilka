@@ -21,12 +21,22 @@ export interface Pole {
   y_position: number;
   pole_type: string;
   height?: number;
+  /** Тип фундамента (не отображать как оборудование в дереве) */
+  foundation_type?: string | null;
   material?: string;
   condition?: string;
   installation_date?: string;
   created_at: string;
   updated_at?: string;
   connectivity_node?: any;
+  /** Комментарий карточки опоры */
+  card_comment?: string | null;
+  /** Вложения карточки: JSON-массив [{t: 'photo'|'voice'|'schema', url: string}] */
+  card_comment_attachment?: string | null;
+  segment_name?: string;
+  power_line_name?: string;
+  equipment?: any[];
+  terminals?: any[];
 }
 
 export interface PoleCreate {

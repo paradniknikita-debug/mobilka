@@ -12,7 +12,7 @@ export const environment = {
   
   map: {
     defaultZoom: 10,
-    minZoom: 1,
+    minZoom: 3,
     maxZoom: 18,
     defaultCenter: {
       lat: 53.9045,

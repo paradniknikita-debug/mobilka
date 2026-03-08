@@ -95,6 +95,8 @@ export class MapComponent implements OnInit, OnDestroy {
   private equipmentMarkers: L.Marker[] = []; // Отдельные маркеры оборудования на линии
   /** Точечные маркеры оборудования как отдельных объектов с собственными координатами */
   private equipmentPointMarkers: L.Marker[] = [];
+  /** Маркеры оборудования из GeoJSON (между опорами, с иконкой и углом — как во Flutter) */
+  private equipmentGeoJsonMarkers: L.Marker[] = [];
   /** Выделенный участок линии (при клике в дереве): подсветка жирной линией и чёрными точками опор */
   private selectedSegment: { powerLineId: number; segmentId: number | null } | null = null;
   private segmentHighlightLayers: L.Layer[] = [];
@@ -198,8 +200,12 @@ export class MapComponent implements OnInit, OnDestroy {
           if (poleId != null) {
             this.apiService.getPole(poleId).subscribe({
               next: (pole) => {
-                (this.selectedPole as any).equipment = (pole as any).equipment || [];
-                (this.selectedPole as any).connectivity_node = (pole as any).connectivity_node || null;
+                Object.assign(this.selectedPole as any, pole, {
+                  equipment: (pole as any).equipment || [],
+                  connectivity_node: (pole as any).connectivity_node ?? null,
+                  latitude: (this.selectedPole as any).latitude ?? (pole as any).y_position,
+                  longitude: (this.selectedPole as any).longitude ?? (pole as any).x_position
+                });
               }
             });
             this.apiService.getPoleTerminals(poleId).subscribe({
@@ -217,6 +223,8 @@ export class MapComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         this.loadMapData();
       });
+
+    // Автообновление карты отключено; данные обновляются по dataRefresh (после действий пользователя) или по явному обновлению.
   }
 
   ngOnDestroy(): void {
@@ -234,7 +242,9 @@ export class MapComponent implements OnInit, OnDestroy {
       center: [center.lat, center.lng],
       zoom: environment.map.defaultZoom,
       minZoom: environment.map.minZoom,
-      maxZoom: environment.map.maxZoom
+      maxZoom: environment.map.maxZoom,
+      maxBounds: L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180)),
+      maxBoundsViscosity: 1
     });
 
     // Добавляем тайлы OpenStreetMap
@@ -250,6 +260,7 @@ export class MapComponent implements OnInit, OnDestroy {
         // Обновляем зум в сервисе для доступа из других компонентов
         this.mapService.setCurrentZoom(this.currentZoom);
         this.updatePoleLabels();
+        this.updateEquipmentVisibility();
       }
     });
     
@@ -336,8 +347,8 @@ export class MapComponent implements OnInit, OnDestroy {
       this.renderPoles(data.poles);
       // Рендерим линии последовательности опор
       this.renderPoleSequence(data.poles);
-      // Рисуем оборудование как элементы линии возле опор
-      this.renderEquipmentOnLines(data.poles);
+      // Оборудование между опорами — как во Flutter: по списку линий и опорам с line_id
+      this.renderEquipmentBetweenPoles(data.poles?.features ?? [], data.powerLinesList ?? []);
     }
     
     // Рендерим отпайки (точки)
@@ -370,6 +381,7 @@ export class MapComponent implements OnInit, OnDestroy {
     if (this.selectedSegment) {
       this.renderSegmentHighlight();
     }
+    this.updateEquipmentVisibility();
   }
 
   /** Рисует линии ЛЭП. Координаты берутся из опор (polesFeatures), чтобы линия проходила ровно через центры маркеров опор. */
@@ -427,8 +439,13 @@ export class MapComponent implements OnInit, OnDestroy {
         const tapToken = parts[1];
         const tapId = tapToken !== 'main' ? Number(tapToken) : null;
 
-        // Для отпайки первым ставим саму отпаечную опору, затем опоры ветки
-        if (tapId != null) {
+        const poleList = poles.filter(
+          (p: GeoJSONFeature) => p.geometry?.type === 'Point' && Array.isArray(p.geometry.coordinates)
+        );
+        const useEquipmentSegments = poleList.length >= 2 && lineId != null;
+
+        // Для отпайки первым ставим отпаечную опору только если линия без полюсов оборудования
+        if (tapId != null && !useEquipmentSegments) {
           const basePole = polesById.get(tapId);
           if (basePole && basePole.geometry?.type === 'Point' && Array.isArray(basePole.geometry.coordinates)) {
             const bc = basePole.geometry.coordinates as number[];
@@ -436,12 +453,26 @@ export class MapComponent implements OnInit, OnDestroy {
           }
         }
 
-        poles
-          .filter((p: GeoJSONFeature) => p.geometry?.type === 'Point' && Array.isArray(p.geometry.coordinates))
-          .forEach((p: GeoJSONFeature) => {
+        // Линия через полюса оборудования: опора → T1 → T2 → ... (ЗН/разрядник — один полюс, в CIM формируется CN)
+        if (useEquipmentSegments) {
+          for (let i = 0; i < poleList.length - 1; i++) {
+            const segPoints = this.buildSegmentConnectionPoints(
+              poleList[i],
+              poleList[i + 1],
+              i,
+              lineId
+            );
+            pts.push(...segPoints);
+          }
+          const last = poleList[poleList.length - 1];
+          const lastCoords = last.geometry!.coordinates as number[];
+          pts.push([lastCoords[1], lastCoords[0]]);
+        } else {
+          poleList.forEach((p: GeoJSONFeature) => {
             const c = p.geometry!.coordinates as number[];
             pts.push([c[1], c[0]]);
           });
+        }
 
         if (pts.length >= 2) {
           latlngs = pts;
@@ -540,12 +571,16 @@ export class MapComponent implements OnInit, OnDestroy {
             );
           }
 
-          // Подгружаем оборудование для панели свойств
+          // Подгружаем полные данные опоры для карточки (поля как во Flutter)
           if (poleId != null) {
             this.apiService.getPole(poleId).subscribe({
               next: (pole) => {
-                (this.selectedPole as any).equipment = (pole as any).equipment || [];
-                (this.selectedPole as any).connectivity_node = (pole as any).connectivity_node || null;
+                Object.assign(this.selectedPole as any, pole, {
+                  equipment: (pole as any).equipment || [],
+                  connectivity_node: (pole as any).connectivity_node ?? null,
+                  latitude: (this.selectedPole as any).latitude ?? (pole as any).y_position,
+                  longitude: (this.selectedPole as any).longitude ?? (pole as any).x_position
+                });
               }
             });
             this.apiService.getPoleTerminals(poleId).subscribe({
@@ -569,43 +604,257 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Отрисовывает оборудование как элементы линии возле опор:
-   * маленькие схематичные значки, размещённые рядом с точкой опоры.
+   * Путь к SVG-ассету для линейного оборудования (те же файлы, что во Flutter).
    */
-  private renderEquipmentOnLines(geoJson: any): void {
-    if (!this.map || !geoJson?.features) return;
+  private getLineEquipmentAssetPath(iconKey: string, outline = false): string {
+    if (iconKey === 'breaker' && outline) return 'assets/equipment/breaker/breaker_outline.svg';
+    const sub: Record<string, string> = {
+      recloser: 'recloser/recloser.svg',
+      breaker: 'breaker/breaker.svg',
+      zn: 'zn/zn.svg',
+      disconnector: 'disconnector/disconnector.svg',
+      arrester: 'arrester/arrester.svg'
+    };
+    return sub[iconKey] ? `assets/equipment/${sub[iconKey]}` : '';
+  }
 
-    // Удаляем старые маркеры оборудования
-    this.equipmentMarkers.forEach(m => this.map?.removeLayer(m));
-    this.equipmentMarkers = [];
+  /**
+   * Ключ иконки для оборудования на линии (null = не рисовать на линии).
+   * Учитываем русские и английские типы/имена с сервера — как во Flutter и бэкенде.
+   */
+  private getLineEquipmentIconKey(eq: Equipment): string | null {
+    const t = (eq.equipment_type || '').toLowerCase().trim();
+    const n = (eq.name || '').toLowerCase();
+    if (t.includes('реклоузер') || n.includes('реклоузер') || t === 'recloser' || n.includes('recloser')) return 'recloser';
+    if (t.includes('выключател') || n.includes('выключател') || t === 'breaker' || n.includes('breaker')) return 'breaker';
+    if (t.includes('зн') || t.includes('заземлен') || t === 'grounding_switch' || t.includes('grounding')) return 'zn';
+    if (t.includes('разъединитель') || t.includes('разъеденитель') || t.includes('разъедин') || t === 'disconnector' || t.includes('disconnector')) return 'disconnector';
+    if (t.includes('разрядник') || n.includes('опн') || t === 'surge_arrester' || t.includes('arrester') || t.includes('surge')) return 'arrester';
+    const noIcon = ['фундамент', 'foundation', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
+    if (noIcon.some(x => t.includes(x))) return null;
+    return null;
+  }
 
-    geoJson.features.forEach((feature: GeoJSONFeature) => {
-      if (feature.geometry.type !== 'Point') return;
-      const poleId: number | null = feature.properties?.['id'] != null ? Number(feature.properties['id']) : null;
-      if (poleId == null) return;
-      const equipmentForPole: Equipment[] = this.equipmentByPoleId.get(poleId) || [];
-      if (!equipmentForPole.length) return;
+  /**
+   * Один полюс у ЗН и разрядника (точка крепления к линии); два полюса T1/T2 у выключателя, реклоузера, разъединителя.
+   * Для ЗН/разрядника в CIM в этой точке формируется Connectivity Node (CN).
+   */
+  private hasTwoTerminals(iconKey: string): boolean {
+    return iconKey === 'breaker' || iconKey === 'recloser' || iconKey === 'disconnector';
+  }
 
-      const coordinates = feature.geometry.coordinates as number[];
-      const lat = Number(coordinates[1]);
-      const lng = Number(coordinates[0]);
-      const latlng = L.latLng(lat, lng);
+  /**
+   * Вычисляет координаты полюсов оборудования в карте (lat/lng).
+   * ЗН/разрядник: один полюс (center = точка крепления).
+   * Выключатель/реклоузер/разъединитель: T1 и T2 вдоль сегмента; смещение = доля длины сегмента (dx, dy), чтобы не сдвигать опоры.
+   */
+  private getEquipmentTerminalsLatLng(
+    center: L.LatLng,
+    iconKey: string,
+    dxLng: number,
+    dyLat: number
+  ): L.LatLng[] {
+    if (!this.hasTwoTerminals(iconKey)) {
+      return [center];
+    }
+    const k = 0.015;
+    const offLng = k * dxLng;
+    const offLat = k * dyLat;
+    const T1 = L.latLng(center.lat - offLat, center.lng - offLng);
+    const T2 = L.latLng(center.lat + offLat, center.lng + offLng);
+    return [T1, T2];
+  }
 
-      const html = this.buildEquipmentInlineHtml(equipmentForPole);
-      if (!html) return;
+  /**
+   * Строит список точек сегмента для отрисовки линии: опора1 → полюса оборудования → (опора2 не включается, добавляется при склейке).
+   * Соединения: опора → T1 первого оборудования → T2 → T1 следующего → ... → для ЗН/разрядника один полюс (CN).
+   */
+  private buildSegmentConnectionPoints(
+    p1: GeoJSONFeature,
+    p2: GeoJSONFeature,
+    segmentIndex: number,
+    _lineId: number
+  ): L.LatLng[] {
+    if (!this.map) return [];
+    const c1 = p1.geometry?.coordinates as number[] | undefined;
+    const c2 = p2.geometry?.coordinates as number[] | undefined;
+    if (!c1?.length || !c2?.length) return [];
+    const lng1 = c1[0] as number;
+    const lat1 = c1[1] as number;
+    const lng2 = c2[0] as number;
+    const lat2 = c2[1] as number;
+    const dx = lng2 - lng1;
+    const dy = lat2 - lat1;
+    const sortEq = (list: Equipment[]) =>
+      list
+        .map((eq) => ({ eq, key: this.getLineEquipmentIconKey(eq) }))
+        .filter((x) => x.key != null)
+        .sort((a, b) => (a.eq.id ?? 0) - (b.eq.id ?? 0))
+        .map((x) => x.eq);
 
-      const marker = L.marker(latlng, {
-        icon: L.divIcon({
-          className: 'equipment-inline-marker',
-          html,
-          iconSize: [40, 10],
-          iconAnchor: [20, 5]
-        }),
-        interactive: false
+    const points: L.LatLng[] = [];
+    points.push(L.latLng(lat1, lng1));
+
+    const collectEquipment = (poleId: number, tBase: number, tSpread: number) => {
+      const rawList = (this.equipmentByPoleId.get(poleId) || []).filter(
+        (eq) => this.getLineEquipmentIconKey(eq) != null
+      );
+      const sorted = sortEq(rawList);
+      if (!sorted.length) return;
+      const n = sorted.length;
+      const tStart = n === 1 ? tBase : tBase - tSpread / 2;
+      const tStep = n > 1 ? tSpread / (n - 1) : 0;
+      sorted.forEach((eq, j) => {
+        const iconKey = this.getLineEquipmentIconKey(eq);
+        if (!iconKey) return;
+        const t = n === 1 ? tBase : tStart + tStep * j;
+        const lng = lng1 + dx * t;
+        const lat = lat1 + dy * t;
+        const center = L.latLng(lat, lng);
+        const terminals = this.getEquipmentTerminalsLatLng(center, iconKey, dx, dy);
+        points.push(...terminals);
       });
+    };
 
-      marker.addTo(this.map!);
-      this.equipmentMarkers.push(marker);
+    if (segmentIndex === 0) {
+      const p1Id = p1.properties?.['id'];
+      if (p1Id != null) collectEquipment(Number(p1Id), 0.2, 0.1);
+    }
+    const p2Id = p2.properties?.['id'];
+    if (p2Id != null) collectEquipment(Number(p2Id), 0.8, 0.2);
+
+    return points;
+  }
+
+  /**
+   * Оборудование между опорами — логика как во Flutter: по списку ЛЭП и опорам с line_id,
+   * одна цепочка опор на линию, сегменты между соседними, оборудование без дублей.
+   */
+  private renderEquipmentBetweenPoles(
+    polesFeatures: GeoJSONFeature[],
+    powerLinesList: { id: number }[]
+  ): void {
+    if (!this.map || !polesFeatures?.length) return;
+
+    this.equipmentGeoJsonMarkers.forEach(m => this.map?.removeLayer(m));
+    this.equipmentGeoJsonMarkers = [];
+
+    // Как во Flutter: для каждой линии pl — опоры с power_line_id/line_id === pl.id, одна цепочка на линию
+    const polesByLineId = new Map<number, GeoJSONFeature[]>();
+    polesFeatures.forEach((f: GeoJSONFeature) => {
+      if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
+      const lineId = f.properties?.['power_line_id'] ?? f.properties?.['line_id'];
+      if (lineId == null) return;
+      const lid = Number(lineId);
+      if (!polesByLineId.has(lid)) polesByLineId.set(lid, []);
+      polesByLineId.get(lid)!.push(f);
+    });
+
+    powerLinesList.forEach((pl) => {
+      let poles = polesByLineId.get(pl.id) ?? [];
+      const byId = new Map<number, GeoJSONFeature>();
+      poles.forEach((f: GeoJSONFeature) => {
+        const id = f.properties?.['id'];
+        if (id != null && !byId.has(Number(id))) byId.set(Number(id), f);
+      });
+      poles = Array.from(byId.values()).sort(
+        (a, b) => (a.properties?.['sequence_number'] ?? 0) - (b.properties?.['sequence_number'] ?? 0)
+      );
+      if (poles.length < 2) return;
+
+      for (let i = 0; i < poles.length - 1; i++) {
+        const p1 = poles[i];
+        const p2 = poles[i + 1];
+        const c1 = p1.geometry?.coordinates as number[] | undefined;
+        const c2 = p2.geometry?.coordinates as number[] | undefined;
+        if (!c1?.length || !c2?.length) continue;
+
+        const lng1 = Number(c1[0]);
+        const lat1 = Number(c1[1]);
+        const lng2 = Number(c2[0]);
+        const lat2 = Number(c2[1]);
+        const dx = lng2 - lng1;
+        const dy = lat2 - lat1;
+        const lineAngleRad = Math.atan2(dy, dx);
+        const lineAngleDeg = lineAngleRad * 180 / Math.PI;
+        const rotOffset = -10; // поворот по часовой стрелке на 10°
+        // Выключатель/разъединитель/реклоузер — боковая сторона перпендикулярна линии
+        const iconAngleDegMain = lineAngleDeg + rotOffset;
+        // ЗН и разрядник — шина сонаправлена пролёту
+        const iconAngleDegZnArrester = 90 - lineAngleDeg + rotOffset;
+
+        const iconSize = 64;
+        const iconAnchorCenter = iconSize / 2;
+        const getIconRotation = (iconKey: string) => {
+          if (iconKey === 'zn' || iconKey === 'arrester') return iconAngleDegZnArrester;
+          if (iconKey === 'disconnector') return iconAngleDegMain + 85;
+          if (iconKey === 'breaker') return iconAngleDegMain - 3;
+          return iconAngleDegMain;
+        };
+        // Разрядник и ЗН: линия проходит через начало (крайняя левая точка), якорь — левый центр
+        const getIconAnchor = (iconKey: string): [number, number] => {
+          return (iconKey === 'arrester' || iconKey === 'zn') ? [0, iconAnchorCenter] : [iconAnchorCenter, iconAnchorCenter];
+        };
+        const buildLineIconHtml = (iconKey: string) => {
+          const path = this.getLineEquipmentAssetPath(iconKey);
+          if (!path) return '';
+          const useOutline = iconKey === 'breaker';
+          const outlineHtml = useOutline
+            ? `<img src="${this.getLineEquipmentAssetPath(iconKey, true)}" class="equipment-on-line-outline" width="${iconSize}" height="${iconSize}" alt="">`
+            : '';
+          const znClass = iconKey === 'zn' ? ' equipment-icon-zn' : '';
+          const mainHtml = `<img src="${path}" class="equipment-on-line-img${znClass}" width="${iconSize}" height="${iconSize}" alt="">`;
+          const recloserBadge = iconKey === 'recloser' ? '<div class="equipment-recloser-badge"></div>' : '';
+          return outlineHtml + mainHtml + recloserBadge;
+        };
+        // Порядок по id (последовательность создания), без разделения на main/aux
+        const sortEq = (list: Equipment[]) => {
+          return list
+            .map(eq => ({ eq, key: this.getLineEquipmentIconKey(eq) }))
+            .filter(x => x.key != null)
+            .sort((a, b) => (a.eq.id ?? 0) - (b.eq.id ?? 0))
+            .map(x => x.eq);
+        };
+
+        const addEquipmentAt = (poleId: number, tBase: number, tSpread: number) => {
+          // Берём всё линейное оборудование опоры, рисуем на линии (как во Flutter — все по t, без смещения вбок)
+          const rawList = (this.equipmentByPoleId.get(poleId) || []).filter(
+            (eq) => this.getLineEquipmentIconKey(eq) != null
+          );
+          const sorted = sortEq(rawList);
+          if (!sorted.length) return;
+
+          const n = sorted.length;
+          const tStart = n === 1 ? tBase : tBase - tSpread / 2;
+          const tStep = n > 1 ? tSpread / (n - 1) : 0;
+
+          sorted.forEach((eq, j) => {
+            const iconKey = this.getLineEquipmentIconKey(eq);
+            if (!iconKey) return;
+            const t = n === 1 ? tBase : tStart + tStep * j;
+            const lng = lng1 + dx * t;
+            const lat = lat1 + dy * t;
+            const inner = buildLineIconHtml(iconKey);
+            const rot = getIconRotation(iconKey);
+            const anchor = getIconAnchor(iconKey);
+            const html = `<div class="equipment-geojson-marker equipment-on-line" style="transform: rotate(${rot}deg); width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}</div>`;
+            const marker = L.marker([lat, lng], {
+              icon: L.divIcon({ className: 'equipment-geojson-icon', html, iconSize: [iconSize, iconSize], iconAnchor: anchor }),
+              interactive: true
+            });
+            marker.bindTooltip(`${eq.equipment_type || ''}${eq.name ? ': ' + eq.name : ''}`, { permanent: false, direction: 'top' });
+            marker.addTo(this.map!);
+            this.equipmentGeoJsonMarkers.push(marker);
+          });
+        };
+
+        if (i === 0) {
+          const p1Id = p1.properties?.['id'];
+          if (p1Id != null) addEquipmentAt(Number(p1Id), 0.2, 0.1);
+        }
+        const p2Id = p2.properties?.['id'];
+        if (p2Id != null) addEquipmentAt(Number(p2Id), 0.8, 0.2);
+      }
     });
   }
 
@@ -628,6 +877,21 @@ export class MapComponent implements OnInit, OnDestroy {
       if (lat == null || lng == null) {
         return;
       }
+      // Фундамент не рисуем в точке опоры (как во Flutter — на линии не отображаются)
+      const t = (eq.equipment_type || '').toLowerCase();
+      const n = (eq.name || '').toLowerCase();
+      if (t.includes('фундамент') || t.includes('foundation') || n.includes('фундамент') || n.includes('foundation')) {
+        return;
+      }
+      // Линейное оборудование рисуется только между опорами, не в точке
+      if (this.getLineEquipmentIconKey(eq) != null) {
+        return;
+      }
+      // Не рисуем в точке опоры оборудование без своей иконки (грозоотвод, изолятор, траверс и т.д.) — не дублируем маркер опоры
+      const noIconAtPole = ['изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
+      if (noIconAtPole.some(x => t.includes(x) || n.includes(x))) {
+        return;
+      }
 
       const html = this.buildEquipmentIconsHtml([eq]);
       if (!html) {
@@ -646,6 +910,59 @@ export class MapComponent implements OnInit, OnDestroy {
 
       marker.addTo(this.map!);
       this.equipmentPointMarkers.push(marker);
+    });
+  }
+
+  /**
+   * Оборудование из GeoJSON (логика как во Flutter): точки между опорами с иконкой и углом поворота.
+   */
+  private renderEquipmentFromGeoJSON(geoJson: GeoJSONCollection): void {
+    if (!this.map || !geoJson?.features?.length) return;
+
+    this.equipmentGeoJsonMarkers.forEach(m => this.map?.removeLayer(m));
+    this.equipmentGeoJsonMarkers = [];
+
+    const iconKeyToSvg = (key: string): string => {
+      switch (key) {
+        case 'recloser': return this.svgRecloser();
+        case 'breaker': return this.svgBreaker();
+        case 'zn': return this.svgGroundingSwitch();
+        case 'disconnector': return this.svgDisconnector();
+        case 'arrester': return this.svgSurgeArrester();
+        default: return this.svgGenericEquipment();
+      }
+    };
+
+    geoJson.features.forEach((feature: GeoJSONFeature) => {
+      if (feature.geometry?.type !== 'Point' || !feature.geometry.coordinates?.length) return;
+      const props = feature.properties || {};
+      const iconKey = props['icon'];
+      if (!iconKey) return;
+
+      const coords = feature.geometry.coordinates as number[];
+      const lng = Number(coords[0]);
+      const lat = Number(coords[1]);
+      const angleRad = typeof props['angle_rad'] === 'number' ? props['angle_rad'] : 0;
+      const angleDeg = (angleRad * 180 / Math.PI);
+
+      const svg = iconKeyToSvg(iconKey);
+      const html = `<div class="equipment-geojson-marker" style="transform: rotate(${angleDeg}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">${svg}</div>`;
+
+      const marker = L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: 'equipment-geojson-icon',
+          html,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        }),
+        interactive: true
+      });
+
+      const eqType = props['equipment_type'] || '';
+      const name = props['name'] || '';
+      marker.bindTooltip(`${eqType}${name ? ': ' + name : ''}`, { permanent: false, direction: 'top' });
+      marker.addTo(this.map!);
+      this.equipmentGeoJsonMarkers.push(marker);
     });
   }
 
@@ -1028,6 +1345,7 @@ export class MapComponent implements OnInit, OnDestroy {
     this.poleSequenceLines.forEach(line => this.map?.removeLayer(line));
     this.equipmentMarkers.forEach(marker => this.map?.removeLayer(marker));
     this.equipmentPointMarkers.forEach(marker => this.map?.removeLayer(marker));
+    this.equipmentGeoJsonMarkers.forEach(marker => this.map?.removeLayer(marker));
     this.clearSegmentHighlight();
 
     this.powerLineLayers = [];
@@ -1039,6 +1357,7 @@ export class MapComponent implements OnInit, OnDestroy {
     this.poleSequenceLines = [];
     this.equipmentMarkers = [];
     this.equipmentPointMarkers = [];
+    this.equipmentGeoJsonMarkers = [];
   }
 
   private clearSegmentHighlight(): void {
@@ -1089,21 +1408,7 @@ export class MapComponent implements OnInit, OnDestroy {
         this.segmentHighlightLayers.push(outline, fill);
       }
     });
-    poles.forEach((feature: GeoJSONFeature) => {
-      if (feature.geometry.type === 'Point') {
-        const c = feature.geometry.coordinates as number[];
-        const latlng = L.latLng(Number(c[1]), Number(c[0]));
-        const circle = L.circleMarker(latlng, {
-          radius: 6,
-          color: '#000',
-          fillColor: '#fff',
-          fillOpacity: 1,
-          weight: 2
-        });
-        circle.addTo(this.map!);
-        this.segmentHighlightLayers.push(circle);
-      }
-    });
+    // Круги на опорах при подсветке участка не рисуем — оставляем только подсветку линии
   }
 
   updatePoleLabels(): void {
@@ -1134,6 +1439,20 @@ export class MapComponent implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  /** Скрывать оборудование (иконки на линии и точечные) при зуме ≤ 14; показывать при зуме > 14. */
+  private updateEquipmentVisibility(): void {
+    if (!this.map) return;
+    const show = this.currentZoom > 14;
+    this.equipmentGeoJsonMarkers.forEach(m => {
+      if (show) { if (!this.map!.hasLayer(m)) m.addTo(this.map!); }
+      else { this.map!.removeLayer(m); }
+    });
+    this.equipmentPointMarkers.forEach(m => {
+      if (show) { if (!this.map!.hasLayer(m)) m.addTo(this.map!); }
+      else { this.map!.removeLayer(m); }
+    });
   }
 
   centerOnObjects(): void {
@@ -1234,6 +1553,35 @@ export class MapComponent implements OnInit, OnDestroy {
     if (!this.selectedPole) return null;
     const v = this.selectedPole.x_position ?? (this.selectedPole as any).longitude;
     return v != null ? Number(v) : null;
+  }
+
+  /** Полный URL вложения для отображения (фото/аудио) */
+  getAttachmentUrl(relativeUrl: string): string {
+    return this.apiService.getAttachmentUrl(relativeUrl);
+  }
+
+  /** Разбор JSON вложений карточки. Возвращает массив с полем url только для серверных вложений. */
+  parseCardAttachments(json: string | null | undefined): { t: string; url: string }[] {
+    if (!json || !json.trim()) return [];
+    try {
+      const arr = JSON.parse(json) as any[];
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .filter((item) => item && (item.url || item.url === ''))
+        .map((item) => ({ t: item.t || 'photo', url: item.url }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Оборудование для карточки опоры без фундамента (фундамент показывается отдельным полем). */
+  getPoleEquipmentForCard(): any[] {
+    const list = this.selectedPole?.equipment;
+    if (!Array.isArray(list)) return [];
+    return list.filter((eq: any) => {
+      const t = (eq?.equipment_type || '').toLowerCase().trim();
+      return t !== 'фундамент' && t !== 'foundation';
+    });
   }
 
   closePoleProperties(): void {

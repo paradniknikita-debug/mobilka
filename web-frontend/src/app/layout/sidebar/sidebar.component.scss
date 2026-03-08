@@ -299,6 +299,29 @@
   margin-right: 6px;
 }
 
+.tree-equipment-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  margin-right: 6px;
+}
+
+.tree-equipment-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: grayscale(100%) brightness(0.5);
+}
+
+.tree-recloser-badge {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  border: 1px solid #fff;
+}
+
 .node-label {
   flex: 1;
   font-size: 12px;

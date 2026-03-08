@@ -97,18 +97,14 @@
                      *ngFor="let eq of getPoleEquipment(pole.properties['id'])"
                      (contextmenu)="onEquipmentRightClick(eq, $event)"
                      [matTooltip]="eq.mrid ? 'UID: ' + eq.mrid : ''">
-                  <mat-icon class="node-icon equipment-icon" [ngSwitch]="eq.equipment_type">
-                    <ng-container *ngSwitchCase="'breaker'">power_settings_new</ng-container>
-                    <ng-container *ngSwitchCase="'disconnector'">switch_left</ng-container>
-                    <ng-container *ngSwitchCase="'recloser'">autorenew</ng-container>
-                    <ng-container *ngSwitchCase="'grounding_switch'">south</ng-container>
-                    <ng-container *ngSwitchCase="'surge_arrester'">bolt</ng-container>
-                    <ng-container *ngSwitchDefault>electrical_services</ng-container>
-                  </mat-icon>
-                  <span class="node-label">
-                    {{ eq.name || 'Оборудование' }}
-                    <span class="node-description-small">({{ eq.equipment_type }})</span>
+                  <span *ngIf="getEquipmentIconKey(eq)" class="tree-equipment-icon-wrap">
+                    <img [src]="getEquipmentAssetPath(getEquipmentIconKey(eq)!)" 
+                         class="node-icon tree-equipment-icon"
+                         [attr.alt]="eq.name || eq.equipment_type">
+                    <span class="tree-recloser-badge" *ngIf="getEquipmentIconKey(eq) === 'recloser'"></span>
                   </span>
+                  <mat-icon *ngIf="!getEquipmentIconKey(eq)" class="node-icon equipment-icon">electrical_services</mat-icon>
+                  <span class="node-label">{{ getEquipmentCimName(eq) }}</span>
                 </div>
               </div>
             </div>

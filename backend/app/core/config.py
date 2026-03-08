@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     # Настройки файлов
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
+
+    # MinIO / S3-совместимое хранилище для медиа (если задано — используем его, иначе локальный диск)
+    S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL", None)  # например http://minio:9000
+    S3_ACCESS_KEY: str = os.getenv("S3_ACCESS_KEY", "")
+    S3_SECRET_KEY: str = os.getenv("S3_SECRET_KEY", "")
+    S3_BUCKET_MEDIA: str = os.getenv("S3_BUCKET_MEDIA", "lepm-media")
+    S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
     
     # Tile server настройки
     TILE_CACHE_DIR: str = "tile_cache"

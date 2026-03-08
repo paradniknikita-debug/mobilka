@@ -94,6 +94,10 @@ class Pole(Base):
     year_installed = Column(Integer, nullable=True)
     condition = Column(String(20), default="good")  # good, satisfactory, poor
     notes = Column(Text, nullable=True)
+    # Комментарий карточки опоры (как во Flutter)
+    card_comment = Column(Text, nullable=True)
+    # Вложения к комментарию: JSON [{"t":"voice"|"photo"|"schema","url":"/api/v1/attachments/..."}] или base64/data (для синка с Flutter)
+    card_comment_attachment = Column(Text, nullable=True)
     # Марка провода для этой опоры (используется для определения марки провода пролёта от этой опоры)
     conductor_type = Column(String(50), nullable=True)  # AC-70, AC-95 и т.д.
     conductor_material = Column(String(50), nullable=True)  # алюминий, медь
@@ -327,6 +331,9 @@ class Equipment(Base):
     installation_date = Column(DateTime, nullable=True)
     condition = Column(String(20), default="good")  # good, satisfactory, poor
     notes = Column(Text, nullable=True)
+    # Дефект (описание), критичность (low | medium | high) — как во Flutter
+    defect = Column(Text, nullable=True)
+    criticality = Column(String(20), nullable=True)
 
     # CIM Location - связь с Location для координат оборудования (как отдельного объекта на карте)
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)

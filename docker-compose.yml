@@ -38,6 +38,23 @@ services:
     networks:
       - lepm_network
 
+  # MinIO — S3-совместимое хранилище для медиа (фото, аудио, видео)
+  minio:
+    image: minio/minio:latest
+    container_name: lepm_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Web Console
+    networks:
+      - lepm_network
+
   # Backend API сервер
   backend:
     build:
@@ -49,6 +66,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
     # env_file опционально - раскомментируй если есть .env
     # env_file:
     #   - ./backend/.env
@@ -58,6 +77,11 @@ services:
       ENVIRONMENT: development
       RELOAD: "true"
       TZ: Europe/Minsk
+      # MinIO (если заданы — медиа сохраняются в MinIO, иначе на диск backend)
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA:-lepm-media}
     # Для разработки: монтируем код как volume (чтобы не пересобирать образ при каждом изменении)
     # Убрали :ro (read-only) чтобы hot reload мог работать
     volumes:
@@ -92,6 +116,7 @@ services:
 
 volumes:
   pgdata:
+  minio_data:
 
 networks:
   lepm_network:

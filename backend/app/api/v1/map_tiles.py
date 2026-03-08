@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
-from app.models.power_line import PowerLine, Pole, Tap, Span
+from app.models.power_line import PowerLine, Pole, Tap, Span, Equipment
 from app.models.substation import Substation
 from app.models.location import Location, PositionPoint
 from app.models.cim_line_structure import ConnectivityNode, LineSection
@@ -28,6 +28,29 @@ def _segment_name_to_short(s: Optional[str]) -> Optional[str]:
     if not s or not s.strip():
         return s
     return re.sub(r"Опора\s+", "оп.", s, flags=re.IGNORECASE).strip()
+
+
+def _equipment_icon_key(equipment_type: str, name: Optional[str] = None) -> Optional[str]:
+    """
+    Ключ иконки оборудования для отрисовки на карте (как во Flutter).
+    Возвращает: recloser | breaker | zn | disconnector | arrester или None (не рисовать).
+    """
+    t = (equipment_type or "").lower()
+    n = (name or "").lower()
+    if "реклоузер" in t or "реклоузер" in n or "recloser" in n:
+        return "recloser"
+    if "выключател" in t or "выключател" in n or "breaker" in n:
+        return "breaker"
+    if "зн" in t or "заземлен" in t:
+        return "zn"
+    if "разъединитель" in t or "разъеденитель" in t or "разъедин" in t or "disconnector" in t:
+        return "disconnector"
+    if "разрядник" in t or "опн" in n:
+        return "arrester"
+    no_icon = ("фундамент", "изолятор", "траверс", "грозоотвод", "грозотрос")
+    if any(x in t for x in no_icon):
+        return None
+    return None
 
 @router.get("/tiles/{z}/{x}/{y}")
 async def get_tile(
@@ -625,6 +648,139 @@ async def get_data_bounds(
                 "max_lng": 169.0
             }
         }
+
+@router.get("/equipment/geojson")
+async def get_equipment_geojson(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Оборудование на карте: точки между соседними опорами (как во Flutter).
+    Каждая фича — Point с properties: icon (ключ: recloser|breaker|zn|disconnector|arrester),
+    angle_rad, equipment_type, name, from_pole_id, to_pole_id, line_id.
+    """
+    try:
+        return await _get_equipment_geojson_impl(db)
+    except Exception as e:
+        logger.exception("map/equipment/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/equipment/geojson: {type(e).__name__}: {e}",
+        ) from e
+
+
+def _line_sort_key(p):
+    """Сортировка опор: sequence_number, затем pole_number."""
+    sn = getattr(p, "sequence_number", None)
+    if sn is not None:
+        return (0, sn, (p.pole_number or ""))
+    return (1, 0, (p.pole_number or ""))
+
+
+async def _get_equipment_geojson_impl(db: AsyncSession):
+    result = await db.execute(
+        select(PowerLine)
+        .options(
+            selectinload(PowerLine.poles).selectinload(Pole.position_points),
+            selectinload(PowerLine.poles).selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(PowerLine.poles).selectinload(Pole.equipment),
+        )
+    )
+    power_lines = result.scalars().all()
+    features: List[Dict[str, Any]] = []
+
+    for power_line in power_lines:
+        poles_list = list(power_line.poles or [])
+        if len(poles_list) < 2:
+            continue
+
+        # Магистраль: опоры с tap_pole_id is None, сортировка по sequence_number
+        main_poles = [p for p in poles_list if getattr(p, "tap_pole_id", None) is None]
+        main_poles.sort(key=_line_sort_key)
+
+        # Пары (предыдущая, текущая) для магистрали; оборудование на текущей опоре рисуем на пролёте к ней
+        for i in range(len(main_poles) - 1):
+            p1, p2 = main_poles[i], main_poles[i + 1]
+            x1, y1 = _pole_coords_from_position_point(p1)
+            x2, y2 = _pole_coords_from_position_point(p2)
+            if x1 is None or y1 is None or x2 is None or y2 is None:
+                continue
+            try:
+                x1, y1 = float(x1), float(y1)
+                x2, y2 = float(x2), float(y2)
+            except (TypeError, ValueError):
+                continue
+            eq_list = list(getattr(p2, "equipment", None) or [])
+            visible = [e for e in eq_list if _equipment_icon_key(e.equipment_type, e.name) is not None]
+            for j, e in enumerate(visible):
+                icon_key = _equipment_icon_key(e.equipment_type, e.name)
+                if not icon_key:
+                    continue
+                t = 0.8 if len(visible) == 1 else 0.6 + (0.3 * (j / max(1, len(visible) - 1)))
+                lng = x1 + (x2 - x1) * t
+                lat = y1 + (y2 - y1) * t
+                angle_rad = math.atan2(y2 - y1, x2 - x1)
+                features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [lng, lat]},
+                    "properties": {
+                        "icon": icon_key,
+                        "angle_rad": angle_rad,
+                        "equipment_type": e.equipment_type,
+                        "name": e.name or "",
+                        "from_pole_id": p1.id,
+                        "to_pole_id": p2.id,
+                        "line_id": power_line.id,
+                    },
+                })
+
+        # Отпайки: для каждой отпаечной опоры X цепочка [X, опоры с tap_pole_id=X]
+        tap_pole_ids = {getattr(p, "tap_pole_id", None) for p in poles_list if getattr(p, "tap_pole_id", None) is not None}
+        tap_poles_by_id = {p.id: p for p in poles_list}
+        for tpid in tap_pole_ids:
+            tap_pole = tap_poles_by_id.get(tpid)
+            if not tap_pole:
+                continue
+            branch_poles = [p for p in poles_list if getattr(p, "tap_pole_id", None) == tpid]
+            branch_poles.sort(key=_line_sort_key)
+            chain = [tap_pole] + branch_poles
+            for i in range(len(chain) - 1):
+                p1, p2 = chain[i], chain[i + 1]
+                x1, y1 = _pole_coords_from_position_point(p1)
+                x2, y2 = _pole_coords_from_position_point(p2)
+                if x1 is None or y1 is None or x2 is None or y2 is None:
+                    continue
+                try:
+                    x1, y1 = float(x1), float(y1)
+                    x2, y2 = float(x2), float(y2)
+                except (TypeError, ValueError):
+                    continue
+                eq_list = list(getattr(p2, "equipment", None) or [])
+                visible = [e for e in eq_list if _equipment_icon_key(e.equipment_type, e.name) is not None]
+                for j, e in enumerate(visible):
+                    icon_key = _equipment_icon_key(e.equipment_type, e.name)
+                    if not icon_key:
+                        continue
+                    t = 0.8 if len(visible) == 1 else 0.6 + (0.3 * (j / max(1, len(visible) - 1)))
+                    lng = x1 + (x2 - x1) * t
+                    lat = y1 + (y2 - y1) * t
+                    angle_rad = math.atan2(y2 - y1, x2 - x1)
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [lng, lat]},
+                        "properties": {
+                            "icon": icon_key,
+                            "angle_rad": angle_rad,
+                            "equipment_type": e.equipment_type,
+                            "name": e.name or "",
+                            "from_pole_id": p1.id,
+                            "to_pole_id": p2.id,
+                            "line_id": power_line.id,
+                        },
+                    })
+
+    return {"type": "FeatureCollection", "features": features}
+
 
 @router.get("/spans/geojson")
 async def get_spans_geojson(
