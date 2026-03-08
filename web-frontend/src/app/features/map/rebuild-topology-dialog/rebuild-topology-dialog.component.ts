@@ -5,7 +5,7 @@ import { MapService } from '../../../core/services/map.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 export interface RebuildTopologyDialogData {
-  powerLineId: number;
+  lineId: number;
 }
 
 @Component({
@@ -26,7 +26,7 @@ export class RebuildTopologyDialogComponent {
 
   onMode(mode: 'full' | 'preserve'): void {
     this.loading = true;
-    this.apiService.autoCreateSpans(this.data.powerLineId, mode).subscribe({
+    this.apiService.autoCreateSpans(this.data.lineId, mode).subscribe({
       next: () => {
         this.snackBar.open(
           mode === 'full' ? 'Топология пересобрана с нуля.' : 'Недостающие пролёты добавлены.',

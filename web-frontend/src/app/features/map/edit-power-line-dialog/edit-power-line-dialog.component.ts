@@ -17,7 +17,7 @@ export class EditPowerLineDialogComponent implements OnInit {
   powerLine: PowerLine | null = null;
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: { powerLineId: number },
+    @Inject(MAT_DIALOG_DATA) public data: { lineId: number },
     private dialogRef: MatDialogRef<EditPowerLineDialogComponent>,
     private fb: FormBuilder,
     private apiService: ApiService,
@@ -40,7 +40,7 @@ export class EditPowerLineDialogComponent implements OnInit {
   }
 
   loadPowerLine(): void {
-    this.apiService.getPowerLine(this.data.powerLineId).subscribe({
+    this.apiService.getPowerLine(this.data.lineId).subscribe({
       next: (powerLine) => {
         this.powerLine = powerLine;
         this.powerLineForm.patchValue({
@@ -69,7 +69,7 @@ export class EditPowerLineDialogComponent implements OnInit {
     this.isSubmitting = true;
     const formValue = this.powerLineForm.value;
 
-    this.apiService.updatePowerLine(this.data.powerLineId, formValue).subscribe({
+    this.apiService.updatePowerLine(this.data.lineId, formValue).subscribe({
       next: (updated) => {
         this.snackBar.open('ЛЭП успешно обновлена', 'Закрыть', { duration: 3000 });
         this.apiService.createChangeLogEntry({

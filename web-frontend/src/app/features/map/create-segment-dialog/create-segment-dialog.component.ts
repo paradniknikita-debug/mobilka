@@ -26,11 +26,11 @@ export class CreateSegmentDialogComponent implements OnInit {
   // Режим редактирования
   isEditMode = false;
   segmentId?: number;
-  powerLineId: number;
+  lineId: number;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { 
-      powerLineId: number;
+      lineId: number;
       segmentId?: number;
       isEdit?: boolean;
     },
@@ -40,7 +40,7 @@ export class CreateSegmentDialogComponent implements OnInit {
     private mapService: MapService,
     private snackBar: MatSnackBar
   ) {
-    this.powerLineId = data.powerLineId;
+    this.lineId = data.lineId;
     this.segmentId = data.segmentId;
     this.isEditMode = data.isEdit || false;
     
@@ -108,7 +108,7 @@ export class CreateSegmentDialogComponent implements OnInit {
 
   loadPoles(): void {
     this.isLoading = true;
-    this.apiService.getPolesSequence(this.powerLineId).subscribe({
+    this.apiService.getPolesSequence(this.lineId).subscribe({
       next: (poles) => {
         this.poles = poles || [];
         this.isLoading = false;
@@ -164,7 +164,7 @@ export class CreateSegmentDialogComponent implements OnInit {
 
     const segmentData: AClineSegmentCreate = {
       name: formValue.name,
-      power_line_id: this.data.powerLineId,
+      line_id: this.data.lineId,
       voltage_level: formValue.voltage_level || 0,
       length: formValue.length || 0,
       from_connectivity_node_id: fromPole.connectivity_node_id!,

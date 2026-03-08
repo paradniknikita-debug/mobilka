@@ -6,7 +6,7 @@ import { Substation } from '../../../core/models/substation.model';
 
 export interface SegmentCardDialogData {
   segmentId: number;
-  powerLineId?: number;
+  lineId?: number;
   segmentName?: string;
 }
 
@@ -159,7 +159,7 @@ export class SegmentCardDialogComponent {
   }
 
   setTapSubstation(): void {
-    const plId = this.data.powerLineId;
+    const plId = this.data.lineId;
     if (plId == null || !this.segment || this.selectedSubstationIdForTap == null) return;
     this.savingTapSubstation = true;
     this.apiService.setSegmentEndSubstation(plId, this.data.segmentId, { to_substation_id: this.selectedSubstationIdForTap }).subscribe({
@@ -172,7 +172,7 @@ export class SegmentCardDialogComponent {
   }
 
   clearTapSubstation(): void {
-    const plId = this.data.powerLineId;
+    const plId = this.data.lineId;
     if (plId == null || !this.segment) return;
     this.savingTapSubstation = true;
     this.apiService.setSegmentEndSubstation(plId, this.data.segmentId, { to_substation_id: null }).subscribe({

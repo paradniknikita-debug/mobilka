@@ -46,13 +46,20 @@ class BaseUrlManager {
     // Если был fallback, используем сохраненный протокол (HTTP)
     
     // Для production web используем относительный путь через nginx (без порта)
-    // Это избегает проблем с Mixed Content и работает с HTTPS
-    // Для development можно использовать абсолютный путь
+    // Исключение: если приложение открыто с нестандартного порта (например 53380 — Flutter web-server),
+    // API на другом порту — используем явный адрес бэкенда (localhost:8000)
     if (kReleaseMode) {
-      // Production: относительный путь
+      final currentPort = Uri.base.port;
+      final isLocalDevServer = (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') &&
+          currentPort != 80 && currentPort != 443 && currentPort != 8000;
+      if (isLocalDevServer) {
+        final port = _protocol == 'https' ? 443 : 8000;
+        return '$_protocol://localhost:$port';
+      }
+      // Production за nginx: относительный путь
       return '';
     }
-    
+
     // Development: абсолютный путь с портом
     final port = _protocol == 'https' ? 443 : 8000;
     final hostname = Uri.base.host;

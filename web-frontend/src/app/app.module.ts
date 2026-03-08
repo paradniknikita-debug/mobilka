@@ -62,6 +62,9 @@ import { ChangeLogComponent } from './features/change-log/change-log.component';
 import { ChangeLogDetailDialogComponent } from './features/change-log/change-log-detail-dialog/change-log-detail-dialog.component';
 import { CimImportComponent } from './features/cim-import/cim-import.component';
 import { CimPreviewMapDialogComponent } from './features/cim-import/cim-preview-map-dialog/cim-preview-map-dialog.component';
+import { AttachmentImageViewComponent } from './features/map/attachment-image-view/attachment-image-view.component';
+import { AttachmentMediaViewComponent } from './features/map/attachment-media-view/attachment-media-view.component';
+import { ImagePreviewDialogComponent } from './features/map/image-preview-dialog/image-preview-dialog.component';
 
 @NgModule({
   declarations: [
@@ -82,7 +85,10 @@ import { CimPreviewMapDialogComponent } from './features/cim-import/cim-preview-
     ChangeLogComponent,
     ChangeLogDetailDialogComponent,
     CimImportComponent,
-    CimPreviewMapDialogComponent
+    CimPreviewMapDialogComponent,
+    AttachmentImageViewComponent,
+    AttachmentMediaViewComponent,
+    ImagePreviewDialogComponent
   ],
   imports: [
     BrowserModule,

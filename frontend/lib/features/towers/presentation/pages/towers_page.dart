@@ -73,10 +73,31 @@ class _TowersPageState extends ConsumerState<TowersPage> {
     final linePoles = await db.getPolesByLine(_selectedPowerLineId!);
     final existingPolesCount = linePoles.length;
 
+    // Автоподставление номера опоры: следующий по магистрали (1, 2, 3...) или в отпайке (N/1, N/2...)
+    String? initialPoleNumber;
+    int? poleSequenceNumber;
+    if (existingPolesCount > 0) {
+      int maxMainNum = 0;
+      for (final p in linePoles) {
+        final n = p.poleNumber.trim();
+        if (!n.contains('/')) {
+          final numVal = int.tryParse(n);
+          if (numVal != null && numVal > maxMainNum) maxMainNum = numVal;
+        }
+      }
+      initialPoleNumber = (maxMainNum + 1).toString();
+      poleSequenceNumber = existingPolesCount + 1;
+    } else {
+      initialPoleNumber = '1';
+      poleSequenceNumber = 1;
+    }
+
     final result = await showDialog<dynamic>(
       context: context,
       builder: (context) => CreatePoleDialog(
         lineId: _selectedPowerLineId!,
+        initialPoleNumber: initialPoleNumber,
+        poleSequenceNumber: poleSequenceNumber,
         existingPolesCount: existingPolesCount,
       ),
     );

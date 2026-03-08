@@ -1,7 +1,9 @@
 """
 API загрузки и отдачи вложений карточки опоры: фото, схемы, голосовые заметки, видео.
 Хранилище: MinIO (S3) при заданных S3_* или локальный диск uploads/pole_attachments/.
+Для фото создаётся миниатюра (до 150px) и возвращается thumbnail_url для хранения в истории комментариев.
 """
+import io
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import Response
@@ -16,6 +18,8 @@ from sqlalchemy import select
 from app.models.power_line import Pole
 
 router = APIRouter()
+
+THUMBNAIL_MAX_SIZE = (150, 150)
 
 ALLOWED_IMAGE = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 ALLOWED_VOICE = {"audio/mpeg", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/wav", "audio/webm"}
@@ -98,10 +102,36 @@ async def upload_pole_attachment(
             detail=f"Размер файла не более {MAX_SIZE_MB} МБ",
         )
 
-    media_put(pole_id, name, content, content_type or "application/octet-stream")
+    try:
+        media_put(pole_id, name, content, content_type or "application/octet-stream")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Ошибка сохранения вложения опоры")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Не удалось сохранить файл: {str(e)}",
+        ) from e
 
     url = f"/api/v1/attachments/poles/{pole_id}/{name}"
-    return {"url": url, "type": attachment_type, "filename": name}
+    result = {"url": url, "type": attachment_type, "filename": name}
+
+    # Для фото создаём миниатюру и возвращаем thumbnail_url для хранения в карточке опоры
+    if attachment_type == "photo" and content_type in ALLOWED_IMAGE:
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(content))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            img.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            thumb_name = f"thumb_{uuid.uuid4().hex}.jpg"
+            media_put(pole_id, thumb_name, buf.getvalue(), "image/jpeg")
+            result["thumbnail_url"] = f"/api/v1/attachments/poles/{pole_id}/{thumb_name}"
+        except Exception:
+            pass  # миниатюра опциональна, не ломаем ответ
+
+    return result
 
 
 @router.get("/poles/{pole_id}/{filename}")
@@ -119,7 +149,15 @@ async def get_pole_attachment(
     if not pole:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Опора не найдена")
 
-    content, media_type = media_get(pole_id, filename)
+    try:
+        content, media_type = media_get(pole_id, filename)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Ошибка чтения вложения")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка чтения файла: {str(e)}",
+        ) from e
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
 

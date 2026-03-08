@@ -1,0 +1,11 @@
+<h2 mat-dialog-title>Просмотр изображения</h2>
+<mat-dialog-content>
+  <div *ngIf="loading" class="preview-loading">
+    <mat-spinner diameter="48"></mat-spinner>
+  </div>
+  <img *ngIf="blobUrl && !loading" [src]="blobUrl" alt="Просмотр" class="preview-img" />
+  <p *ngIf="error && !loading" class="preview-error">Не удалось загрузить изображение</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close (click)="onClose()">Закрыть</button>
+</mat-dialog-actions>

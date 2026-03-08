@@ -86,25 +86,31 @@
         <span class="property-label">Фундамент:</span>
         <span class="property-value">{{ selectedPole.foundation_type }}</span>
       </div>
+      <div class="property-item" *ngIf="selectedPole.material">
+        <span class="property-label">Материал:</span>
+        <span class="property-value">{{ selectedPole.material }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.year_installed != null">
+        <span class="property-label">Год установки:</span>
+        <span class="property-value">{{ selectedPole.year_installed }}</span>
+      </div>
       <div class="property-item">
         <span class="property-label">Состояние:</span>
         <span class="property-value">{{ selectedPole.condition ?? '—' }}</span>
       </div>
+      <div class="property-item" *ngIf="selectedPole.notes">
+        <span class="property-label">Заметки:</span>
+        <span class="property-value card-comment">{{ selectedPole.notes }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.conductor_type || selectedPole.conductor_material || selectedPole.conductor_section">
+        <span class="property-label">Марка провода:</span>
+        <span class="property-value">
+          {{ (selectedPole.conductor_type || '') + (selectedPole.conductor_material ? ' · ' + selectedPole.conductor_material : '') + (selectedPole.conductor_section ? ' · ' + selectedPole.conductor_section + ' мм²' : '') || '—' }}
+        </span>
+      </div>
       <div class="property-item" *ngIf="selectedPole.card_comment">
         <span class="property-label">Комментарий карточки:</span>
         <span class="property-value card-comment">{{ selectedPole.card_comment }}</span>
-      </div>
-      <div class="property-item property-item--attachments" *ngIf="parseCardAttachments(selectedPole.card_comment_attachment).length">
-        <span class="property-label">Вложения:</span>
-        <span class="property-value attachments-list">
-          <ng-container *ngFor="let att of parseCardAttachments(selectedPole.card_comment_attachment)">
-            <ng-container [ngSwitch]="att.t">
-              <img *ngSwitchCase="'photo'" [src]="getAttachmentUrl(att.url)" alt="Фото" class="attachment-img" />
-              <img *ngSwitchCase="'schema'" [src]="getAttachmentUrl(att.url)" alt="Схема" class="attachment-img" />
-              <audio *ngSwitchCase="'voice'" [src]="getAttachmentUrl(att.url)" controls class="attachment-audio"></audio>
-            </ng-container>
-          </ng-container>
-        </span>
       </div>
       <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">
         <span class="property-label">Терминалы:</span>

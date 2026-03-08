@@ -757,14 +757,14 @@ class _ApiService implements ApiService {
   @override
   Future<List<PatrolSession>> getPatrolSessions(
     int? userId,
-    int? powerLineId,
+    int? lineId,
     int? limit,
     int? offset,
   ) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{
       r'user_id': userId,
-      r'power_line_id': powerLineId,
+      r'line_id': lineId,
       r'limit': limit,
       r'offset': offset,
     };

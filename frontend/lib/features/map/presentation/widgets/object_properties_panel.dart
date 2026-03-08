@@ -10,9 +10,9 @@ class ObjectPropertiesPanel extends StatelessWidget {
   final VoidCallback? onAutoCreateSpans;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-  /// Открыть диалог создания опоры «Начать отпайку» от этой опоры.
+  /// Открыть диалог создания опоры «Начать отпайку» от этой опоры (отпаечная опора = точка ветвления, напр. опора 3).
   final VoidCallback? onStartTapPole;
-  /// Открыть диалог добавления следующей опоры в отпайку (только для опор с номером вида N/M).
+  /// Открыть диалог добавления следующей опоры в отпайку (опора уже в отпайке: 3/1, 3/2 и т.д.).
   final VoidCallback? onAddPoleToTap;
 
   const ObjectPropertiesPanel({
@@ -39,9 +39,19 @@ class ObjectPropertiesPanel extends StatelessWidget {
     return v.toString();
   }
 
-  static bool _isTapPole(Map<String, dynamic> props) {
+  /// Отпаечная опора (точка ветвления): опора 3, от которой идёт отпайка 3/1, 3/2. Как в Angular: is_tap_pole == true.
+  static bool _isTapPoleForStart(Map<String, dynamic> props) {
+    if (props['is_tap_pole'] == true) return true;
     final n = props['pole_number'] ?? props['poleNumber'];
-    return n is String && n.contains('/');
+    // Магистральная опора (без "/") — можно начать отпайку; после создания 3/1 бэкенд выставит is_tap_pole для 3
+    return n is String && n.isNotEmpty && !n.contains('/');
+  }
+
+  /// Опора в отпайке (3/1, 3/2): первая и последующие опоры ветки, не точка ветвления.
+  static bool _isPoleInTapBranch(Map<String, dynamic> props) {
+    final n = props['pole_number'] ?? props['poleNumber'];
+    if (n is String && n.contains('/')) return true;
+    return props['tap_pole_id'] != null;
   }
 
   static int? _toInt(dynamic v) {
@@ -65,7 +75,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lineId = _toInt(objectProperties['line_id'] ?? objectProperties['power_line_id']);
+    final lineId = _toInt(objectProperties['line_id']);
 
     return Container(
       decoration: BoxDecoration(
@@ -172,7 +182,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
                   ],
                   if (onStartTapPole != null &&
                       lineId != null &&
-                      objectProperties['id'] != null) ...[
+                      objectProperties['id'] != null &&
+                      _isTapPoleForStart(objectProperties)) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -190,7 +201,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
                   if (onAddPoleToTap != null &&
                       lineId != null &&
                       objectProperties['id'] != null &&
-                      _isTapPole(objectProperties)) ...[
+                      _isPoleInTapBranch(objectProperties)) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(

@@ -92,8 +92,7 @@ export interface AClineSegment {
   mrid: string;
   name: string;
   code: string;
-  /** ID линии (ЛЭП); бэкенд возвращает line_id */
-  power_line_id?: number;
+  /** ID линии (ЛЭП) */
   line_id?: number;
   voltage_level: number;
   length: number;
@@ -125,7 +124,7 @@ export interface AClineSegment {
 export interface AClineSegmentCreate {
   name: string;
   code?: string; // Опциональный, генерируется на бэкенде
-  power_line_id: number;
+  line_id: number;
   voltage_level: number;
   length: number;
   is_tap?: boolean;
@@ -148,8 +147,6 @@ export interface AClineSegmentCreate {
 }
 
 export interface Span {
-  // Для обратной совместимости
-  power_line_id?: number;
   from_pole_id?: number;
   to_pole_id?: number;
   id: number;
@@ -187,10 +184,7 @@ export interface SpanCreate {
   sag?: number;
   notes?: string;
   mrid?: string;
-  // Для обратной совместимости
-  power_line_id?: number;
   from_pole_id?: number;
-  to_pole_id?: number;
 }
 
 export interface PoleSequenceResponse {

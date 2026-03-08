@@ -9,7 +9,9 @@ import 'dart:convert';
 
 import '../config/app_config.dart';
 import '../database/database.dart';
+import '../models/power_line.dart' show PoleCreate;
 import 'api_service.dart';
+import 'attachment_reader.dart';
 import 'auth_service.dart'; // prefsProvider
 
 part 'sync_service.freezed.dart';
@@ -29,7 +31,7 @@ Map<String, dynamic> _toSnakeCaseMap(Map<String, dynamic> map) {
 
 class SyncService extends StateNotifier<SyncState> {
   final AppDatabase _database;
-  final ApiService _apiService;
+  final ApiServiceWithExport _apiService;
   final SharedPreferences? _prefs;
   final Connectivity _connectivity;
   final Uuid _uuid;
@@ -179,8 +181,10 @@ class SyncService extends StateNotifier<SyncState> {
       records.add(_createSyncRecord('power_line', 'create', data, batchId));
     }
 
-    // Затем опоры (line_id может быть локальным < 0 — подставляем server id из маппинга при наличии)
+    // Затем опоры (line_id может быть локальным < 0 — подставляем server id из маппинга при наличии).
+    // Вложения с локальным путём (p) загружаем на сервер и подставляем url; для новых опор — после создания пакета.
     final powerLineMapping = _getSyncPowerLineMapping();
+    final newPolesWithPendingAttachments = <({Pole pole, List<Map<String, dynamic>> pending, List<Map<String, dynamic>> resolved})>[];
     for (final pole in poles) {
       var poleData = _toSnakeCaseMap(pole.toJson());
       final plId = pole.lineId;
@@ -189,6 +193,58 @@ class SyncService extends StateNotifier<SyncState> {
         if (serverPlId != null && serverPlId > 0) {
           poleData = {...poleData, 'line_id': serverPlId};
         }
+      }
+      // Разрешаем card_comment_attachment: загружаем файлы по "p", подставляем "url"
+      final attachmentJson = poleData['card_comment_attachment'];
+      if (attachmentJson != null && attachmentJson is String) {
+        try {
+          final list = jsonDecode(attachmentJson) as List<dynamic>;
+          final resolved = <Map<String, dynamic>>[];
+          List<Map<String, dynamic>>? pendingForNew;
+          for (final e in list) {
+            if (e is! Map) continue;
+            final m = Map<String, dynamic>.from(e as Map);
+            if (m['url'] != null) {
+              resolved.add(m);
+              continue;
+            }
+            final path = m['p'] as String?;
+            if (path == null || path.isEmpty) continue;
+            final type = m['t'] as String? ?? 'photo';
+            if (pole.id > 0) {
+              try {
+                final bytes = await readAttachmentBytes(path);
+                if (bytes.isEmpty) continue;
+                final ext = path.contains('.') ? path.split('.').last : 'jpg';
+                final filename = 'upload.$ext';
+                final result = await _apiService.uploadPoleAttachment(pole.id, type, bytes, filename);
+                final url = result['url'] as String?;
+                if (url != null) {
+                  final entry = <String, dynamic>{'t': type, 'url': url};
+                  if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+                  resolved.add(entry);
+                }
+              } catch (_) {
+                // файл удалён или сеть — пропускаем
+              }
+            } else {
+              pendingForNew ??= [];
+              pendingForNew.add(m);
+            }
+          }
+          if (pole.id > 0) {
+            poleData['card_comment_attachment'] = resolved.isEmpty ? null : jsonEncode(resolved);
+          } else {
+            poleData['card_comment_attachment'] = resolved.isEmpty ? null : jsonEncode(resolved);
+            if (pendingForNew != null && pendingForNew.isNotEmpty) {
+              newPolesWithPendingAttachments.add((
+                pole: pole,
+                pending: pendingForNew,
+                resolved: List.from(resolved),
+              ));
+            }
+          }
+        } catch (_) {}
       }
       records.add(_createSyncRecord('pole', 'create', poleData, batchId));
     }
@@ -223,18 +279,68 @@ class SyncService extends StateNotifier<SyncState> {
     final response = await _apiService.uploadSyncBatch(batch);
     if (response['success'] == true) {
       final idMapping = response['id_mapping'];
-      if (idMapping is Map) {
-        if (idMapping['pole'] is Map) {
-          _saveSyncPoleMapping(Map<String, dynamic>.from(idMapping['pole'] as Map));
-          for (final entry in (idMapping['pole'] as Map).entries) {
-            final clientId = int.tryParse(entry.key.toString());
-            if (clientId != null) {
-              await _database.setPoleNeedsSync(clientId, false);
-            }
+      final idMappingPole = idMapping is Map && idMapping['pole'] is Map
+          ? Map<String, dynamic>.from(idMapping['pole'] as Map)
+          : <String, dynamic>{};
+      final idMappingPowerLine = idMapping is Map && idMapping['power_line'] is Map
+          ? Map<String, dynamic>.from(idMapping['power_line'] as Map)
+          : <String, dynamic>{};
+      if (idMappingPole.isNotEmpty) {
+        _saveSyncPoleMapping(idMappingPole);
+        for (final entry in idMappingPole.entries) {
+          final clientId = int.tryParse(entry.key.toString());
+          if (clientId != null) {
+            await _database.setPoleNeedsSync(clientId, false);
           }
         }
-        if (idMapping['power_line'] is Map) {
-          final plMapping = Map<String, dynamic>.from(idMapping['power_line'] as Map);
+      }
+      // Новые опоры с локальными вложениями: загружаем файлы и обновляем опору на сервере
+      for (final item in newPolesWithPendingAttachments) {
+        final serverPoleIdRaw = idMappingPole[item.pole.id.toString()];
+        final serverPoleId = serverPoleIdRaw is int
+            ? serverPoleIdRaw
+            : (serverPoleIdRaw is num ? serverPoleIdRaw.toInt() : int.tryParse(serverPoleIdRaw?.toString() ?? ''));
+        final serverLineId = powerLineMapping[item.pole.lineId];
+        if (serverPoleId == null || serverPoleId <= 0 || serverLineId == null || serverLineId <= 0) continue;
+        final resolved = List<Map<String, dynamic>>.from(item.resolved);
+        for (final m in item.pending) {
+          final path = m['p'] as String?;
+          if (path == null || path.isEmpty) continue;
+          final type = m['t'] as String? ?? 'photo';
+          try {
+            final bytes = await readAttachmentBytes(path);
+            if (bytes.isEmpty) continue;
+            final ext = path.contains('.') ? path.split('.').last : 'jpg';
+            final result = await _apiService.uploadPoleAttachment(serverPoleId, type, bytes, 'upload.$ext');
+            final url = result['url'] as String?;
+            if (url != null) {
+              final entry = <String, dynamic>{'t': type, 'url': url};
+              if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+              resolved.add(entry);
+            }
+          } catch (_) {}
+        }
+        final pole = item.pole;
+        final poleCreate = PoleCreate(
+          poleNumber: pole.poleNumber,
+          xPosition: pole.xPosition ?? 0.0,
+          yPosition: pole.yPosition ?? 0.0,
+          poleType: pole.poleType ?? 'unknown',
+          height: pole.height,
+          foundationType: pole.foundationType,
+          material: pole.material,
+          yearInstalled: pole.yearInstalled,
+          condition: pole.condition ?? 'good',
+          notes: pole.notes,
+          cardComment: pole.cardComment,
+          cardCommentAttachment: resolved.isEmpty ? null : jsonEncode(resolved),
+        );
+        try {
+          await _apiService.updatePole(serverLineId, serverPoleId, poleCreate);
+        } catch (_) {}
+      }
+      if (idMappingPowerLine.isNotEmpty) {
+        final plMapping = idMappingPowerLine;
           _saveSyncPowerLineMapping(plMapping);
           // Заменить локальные ЛЭП на серверные: перенос опор, сессий обхода, вставка строки с server id, удаление локальной
           for (final pl in powerLines) {
@@ -273,7 +379,6 @@ class SyncService extends StateNotifier<SyncState> {
               }
             }
           }
-        }
       }
       for (final eq in equipmentToSync) {
         await _database.setEquipmentNeedsSync(eq.id, false);
@@ -479,7 +584,7 @@ class SyncService extends StateNotifier<SyncState> {
       case 'create':
       case 'update':
         final id = _toInt(data['id']);
-        final lineId = _toInt(data['line_id'] ?? data['power_line_id']);
+        final lineId = _toInt(data['line_id']);
         final createdAt = _parseDateTime(data['created_at']) ?? DateTime.now();
         final updatedAt = _parseDateTime(data['updated_at']);
 

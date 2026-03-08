@@ -37,7 +37,7 @@
             <input 
               type="text"
               matInput
-              formControlName="power_line_id"
+              formControlName="line_id"
               [matAutocomplete]="autoPowerLine"
               placeholder="Выберите ЛЭП">
             <mat-autocomplete #autoPowerLine="matAutocomplete" [displayWith]="displayPowerLine">
@@ -45,7 +45,7 @@
                 {{ line.name }}
               </mat-option>
             </mat-autocomplete>
-            <mat-error>{{ getFieldError('power_line_id') }}</mat-error>
+            <mat-error>{{ getFieldError('line_id') }}</mat-error>
           </mat-form-field>
 
           <!-- Ветка: магистраль или отпайка (несколько веток от одной опоры с разными подписями) -->
@@ -162,6 +162,65 @@
             <mat-label>Примечания</mat-label>
             <textarea matInput formControlName="notes" rows="2"></textarea>
           </mat-form-field>
+        </mat-expansion-panel>
+
+        <mat-expansion-panel class="expansion-section" *ngIf="selectedObjectType === 'pole'">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Комментарий и медиа карточки</mat-panel-title>
+          </mat-expansion-panel-header>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Комментарий карточки</mat-label>
+            <textarea matInput formControlName="card_comment" rows="2" placeholder="Текст комментария к опоре"></textarea>
+          </mat-form-field>
+          <ng-container *ngIf="isEditMode && poleId && lineId">
+            <p class="pole-attachments-label">Вложения (фото, схемы, голос, видео)</p>
+            <div class="pole-attachments-actions">
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('photo')" matTooltip="Изображение (фото, схема)" class="upload-btn">
+                <mat-icon>image</mat-icon>
+              </button>
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('voice')" matTooltip="Голос" class="upload-btn">
+                <mat-icon>mic</mat-icon>
+              </button>
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('video')" matTooltip="Видео" class="upload-btn">
+                <mat-icon>videocam</mat-icon>
+              </button>
+              <input #poleAttachmentFileInput type="file" class="upload-input-hidden" [accept]="poleAttachmentAccept" (change)="onPoleAttachmentFileSelected($event)" />
+            </div>
+            <div class="pole-attachments-list" *ngIf="poleAttachments.length">
+              <div class="pole-attachment-item" *ngFor="let att of poleAttachments; let i = index">
+                <ng-container [ngSwitch]="att.t">
+                  <div *ngSwitchCase="'photo'" class="attachment-preview-wrap">
+                    <app-attachment-image-view
+                      [url]="att.url"
+                      [thumbnailUrl]="att.thumbnail"
+                      cssClass="attachment-thumb"
+                      (openPreview)="openImagePreview($event)"
+                    ></app-attachment-image-view>
+                  </div>
+                  <div *ngSwitchCase="'schema'" class="attachment-preview-wrap">
+                    <app-attachment-image-view
+                      [url]="att.url"
+                      [thumbnailUrl]="att.thumbnail"
+                      cssClass="attachment-thumb"
+                      (openPreview)="openImagePreview($event)"
+                    ></app-attachment-image-view>
+                  </div>
+                  <div *ngSwitchCase="'voice'" class="attachment-audio-wrap">
+                    <app-attachment-media-view [url]="att.url" type="voice"></app-attachment-media-view>
+                  </div>
+                  <div *ngSwitchCase="'video'" class="attachment-video-wrap">
+                    <app-attachment-media-view [url]="att.url" type="video"></app-attachment-media-view>
+                  </div>
+                  <span *ngSwitchDefault class="attachment-unknown">{{ att.t || 'файл' }}</span>
+                </ng-container>
+                <div class="attachment-item-actions">
+                  <button mat-icon-button type="button" (click)="downloadPoleAttachment(att)" matTooltip="Скачать">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </ng-container>
         </mat-expansion-panel>
       </form>
     </div>

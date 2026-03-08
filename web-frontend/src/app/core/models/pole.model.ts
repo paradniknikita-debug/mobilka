@@ -72,5 +72,9 @@ export interface PoleCreate {
   conductor_material?: string;
   /** Сечение провода, мм² */
   conductor_section?: string;
+  /** Комментарий карточки опоры (для обновления) */
+  card_comment?: string | null;
+  /** Вложения карточки: JSON [{t, url}] (для обновления) */
+  card_comment_attachment?: string | null;
 }
 

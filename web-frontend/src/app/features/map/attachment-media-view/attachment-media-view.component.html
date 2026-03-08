@@ -1,0 +1,8 @@
+<div class="attachment-media-wrap">
+  <div *ngIf="loading" class="attachment-media-loading">
+    <mat-spinner diameter="24"></mat-spinner>
+  </div>
+  <audio *ngIf="blobUrl && !loading && type === 'voice'" [src]="blobUrl" controls class="attachment-audio"></audio>
+  <video *ngIf="blobUrl && !loading && type === 'video'" [src]="blobUrl" controls class="attachment-video" preload="metadata"></video>
+  <span *ngIf="error && !loading" class="attachment-media-error">Не удалось загрузить</span>
+</div>

@@ -78,9 +78,9 @@ class AppConfig {
   static const String pendingDeletePowerLineIdsKey = 'pending_delete_power_line_ids';
   /// Маппинг локальный id опоры → серверный (JSON, string→int) для pole_server_id в equipment
   static const String syncPoleMappingKey = 'sync_pole_mapping';
-  /// Маппинг локальный id ЛЭП → серверный (JSON, string→int) для подстановки power_line_id в опорах
+  /// Маппинг локальный id ЛЭП → серверный (JSON, string→int) для подстановки line_id в опорах
   static const String syncPowerLineMappingKey = 'sync_power_line_mapping';
-  /// Активная сессия обхода: id выбранной ЛЭП
+  /// Активная сессия обхода: id выбранной линии (line_id)
   static const String activeSessionPowerLineIdKey = 'active_session_power_line_id';
   /// Время начала сессии (ISO8601)
   static const String activeSessionStartTimeKey = 'active_session_start_time';

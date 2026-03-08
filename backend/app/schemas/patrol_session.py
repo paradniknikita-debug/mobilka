@@ -4,10 +4,10 @@ from datetime import datetime
 
 
 class PatrolSessionCreate(BaseModel):
-    """Создание сессии обхода. Принимаем line_id (наша схема) или power_line_id/powerLineId (для совместимости)."""
+    """Создание сессии обхода. Используется только line_id."""
     line_id: int = Field(
         ...,
-        validation_alias=AliasChoices("line_id", "power_line_id", "powerLineId"),
+        validation_alias="line_id",
         description="ID линии (ЛЭП) на сервере",
     )
     note: Optional[str] = None

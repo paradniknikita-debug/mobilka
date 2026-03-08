@@ -1,6 +1,7 @@
-import { Component, OnInit, Inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, Inject, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
+import { ImagePreviewDialogComponent } from '../image-preview-dialog/image-preview-dialog.component';
 import { MatSelectChange } from '@angular/material/select';
 import { ApiService } from '../../../core/services/api.service';
 import { MapService } from '../../../core/services/map.service';
@@ -36,7 +37,7 @@ export class CreateObjectDialogComponent implements OnInit {
   isEditMode = false;
   poleId?: number;
   substationId?: number;
-  powerLineId?: number;
+  lineId?: number;
   isLoading = false;
 
   // Типы опор для выпадающего списка
@@ -90,6 +91,11 @@ export class CreateObjectDialogComponent implements OnInit {
   selectedTapSegmentForEnd: { lineId: number; segmentId: number } | null = null;
   linkingTapEnd = false;
 
+  /** Вложения карточки опоры (только в режиме редактирования). */
+  poleAttachments: { t: string; url: string; thumbnail?: string }[] = [];
+  @ViewChild('poleAttachmentFileInput') poleAttachmentFileInput?: ElementRef<HTMLInputElement>;
+  currentPoleAttachmentType: 'photo' | 'voice' | 'video' = 'photo';
+
   // Кэшированные вычисления для карточки подстанции,
   // чтобы не гонять тяжёлые циклы в геттерах при каждом цикле change detection
   private _linesWhereSubstationIsStart: PowerLine[] = [];
@@ -116,6 +122,7 @@ export class CreateObjectDialogComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<CreateObjectDialogComponent>,
+    private dialog: MatDialog,
     private apiService: ApiService,
     private mapService: MapService,
     private snackBar: MatSnackBar,
@@ -129,9 +136,9 @@ export class CreateObjectDialogComponent implements OnInit {
       this.selectedObjectType = data.defaultObjectType as ObjectType;
       console.log('✓ Установлен selectedObjectType в конструкторе:', this.selectedObjectType);
       
-      if (data.defaultObjectType === 'pole' && data.powerLineId) {
-        this.powerLineId = data.powerLineId;
-        console.log('✓ Установлен powerLineId в конструкторе:', this.powerLineId);
+      if (data.defaultObjectType === 'pole' && data.lineId) {
+        this.lineId = data.lineId;
+        console.log('✓ Установлен lineId в конструкторе:', this.lineId);
       }
     } else {
       console.log('⚠ defaultObjectType не передан, selectedObjectType останется null');
@@ -143,7 +150,7 @@ export class CreateObjectDialogComponent implements OnInit {
 
     this.poleForm = this.fb.group({
       pole_number: ['', [Validators.required, Validators.maxLength(20)]],
-      power_line_id: ['', Validators.required],
+      line_id: ['', Validators.required],
       latitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       pole_type: ['', Validators.required],
@@ -161,7 +168,8 @@ export class CreateObjectDialogComponent implements OnInit {
       material: [''],
       year_installed: [null, [this.yearValidator.bind(this)]],
       condition: ['good'],
-      notes: ['']
+      notes: [''],
+      card_comment: ['']
     });
 
     // Автогенерация UID при инициализации (только если не передан defaultObjectType для опоры)
@@ -228,13 +236,13 @@ export class CreateObjectDialogComponent implements OnInit {
     console.log('selectedObjectType в ngOnInit:', this.selectedObjectType);
     
     // Проверяем режим редактирования опоры
-    if (this.data?.isEdit && this.data?.objectType === 'pole' && this.data?.poleId && this.data?.powerLineId) {
+    if (this.data?.isEdit && this.data?.objectType === 'pole' && this.data?.poleId && this.data?.lineId) {
       this.isEditMode = true;
       this.poleId = this.data.poleId;
-      this.powerLineId = this.data.powerLineId;
+      this.lineId = this.data.lineId;
       this.selectedObjectType = 'pole';
       this.objectTypeForm.patchValue({ objectType: 'pole' });
-      console.log('Режим редактирования опоры, poleId:', this.poleId, 'powerLineId:', this.powerLineId);
+      console.log('Режим редактирования опоры, poleId:', this.poleId, 'lineId:', this.lineId);
       this.cdr.detectChanges();
     } else if (this.data?.isEdit && this.data?.objectType === 'substation' && this.data?.substationId) {
       this.isEditMode = true;
@@ -259,15 +267,15 @@ export class CreateObjectDialogComponent implements OnInit {
       this.objectTypeForm.patchValue({ objectType: this.data.defaultObjectType });
       console.log('Установлен defaultObjectType:', this.data.defaultObjectType, 'selectedObjectType:', this.selectedObjectType);
       
-      // Если это опора и передан powerLineId, сохраняем его для установки после загрузки списка
-      if (this.data.defaultObjectType === 'pole' && this.data.powerLineId) {
-        if (!this.powerLineId) {
-          this.powerLineId = this.data.powerLineId;
+      // Если это опора и передан lineId, сохраняем его для установки после загрузки списка
+      if (this.data.defaultObjectType === 'pole' && this.data.lineId) {
+        if (!this.lineId) {
+          this.lineId = this.data.lineId;
         }
         if (this.data.tapPoleId) {
           this.tapPoleIdToUse = this.data.tapPoleId;
         }
-        console.log('Установлен powerLineId для опоры:', this.powerLineId);
+        console.log('Установлен lineId для опоры:', this.lineId);
         // Генерируем MRID сразу, так как тип объекта уже выбран
         this.generateMRID();
       }
@@ -279,7 +287,7 @@ export class CreateObjectDialogComponent implements OnInit {
     this.loadPowerLines();
 
     // Фильтрация ЛЭП для автокомплита
-    this.filteredPowerLines = this.poleForm.get('power_line_id')!.valueChanges.pipe(
+    this.filteredPowerLines = this.poleForm.get('line_id')!.valueChanges.pipe(
       startWith(''),
       map(value => {
         const name = typeof value === 'string' ? value : value?.name || '';
@@ -288,7 +296,7 @@ export class CreateObjectDialogComponent implements OnInit {
     );
 
     // При смене ЛЭП — загружаем опоры и определяем, показывать ли выбор «магистраль/отпайка»
-    this.poleForm.get('power_line_id')?.valueChanges.subscribe(val => {
+    this.poleForm.get('line_id')?.valueChanges.subscribe(val => {
       const lineId = typeof val === 'object' && val !== null && 'id' in val ? (val as { id: number }).id : null;
       if (lineId) {
         this.updateLastPoleInLine(lineId, this.tapPoleIdToUse);
@@ -333,8 +341,8 @@ export class CreateObjectDialogComponent implements OnInit {
     });
   }
 
-  updateLastPoleInLine(powerLineId: number, tapPoleId?: number): void {
-    this.apiService.getPolesByPowerLine(powerLineId).subscribe({
+  updateLastPoleInLine(lineId: number, tapPoleId?: number): void {
+    this.apiService.getPolesByPowerLine(lineId).subscribe({
       next: (poles) => {
         const list = (poles as any[]) || [];
         const tapPoles = list.filter((p: any) => p.is_tap_pole === true);
@@ -386,8 +394,8 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   /** Загружает список отпаечных опор и веток линии для выбора при редактировании (направление «По отпайке») */
-  loadTapPolesForLine(powerLineId: number): void {
-    this.apiService.getPolesByPowerLine(powerLineId).subscribe({
+  loadTapPolesForLine(lineId: number): void {
+    this.apiService.getPolesByPowerLine(lineId).subscribe({
       next: (poles) => {
         const list = (poles as any[]) || [];
         const tapPoles = list.filter((p: any) => p.is_tap_pole === true);
@@ -422,25 +430,25 @@ export class CreateObjectDialogComponent implements OnInit {
       next: (lines) => {
         this.powerLines = Array.isArray(lines) ? lines.filter(l => l != null && typeof l === 'object') : [];
         const count = this.powerLines.length;
-        console.log('Загружены ЛЭП, количество:', count, 'powerLineId для установки:', this.powerLineId);
+        console.log('Загружены ЛЭП, количество:', count, 'lineId для установки:', this.lineId);
         if (count > 0) {
           console.log('Все ЛЭП:', this.powerLines.map(l => l && (typeof l === 'object') ? { id: l.id, name: (l as any).name } : null));
         }
 
-        // Если передан powerLineId (при создании опоры из контекстного меню линии), устанавливаем его в форму
-        if (this.powerLineId && !this.isEditMode) {
-          const selectedLine = this.powerLines.find(line => line && line.id === this.powerLineId);
-          console.log('Поиск линии с ID', this.powerLineId, 'найден:', selectedLine);
+        // Если передан lineId (при создании опоры из контекстного меню линии), устанавливаем его в форму
+        if (this.lineId && !this.isEditMode) {
+          const selectedLine = this.powerLines.find(line => line && line.id === this.lineId);
+          console.log('Поиск линии с ID', this.lineId, 'найден:', selectedLine);
           if (selectedLine) {
             // Используем setTimeout для гарантии, что форма готова
             setTimeout(() => {
-              this.poleForm.patchValue({ power_line_id: selectedLine });
+              this.poleForm.patchValue({ line_id: selectedLine });
               console.log('Линия установлена в форму:', selectedLine);
               this.updateLastPoleInLine(selectedLine.id, this.tapPoleIdToUse);
               this.cdr.detectChanges();
             }, 0);
           } else {
-            console.warn('Линия с ID', this.powerLineId, 'не найдена в списке');
+            console.warn('Линия с ID', this.lineId, 'не найдена в списке');
             if (count > 0) {
               console.warn('Доступные ID линий:', this.powerLines.map(l => l?.id));
             }
@@ -448,7 +456,7 @@ export class CreateObjectDialogComponent implements OnInit {
         }
 
         // Если режим редактирования, загружаем данные опоры после загрузки ЛЭП
-        if (this.isEditMode && this.poleId && this.powerLineId) {
+        if (this.isEditMode && this.poleId && this.lineId) {
           setTimeout(() => {
             this.loadPole();
           }, 100);
@@ -556,13 +564,13 @@ export class CreateObjectDialogComponent implements OnInit {
   }
   
   loadPole(): void {
-    if (!this.poleId || !this.powerLineId) return;
+    if (!this.poleId || !this.lineId) return;
     
     this.isLoading = true;
-    this.apiService.getPoleByPowerLine(this.powerLineId, this.poleId).subscribe({
+    this.apiService.getPoleByPowerLine(this.lineId, this.poleId).subscribe({
       next: (pole) => {
         // Находим ЛЭП для установки в форму
-        const powerLine = this.powerLines.find(p => p.id === this.powerLineId);
+        const powerLine = this.powerLines.find(p => p.id === this.lineId);
         
         // Заполняем форму данными опоры
         const tapId = (pole as any).tap_pole_id ?? null;
@@ -570,7 +578,7 @@ export class CreateObjectDialogComponent implements OnInit {
         const branchSel = tapId != null ? `${tapId}:${tapBi}` : null;
         this.poleForm.patchValue({
           pole_number: pole.pole_number || '',
-          power_line_id: powerLine || this.powerLineId,
+          line_id: powerLine || this.lineId,
           latitude: (pole as any).y_position ?? (pole as any).latitude ?? '',
           longitude: (pole as any).x_position ?? (pole as any).longitude ?? '',
           pole_type: pole.pole_type || '',
@@ -588,13 +596,15 @@ export class CreateObjectDialogComponent implements OnInit {
           material: pole.material || '',
           year_installed: pole.installation_date ? new Date(pole.installation_date).getFullYear() : null,
           condition: pole.condition || 'good',
-          notes: (pole as any).notes || ''
+          notes: (pole as any).notes || '',
+          card_comment: (pole as any).card_comment || ''
         });
+        this.poleAttachments = this.parseCardAttachments((pole as any).card_comment_attachment);
         this.isLoading = false;
         // В режиме редактирования показываем выбор направления и загружаем список отпаечных опор
-        if (this.isEditMode && this.powerLineId) {
+        if (this.isEditMode && this.lineId) {
           this.showBranchChoice = true;
-          this.loadTapPolesForLine(this.powerLineId);
+          this.loadTapPolesForLine(this.lineId);
         }
         this.cdr.detectChanges();
       },
@@ -632,6 +642,87 @@ export class CreateObjectDialogComponent implements OnInit {
         this.isLoading = false;
         this.cdr.detectChanges();
       }
+    });
+  }
+
+  /** Разбор JSON вложений карточки опоры. */
+  parseCardAttachments(json: string | null | undefined): { t: string; url: string; thumbnail?: string }[] {
+    if (!json || !json.trim()) return [];
+    try {
+      const arr = JSON.parse(json) as any[];
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .filter((item) => item && (item.url || item.url === ''))
+        .map((item) => ({ t: item.t || 'photo', url: item.url, thumbnail: item.thumbnail }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Открыть предпросмотр изображения в модальном окне. */
+  openImagePreview(url: string): void {
+    this.dialog.open(ImagePreviewDialogComponent, {
+      data: { url },
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      panelClass: 'image-preview-dialog-panel'
+    });
+  }
+
+  getAttachmentUrl(relativeUrl: string): string {
+    return this.apiService.getAttachmentUrl(relativeUrl);
+  }
+
+  getAttachmentFilename(url: string): string {
+    if (!url || !url.trim()) return 'attachment';
+    const segment = url.replace(/\/+$/, '').split('/').pop();
+    return segment || 'attachment';
+  }
+
+  downloadPoleAttachment(att: { t: string; url: string }): void {
+    const filename = this.getAttachmentFilename(att.url);
+    this.apiService.getAttachmentBlob(att.url).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.snackBar.open('Файл сохранён', 'Закрыть', { duration: 2000 });
+      },
+      error: () => this.snackBar.open('Ошибка загрузки файла', 'Закрыть', { duration: 3000 })
+    });
+  }
+
+  get poleAttachmentAccept(): string {
+    switch (this.currentPoleAttachmentType) {
+      case 'photo': return 'image/*';
+      case 'voice': return 'audio/*';
+      case 'video': return 'video/*';
+      default: return '*/*';
+    }
+  }
+
+  triggerPoleAttachmentUpload(type: 'photo' | 'voice' | 'video'): void {
+    this.currentPoleAttachmentType = type;
+    setTimeout(() => this.poleAttachmentFileInput?.nativeElement?.click(), 0);
+  }
+
+  onPoleAttachmentFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !this.poleId || !this.lineId) return;
+    this.apiService.uploadPoleAttachment(this.poleId, this.currentPoleAttachmentType, file).subscribe({
+      next: (res) => {
+        const att: { t: string; url: string; thumbnail?: string } = { t: this.currentPoleAttachmentType, url: res.url };
+        if ((res as any).thumbnail_url) att.thumbnail = (res as any).thumbnail_url;
+        this.poleAttachments = [...this.poleAttachments, att];
+        this.cdr.detectChanges();
+        this.snackBar.open('Вложение добавлено. Сохраните опору.', 'Закрыть', { duration: 3000 });
+      },
+      error: () => this.snackBar.open('Ошибка загрузки файла', 'Закрыть', { duration: 3000 })
     });
   }
 
@@ -936,11 +1027,11 @@ export class CreateObjectDialogComponent implements OnInit {
     const formValue = this.poleForm.value;
     
     // Получаем ID выбранной ЛЭП
-    let powerLineId: number;
-    if (typeof formValue.power_line_id === 'object' && formValue.power_line_id !== null) {
-      powerLineId = formValue.power_line_id.id;
-    } else if (typeof formValue.power_line_id === 'number') {
-      powerLineId = formValue.power_line_id;
+    let lineId: number;
+    if (typeof formValue.line_id === 'object' && formValue.line_id !== null) {
+      lineId = formValue.line_id.id;
+    } else if (typeof formValue.line_id === 'number') {
+      lineId = formValue.line_id;
     } else {
       this.snackBar.open('Необходимо выбрать ЛЭП из списка', 'Закрыть', {
         duration: 5000
@@ -1002,7 +1093,7 @@ export class CreateObjectDialogComponent implements OnInit {
 
     // CIM: x_position = долгота, y_position = широта (форма ввода — широта/долгота)
     const poleData: PoleCreate = {
-      line_id: powerLineId,
+      line_id: lineId,
       pole_number: formValue.pole_number.trim(),
       sequence_number: seqNum,
       x_position: longitude,
@@ -1025,15 +1116,17 @@ export class CreateObjectDialogComponent implements OnInit {
       material: formValue.material || undefined,
       year_installed: formValue.year_installed ? parseInt(String(formValue.year_installed)) : undefined,
       condition: formValue.condition || 'good',
-      notes: formValue.notes?.trim() || undefined
+      notes: formValue.notes?.trim() || undefined,
+      card_comment: formValue.card_comment?.trim() || undefined,
+      card_comment_attachment: this.poleAttachments.length ? JSON.stringify(this.poleAttachments) : undefined
     };
 
     console.log('Отправка данных для ' + (this.isEditMode ? 'обновления' : 'создания') + ' опоры:', poleData);
 
     // Используем API для создания или обновления опоры
-    const poleObservable = this.isEditMode && this.poleId && this.powerLineId
-      ? this.apiService.updatePole(this.powerLineId, this.poleId, poleData)
-      : this.apiService.createPole(powerLineId, poleData);
+    const poleObservable = this.isEditMode && this.poleId && this.lineId
+      ? this.apiService.updatePole(this.lineId, this.poleId, poleData)
+      : this.apiService.createPole(lineId, poleData);
     
     poleObservable.subscribe({
       next: (pole) => {

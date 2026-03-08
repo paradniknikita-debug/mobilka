@@ -25,8 +25,7 @@ class PatrolSession {
     return PatrolSession(
       id: (json['id'] as num?)?.toInt() ?? 0,
       userId: (json['user_id'] as num?)?.toInt() ?? 0,
-      // Единое поле line_id, с поддержкой старого имени power_line_id
-      lineId: ((json['line_id'] ?? json['power_line_id']) as num?)?.toInt() ?? 0,
+      lineId: (json['line_id'] as num?)?.toInt() ?? 0,
       note: json['note'] as String?,
       startedAt: json['started_at'] != null
           ? DateTime.tryParse(json['started_at'].toString()) ?? DateTime.now()

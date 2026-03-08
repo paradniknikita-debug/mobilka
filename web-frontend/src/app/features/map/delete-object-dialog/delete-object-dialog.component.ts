@@ -8,7 +8,7 @@ export interface DeleteObjectData {
   objectType: 'pole' | 'powerLine' | 'substation' | 'tap' | 'span' | 'segment';
   objectId: number;
   objectName: string;
-  powerLineId?: number; // Для пролётов и участков
+  lineId?: number; // Для пролётов (id линии)
   hasChildren?: boolean;
   childrenSummary?: string;
 }
@@ -100,8 +100,8 @@ export class DeleteObjectDialogComponent {
         deleteObservable = this.apiService.deletePole(this.data.objectId);
         break;
       case 'span':
-        if (this.data.powerLineId) {
-          deleteObservable = this.apiService.deleteSpan(this.data.powerLineId, this.data.objectId);
+        if (this.data.lineId) {
+          deleteObservable = this.apiService.deleteSpan(this.data.lineId, this.data.objectId);
         } else {
           this.snackBar.open('Ошибка: не указана ЛЭП для удаления пролёта', 'Закрыть', {
             duration: 3000

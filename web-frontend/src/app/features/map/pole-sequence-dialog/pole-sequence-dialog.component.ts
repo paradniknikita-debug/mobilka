@@ -11,19 +11,19 @@ import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
   styleUrls: ['./pole-sequence-dialog.component.scss']
 })
 export class PoleSequenceDialogComponent implements OnInit {
-  powerLineId: number;
+  lineId: number;
   poles: Pole[] = [];
   originalSequence: number[] = [];
   isLoading = false;
   isSaving = false;
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: { powerLineId: number },
+    @Inject(MAT_DIALOG_DATA) public data: { lineId: number },
     private dialogRef: MatDialogRef<PoleSequenceDialogComponent>,
     private apiService: ApiService,
     private snackBar: MatSnackBar
   ) {
-    this.powerLineId = data.powerLineId;
+    this.lineId = data.lineId;
   }
 
   ngOnInit(): void {
@@ -32,7 +32,7 @@ export class PoleSequenceDialogComponent implements OnInit {
 
   loadPoles(): void {
     this.isLoading = true;
-    this.apiService.getPolesSequence(this.powerLineId).subscribe({
+    this.apiService.getPolesSequence(this.lineId).subscribe({
       next: (poles) => {
         this.poles = poles;
         this.originalSequence = poles.map(p => p.id);
@@ -62,7 +62,7 @@ export class PoleSequenceDialogComponent implements OnInit {
     this.isLoading = true;
     const startPoleId = this.poles[0].id;
     
-    this.apiService.autoSequencePoles(this.powerLineId, startPoleId).subscribe({
+    this.apiService.autoSequencePoles(this.lineId, startPoleId).subscribe({
       next: (response) => {
         this.snackBar.open(response.message, 'Закрыть', { duration: 3000 });
         this.loadPoles(); // Перезагружаем опоры с новой последовательностью
@@ -91,7 +91,7 @@ export class PoleSequenceDialogComponent implements OnInit {
     }
 
     this.isSaving = true;
-    this.apiService.updatePoleSequence(this.powerLineId, poleIds).subscribe({
+    this.apiService.updatePoleSequence(this.lineId, poleIds).subscribe({
       next: (response) => {
         this.snackBar.open(response.message, 'Закрыть', { duration: 3000 });
         this.originalSequence = [...poleIds];

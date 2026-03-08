@@ -157,7 +157,7 @@ async def import_poles(file_path: str):
                     
                     # Создание опоры
                     pole = Pole(
-                        power_line_id=power_line.id,
+                        line_id=power_line.id,
                         pole_number=str(row['pole_number']),
                         latitude=float(row['latitude']),
                         longitude=float(row['longitude']),
@@ -290,7 +290,7 @@ async def import_equipment(file_path: str):
                     
                     pole_result = await session.execute(
                         select(Pole).where(
-                            Pole.power_line_id == power_line.id,
+                            Pole.line_id == power_line.id,
                             Pole.pole_number == str(row['pole_number'])
                         )
                     )

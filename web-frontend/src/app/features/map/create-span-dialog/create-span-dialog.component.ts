@@ -14,7 +14,7 @@ import { LineSection } from '../../../core/models/cim.model';
   styleUrls: ['./create-span-dialog.component.scss']
 })
 export class CreateSpanDialogComponent implements OnInit {
-  powerLineId: number;
+  lineId: number;
   spanId?: number;
   isEditMode = false;
   poles: Pole[] = [];
@@ -28,7 +28,7 @@ export class CreateSpanDialogComponent implements OnInit {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { 
-      powerLineId: number; 
+      lineId: number; 
       fromPoleId?: number; 
       toPoleId?: number;
       segmentId?: number;
@@ -41,7 +41,7 @@ export class CreateSpanDialogComponent implements OnInit {
     private mapService: MapService,
     private snackBar: MatSnackBar
   ) {
-    this.powerLineId = data.powerLineId;
+    this.lineId = data.lineId;
     this.spanId = data.spanId;
     this.isEditMode = data.isEdit || false;
     
@@ -84,7 +84,7 @@ export class CreateSpanDialogComponent implements OnInit {
     if (!this.spanId) return;
     
     this.isLoading = true;
-    this.apiService.getSpan(this.powerLineId, this.spanId).subscribe({
+    this.apiService.getSpan(this.lineId, this.spanId).subscribe({
       next: (span) => {
         // Получаем ID опор из ответа API
         // Используем from_pole_id/to_pole_id если есть, иначе из connectivity_node
@@ -157,7 +157,7 @@ export class CreateSpanDialogComponent implements OnInit {
 
   loadPoles(): void {
     this.isLoading = true;
-    this.apiService.getPolesSequence(this.powerLineId).subscribe({
+    this.apiService.getPolesSequence(this.lineId).subscribe({
       next: (poles) => {
         // Загружаем все опоры линии (не фильтруем по connectivity_node_id, так как он может быть создан автоматически)
         this.poles = poles || [];
@@ -362,7 +362,7 @@ export class CreateSpanDialogComponent implements OnInit {
     // Используем старый API для создания пролёта (обратная совместимость)
     // API автоматически создаст необходимые CIM структуры (LineSection, AClineSegment)
     const spanData: any = {
-      power_line_id: this.powerLineId,
+      line_id: this.lineId,
       from_pole_id: fromPoleId,
       to_pole_id: toPoleId,
       span_number: spanNumber || (fromPole && toPole ? `Пролёт ${this.shortPoleLabel(fromPole.pole_number)}-${this.shortPoleLabel(toPole.pole_number)}` : ''),
@@ -377,8 +377,8 @@ export class CreateSpanDialogComponent implements OnInit {
 
     // Используем API для создания или обновления пролёта
     const spanObservable = this.isEditMode && this.spanId
-      ? this.apiService.updateSpan(this.powerLineId, this.spanId, spanData)
-      : this.apiService.createSpan(this.powerLineId, spanData, this.data.segmentId);
+      ? this.apiService.updateSpan(this.lineId, this.spanId, spanData)
+      : this.apiService.createSpan(this.lineId, spanData, this.data.segmentId);
     
     spanObservable.subscribe({
       next: (span) => {

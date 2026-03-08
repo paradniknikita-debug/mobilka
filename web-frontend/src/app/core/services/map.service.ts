@@ -99,17 +99,17 @@ export class MapService {
 
   // Запрос выделения опоры в дереве объектов (при клике на опору на карте)
   private requestSelectPoleInTreeSubject$ = new Subject<{
-    powerLineId: number;
+    lineId: number;
     segmentId?: number | null;
     poleId: number;
   }>();
 
-  requestSelectPoleInTree(powerLineId: number, poleId: number, segmentId?: number | null): void {
-    this.requestSelectPoleInTreeSubject$.next({ powerLineId, segmentId, poleId });
+  requestSelectPoleInTree(lineId: number, poleId: number, segmentId?: number | null): void {
+    this.requestSelectPoleInTreeSubject$.next({ lineId, segmentId, poleId });
   }
 
   get requestSelectPoleInTree$(): Observable<{
-    powerLineId: number;
+    lineId: number;
     segmentId?: number | null;
     poleId: number;
   }> {
@@ -130,8 +130,8 @@ export class MapService {
   /** Запрос пересборки топологии линии (пролёты/сегменты по порядку опор) */
   private requestRebuildTopologySubject$ = new Subject<number>();
 
-  requestRebuildTopology(powerLineId: number): void {
-    this.requestRebuildTopologySubject$.next(powerLineId);
+  requestRebuildTopology(lineId: number): void {
+    this.requestRebuildTopologySubject$.next(lineId);
   }
 
   get requestRebuildTopology$(): Observable<number> {
@@ -139,16 +139,16 @@ export class MapService {
   }
 
   private requestSelectSegmentSubject$ = new Subject<{
-    powerLineId: number;
+    lineId: number;
     segmentId: number | null;
     bounds: [[number, number], [number, number]];
   }>();
 
-  requestSelectSegment(powerLineId: number, segmentId: number | null, bounds: [[number, number], [number, number]]): void {
-    this.requestSelectSegmentSubject$.next({ powerLineId, segmentId, bounds });
+  requestSelectSegment(lineId: number, segmentId: number | null, bounds: [[number, number], [number, number]]): void {
+    this.requestSelectSegmentSubject$.next({ lineId, segmentId, bounds });
   }
 
-  get requestSelectSegment$(): Observable<{ powerLineId: number; segmentId: number | null; bounds: [[number, number], [number, number]] }> {
+  get requestSelectSegment$(): Observable<{ lineId: number; segmentId: number | null; bounds: [[number, number], [number, number]] }> {
     return this.requestSelectSegmentSubject$.asObservable();
   }
 
@@ -171,6 +171,17 @@ export class MapService {
 
   get requestSelectSubstationInTree$(): Observable<{ substationId: number }> {
     return this.requestSelectSubstationInTreeSubject$.asObservable();
+  }
+
+  /** Запрос центрирования карты на оборудовании (по poleId и equipmentId; карта сама вычислит координаты иконки). */
+  private centerOnEquipmentSubject$ = new Subject<{ poleId: number; equipmentId: number }>();
+
+  requestCenterOnEquipment(poleId: number, equipmentId: number): void {
+    this.centerOnEquipmentSubject$.next({ poleId, equipmentId });
+  }
+
+  get centerOnEquipment$(): Observable<{ poleId: number; equipmentId: number }> {
+    return this.centerOnEquipmentSubject$.asObservable();
   }
 }
 

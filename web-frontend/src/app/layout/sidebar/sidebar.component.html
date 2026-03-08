@@ -95,6 +95,7 @@
               <div class="tree-children equipment-list" *ngIf="getPoleEquipment(pole.properties['id']).length">
                 <div class="tree-node equipment-node" 
                      *ngFor="let eq of getPoleEquipment(pole.properties['id'])"
+                     (click)="onEquipmentClick(eq, pole, $event)"
                      (contextmenu)="onEquipmentRightClick(eq, $event)"
                      [matTooltip]="eq.mrid ? 'UID: ' + eq.mrid : ''">
                   <span *ngIf="getEquipmentIconKey(eq)" class="tree-equipment-icon-wrap">
@@ -104,7 +105,7 @@
                     <span class="tree-recloser-badge" *ngIf="getEquipmentIconKey(eq) === 'recloser'"></span>
                   </span>
                   <mat-icon *ngIf="!getEquipmentIconKey(eq)" class="node-icon equipment-icon">electrical_services</mat-icon>
-                  <span class="node-label">{{ getEquipmentCimName(eq) }}</span>
+                  <span class="node-label">{{ eq.name || eq.equipment_type || 'Оборудование' }}</span>
                 </div>
               </div>
             </div>
@@ -175,7 +176,7 @@
   </ng-container>
   
   <ng-container *ngIf="contextMenuType === 'segment'">
-    <button mat-menu-item (click)="contextMenuSegmentId != null && contextMenuPowerLineId != null && openSegmentCard(contextMenuSegmentId, contextMenuPowerLineId)">
+    <button mat-menu-item (click)="contextMenuSegmentId != null && contextMenuLineId != null && openSegmentCard(contextMenuSegmentId, contextMenuLineId)">
       <mat-icon>info</mat-icon>
       <span>Карточка участка</span>
     </button>

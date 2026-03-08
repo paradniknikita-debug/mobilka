@@ -70,7 +70,6 @@ POLE_SCHEMA = {
         "id": {"type": ["integer", "string"]},
         "mrid": {"type": ["string", "null"]},
         "line_id": {"type": ["integer", "string"]},
-        "power_line_id": {"type": ["integer", "string"]},
         "pole_number": {"type": "string"},
         "x_position": {"type": ["number", "null"]},
         "y_position": {"type": ["number", "null"]},

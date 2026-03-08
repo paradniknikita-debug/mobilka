@@ -130,7 +130,7 @@ abstract class ApiService {
   @GET('/patrol-sessions')
   Future<List<PatrolSession>> getPatrolSessions(
     @Query('user_id') int? userId,
-    @Query('power_line_id') int? powerLineId,
+    @Query('line_id') int? lineId,
     @Query('limit') int? limit,
     @Query('offset') int? offset,
   );
@@ -161,13 +161,22 @@ abstract class ApiService {
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
 }
 
-// Расширенный интерфейс с методом exportCimXml
-// (не может быть в Retrofit из-за бинарных ответов)
+// Расширенный интерфейс с методом exportCimXml и загрузкой вложений опоры
+// (не может быть в Retrofit из-за бинарных ответов и multipart)
 abstract class ApiServiceWithExport implements ApiService {
   Future<Response<List<int>>> exportCimXml(
     bool useCimpy,
     bool includeSubstations,
     bool includePowerLines,
+  );
+
+  /// Загружает вложение к карточке опоры (фото, голос, схема, видео).
+  /// Возвращает {url, thumbnail_url?, type, filename}.
+  Future<Map<String, dynamic>> uploadPoleAttachment(
+    int poleId,
+    String attachmentType,
+    List<int> fileBytes,
+    String filename,
   );
 }
 
@@ -415,6 +424,32 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
     return response;
   }
 
+  @override
+  Future<Map<String, dynamic>> uploadPoleAttachment(
+    int poleId,
+    String attachmentType,
+    List<int> fileBytes,
+    String filename,
+  ) async {
+    final formData = FormData.fromMap({
+      'attachment_type': attachmentType,
+      'file': MultipartFile.fromBytes(
+        fileBytes,
+        filename: filename,
+      ),
+    });
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/attachments/poles/$poleId/attachments',
+      data: formData,
+      options: Options(
+        contentType: 'multipart/form-data',
+      ),
+    );
+    final data = response.data;
+    if (data == null) throw Exception('Пустой ответ при загрузке вложения');
+    return data;
+  }
+
   // Делегируем все остальные методы к базовому сервису
   @override
   Future<AuthResponse> login(String username, String password) => _delegate.login(username, password);
@@ -508,8 +543,8 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<dynamic> getDataBounds() => _delegate.getDataBounds();
 
   @override
-  Future<List<PatrolSession>> getPatrolSessions(int? userId, int? powerLineId, int? limit, int? offset) =>
-      _delegate.getPatrolSessions(userId, powerLineId, limit, offset);
+  Future<List<PatrolSession>> getPatrolSessions(int? userId, int? lineId, int? limit, int? offset) =>
+      _delegate.getPatrolSessions(userId, lineId, limit, offset);
 
   @override
   Future<Map<String, dynamic>> createPatrolSession(Map<String, dynamic> body) =>

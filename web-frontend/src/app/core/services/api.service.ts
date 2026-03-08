@@ -84,35 +84,35 @@ export class ApiService {
     return this.http.get<Pole>(`${this.apiUrl}/poles/${id}`);
   }
 
-  getPolesByPowerLine(powerLineId: number): Observable<Pole[]> {
-    return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${powerLineId}/poles`);
+  getPolesByPowerLine(lineId: number): Observable<Pole[]> {
+    return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${lineId}/poles`);
   }
 
-  createPole(powerLineId: number, pole: PoleCreate): Observable<Pole> {
-    return this.http.post<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles`, pole);
+  createPole(lineId: number, pole: PoleCreate): Observable<Pole> {
+    return this.http.post<Pole>(`${this.apiUrl}/power-lines/${lineId}/poles`, pole);
   }
 
-  linkLineToSubstation(powerLineId: number, firstPoleId: number, substationId: number): Observable<{ acline_segment_id: number; name: string }> {
+  linkLineToSubstation(lineId: number, firstPoleId: number, substationId: number): Observable<{ acline_segment_id: number; name: string }> {
     return this.http.post<{ acline_segment_id: number; name: string }>(
-      `${this.apiUrl}/power-lines/${powerLineId}/link-substation`,
+      `${this.apiUrl}/power-lines/${lineId}/link-substation`,
       { first_pole_id: firstPoleId, substation_id: substationId }
     );
   }
 
   /** Назначить или снять ТП в конце участка (отпайки) */
-  setSegmentEndSubstation(powerLineId: number, segmentId: number, body: { to_substation_id: number | null }): Observable<{ segment_id: number; to_substation_id: number | null }> {
+  setSegmentEndSubstation(lineId: number, segmentId: number, body: { to_substation_id: number | null }): Observable<{ segment_id: number; to_substation_id: number | null }> {
     return this.http.patch<{ segment_id: number; to_substation_id: number | null }>(
-      `${this.apiUrl}/power-lines/${powerLineId}/segments/${segmentId}/substation`,
+      `${this.apiUrl}/power-lines/${lineId}/segments/${segmentId}/substation`,
       body
     );
   }
 
-  getPoleByPowerLine(powerLineId: number, poleId: number): Observable<Pole> {
-    return this.http.get<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles/${poleId}`);
+  getPoleByPowerLine(lineId: number, poleId: number): Observable<Pole> {
+    return this.http.get<Pole>(`${this.apiUrl}/power-lines/${lineId}/poles/${poleId}`);
   }
 
-  updatePole(powerLineId: number, poleId: number, pole: Partial<PoleCreate>): Observable<Pole> {
-    return this.http.put<Pole>(`${this.apiUrl}/power-lines/${powerLineId}/poles/${poleId}`, pole);
+  updatePole(lineId: number, poleId: number, pole: Partial<PoleCreate>): Observable<Pole> {
+    return this.http.put<Pole>(`${this.apiUrl}/power-lines/${lineId}/poles/${poleId}`, pole);
   }
 
   deletePole(id: number): Observable<{message: string, details?: string}> {
@@ -126,8 +126,14 @@ export class ApiService {
     return `${base}${path}`;
   }
 
-  /** Загрузить вложение к карточке опоры (фото, голос, схема). Возвращает url для сохранения в card_comment_attachment. */
-  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema', file: File): Observable<{ url: string; type: string; filename: string }> {
+  /** Скачать вложение как Blob (для сохранения на диск с правильным именем). */
+  getAttachmentBlob(relativeUrl: string): Observable<Blob> {
+    const url = this.getAttachmentUrl(relativeUrl);
+    return this.http.get(url, { responseType: 'blob' });
+  }
+
+  /** Загрузить вложение к карточке опоры (фото, голос, схема, видео). Возвращает url для сохранения в card_comment_attachment. */
+  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema' | 'video', file: File): Observable<{ url: string; type: string; filename: string }> {
     const formData = new FormData();
     formData.append('attachment_type', attachmentType);
     formData.append('file', file);
@@ -138,33 +144,33 @@ export class ApiService {
   }
 
   // ========== Spans ==========
-  getSpansByPowerLine(powerLineId: number): Observable<Span[]> {
-    return this.http.get<Span[]>(`${this.apiUrl}/power-lines/${powerLineId}/spans`);
+  getSpansByPowerLine(lineId: number): Observable<Span[]> {
+    return this.http.get<Span[]>(`${this.apiUrl}/power-lines/${lineId}/spans`);
   }
 
-  getSpan(powerLineId: number, spanId: number): Observable<Span> {
-    return this.http.get<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`);
+  getSpan(lineId: number, spanId: number): Observable<Span> {
+    return this.http.get<Span>(`${this.apiUrl}/power-lines/${lineId}/spans/${spanId}`);
   }
 
-  createSpan(powerLineId: number, span: any, segmentId?: number): Observable<Span> {
-    let url = `${this.apiUrl}/power-lines/${powerLineId}/spans`;
+  createSpan(lineId: number, span: any, segmentId?: number): Observable<Span> {
+    let url = `${this.apiUrl}/power-lines/${lineId}/spans`;
     if (segmentId) {
       url += `?segment_id=${segmentId}`;
     }
     return this.http.post<Span>(url, span);
   }
 
-  updateSpan(powerLineId: number, spanId: number, span: any): Observable<Span> {
-    return this.http.put<Span>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`, span);
+  updateSpan(lineId: number, spanId: number, span: any): Observable<Span> {
+    return this.http.put<Span>(`${this.apiUrl}/power-lines/${lineId}/spans/${spanId}`, span);
   }
 
-  deleteSpan(powerLineId: number, spanId: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/power-lines/${powerLineId}/spans/${spanId}`);
+  deleteSpan(lineId: number, spanId: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/power-lines/${lineId}/spans/${spanId}`);
   }
 
-  autoCreateSpans(powerLineId: number, mode: 'full' | 'preserve' = 'preserve'): Observable<any> {
+  autoCreateSpans(lineId: number, mode: 'full' | 'preserve' = 'preserve'): Observable<any> {
     const params = new HttpParams().set('mode', mode);
-    return this.http.post<any>(`${this.apiUrl}/power-lines/${powerLineId}/spans/auto-create`, {}, { params });
+    return this.http.post<any>(`${this.apiUrl}/power-lines/${lineId}/spans/auto-create`, {}, { params });
   }
 
   // ========== Equipment ==========
@@ -351,9 +357,7 @@ export class ApiService {
 
   // AClineSegment
   createAClineSegment(segment: AClineSegmentCreate): Observable<AClineSegment> {
-    const body = { ...segment, line_id: segment.power_line_id } as any;
-    delete body.power_line_id;
-    return this.http.post<AClineSegment>(`${this.apiUrl}/cim/acline-segments`, body);
+    return this.http.post<AClineSegment>(`${this.apiUrl}/cim/acline-segments`, segment);
   }
 
   getAClineSegment(id: number): Observable<AClineSegment> {
@@ -361,9 +365,7 @@ export class ApiService {
   }
 
   updateAClineSegment(id: number, segment: AClineSegmentCreate): Observable<AClineSegment> {
-    const body = { ...segment, line_id: segment.power_line_id } as any;
-    delete body.power_line_id;
-    return this.http.put<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`, body);
+    return this.http.put<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${id}`, segment);
   }
 
   deleteAClineSegment(id: number): Observable<{message?: string; details?: string}> {
@@ -385,24 +387,24 @@ export class ApiService {
   }
 
   // Pole Sequence
-  autoSequencePoles(powerLineId: number, startPoleId?: number): Observable<PoleSequenceResponse> {
+  autoSequencePoles(lineId: number, startPoleId?: number): Observable<PoleSequenceResponse> {
     const params = startPoleId ? new HttpParams().set('start_pole_id', startPoleId.toString()) : undefined;
     return this.http.post<PoleSequenceResponse>(
-      `${this.apiUrl}/power-lines/${powerLineId}/poles/auto-sequence`,
+      `${this.apiUrl}/power-lines/${lineId}/poles/auto-sequence`,
       {},
       { params }
     );
   }
 
-  updatePoleSequence(powerLineId: number, poleIds: number[]): Observable<PoleSequenceResponse> {
+  updatePoleSequence(lineId: number, poleIds: number[]): Observable<PoleSequenceResponse> {
     return this.http.put<PoleSequenceResponse>(
-      `${this.apiUrl}/power-lines/${powerLineId}/poles/sequence`,
+      `${this.apiUrl}/power-lines/${lineId}/poles/sequence`,
       poleIds
     );
   }
 
-  getPolesSequence(powerLineId: number): Observable<Pole[]> {
-    return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${powerLineId}/poles/sequence`);
+  getPolesSequence(lineId: number): Observable<Pole[]> {
+    return this.http.get<Pole[]>(`${this.apiUrl}/power-lines/${lineId}/poles/sequence`);
   }
 
   // ========== Журнал (изменения + несоответствия) ==========

@@ -51,7 +51,10 @@ def _get_s3_client():
 def media_put(pole_id: int, filename: str, content: bytes, content_type: str) -> None:
     """Сохранить файл в выбранное хранилище."""
     key = f"poles/{pole_id}/{filename}"
-    client, bucket = _get_s3_client()
+    try:
+        client, bucket = _get_s3_client()
+    except Exception:
+        client, bucket = None, None  # fallback на локальный диск при ошибке S3
     if client and bucket:
         client.put_object(
             Bucket=bucket,
@@ -62,8 +65,15 @@ def media_put(pole_id: int, filename: str, content: bytes, content_type: str) ->
         return
     # Локальный диск
     d = UPLOAD_DIR / str(pole_id)
-    d.mkdir(parents=True, exist_ok=True)
-    (d / filename).write_bytes(content)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise RuntimeError(f"Не удалось создать каталог {d}: {e}") from e
+    target = d / filename
+    try:
+        target.write_bytes(content)
+    except OSError as e:
+        raise RuntimeError(f"Не удалось записать файл {target}: {e}") from e
 
 
 def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
@@ -72,7 +82,10 @@ def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[st
     Возвращает (content, content_type) или (None, None) если не найден.
     """
     key = f"poles/{pole_id}/{filename}"
-    client, bucket = _get_s3_client()
+    try:
+        client, bucket = _get_s3_client()
+    except Exception:
+        client, bucket = None, None
     if client and bucket:
         try:
             resp = client.get_object(Bucket=bucket, Key=key)
@@ -85,7 +98,10 @@ def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[st
     path = UPLOAD_DIR / str(pole_id) / filename
     if not path.is_file():
         return None, None
-    content = path.read_bytes()
+    try:
+        content = path.read_bytes()
+    except OSError:
+        return None, None
     content_type = "application/octet-stream"
     if filename.endswith((".jpg", ".jpeg")):
         content_type = "image/jpeg"

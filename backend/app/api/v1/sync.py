@@ -75,7 +75,7 @@ async def _delete_power_line_cascade(db: AsyncSession, power_line_id: int) -> No
         await db.execute(update(Pole).where(Pole.connectivity_node_id == cid).values(connectivity_node_id=None))
     await db.execute(delete(ConnectivityNode).where(ConnectivityNode.line_id == power_line_id))
     # Сессии обхода
-    await db.execute(delete(PatrolSession).where(PatrolSession.power_line_id == power_line_id))
+    await db.execute(delete(PatrolSession).where(PatrolSession.line_id == power_line_id))
     # Сама ЛЭП (каскад в модели удалит опоры, пролёты, отпайки и т.д.)
     await db.delete(power_line)
 
@@ -112,7 +112,7 @@ async def upload_sync_batch(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Загрузка пакета данных для синхронизации. ЛЭП создаются первыми, затем опоры с подстановкой server power_line_id."""
+    """Загрузка пакета данных для синхронизации. ЛЭП создаются первыми, затем опоры с подстановкой server line_id."""
     
     processed_count = 0
     failed_count = 0
@@ -127,15 +127,15 @@ async def upload_sync_batch(
         if record.entity_type == "power_line":
             data_preview += f" name={record.data.get('name', '')!r}"
         elif record.entity_type == "pole":
-            data_preview += f" power_line_id={record.data.get('power_line_id')} pole_number={record.data.get('pole_number', '')!r} lat={record.data.get('latitude')} lon={record.data.get('longitude')}"
+            data_preview += f" line_id={record.data.get('line_id')} pole_number={record.data.get('pole_number', '')!r} lat={record.data.get('latitude')} lon={record.data.get('longitude')}"
         logger.info("sync/upload: обработка %s %s %s", record.entity_type, record.action, data_preview)
         try:
             data = record.data
             # Подстановка серверных id для опор и оборудования (локальные id отрицательные)
             if record.entity_type == "pole" and record.action == SyncAction.CREATE:
-                pl_id = _to_int(data.get("power_line_id"))
+                pl_id = _to_int(data.get("line_id"))
                 if pl_id is not None and pl_id < 0 and pl_id in id_mapping["power_line"]:
-                    data = {**data, "power_line_id": id_mapping["power_line"][pl_id]}
+                    data = {**data, "line_id": id_mapping["power_line"][pl_id]}
             elif record.entity_type == "equipment" and record.action == SyncAction.CREATE:
                 pole_id = _to_int(data.get("pole_id"))
                 pole_server_id = _to_int(data.get("pole_server_id"))
@@ -306,7 +306,7 @@ async def _download_sync_data_impl(
         lat = getattr(pole, "get_latitude", None) and pole.get_latitude()
         pole_data = {
             "id": pole.id,
-            "power_line_id": pole.line_id,
+            "line_id": pole.line_id,
             "pole_number": pole.pole_number,
             "x_position": float(lon) if lon is not None else None,
             "y_position": float(lat) if lat is not None else None,
@@ -482,11 +482,11 @@ async def process_sync_record(
             existing_pole = existing.scalar_one_or_none()
             client_id = data.get('id')
             if existing_pole:
-                pl_id_val = _to_int(data.get('power_line_id'))
+                pl_id_val = _to_int(data.get('line_id'))
                 if pl_id_val is not None:
                     existing_pole.line_id = pl_id_val
                 for key, value in data.items():
-                    if key in ('id', 'mrid', 'created_at', 'power_line_id'):
+                    if key in ('id', 'mrid', 'created_at', 'line_id'):
                         continue
                     if hasattr(existing_pole, key):
                         setattr(existing_pole, key, value)
@@ -501,9 +501,9 @@ async def process_sync_record(
                 lon = data.get('x_position') or data.get('longitude')
                 y_pos = float(lat) if lat is not None else None
                 x_pos = float(lon) if lon is not None else None
-                pl_id = _to_int(data.get('power_line_id') or data.get('line_id'))
+                pl_id = _to_int(data.get('line_id'))
                 if pl_id is None:
-                    raise ValueError("power_line_id или line_id обязателен для создания опоры")
+                    raise ValueError("line_id обязателен для создания опоры")
                 db_pole = Pole(
                     mrid=mrid,
                     line_id=pl_id,
@@ -544,7 +544,7 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
-                pl_id_val = _to_int(data.get('power_line_id') or data.get('line_id'))
+                pl_id_val = _to_int(data.get('line_id'))
                 if pl_id_val is not None:
                     pole.line_id = pl_id_val
                 upd = dict(data)
@@ -552,7 +552,7 @@ async def process_sync_record(
                     upd['y_position'] = upd['latitude']
                 if 'longitude' in upd and 'x_position' not in upd:
                     upd['x_position'] = upd['longitude']
-                for key in ['latitude', 'longitude', 'power_line_id']:
+                for key in ['latitude', 'longitude', 'line_id']:
                     upd.pop(key, None)
                 x_pos = upd.pop('x_position', None)
                 y_pos = upd.pop('y_position', None)
