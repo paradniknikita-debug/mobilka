@@ -689,12 +689,12 @@ async def auto_create_span(
     )
     span_count = result.scalar_one() or 0
     
-    # Наименование пролёта: «оп.1 - оп.2» или «ПС Название - оп.1»
+    # Наименование пролёта: как при ручном создании, «Пролёт оп.1-оп.2» или «Пролёт ПС - оп.1»
     from_display = await _connectivity_node_display_name(db, previous_cn.id)
     to_display = await _connectivity_node_display_name(db, new_connectivity_node.id)
     from_short = _short_label_for_span(from_display)
     to_short = _short_label_for_span(to_display)
-    span_number = f"{from_short} - {to_short}"
+    span_number = f"Пролёт {from_short}-{to_short}"
 
     # Создаём пролёт
     span = Span(
@@ -871,7 +871,7 @@ async def link_line_to_substation(
         float(sub_lat), float(sub_lon),
         first_pole.get_latitude() or 0, first_pole.get_longitude() or 0,
     )
-    span_number = f"{_short_label_for_span(from_name)} - {_short_label_for_span(to_name)}"
+    span_number = f"Пролёт {_short_label_for_span(from_name)}-{_short_label_for_span(to_name)}"
 
     span = Span(
         mrid=generate_mrid(),
@@ -1024,7 +1024,7 @@ async def add_substation_span_from_last_pole(
     )
     span = Span(
         mrid=generate_mrid(),
-        span_number=f"{_short_label_for_span(from_name)} - {_short_label_for_span(to_name)}",
+        span_number=f"Пролёт {_short_label_for_span(from_name)}-{_short_label_for_span(to_name)}",
         line_id=power_line_id,
         from_pole_id=last_pole.id,
         to_pole_id=None,
@@ -1148,7 +1148,7 @@ async def extend_tap_segment_to_substation(
 
     span = Span(
         mrid=generate_mrid(),
-        span_number=f"{_short_label_for_span(from_name_span)} - {_short_label_for_span(to_name)}",
+        span_number=f"Пролёт {_short_label_for_span(from_name_span)}-{_short_label_for_span(to_name)}",
         line_id=power_line_id,
         from_pole_id=last_pole.id,
         to_pole_id=None,
