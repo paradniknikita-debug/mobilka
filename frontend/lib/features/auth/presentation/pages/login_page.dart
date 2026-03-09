@@ -139,10 +139,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             onPressed: () async {
               final url = controller.text.trim();
               if (url.isNotEmpty) {
-                // Убеждаемся, что URL начинается с http:// или https://
-                final normalizedUrl = url.startsWith('http://') || url.startsWith('https://')
+                // Убеждаемся, что URL начинается с http:// или https://.
+                // Если схема не указана, по умолчанию используем HTTPS (чтобы избежать редиректов 301 от nginx).
+                final hasScheme = url.startsWith('http://') || url.startsWith('https://');
+                final normalizedUrl = hasScheme
                     ? url
-                    : 'http://$url';
+                    : 'https://$url';
                 
                 await urlManager.setServerUrl(normalizedUrl);
                 Navigator.pop(context);

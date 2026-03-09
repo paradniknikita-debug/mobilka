@@ -434,7 +434,8 @@ export class MapComponent implements OnInit, OnDestroy {
     });
 
     geoJson.features.forEach((feature: GeoJSONFeature) => {
-      if (feature.geometry.type !== 'LineString') return;
+      const geom = feature.geometry as any;
+      if (!geom || geom.type !== 'LineString' || !Array.isArray(geom.coordinates)) return;
 
       const lineId = feature.properties?.['id'] ?? feature.properties?.['line_id'] ?? feature.properties?.['power_line_id'];
       const tapPoleId = feature.properties?.['tap_pole_id'] ?? null;
@@ -490,7 +491,7 @@ export class MapComponent implements OnInit, OnDestroy {
         }
       }
       if (!latlngs || latlngs.length < 2) {
-        const coordinates = feature.geometry.coordinates as number[][];
+        const coordinates = geom.coordinates as number[][];
         latlngs = coordinates.map(coord => [coord[1], coord[0]] as L.LatLngExpression);
       }
 
