@@ -252,6 +252,8 @@ EquipmentCreate _$EquipmentCreateFromJson(Map<String, dynamic> json) =>
                   json['installation_date'] ?? json['installationDate']),
       condition: _stringFromJson(json['condition'] ?? 'good'),
       notes: json['notes'] as String?,
+      defect: json['defect'] as String?,
+      criticality: json['criticality'] as String?,
     );
 
 Map<String, dynamic> _$EquipmentCreateToJson(EquipmentCreate instance) =>
@@ -265,5 +267,7 @@ Map<String, dynamic> _$EquipmentCreateToJson(EquipmentCreate instance) =>
       'installationDate': instance.installationDate?.toIso8601String(),
       'condition': instance.condition,
       'notes': instance.notes,
+      'defect': instance.defect,
+      'criticality': instance.criticality,
     };
 

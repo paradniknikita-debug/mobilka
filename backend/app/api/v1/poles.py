@@ -221,9 +221,22 @@ async def delete_pole(
         # Удаляем связанные объекты перед удалением опоры
         from app.models.cim_line_structure import ConnectivityNode
         from app.models.acline_segment import AClineSegment
-        from app.models.power_line import Span
+        from app.models.power_line import Span, Equipment, Tap
         
-        # Получаем все ConnectivityNode для этой опоры (может быть несколько)
+        # 1. Удаляем/отвязываем оборудование и ответвления (Tap), жёстко привязанные к опоре через FK pole_id.
+        # Сначала обнуляем equipment_id в ConnectivityNode, чтобы не было FK‑ошибок при удалении Equipment.
+        await db.execute(
+            update(ConnectivityNode)
+            .where(ConnectivityNode.equipment_id.in_(
+                select(Equipment.id).where(Equipment.pole_id == pole_id)
+            ))
+            .values(equipment_id=None)
+        )
+        await db.execute(delete(Equipment).where(Equipment.pole_id == pole_id))
+        await db.execute(delete(Tap).where(Tap.pole_id == pole_id))
+        print(f"DEBUG: Удалены Equipment и Tap, связанные с опорой {pole_id}")
+        
+        # 2. Получаем все ConnectivityNode для этой опоры (может быть несколько)
         connectivity_nodes_result = await db.execute(
             select(ConnectivityNode).where(ConnectivityNode.pole_id == pole_id)
         )

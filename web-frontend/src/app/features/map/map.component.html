@@ -132,11 +132,15 @@
                 {{ eq.name || eq.equipment_type }}
                 <span class="equipment-type">({{ eq.equipment_type }})</span>
               </span>
-              <div class="equipment-defect" *ngIf="eq.defect">
-                <span class="defect-label">Дефект:</span> {{ eq.defect }}
+              <div class="equipment-defect" *ngIf="getEquipmentDefect(eq)">
+                <span class="defect-label">Дефект:</span> {{ getEquipmentDefect(eq) }}
               </div>
-              <span class="criticality-badge" *ngIf="eq.criticality" [class]="'criticality-badge--' + eq.criticality">
-                {{ eq.criticality === 'high' ? 'Высокая' : eq.criticality === 'medium' ? 'Средняя' : 'Низкая' }}
+              <span
+                class="criticality-badge"
+                *ngIf="getEquipmentCriticality(eq) as crit"
+                [class]="'criticality-badge--' + crit"
+              >
+                {{ crit === 'high' ? 'Высокая' : crit === 'medium' ? 'Средняя' : 'Низкая' }}
               </span>
             </div>
           </ng-container>

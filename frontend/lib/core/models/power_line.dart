@@ -476,6 +476,8 @@ class EquipmentCreate {
   final DateTime? installationDate;
   final String condition;
   final String? notes;
+  final String? defect;
+  final String? criticality;
 
   const EquipmentCreate({
     required this.equipmentType,
@@ -487,6 +489,8 @@ class EquipmentCreate {
     this.installationDate,
     this.condition = 'good',
     this.notes,
+    this.defect,
+    this.criticality,
   });
 
   factory EquipmentCreate.fromJson(Map<String, dynamic> json) => _$EquipmentCreateFromJson(json);

@@ -1738,7 +1738,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
 
           const iconSize = 64.0;
-          // Отдельно распознаём ЗН, разрядник и разъединитель (якоря и/или поворот по пролёту).
+          // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
           final isZn = iconPath.contains('/zn/');
           final isArrester = iconPath.contains('/arrester/');
           final isDisconnector = iconPath.contains('/disconnector/');
@@ -1767,6 +1767,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
           // У реклоузера поверх всегда белый квадрат в левом верхнем углу (не закрашивается)
           final isRecloser = iconPath.contains('/recloser/');
+          final isBreaker = iconPath.contains('/breaker/');
 
           Widget child = iconWidget;
           // Для ЗН смещаем локальную систему координат так, чтобы «начало» символа
@@ -1783,7 +1784,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             final double dy = 32.0 - (anchorY * iconSize / viewBoxHeight);
             child = Transform.translate(
               offset: Offset(dx, dy),
-              child: child,
+              child: Transform.scale(
+                scale: 0.40,
+                child: child,
+              ),
             );
           } else if (isArrester) {
             // Для разрядника используем «начало» в точке подключения к линии.
@@ -1810,10 +1814,10 @@ class _MapPageState extends ConsumerState<MapPage> {
               children: [
                 child,
                 Positioned(
-                  left: 2,
-                  top: 2,
-                  width: 14,
-                  height: 14,
+                  left: 24,
+                  top: 24,
+                  width: 8,
+                  height: 8,
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -1825,32 +1829,39 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
 
-          // Для ЗН и разрядника поворачиваем символ так, чтобы шина была
-          // сонаправлена с пролётом (как на однолинейной схеме). Остальное
-          // оборудование оставляем без поворота.
+          // Поворот иконки по тем же правилам, что и на веб-карте (Angular):
+          // - ЗН и разрядник: шина сонаправлена пролёту;
+          // - выключатель, разъединитель, реклоузер: боковая сторона перпендикулярна линии с небольшими поправками.
           final angleValue = props?['angle_rad'];
-          if (angleValue is num && isZn) {
-            final angleRad = angleValue.toDouble();
+          if (angleValue is num) {
+            final lineAngleRad = angleValue.toDouble();
+            final lineAngleDeg = lineAngleRad * 180.0 / math.pi;
+            const rotOffsetDeg = -10.0;
+            final iconAngleDegMain = lineAngleDeg + rotOffsetDeg;
+            final iconAngleDegZnArrester = 90.0 - lineAngleDeg + rotOffsetDeg;
+
+            double iconDeg;
+            if (isZn || isArrester) {
+              iconDeg = iconAngleDegZnArrester;
+            } else if (isDisconnector) {
+              iconDeg = iconAngleDegMain + 85.0;
+            } else if (isBreaker) {
+              iconDeg = iconAngleDegMain - 3.0;
+            } else if (isRecloser) {
+              iconDeg = iconAngleDegMain - 90.0;
+            } else {
+              iconDeg = iconAngleDegMain;
+            }
+
+            final iconRad = iconDeg * math.pi / 180.0;
             child = Transform.rotate(
-              angle: math.pi / 2 - angleRad,
-              alignment: Alignment.center,
-              child: child,
-            );
-          } else if (angleValue is num && isArrester) {
-            final angleRad = angleValue.toDouble();
-            child = Transform.rotate(
-              angle: math.pi / 2 - angleRad,
-              alignment: Alignment.center,
-              child: child,
-            );
-          } else if (angleValue is num && isDisconnector) {
-            final angleRad = angleValue.toDouble();
-            child = Transform.rotate(
-              angle: angleRad,
+              angle: iconRad,
               alignment: Alignment.center,
               child: child,
             );
           } else if (isZnOrArrester) {
+            // Для старых данных без angle_rad оставляем лёгкий сдвиг значка,
+            // чтобы контакт был ближе к линии.
             child = Transform.translate(
               offset: const Offset(16, -8),
               child: child,

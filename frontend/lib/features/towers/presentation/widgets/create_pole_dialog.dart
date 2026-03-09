@@ -962,6 +962,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                   name: eq.name,
                   condition: 'good',
                   notes: notesParts.isEmpty ? null : notesParts.join('; '),
+                  defect: eq.defect,
+                  criticality: eq.criticality,
                 ),
               );
               final db2 = ref.read(databaseProvider);
@@ -1099,6 +1101,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                 name: eq.name,
                 condition: 'good',
                 notes: notesParts.isEmpty ? null : notesParts.join('; '),
+                defect: eq.defect,
+                criticality: eq.criticality,
               ),
             );
             await db.insertEquipmentOrReplace(EquipmentCompanion.insert(

@@ -1956,23 +1956,33 @@ async def auto_create_spans(
     for i in range(1, len(main_poles)):
         span_pairs.append((main_poles[i - 1], main_poles[i]))
 
-    # Отпайки: для каждой отпаечной опоры — цепочка от неё к опорам с tap_pole_id = её id
-    tap_pole_ids = {getattr(p, "tap_pole_id", None) for p in all_poles if getattr(p, "tap_pole_id", None) is not None}
+    # Отпайки: для каждой отпаечной опоры и каждой ветки (tap_branch_index) — своя цепочка.
+    # Раньше все ветки от одной опоры (3/1, 3/2, 3/3, 3/4) шли одной цепочкой по tap_pole_id,
+    # что давало неправильные пролёты и участки. Теперь учитываем tap_branch_index.
+    branches: dict[tuple[int, int], list[Pole]] = {}
     poles_by_id = {p.id: p for p in all_poles}
-    for tpid in tap_pole_ids:
+    for p in all_poles:
+        tpid = getattr(p, "tap_pole_id", None)
+        if tpid is None:
+            continue
+        tbi = getattr(p, "tap_branch_index", None) or 1
+        key_branch = (int(tpid), int(tbi))
+        branches.setdefault(key_branch, []).append(p)
+
+    for (tpid, tbi), branch_poles in branches.items():
         tap_pole = poles_by_id.get(tpid)
         if not tap_pole:
             continue
-        branch_poles = sorted(
-            [p for p in all_poles if getattr(p, "tap_pole_id", None) == tpid],
+        branch_poles_sorted = sorted(
+            branch_poles,
             key=lambda p: (p.sequence_number or 0),
         )
-        if not branch_poles:
+        if not branch_poles_sorted:
             continue
-        # Пролёт от отпаечной опоры к первой опоре отпайки
-        span_pairs.append((tap_pole, branch_poles[0]))
-        for i in range(1, len(branch_poles)):
-            span_pairs.append((branch_poles[i - 1], branch_poles[i]))
+        # Пролёт от отпаечной опоры к первой опоре данной ветки отпайки
+        span_pairs.append((tap_pole, branch_poles_sorted[0]))
+        for i in range(1, len(branch_poles_sorted)):
+            span_pairs.append((branch_poles_sorted[i - 1], branch_poles_sorted[i]))
 
     poles = all_poles  # для создания узлов ниже
     

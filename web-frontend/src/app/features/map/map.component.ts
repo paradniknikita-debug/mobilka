@@ -873,6 +873,7 @@ export class MapComponent implements OnInit, OnDestroy {
           if (iconKey === 'zn' || iconKey === 'arrester') return iconAngleDegZnArrester;
           if (iconKey === 'disconnector') return iconAngleDegMain + 85;
           if (iconKey === 'breaker') return iconAngleDegMain - 3;
+          if (iconKey === 'recloser') return iconAngleDegMain - 90;
           return iconAngleDegMain;
         };
         // Разрядник и ЗН: линия проходит через начало (крайняя левая точка), якорь — левый центр
@@ -1728,6 +1729,28 @@ export class MapComponent implements OnInit, OnDestroy {
       const t = (eq?.equipment_type || '').toLowerCase().trim();
       return t !== 'фундамент' && t !== 'foundation';
     });
+  }
+
+  /** Дефект оборудования: сначала поле defect, иначе пытаемся вытащить из notes (старые данные из Flutter). */
+  getEquipmentDefect(eq: any): string | null {
+    if (!eq) return null;
+    const direct = (eq.defect ?? '').toString().trim();
+    if (direct) return direct;
+    const notes = (eq.notes ?? '').toString();
+    if (!notes) return null;
+    const m = notes.match(/дефект:\s*([^;]+)(;|$)/i);
+    return m ? m[1].trim() : null;
+  }
+
+  /** Критичность оборудования: сначала поле criticality, иначе пытаемся вытащить из notes (high|medium|low). */
+  getEquipmentCriticality(eq: any): string | null {
+    if (!eq) return null;
+    const direct = (eq.criticality ?? '').toString().trim().toLowerCase();
+    if (direct === 'high' || direct === 'medium' || direct === 'low') return direct;
+    const notes = (eq.notes ?? '').toString();
+    if (!notes) return null;
+    const m = notes.match(/критичность:\s*(high|medium|low)/i);
+    return m ? m[1].toLowerCase() : null;
   }
 
   closePoleProperties(): void {

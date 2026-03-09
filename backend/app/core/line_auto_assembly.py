@@ -313,6 +313,7 @@ async def find_or_create_acline_segment(
     to_connectivity_node_id_if_tap: Optional[int] = None,
     branch_type: Optional[str] = None,
     tap_pole_id: Optional[int] = None,
+    tap_branch_index: Optional[int] = None,
 ) -> AClineSegment:
     """
     Найти или создать AClineSegment от данной опоры.
@@ -390,6 +391,24 @@ async def find_or_create_acline_segment(
         await db.flush()
         return tap_segment
     
+    # Продолжение отпайки (после первой опоры): tap_pole_id задан, но to_connectivity_node_id_if_tap=None.
+    # Всегда используем последний сегмент от этой отпаечной опоры и ветки, чтобы вся отпайка была одним участком.
+    if tap_pole_id is not None and to_connectivity_node_id_if_tap is None:
+        q = select(AClineSegment).where(
+            AClineSegment.line_id == power_line_id,
+            AClineSegment.is_tap == True,
+            AClineSegment.tap_pole_id == tap_pole_id,
+        )
+        if tap_branch_index is not None:
+            right = str(tap_branch_index).strip()
+            if right:
+                q = q.where(AClineSegment.tap_number.like(f"%/{right}"))
+        q = q.order_by(AClineSegment.sequence_number.desc()).limit(1)
+        result = await db.execute(q)
+        existing_tap_segment = result.scalar_one_or_none()
+        if existing_tap_segment:
+            return existing_tap_segment
+
     # Получаем информацию о линии
     power_line = await db.get(PowerLine, power_line_id)
     if not power_line:
@@ -660,10 +679,15 @@ async def auto_create_span(
     
     # Находим или создаём AClineSegment (если новая опора отпаечная — закрываем текущий участок на ней)
     acline_segment = await find_or_create_acline_segment(
-        db, power_line_id, previous_cn.id, voltage_level, current_user_id,
+        db,
+        power_line_id,
+        previous_cn.id,
+        voltage_level,
+        current_user_id,
         to_connectivity_node_id_if_tap=new_connectivity_node.id if is_tap else None,
-        branch_type=getattr(new_pole, 'branch_type', None),
-        tap_pole_id=getattr(new_pole, 'tap_pole_id', None),
+        branch_type=getattr(new_pole, "branch_type", None),
+        tap_pole_id=getattr(new_pole, "tap_pole_id", None),
+        tap_branch_index=getattr(new_pole, "tap_branch_index", None),
     )
     
     # Конец участка (to_connectivity_node) только на реальных CN: отпаечная опора, ПС или оборудование.
