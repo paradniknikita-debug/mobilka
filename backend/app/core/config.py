@@ -1,36 +1,23 @@
 from pydantic_settings import BaseSettings
 from typing import Optional, List
 import os
-
 class Settings(BaseSettings):
-    # База данных
-    # ОБЯЗАТЕЛЬНО задайте через .env или переменные окружения для продакшена!
-    # Для Docker: postgresql://postgres:postgres@postgres:5432/lepm_db
-    # Для локального запуска: postgresql://postgres:password@localhost:5432/lepm_db
-    # Дефолтное значение только для development
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:dragon167@localhost:5433/lepm_db")
-    
     # JWT настройки
-    # ОБЯЗАТЕЛЬНО задайте через .env для продакшена! Сгенерируйте через: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-    # Дефолтное значение только для development
     SECRET_KEY: str = os.getenv("SECRET_KEY", "CHANGE_ME_SECRET_KEY")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 часов (можно задать через .env)
-    
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     # Redis для кэширования
     REDIS_URL: str = "redis://localhost:6379"
-    
     # Настройки файлов
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
-
     # MinIO / S3-совместимое хранилище для медиа (если задано — используем его, иначе локальный диск)
-    S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL", None)  # например http://minio:9000
+    S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL", None)  
     S3_ACCESS_KEY: str = os.getenv("S3_ACCESS_KEY", "")
     S3_SECRET_KEY: str = os.getenv("S3_SECRET_KEY", "")
     S3_BUCKET_MEDIA: str = os.getenv("S3_BUCKET_MEDIA", "lepm-media")
     S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
-    
     # Tile server настройки
     TILE_CACHE_DIR: str = "tile_cache"
     #Nginx
@@ -45,34 +32,18 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost",
         "http://127.0.0.1",
-        "https://your-domain.com",
-        # для Flutter Web dev-сервера (случайные порты)
-        # при необходимости ограничьте конкретными origin позже
     ]
-    
-    # CORS настройки для продакшена
-    # Задайте через переменную окружения CORS_ORIGINS (через запятую)
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "")
-
-
-
-    # Настройки карты
     DEFAULT_ZOOM: int = 10
     MIN_ZOOM: int = 1
     MAX_ZOOM: int = 18
     SSL_KEYFILE: str = "/app/nginx/ssl/key.pem"
     SSL_CERTFILE: str = "/app/nginx/ssl/crt.pem"
-    
     # Окружение (development/production)
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-
-    # Пересоздать БД при старте: удалить все таблицы и создать заново по моделям (данные теряются).
-    # Использовать только для разработки: RECREATE_DB=1
     RECREATE_DB: bool = os.getenv("RECREATE_DB", "0").lower() in ("1", "true", "yes")
-    
     class Config:
         env_file = ".env"
-        
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Проверка обязательных переменных для продакшена
@@ -83,5 +54,4 @@ class Settings(BaseSettings):
                 raise ValueError("SECRET_KEY должен быть задан для продакшена!")
             if not self.CORS_ORIGINS:
                 raise ValueError("CORS_ORIGINS должен быть задан для продакшена!")
-
 settings = Settings()

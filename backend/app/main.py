@@ -24,19 +24,12 @@ from app.models import (
     ConnectivityNode, Terminal, LineSection, PatrolSession,
     ChangeLog,
 )
-
-# Redis клиент будет инициализирован в lifespan
 redis_client = None
-
-# Инициализация токена безопасности
 security = HTTPBearer()
-
 @asynccontextmanager # lifespan - управление жизненным циклом приложения
 async def lifespan(app: FastAPI):
     # Инициализация базы данных при запуске. Всё что внутри этой функции будет выполнено при запуске приложения.
     global redis_client
-    
-    # Инициализация Redis (опционально)
     try:
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5)
         await redis_client.ping()
@@ -46,20 +39,15 @@ async def lifespan(app: FastAPI):
         print(f"WARNING: Redis недоступен: {e}. Продолжаем без Redis.")
         redis_client = None
         set_redis_client(None)
-    
-    # Инициализация базы данных (обязательно)
     try:
         await init_db()
     except Exception as e:
         print(f"ERROR: Критическая ошибка: не удалось инициализировать базу данных.")
         print(f"Приложение не может быть запущено без подключения к БД.")
         raise
-    
     # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
-    
     yield
-    
     # Закрытие соединений при остановке
     set_redis_client(None)
     if redis_client:
@@ -67,7 +55,7 @@ async def lifespan(app: FastAPI):
             await redis_client.close()
         except Exception:
             pass
-# Создание FastAPI приложения. Далее можно добавить @app.get, @app.post, @app.put, @app.delete методы.
+# Создание FastAPI приложения.
 app = FastAPI(
     title="ЛЭП Management System",
     description="Система управления линиями электропередач",
@@ -170,10 +158,6 @@ app.include_router(cim_export.router, prefix="/api/v1/cim", tags=["cim-export"])
 app.include_router(patrol_sessions.router, prefix="/api/v1/patrol-sessions", tags=["patrol-sessions"])
 app.include_router(change_log.router, prefix="/api/v1/change-log", tags=["change-log"])
 app.include_router(attachments.router, prefix="/api/v1/attachments", tags=["attachments"])
-# Временно закомментировано до применения миграции
-# app.include_router(base_voltage.router, prefix="/api/v1/base-voltages", tags=["base-voltages"])
-# app.include_router(wire_info.router, prefix="/api/v1/wire-infos", tags=["wire-infos"])
-
 # Обработчик исключений для обеспечения CORS заголовков даже при ошибках
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

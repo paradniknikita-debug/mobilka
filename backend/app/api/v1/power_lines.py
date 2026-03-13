@@ -1320,7 +1320,6 @@ async def update_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Power line not found"
         )
-    
     # Получаем существующую опору
     result = await db.execute(
         select(Pole)
@@ -1338,13 +1337,7 @@ async def update_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
-    
-    # Обновляем поля опоры (исключаем mrid, power_line_id, created_by, x_position, y_position)
-    # x_position и y_position будут обновлены в PositionPoint
-    # CIM: координаты только в PositionPoint, не в pole
     pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid', 'x_position', 'y_position'})
-    # Координаты: приходят в теле, но в соответствии с CIM храним их в PositionPoint и ConnectivityNode,
-    # а также дублируем в полях x_position/y_position опоры для быстрого доступа и карты.
     x_position = getattr(pole_data, 'x_position', None) if 'x_position' in pole_data.dict(exclude_unset=True) else None
     y_position = getattr(pole_data, 'y_position', None) if 'y_position' in pole_data.dict(exclude_unset=True) else None
     if "is_tap" in pole_data.dict(exclude_unset=True):
