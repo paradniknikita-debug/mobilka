@@ -15,7 +15,9 @@ import '../../../../core/database/database.dart' hide Equipment, Pole;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/pole_reference_data.dart';
+import '../../../../core/utils/pole_number_mask.dart';
 import '../../../../core/theme/app_theme.dart';
+import 'pole_number_mask_field.dart';
 import '../../../../core/services/auth_service.dart';
 import 'add_equipment_dialog.dart';
 
@@ -82,6 +84,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   bool _autofill = false;
 
   String _poleNumber = '';
+  late PoleNumberMask _poleMask;
+  PoleNumberMask? _suggestedMask;
+  /// Сброс полей маски при подсказке / загрузке опоры (см. [PoleNumberMaskField]).
+  int _poleMaskKey = 0;
+  /// При редактировании: id отпаечной опоры-якоря (для «Начать отпайку» с опоры 3/1 — это id опоры 3).
+  int? _editTapAnchorId;
   String _poleType = PoleReferenceData.defaultPoleType;
   double? _latitude;
   double? _longitude;
@@ -111,7 +119,6 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   bool _cardCommentRecording = false;
 
   /// Контроллеры для полей, подставляемых при загрузке в режиме редактирования.
-  late final TextEditingController _poleNumberController;
   late final TextEditingController _materialController;
 
   /// Количество «установленного» оборудования по категориям (для отображения 0 из N).
@@ -300,22 +307,24 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   @override
   void initState() {
     super.initState();
-    _poleNumberController = TextEditingController();
     _materialController = TextEditingController();
     if (widget.isEditMode && widget.poleId != null) {
+      _poleMask = PoleNumberMask();
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadPoleForEdit());
       return;
     }
     if (widget.initialPoleNumber != null && widget.initialPoleNumber!.isNotEmpty) {
-      _poleNumber = widget.initialPoleNumber!;
-      _poleNumberController.text = 'Опора $_poleNumber';
+      _poleMask = PoleNumberMask.parse(widget.initialPoleNumber!);
+      _poleNumber = _poleMask.apiString;
     } else if (widget.poleSequenceNumber != null) {
-      _poleNumber = widget.poleSequenceNumber!.toString();
-      _poleNumberController.text = 'Опора $_poleNumber';
+      _poleMask = PoleNumberMask(mainDigits: widget.poleSequenceNumber!.toString());
+      _poleNumber = _poleMask.apiString;
     } else if (widget.existingPolesCount > 0) {
-      // Fallback: автоподставление номера, если вызывающий код не передал (например, старая точка входа)
-      _poleNumber = (widget.existingPolesCount + 1).toString();
-      _poleNumberController.text = 'Опора $_poleNumber';
+      _poleMask = PoleNumberMask(mainDigits: '${widget.existingPolesCount + 1}');
+      _poleNumber = _poleMask.apiString;
+    } else {
+      _poleMask = PoleNumberMask(mainDigits: '1');
+      _poleNumber = _poleMask.apiString;
     }
     if (widget.initialLatitude != null && widget.initialLongitude != null) {
       _latitude = widget.initialLatitude;
@@ -337,6 +346,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _loadTapBranchesForLine();
+        _loadPoleNumberSuggestion();
       });
     }
     if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
@@ -347,8 +357,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   void _applyLoadedPoleToState(Pole pole, List<Equipment> equipmentList) {
     if (!mounted) return;
     setState(() {
-      _poleNumber = pole.poleNumber;
-      _poleNumberController.text = 'Опора ${pole.poleNumber}';
+      _poleMask = PoleNumberMask.parse(pole.poleNumber);
+      _poleNumber = _poleMask.apiString;
+      _poleMaskKey++;
+      _editTapAnchorId = pole.tapPoleId;
       _materialController.text = pole.material ?? '';
       _poleType = pole.poleType;
       _latitude = pole.yPosition;
@@ -421,6 +433,28 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _showBranchChoice = false;
       });
     }
+  }
+
+  /// Подсказка следующего номера по последним созданным опорам линии (API или локальная БД).
+  Future<void> _loadPoleNumberSuggestion() async {
+    if (widget.isEditMode) return;
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final db = ref.read(databaseProvider);
+      final List<String> numbers = [];
+      try {
+        final poles = await apiService.getPoles(widget.lineId);
+        poles.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        numbers.addAll(poles.map((p) => p.poleNumber));
+      } catch (_) {
+        final rows = await db.getPolesByLine(widget.lineId);
+        rows.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        numbers.addAll(rows.map((p) => p.poleNumber));
+      }
+      if (numbers.isEmpty) return;
+      final sug = PoleNumberSuggestion.suggestNext(numbers);
+      if (mounted && sug != null) setState(() => _suggestedMask = sug);
+    } catch (_) {}
   }
 
   Future<void> _loadPoleForEdit() async {
@@ -639,20 +673,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
   }
 
-  /// Из текста поля «Название опоры» извлекает номер для API (например «Опора 3» → «3», «Опора 3/1» → «3/1»).
-  static String _parsePoleNumberFromField(String text) {
-    final t = text.trim();
-    if (t.isEmpty) return '';
-    const prefix = 'Опора ';
-    if (t.length > prefix.length && t.toLowerCase().startsWith(prefix.toLowerCase())) {
-      return t.substring(prefix.length).trim();
-    }
-    return t;
-  }
-
   @override
   void dispose() {
-    _poleNumberController.dispose();
     _materialController.dispose();
     _cardCommentController.dispose();
     _cardCommentRecorder.dispose();
@@ -834,6 +856,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_poleMask.isValidForSave) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Укажите основной номер опоры (первый блок — цифры).'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     if (_latitude == null || _longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Укажите координаты или получите местоположение.'), backgroundColor: Colors.orange),
@@ -843,7 +874,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     setState(() => _isLoading = true);
     try {
       final apiService = ref.read(apiServiceProvider);
-      _poleNumber = _parsePoleNumberFromField(_poleNumberController.text);
+      _poleNumber = _poleMask.apiString;
       _material = _materialController.text.trim().isEmpty ? null : _materialController.text.trim();
       final cardCommentText = _cardCommentController.text.trim();
 
@@ -1002,12 +1033,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             'y_position': _latitude!,
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(_showBranchChoice
-                  ? 'Изменения опоры сохранены. При смене направления выполните «Пересборка топологии» по ЛЭП.'
-                  : 'Изменения опоры сохранены'),
+            const SnackBar(
+              content: Text('Изменения опоры сохранены'),
               backgroundColor: Colors.green,
-              duration: _showBranchChoice ? const Duration(seconds: 5) : const Duration(seconds: 3),
+              duration: Duration(seconds: 3),
             ),
           );
         }
@@ -1208,7 +1237,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                           radius: 22,
                           backgroundColor: PatrolColors.accentBlue,
                           child: Text(
-                            widget.isEditMode ? (_poleNumber.isEmpty ? '...' : _poleNumber) : (_poleNumber.isNotEmpty ? _poleNumber : '$seq'),
+                            widget.isEditMode
+                                ? (_poleNumber.isEmpty ? '...' : (_poleNumber.length > 4 ? '${_poleNumber.substring(0, 4)}…' : _poleNumber))
+                                : (_poleNumber.isNotEmpty ? (_poleNumber.length > 4 ? '${_poleNumber.substring(0, 4)}…' : _poleNumber) : '$seq'),
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ),
@@ -1332,22 +1363,27 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Название опоры: отображается как «Опора N», в API уходит только номер (N или N/1, N/2)
-                      TextFormField(
-                        controller: _poleNumberController,
-                        decoration: const InputDecoration(
-                          labelText: 'Название опоры *',
-                          hintText: 'Опора 1',
-                          filled: true,
-                          fillColor: PatrolColors.surfaceCard,
-                        ),
-                        style: const TextStyle(color: PatrolColors.textPrimary),
-                        validator: (v) {
-                          final raw = _parsePoleNumberFromField(v ?? '');
-                          return raw.isEmpty ? 'Введите название опоры (например: Опора 3)' : null;
+                      // Маска номера опоры → в API уходит строка вида 15, 15а, 15/1, 14/12/2
+                      PoleNumberMaskField(
+                        key: ValueKey(_poleMaskKey),
+                        initial: _poleMask,
+                        suggestion: _suggestedMask,
+                        onApplySuggestion: _suggestedMask == null
+                            ? null
+                            : () {
+                                setState(() {
+                                  _poleMask = _suggestedMask!;
+                                  _poleNumber = _poleMask.apiString;
+                                  _suggestedMask = null;
+                                  _poleMaskKey++;
+                                });
+                              },
+                        onChanged: (m) {
+                          setState(() {
+                            _poleMask = m;
+                            _poleNumber = m.apiString;
+                          });
                         },
-                        onSaved: (v) => _poleNumber = _parsePoleNumberFromField(v ?? ''),
-                        onChanged: (v) => _poleNumber = _parsePoleNumberFromField(v),
                       ),
                       const SizedBox(height: 12),
 
@@ -1724,11 +1760,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       onPressed: _isLoading
                           ? null
                           : () {
+                              final numStr = _poleMask.apiString;
+                              final rootNum = numStr.contains('/')
+                                  ? numStr.split('/').first.trim()
+                                  : numStr;
                               Navigator.of(context).pop(<String, dynamic>{
                                 'action': 'start_tap',
-                                'tapPoleId': widget.poleId,
+                                'tapPoleId': _editTapAnchorId ?? widget.poleId,
                                 'lineId': widget.lineId,
-                                'tapPoleNumber': _parsePoleNumberFromField(_poleNumberController.text),
+                                'tapPoleNumber': rootNum.isEmpty ? null : rootNum,
                               });
                             },
                       style: OutlinedButton.styleFrom(

@@ -230,7 +230,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// Загрузка данных карты из локальной БД (оффлайн-режим)
-  Future<void> _loadMapDataFromLocal() async {
+  /// [skipAutoCenter] — не сдвигать карту на «первую опору линии» (после создания опоры центрируем вручную).
+  Future<void> _loadMapDataFromLocal({bool skipAutoCenter = false}) async {
     if (!mounted) return;
     try {
       final db = ref.read(drift_db.databaseProvider);
@@ -429,9 +430,11 @@ class _MapPageState extends ConsumerState<MapPage> {
             aclineSegments: null,
           )).toList();
           _errorMessage = null;
+          _applyActiveSessionLineSync();
         });
-        _applyActiveSessionIfNeeded();
-        _centerOnObjects();
+        if (!skipAutoCenter) {
+          _centerOnObjects();
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) setState(() {});
         });
@@ -443,21 +446,16 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  /// Устанавливает текущую ЛЭП из активной сессии обхода, если она есть в списке линий.
-  /// При перезаходе в сессию (линия подставляется из сохранённой) контекст отпайки сбрасывается — новые опоры на магистрали.
-  void _applyActiveSessionIfNeeded() {
+  /// Текущая ЛЭП обхода из prefs — в том же [setState], что и данные карты, чтобы центрирование не брало «старую» линию.
+  /// Линия может быть только в локальной БД (отрицательный id) — всё равно применяем id из сессии.
+  void _applyActiveSessionLineSync() {
     final prefs = ref.read(prefsProvider);
     if (prefs == null) return;
     final sessionLineId = prefs.getInt(AppConfig.activeSessionPowerLineIdKey);
     if (sessionLineId == null) return;
-    if (_powerLinesList != null &&
-        _powerLinesList!.any((pl) => pl.id == sessionLineId)) {
-      setState(() {
-        final restoringSession = _currentLineId != sessionLineId;
-        _currentLineId = sessionLineId;
-        if (restoringSession) _currentTapRoot = null;
-      });
-    }
+    final prev = _currentLineId;
+    _currentLineId = sessionLineId;
+    if (prev != sessionLineId) _currentTapRoot = null;
   }
 
   /// Сбросить активную сессию обхода, если она привязана к указанной линии (например, при удалении линии).
@@ -550,7 +548,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  Future<void> _loadMapData({bool forceFromServer = false}) async {
+  Future<void> _loadMapData({bool forceFromServer = false, bool skipAutoCenter = false}) async {
     if (!mounted) return;
     
     try {
@@ -583,7 +581,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       final isOffline = connectivityResult == ConnectivityResult.none;
 
       if (isOffline) {
-        await _loadMapDataFromLocal();
+        await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -600,7 +598,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Загружаем с сервера только по явному нажатию «Обновить» (forceFromServer).
       final syncMode = ref.read(syncModeProvider);
       if (syncMode == SyncMode.manual && !forceFromServer) {
-        await _loadMapDataFromLocal();
+        await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -615,7 +613,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       // Сначала показываем локальные данные, чтобы карта и дерево не были пустыми при открытии.
       // Затем подгружаем с сервера и объединяем — так слои гарантированно отрисовываются.
-      await _loadMapDataFromLocal();
+      await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
       if (!mounted) return;
 
       final apiService = ref.read(apiServiceProvider);
@@ -900,14 +898,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
 
       if (mounted) {
-        // Уменьшаем логирование
-        if (kDebugMode) {
-          print('✅ Загружено: ЛЭП: ${(powerLinesData['features'] as List?)?.length ?? 0}, '
-              'Опоры: ${(polesData['features'] as List?)?.length ?? 0}, '
-              'Отпайки: ${(tapsData['features'] as List?)?.length ?? 0}, '
-              'Подстанции: ${(substationsData['features'] as List?)?.length ?? 0}');
-        }
-
         setState(() {
           _powerLinesData = powerLinesData;
           _polesData = polesData;
@@ -916,9 +906,11 @@ class _MapPageState extends ConsumerState<MapPage> {
           _substationsData = substationsData;
           _powerLinesList = powerLinesList;
           _errorMessage = null;
+          _applyActiveSessionLineSync();
         });
-        _applyActiveSessionIfNeeded();
-        _centerOnObjects();
+        if (!skipAutoCenter) {
+          _centerOnObjects();
+        }
         // Повторная отрисовка после установки данных — чтобы слои ЛЭП/опор гарантированно появились на карте.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) setState(() {});
@@ -992,12 +984,25 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   void _centerOnObjects() {
     LatLng? center;
-    
+    final prefs = ref.read(prefsProvider);
+    final sessionLineId = prefs?.getInt(AppConfig.activeSessionPowerLineIdKey);
+
     if (_polesData != null) {
       final features = _polesData!['features'] as List<dynamic>?;
       if (features != null && features.isNotEmpty) {
-        final firstFeature = features[0];
-        final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
+        Map<String, dynamic>? chosen;
+        if (sessionLineId != null) {
+          for (final f in features) {
+            if (f is! Map<String, dynamic>) continue;
+            final props = f['properties'] as Map<String, dynamic>?;
+            if (props != null && _toInt(props['line_id']) == sessionLineId) {
+              chosen = f;
+              break;
+            }
+          }
+        }
+        chosen ??= features.first as Map<String, dynamic>;
+        final geometry = chosen['geometry'] as Map<String, dynamic>?;
         if (geometry != null && geometry['type'] == 'Point') {
           final coords = geometry['coordinates'] as List<dynamic>?;
           if (coords != null && coords.length >= 2) {
@@ -1026,8 +1031,11 @@ class _MapPageState extends ConsumerState<MapPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _mapReady) {
           try {
-            // Сохраняем текущий зум пользователя, не сбрасываем на defaultZoom
-            final zoom = _mapController.camera.zoom;
+            // Как на вебе: при обходе не уводить зум ниже порога оборудования — иначе «пустая» карта.
+            var zoom = _mapController.camera.zoom;
+            if (zoom <= AppConfig.minZoomToShowEquipment) {
+              zoom = AppConfig.defaultZoom;
+            }
             _mapController.move(center!, zoom);
           } catch (e) {
             print('Ошибка центрирования на объектах: $e');
@@ -1510,6 +1518,22 @@ class _MapPageState extends ConsumerState<MapPage> {
     return null;
   }
 
+  /// ID отпаечной опоры-якоря (магистральная «3»); для опоры 3/1 — из [tap_pole_id], не из id опоры в ветке.
+  static int? _tapAnchorPoleIdFromProperties(Map<String, dynamic>? props) {
+    if (props == null) return null;
+    final tapId = _toInt(props['tap_pole_id']);
+    final selfId = _toInt(props['id']);
+    return tapId ?? selfId;
+  }
+
+  /// Номер якоря для нумерации «3/1»: из «3» или из «3/1» → «3».
+  static String? _tapRootNumberFromPoleNumber(String? poleNumber) {
+    if (poleNumber == null || poleNumber.trim().isEmpty) return null;
+    final t = poleNumber.trim();
+    if (t.contains('/')) return t.split('/').first.trim();
+    return t;
+  }
+
   /// Безопасное преобразование в double (null → 0.0), чтобы избежать "Null is not a subtype of num".
   static double _toDouble(dynamic v) {
     if (v == null) return 0.0;
@@ -1583,11 +1607,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       return 'assets/equipment/arrester/arrester.svg';
     }
     // Фундамент, изоляторы, траверсы, грозоотвод — на линии не отображаются по дизайну, не логируем.
-    final noIconTypes = ['фундамент', 'foundation', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
-    final skipLog = noIconTypes.any((t) => type.contains(t));
-    if (kDebugMode && !skipLog) {
-      print('No SVG mapping for equipment: equipmentType=$equipmentType, name=$name');
-    }
     return null;
   }
 
@@ -1717,13 +1736,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           );
           final iconPath = props?['icon'] as String?;
           if (iconPath == null) {
-            if (kDebugMode) {
-              print(
-                'SVG marker skipped: no icon in properties for feature with '
-                'equipmentType=${props?['equipment_type']}, name=${props?['name']} '
-                'at lat=${latLng.latitude}, lng=${latLng.longitude}',
-              );
-            }
             continue;
           }
 
@@ -1731,11 +1743,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           final lineIdInt = lineId is int ? lineId : (lineId is num ? lineId.toInt() : null);
           final isActive = lineIdInt != null && lineIdInt == _currentLineId;
           final color = isActive ? Colors.green : Colors.red;
-
-          if (kDebugMode) {
-            print('SVG equipment marker: lat=${latLng.latitude}, lng=${latLng.longitude}, '
-                'type=${props?['equipment_type']}, name=${props?['name']}, icon=$iconPath');
-          }
 
           const iconSize = 64.0;
           // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
@@ -2117,54 +2124,72 @@ class _MapPageState extends ConsumerState<MapPage> {
     final geoFeature = _findPowerLineInGeoJSON(powerLine.id);
     final initiallyExpanded = _expandedPowerLineIds.contains(powerLine.id);
 
-    return GestureDetector(
-      onLongPress: () => _showPowerLineContextMenu(powerLine),
-      child: ExpansionTile(
-        initiallyExpanded: initiallyExpanded,
-        dense: true,
-        controlAffinity: ListTileControlAffinity.leading,
-        leading: const Icon(Icons.electrical_services, size: 14, color: Colors.red),
-        title: Text(
+    void onLongPressDeleteLine() => _showPowerLineContextMenu(powerLine);
+
+    return ExpansionTile(
+      initiallyExpanded: initiallyExpanded,
+      dense: true,
+      controlAffinity: ListTileControlAffinity.leading,
+      leading: GestureDetector(
+        onLongPress: onLongPressDeleteLine,
+        child: const Icon(Icons.electrical_services, size: 14, color: Colors.red),
+      ),
+      title: GestureDetector(
+        onLongPress: onLongPressDeleteLine,
+        behavior: HitTestBehavior.translucent,
+        child: Text(
           powerLine.name,
           style: const TextStyle(fontSize: 13),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(
+      ),
+      subtitle: GestureDetector(
+        onLongPress: onLongPressDeleteLine,
+        behavior: HitTestBehavior.translucent,
+        child: Text(
           _formatVoltageDisplay(powerLine.voltageLevel),
           style: const TextStyle(fontSize: 11),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        children: [
+      ),
+      children: [
         // Список AClineSegments напрямую (без обобщения)
         ..._buildAClineSegmentsTree(powerLine.aclineSegments ?? []),
         // Опоры напрямую (без папки обобщения)
         ...(powerLine.poles ?? []).map<Widget>((pole) {
           final geoPole = _findPoleInGeoJSON(pole.id);
-          return ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.only(left: 32, right: 8),
-            leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
-            title: Text(
-              pole.poleNumber,
-              style: const TextStyle(fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          return GestureDetector(
+            onLongPress: () => _deletePoleFromTree(pole, powerLine),
+            behavior: HitTestBehavior.opaque,
+            child: ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.only(left: 32, right: 8),
+              leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
+              title: Text(
+                pole.poleNumber,
+                style: const TextStyle(fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${pole.poleType ?? ''}',
+                style: const TextStyle(fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                if (geoPole != null) {
+                  _centerOnFeature(geoPole);
+                  _showPoleInfo(
+                    Map<String, dynamic>.from(geoPole['properties'] as Map? ?? {}),
+                    geometry: geoPole['geometry'] as Map<String, dynamic>?,
+                  );
+                }
+              },
             ),
-            subtitle: Text(
-              '${pole.poleType ?? ''}',
-              style: const TextStyle(fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: () {
-              Navigator.of(context).pop();
-              if (geoPole != null) {
-                _centerOnFeature(geoPole);
-                _showPoleInfo(geoPole['properties'] ?? {});
-              }
-            },
           );
         }),
       ],
@@ -2178,7 +2203,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           _centerOnFeature(geoFeature);
         }
       },
-      ),
     );
   }
 
@@ -2742,7 +2766,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       ),
     );
     if (result != null && result['success'] == true && mounted) {
-      await _loadMapData();
+      await _loadMapData(forceFromServer: true, skipAutoCenter: true);
       final latRaw = result['y_position'] ?? result['latitude'];
       final lngRaw = result['x_position'] ?? result['longitude'];
       final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
@@ -2762,13 +2786,15 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// Открыть диалог создания опоры «Начать отпайку» от выбранной опоры на карте.
+  /// Якорь отпайки — отпаечная опора (или [tap_pole_id] у опоры 3/1), как в Angular.
   Future<void> _showCreatePoleFromTapPoleDialog() async {
     final lineId = _toInt(_selectedObjectProperties?['line_id']);
-    final tapPoleId = _toInt(_selectedObjectProperties?['id']);
-    final tapPoleNumber = _selectedObjectProperties?['pole_number']?.toString();
-    if (lineId == null || tapPoleId == null) return;
+    final props = _selectedObjectProperties;
+    final tapAnchorId = _tapAnchorPoleIdFromProperties(props);
+    final tapPoleNumber = _tapRootNumberFromPoleNumber(props?['pole_number']?.toString());
+    if (lineId == null || tapAnchorId == null) return;
     _closeObjectProperties();
-    await _openCreatePoleFromTapPole(lineId, tapPoleId, tapPoleNumber);
+    await _openCreatePoleFromTapPole(lineId, tapAnchorId, tapPoleNumber);
   }
 
   /// Открыть диалог добавления следующей опоры в отпайку (выбрана опора 3/1, 3/2 и т.д.).
@@ -2835,7 +2861,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       ),
     );
     if (result != null && result['success'] == true && mounted) {
-      await _loadMapData();
+      await _loadMapData(forceFromServer: true, skipAutoCenter: true);
       final latRaw = result['y_position'] ?? result['latitude'];
       final lngRaw = result['x_position'] ?? result['longitude'];
       final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
@@ -2941,7 +2967,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // Если опора создана успешно, обновляем данные и центрируем карту на ней
     if (result != null && result['success'] == true && mounted) {
-      await _loadMapData();
+      await _loadMapData(forceFromServer: true, skipAutoCenter: true);
       final latRaw = result['y_position'] ?? result['latitude'];
       final lngRaw = result['x_position'] ?? result['longitude'];
       final lat = latRaw is num ? latRaw.toDouble() : (latRaw is double ? latRaw : null);
@@ -3026,18 +3052,21 @@ class _MapPageState extends ConsumerState<MapPage> {
     });
   }
   
-  void _showPoleInfo(Map<String, dynamic> properties) {
-    _showObjectInfo(properties, ObjectType.pole);
-  }
-  
-  void _handleConnectivityNode() {
-    // TODO: Реализовать управление узлом соединения
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Функция управления узлом соединения будет реализована'),
-        backgroundColor: Colors.orange,
-      ),
-    );
+  /// [geometry] — GeoJSON точки опоры (в properties координат может не быть).
+  void _showPoleInfo(
+    Map<String, dynamic> properties, {
+    Map<String, dynamic>? geometry,
+  }) {
+    final merged = Map<String, dynamic>.from(properties);
+    final geom = geometry ?? properties['geometry'] as Map<String, dynamic>?;
+    if (geom != null && geom['type'] == 'Point') {
+      final coordinates = geom['coordinates'] as List<dynamic>?;
+      if (coordinates != null && coordinates.length >= 2) {
+        merged['x_position'] = _toDouble(coordinates[0]);
+        merged['y_position'] = _toDouble(coordinates[1]);
+      }
+    }
+    _showObjectInfo(merged, ObjectType.pole);
   }
   
   void _handlePoleSequence() {
@@ -3113,6 +3142,143 @@ class _MapPageState extends ConsumerState<MapPage> {
           SnackBar(
             content: Text('Ошибка: ${e.toString()}'),
             backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Удаление одной опоры из дерева (долгое нажатие на строку опоры), без удаления всей ЛЭП.
+  Future<void> _deletePoleFromTree(Pole pole, PowerLine powerLine) async {
+    final objectName = pole.poleNumber;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить опору?'),
+        content: Text(
+          'Вы уверены, что хотите удалить опору "$objectName"? Это действие нельзя отменить.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOffline = connectivityResult == ConnectivityResult.none;
+
+      if (isOffline) {
+        await _deletePoleOfflineById(pole.id);
+        await _loadMapDataFromLocal();
+        await _loadPowerLineDetails(powerLine.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Опора удалена локально. Синхронизация при подключении.'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      final apiService = ref.read(apiServiceProvider);
+      await apiService.deletePole(pole.id);
+      await _loadMapData(forceFromServer: true);
+      await _loadPowerLineDetails(powerLine.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Опора "$objectName" успешно удалена.\n'
+              'Пролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      final isConnectionError = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout;
+      if (isConnectionError && mounted) {
+        try {
+          await _deletePoleOfflineById(pole.id);
+          await _loadMapDataFromLocal();
+          await _loadPowerLineDetails(powerLine.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Опора удалена локально. Синхронизация при подключении.'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Ошибка удаления опоры в офлайн-режиме'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      String errorMessage = 'Ошибка удаления опоры';
+      if (e.response != null) {
+        final statusCode = e.response!.statusCode;
+        final responseData = e.response!.data;
+        if (statusCode == 404) {
+          errorMessage = 'Объект не найден';
+        } else if (statusCode == 403) {
+          errorMessage = 'Доступ запрещён.';
+        } else if (statusCode == 401) {
+          errorMessage = 'Требуется авторизация.';
+        } else if (responseData is Map && responseData['detail'] != null) {
+          errorMessage = responseData['detail'] as String;
+        } else {
+          errorMessage = 'Ошибка сервера (${statusCode ?? '?'})';
+        }
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = 'Ошибка соединения с сервером.';
+      } else {
+        errorMessage = 'Ошибка удаления: ${e.message ?? e.toString()}';
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка удаления: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -3663,13 +3829,26 @@ class _MapPageState extends ConsumerState<MapPage> {
         conductorSection: _quickConductorSection,
       );
 
-      await apiService.createPole(_currentLineId!, poleData);
+      final created = await apiService.createPole(_currentLineId!, poleData);
 
-      _refreshPolesData().catchError((e) {
+      await _refreshPolesData().catchError((e) {
         print('Ошибка обновления опор: $e');
       });
 
       if (mounted) {
+        final target = LatLng(created.yPosition, created.xPosition);
+        if (_mapReady) {
+          try {
+            _mapController.move(target, 18.0);
+          } catch (e) {
+            print('Ошибка центрирования карты: $e');
+          }
+        } else {
+          setState(() {
+            _pendingCenterOnObjects = target;
+            _pendingCenterZoom = 18.0;
+          });
+        }
         setState(() {
           _quickPoleNumber = '';
           _isEndPole = false;
@@ -3694,7 +3873,14 @@ class _MapPageState extends ConsumerState<MapPage> {
             _isEndPole = false;
             if (_isTapPole) _isTapPole = false;
           });
-          await _loadMapDataFromLocal();
+          await _loadMapDataFromLocal(skipAutoCenter: true);
+          if (_mapReady && _currentLocation != null) {
+            try {
+              _mapController.move(_currentLocation!, 18.0);
+            } catch (e) {
+              print('Ошибка центрирования карты: $e');
+            }
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Нет связи. Опора сохранена локально и будет синхронизирована при подключении.'),

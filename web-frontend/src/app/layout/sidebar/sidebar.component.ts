@@ -424,11 +424,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
     return `оп.${first}-оп.${last}`;
   }
 
-  /** Подпись пролёта в формате «пролёт 1-2» (без суффикса «(отпайка)») */
+  /** Подпись пролёта в формате «Пролёт 1-2» (без суффикса «(отпайка)») */
   getSpanDisplayName(span: GeoJSONFeature): string {
     const sn = (span.properties['span_number'] ?? '')?.toString().trim();
     const normalized = sn ? sn.replace(/^пролёт\s+/i, '') : '';
-    return 'пролёт ' + (normalized || 'N/A');
+    return 'Пролёт ' + (normalized || 'N/A');
   }
 
   /**

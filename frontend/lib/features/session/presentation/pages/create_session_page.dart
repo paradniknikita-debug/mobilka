@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' as drift;
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/services/api_service.dart';
@@ -204,16 +205,21 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
     }
   }
 
+  String _voltageKvLabel(double v) {
+    if ((v - v.roundToDouble()).abs() < 0.001) return '${v.toInt()}';
+    return v.toString();
+  }
+
   /// Показать диалог создания ЛЭП. После успешного создания обновляет список и выбирает новую линию.
   Future<void> _showCreatePowerLineDialog() async {
     final nameController = TextEditingController();
-    final voltageController = TextEditingController(text: '110');
-    final descriptionController = TextEditingController();
+    var selectedVoltageKv = PoleReferenceData.defaultVoltageKv;
 
     final newId = await showDialog<int>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         title: const Text('Создать новую линию'),
         content: SingleChildScrollView(
           child: Column(
@@ -227,23 +233,23 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: voltageController,
+              DropdownButtonFormField<double>(
+                value: selectedVoltageKv,
                 decoration: const InputDecoration(
                   labelText: 'Напряжение (кВ)',
-                  hintText: '0.4, 6, 10, 35, 110, 220, 330, 500, 750',
                   border: OutlineInputBorder(),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Описание',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
+                items: PoleReferenceData.voltageLevelsKv
+                    .map(
+                      (v) => DropdownMenuItem<double>(
+                        value: v,
+                        child: Text(_voltageKvLabel(v)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setDialogState(() => selectedVoltageKv = v);
+                },
               ),
             ],
           ),
@@ -297,19 +303,16 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 }
               }
 
-              final voltageLevel = double.tryParse(voltageController.text) ?? 0.0;
+              final voltageLevel = selectedVoltageKv;
               final branchId = 1;
               final status = 'active';
-              final description = descriptionController.text.trim().isEmpty
-                  ? null
-                  : descriptionController.text.trim();
               final powerLineData = PowerLineCreate(
                 name: name,
                 voltageLevel: voltageLevel,
                 length: null,
                 branchId: branchId,
                 status: status,
-                description: description,
+                description: null,
               );
               try {
                 final created = await apiService.createPowerLine(powerLineData);
@@ -369,7 +372,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                   branchId: branchId,
                   createdBy: userId,
                   status: status,
-                  description: drift.Value(description),
+                  description: const drift.Value.absent(),
                   createdAt: now,
                   updatedAt: drift.Value(now),
                   isLocal: const drift.Value(true),
@@ -392,21 +395,22 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
           ),
         ],
       ),
+        ),
     );
 
     if (newId != null && mounted) {
       await _loadPowerLines();
       if (mounted) {
-        drift_db.PowerLine? newLine;
-        for (final pl in _powerLines) {
-          if (pl.id == newId) {
-            newLine = pl;
-            break;
+        final db = ref.read(drift_db.databaseProvider);
+        final fromDb = await db.getPowerLine(newId);
+        drift_db.PowerLine? newLine = fromDb;
+        newLine ??= () {
+          for (final pl in _powerLines) {
+            if (pl.id == newId) return pl;
           }
-        }
-        if (newLine != null) {
-          setState(() => _selectedLine = newLine);
-        }
+          return null;
+        }();
+        setState(() => _selectedLine = newLine);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

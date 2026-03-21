@@ -39,12 +39,11 @@ class ObjectPropertiesPanel extends StatelessWidget {
     return v.toString();
   }
 
-  /// Отпаечная опора (точка ветвления): опора 3, от которой идёт отпайка 3/1, 3/2. Как в Angular: is_tap_pole == true.
+  /// Любая опора с номером: «Начать отпайку» (магистраль → первая ветка; 3/1 → ещё ветка от якоря, см. карту).
   static bool _isTapPoleForStart(Map<String, dynamic> props) {
     if (props['is_tap_pole'] == true) return true;
     final n = props['pole_number'] ?? props['poleNumber'];
-    // Магистральная опора (без "/") — можно начать отпайку; после создания 3/1 бэкенд выставит is_tap_pole для 3
-    return n is String && n.isNotEmpty && !n.contains('/');
+    return n is String && n.isNotEmpty;
   }
 
   /// Опора в отпайке (3/1, 3/2): первая и последующие опоры ветки, не точка ветвления.
@@ -292,10 +291,8 @@ class ObjectPropertiesPanel extends StatelessWidget {
   }
 
   List<Widget> _buildPoleProperties(BuildContext context) {
-    final connectivityNodeId = objectProperties['connectivity_node_id'];
-    final hasConnectivityNode = connectivityNodeId != null;
-
-    final properties = <Widget>[
+    final seq = objectProperties['sequence_number'];
+    return [
       _buildPropertyItem(
         context,
         'Название:',
@@ -318,44 +315,16 @@ class ObjectPropertiesPanel extends StatelessWidget {
         'Позиция (X, Y):',
         '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
         '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
+        isLast: seq == null,
       ),
-      if (objectProperties['sequence_number'] != null)
+      if (seq != null)
         _buildPropertyItem(
           context,
           'Порядок в линии:',
-          objectProperties['sequence_number'].toString(),
+          seq.toString(),
+          isLast: true,
         ),
-      _buildPropertyItem(
-        context,
-        'Узел соединения:',
-        '',
-        isLast: true,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 4,
-          ),
-          decoration: BoxDecoration(
-            color: hasConnectivityNode
-                ? Colors.green.shade50
-                : Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            hasConnectivityNode ? 'Есть' : 'Нет',
-            style: TextStyle(
-              color: hasConnectivityNode
-                  ? Colors.green.shade700
-                  : Colors.orange.shade700,
-              fontWeight: FontWeight.w500,
-              fontSize: 12,
-            ),
-          ),
-        ),
-      ),
     ];
-    
-    return properties;
   }
 
   List<Widget> _buildSubstationProperties(BuildContext context) {

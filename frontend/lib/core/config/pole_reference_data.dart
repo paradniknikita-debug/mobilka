@@ -90,6 +90,12 @@ class PoleReferenceData {
 
   /// Значение по умолчанию для сечения
   static const String defaultConductorSection = '70';
+
+  /// Номинальное напряжение ЛЭП (кВ) — выпадающий список при создании линии (как на веб-клиенте).
+  static const List<double> voltageLevelsKv = [
+    0.4, 6, 10, 35, 110, 220, 330, 500, 750,
+  ];
+  static const double defaultVoltageKv = 110.0;
 }
 
 /// Справочник типов оборудования на опорах (офлайн).
