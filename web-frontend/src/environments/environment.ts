@@ -30,11 +30,13 @@ export const environment = {
     return `${protocol}://${backendHost}/api/${this.apiVersion}`;
   },
   
-  // Настройки карты (minZoom 3 — не даём отдалять до дублирования континентов)
+  // Настройки карты (minZoom 3 — не отдалять до дублирования континентов; maxZoom 20 — точность ~0.00003°)
   map: {
     defaultZoom: 10,
     minZoom: 3,
-    maxZoom: 18,
+    maxZoom: 20,
+    /** Порог зума для отображения оборудования на линии: при зуме строго выше этого значения иконки видны. Меняйте при смене детализации. */
+    minZoomToShowEquipment: 10,
     defaultCenter: {
       lat: 53.9045,
       lng: 27.5615

@@ -1,4 +1,4 @@
-<div class="create-object-dialog" [class.substation-edit]="isEditMode && selectedObjectType === 'substation'">
+<div class="create-object-dialog" [class.substation-edit]="isEditMode && selectedObjectType === 'substation'" appResizableDialog>
   <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : isEditMode && selectedObjectType === 'substation' ? 'Редактирование подстанции' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
 
   <mat-dialog-content>

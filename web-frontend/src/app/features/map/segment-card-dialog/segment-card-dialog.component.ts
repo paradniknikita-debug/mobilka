@@ -1,4 +1,4 @@
-import { Component, Inject, HostListener, ElementRef } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ApiService } from '../../../core/services/api.service';
 import { AClineSegment, LineSection } from '../../../core/models/cim.model';
@@ -22,60 +22,13 @@ export class SegmentCardDialogComponent {
   loading = true;
   error: string | null = null;
   savingTapSubstation = false;
-  private resizing = false;
-  private startX = 0;
-  private startY = 0;
-  private startW = 0;
-  private startH = 0;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: SegmentCardDialogData,
     private dialogRef: MatDialogRef<SegmentCardDialogComponent>,
-    private apiService: ApiService,
-    private el: ElementRef<HTMLElement>
+    private apiService: ApiService
   ) {
     this.loadSegment();
-  }
-
-  private boundDoResize = (e: MouseEvent) => this.doResize(e);
-  private boundStopResize = () => this.stopResize();
-
-  startResize(e: MouseEvent): void {
-    e.preventDefault();
-    const container = this.el.nativeElement.closest('.mat-mdc-dialog-container') as HTMLElement;
-    if (!container) return;
-    this.resizing = true;
-    this.startX = e.clientX;
-    this.startY = e.clientY;
-    this.startW = container.offsetWidth;
-    this.startH = container.offsetHeight;
-    document.addEventListener('mousemove', this.boundDoResize);
-    document.addEventListener('mouseup', this.boundStopResize);
-  }
-
-  private doResize(e: MouseEvent): void {
-    if (!this.resizing) return;
-    const container = this.el.nativeElement.closest('.mat-mdc-dialog-container') as HTMLElement;
-    if (!container) return;
-    const dw = e.clientX - this.startX;
-    const dh = e.clientY - this.startY;
-    const w = Math.max(360, this.startW + dw);
-    const h = Math.max(200, this.startH + dh);
-    container.style.width = w + 'px';
-    container.style.height = h + 'px';
-    container.style.maxWidth = '95vw';
-    container.style.maxHeight = '90vh';
-  }
-
-  private stopResize(): void {
-    this.resizing = false;
-    document.removeEventListener('mousemove', this.boundDoResize);
-    document.removeEventListener('mouseup', this.boundStopResize);
-  }
-
-  @HostListener('document:mouseup')
-  onDocMouseUp(): void {
-    if (this.resizing) this.stopResize();
   }
 
   loadSegment(): void {

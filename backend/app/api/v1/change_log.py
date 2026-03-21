@@ -108,7 +108,7 @@ async def get_change_log(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Список записей журнала изменений (с именами пользователей и сущностей вместо только id)."""
+    """Список записей журнала изменений"""
     q = select(ChangeLog).order_by(desc(ChangeLog.created_at)).limit(limit).offset(offset)
     if source:
         q = q.where(ChangeLog.source == source)

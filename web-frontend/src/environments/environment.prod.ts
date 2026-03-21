@@ -13,7 +13,8 @@ export const environment = {
   map: {
     defaultZoom: 10,
     minZoom: 3,
-    maxZoom: 18,
+    maxZoom: 20,
+    minZoomToShowEquipment: 10,
     defaultCenter: {
       lat: 53.9045,
       lng: 27.5615

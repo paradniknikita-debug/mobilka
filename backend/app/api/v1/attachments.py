@@ -56,11 +56,6 @@ async def upload_pole_attachment(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Загрузить вложение к карточке опоры.
-    attachment_type: photo, voice, schema, video.
-    Хранилище: MinIO при настройке S3_* или локальный диск.
-    """
     if attachment_type not in ("photo", "voice", "schema", "video"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

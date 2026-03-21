@@ -65,9 +65,11 @@ import { CimPreviewMapDialogComponent } from './features/cim-import/cim-preview-
 import { AttachmentImageViewComponent } from './features/map/attachment-image-view/attachment-image-view.component';
 import { AttachmentMediaViewComponent } from './features/map/attachment-media-view/attachment-media-view.component';
 import { ImagePreviewDialogComponent } from './features/map/image-preview-dialog/image-preview-dialog.component';
+import { ResizableDialogDirective } from './core/directives/resizable-dialog.directive';
 
 @NgModule({
   declarations: [
+    ResizableDialogDirective,
     AppComponent,
     MainLayoutComponent,
     SidebarComponent,

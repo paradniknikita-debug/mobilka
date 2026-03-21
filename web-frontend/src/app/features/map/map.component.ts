@@ -1551,10 +1551,11 @@ export class MapComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Скрывать оборудование (иконки на линии и точечные) при зуме ≤ 14; показывать при зуме > 14. */
+  /** Скрывать оборудование при зуме ≤ minZoomToShowEquipment; показывать при зуме выше (порог задаётся в environment.map.minZoomToShowEquipment). */
   private updateEquipmentVisibility(): void {
     if (!this.map) return;
-    const show = this.currentZoom > 14;
+    const threshold = (environment.map as any).minZoomToShowEquipment ?? 14;
+    const show = this.currentZoom > threshold;
     this.equipmentGeoJsonMarkers.forEach(m => {
       if (show) { if (!this.map!.hasLayer(m)) m.addTo(this.map!); }
       else { this.map!.removeLayer(m); }

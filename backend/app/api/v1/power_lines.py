@@ -970,7 +970,7 @@ async def create_pole(
             await db.flush()
             db_pole.connectivity_node_id = connectivity_node.id
 
-        # Автоматическое создание пролёта от предыдущей опоры к новой (узлы создаются по требованию)
+        # Автоматическое создание пролёта от предыдущей опоры к новой
         try:
             from app.core.line_auto_assembly import auto_create_span
 

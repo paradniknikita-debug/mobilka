@@ -135,20 +135,12 @@ async def update_pole_sequence(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Ручное обновление последовательности опор
-    
-    Принимает список ID опор в нужном порядке
-    """
-    # Проверяем существование линии
     power_line = await db.get(PowerLine, power_line_id)
     if not power_line:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Линия не найдена"
         )
-    
-    # Проверяем, что все опоры принадлежат этой линии
     result = await db.execute(
         select(Pole).where(
             Pole.line_id == power_line_id,
@@ -156,20 +148,16 @@ async def update_pole_sequence(
         )
     )
     poles = {p.id: p for p in result.scalars().all()}
-    
     if len(poles) != len(pole_sequence):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Не все опоры принадлежат этой линии или некоторые опоры не найдены"
         )
-    
     # Обновляем sequence_number
     for sequence_number, pole_id in enumerate(pole_sequence, start=1):
         if pole_id in poles:
             poles[pole_id].sequence_number = sequence_number
-    
     await db.commit()
-    
     return {
         "message": f"Последовательность обновлена для {len(pole_sequence)} опор",
         "sequence": [{"id": pid, "sequence": idx} for idx, pid in enumerate(pole_sequence, start=1)]

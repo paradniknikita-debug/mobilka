@@ -1,4 +1,4 @@
-<div class="segment-card-dialog">
+<div class="segment-card-dialog" appResizableDialog>
   <h2 mat-dialog-title class="dialog-title">
     <mat-icon class="title-icon">linear_scale</mat-icon>
     <span class="title-text">Карточка участка линии</span>
@@ -90,5 +90,4 @@
   <mat-dialog-actions align="end">
     <button mat-button mat-dialog-close>Закрыть</button>
   </mat-dialog-actions>
-  <div class="resize-handle" (mousedown)="startResize($event)" title="Тяните для изменения размера"></div>
 </div>

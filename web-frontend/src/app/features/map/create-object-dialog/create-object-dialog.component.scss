@@ -1,13 +1,16 @@
 .create-object-dialog {
   width: 100%;
   min-width: 320px;
-  max-width: 560px;
+  max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 
-  // Редактирование подстанции — шире контент, меньше пустые края по бокам
+  // Редактирование подстанции — шире контент
   &.substation-edit {
-    max-width: min(680px, 92vw);
+    max-width: 100%;
     mat-dialog-content {
       padding-left: 16px;
       padding-right: 16px;
@@ -393,10 +396,9 @@ mat-dialog-content {
   margin: auto !important;
 }
 
-// Глобальные стили для диалога Material — центрирование и оформление
+// Глобальные стили для диалога Material — центрирование и оформление (overflow задаётся глобально для растягивания)
 ::ng-deep .mat-dialog-container {
   border-radius: 8px !important;
-  overflow: hidden !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
   padding: 0 !important;
   max-width: 96vw !important;
