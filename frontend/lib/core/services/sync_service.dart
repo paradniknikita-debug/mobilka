@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -14,8 +13,9 @@ import '../models/power_line.dart' show PoleCreate;
 import 'api_service.dart';
 import 'attachment_reader.dart';
 import 'auth_service.dart'; // prefsProvider
+import '../models/sync_state.dart';
 
-part 'sync_service.freezed.dart';
+export '../models/sync_state.dart';
 
 /// Преобразование ключей camelCase в snake_case для API бэкенда
 Map<String, dynamic> _toSnakeCaseMap(Map<String, dynamic> map) {
@@ -771,14 +771,6 @@ class SyncService extends StateNotifier<SyncState> {
   Future<void> _setLastSyncTime(DateTime time) async {
     await _prefs?.setString(AppConfig.lastSyncKey, time.toIso8601String());
   }
-}
-
-@freezed
-class SyncState with _$SyncState {
-  const factory SyncState.idle() = _Idle;
-  const factory SyncState.syncing() = _Syncing;
-  const factory SyncState.completed() = _Completed;
-  const factory SyncState.error(String message) = _Error;
 }
 
 // Provider для SyncService

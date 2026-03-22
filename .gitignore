@@ -34,9 +34,12 @@ frontend/.flutter-plugins-dependencies
 # Vendored Flutter SDK (не коммитим огромный SDK)
 flutter/
 
-# Generated files
+# Сгенерированный Dart-код (по умолчанию не коммитим)
 *.freezed.dart
 *.g.dart
+# Исключение: код под frontend/lib нужен в git — иначе при cache hit в CI не запускается build_runner и сборка web падает.
+!frontend/lib/**/*.freezed.dart
+!frontend/lib/**/*.g.dart
 
 # OS specific
 Thumbs.db

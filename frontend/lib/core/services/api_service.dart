@@ -81,7 +81,8 @@ abstract class ApiService {
   Future<List<Pole>> getPoles(@Path('id') int powerLineId);
 
   @POST('/power-lines/{id}/link-substation')
-  Future<Map<String, dynamic>> linkLineToSubstation(
+  /// dynamic — иначе retrofit_generator генерирует неверный `dynamic.fromJson` для web.
+  Future<dynamic> linkLineToSubstation(
     @Path('id') int powerLineId,
     @Body() Map<String, dynamic> body,
   );
@@ -90,7 +91,7 @@ abstract class ApiService {
   Future<void> deleteSpan(@Path('powerLineId') int powerLineId, @Path('spanId') int spanId);
 
   @POST('/power-lines/{id}/spans/auto-create')
-  Future<Map<String, dynamic>> autoCreateSpans(@Path('id') int powerLineId);
+  Future<dynamic> autoCreateSpans(@Path('id') int powerLineId);
 
   // Poles
   @GET('/poles')
@@ -154,16 +155,16 @@ abstract class ApiService {
   );
 
   @POST('/patrol-sessions')
-  Future<Map<String, dynamic>> createPatrolSession(
+  Future<dynamic> createPatrolSession(
     @Body() Map<String, dynamic> body,
   );
 
   @PATCH('/patrol-sessions/{id}')
-  Future<Map<String, dynamic>> endPatrolSession(@Path('id') int id);
+  Future<dynamic> endPatrolSession(@Path('id') int id);
 
   // CIM: карточка участка линии (AClineSegment)
   @GET('/cim/acline-segments/{id}')
-  Future<Map<String, dynamic>> getAclineSegment(@Path('id') int segmentId);
+  Future<dynamic> getAclineSegment(@Path('id') int segmentId);
 
   // Sync
   @POST('/sync/upload')
@@ -508,14 +509,19 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<List<Pole>> getPoles(int powerLineId) => _delegate.getPoles(powerLineId);
 
   @override
-  Future<Map<String, dynamic>> linkLineToSubstation(int powerLineId, Map<String, dynamic> body) =>
-      _delegate.linkLineToSubstation(powerLineId, body);
+  Future<Map<String, dynamic>> linkLineToSubstation(int powerLineId, Map<String, dynamic> body) async {
+    final raw = await _delegate.linkLineToSubstation(powerLineId, body);
+    return Map<String, dynamic>.from(raw as Map);
+  }
 
   @override
   Future<void> deleteSpan(int powerLineId, int spanId) => _delegate.deleteSpan(powerLineId, spanId);
 
   @override
-  Future<Map<String, dynamic>> autoCreateSpans(int powerLineId) => _delegate.autoCreateSpans(powerLineId);
+  Future<Map<String, dynamic>> autoCreateSpans(int powerLineId) async {
+    final raw = await _delegate.autoCreateSpans(powerLineId);
+    return Map<String, dynamic>.from(raw as Map);
+  }
 
   @override
   Future<List<Pole>> getAllPoles() => _delegate.getAllPoles();
@@ -555,7 +561,10 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   Future<dynamic> getSubstationsGeoJSON() => _delegate.getSubstationsGeoJSON();
 
   @override
-  Future<Map<String, dynamic>> getAclineSegment(int segmentId) => _delegate.getAclineSegment(segmentId);
+  Future<Map<String, dynamic>> getAclineSegment(int segmentId) async {
+    final raw = await _delegate.getAclineSegment(segmentId);
+    return Map<String, dynamic>.from(raw as Map);
+  }
 
   @override
   Future<Substation> createSubstation(SubstationCreate substationData) => _delegate.createSubstation(substationData);
@@ -571,11 +580,16 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
       _delegate.getPatrolSessions(userId, lineId, limit, offset);
 
   @override
-  Future<Map<String, dynamic>> createPatrolSession(Map<String, dynamic> body) =>
-      _delegate.createPatrolSession(body);
+  Future<Map<String, dynamic>> createPatrolSession(Map<String, dynamic> body) async {
+    final raw = await _delegate.createPatrolSession(body);
+    return Map<String, dynamic>.from(raw as Map);
+  }
 
   @override
-  Future<Map<String, dynamic>> endPatrolSession(int id) => _delegate.endPatrolSession(id);
+  Future<Map<String, dynamic>> endPatrolSession(int id) async {
+    final raw = await _delegate.endPatrolSession(id);
+    return Map<String, dynamic>.from(raw as Map);
+  }
 
   @override
   Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) => _delegate.uploadSyncBatch(batch);
