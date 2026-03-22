@@ -25,6 +25,19 @@ export class ChangeLogDetailDialogComponent {
   onlyChanges = false;
   rows: KeyValueRow[] = [];
 
+  /** Payload как словарь для шаблона (строгий strictTemplates). */
+  get pl(): Record<string, unknown> | null {
+    const p = this.entry.payload;
+    return p && typeof p === 'object' ? (p as Record<string, unknown>) : null;
+  }
+
+  /** События вложений карточки опоры для *ngFor. */
+  get attachmentEventsList(): { label_ru?: string; kind?: string }[] {
+    const raw = this.pl?.['attachment_events'];
+    if (!Array.isArray(raw)) return [];
+    return raw as { label_ru?: string; kind?: string }[];
+  }
+
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: ChangeLogDetailDialogData,
     private dialogRef: MatDialogRef<ChangeLogDetailDialogComponent>
@@ -60,6 +73,8 @@ export class ChangeLogDetailDialogComponent {
   get hasPayload(): boolean {
     const p = this.entry.payload;
     if (!p) return false;
+    if ((p as any).pole_card === true) return false;
+    if ((p as any).data_quality_warning === true) return false;
     const oldVal = (p as any).old_value ?? (p as any).before;
     const newVal = (p as any).new_value ?? (p as any).after;
     return (oldVal && typeof oldVal === 'object' && Object.keys(oldVal).length > 0) ||

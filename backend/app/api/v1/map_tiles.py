@@ -24,10 +24,15 @@ def filter_none_properties(props: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _segment_name_to_short(s: Optional[str]) -> Optional[str]:
-    """«Опора 4 - Опора 5» → «оп.4 - оп.5» для отображения в UI."""
+    """«Опора 4 - Опора 5» → «оп.4 - оп.5». Имя ПС («Опора старт») не сокращать в «оп.старт»."""
     if not s or not s.strip():
         return s
-    return re.sub(r"Опора\s+", "оп.", s, flags=re.IGNORECASE).strip()
+    t = s.strip()
+    # Только номера опор: «Опора 3» → «оп.3»
+    t = re.sub(r"Опора\s+(?=\d)", "оп.", t, flags=re.IGNORECASE)
+    # «Опора старт» и т.п. (не номер) — убрать приставку «Опора »
+    t = re.sub(r"Опора\s+([^\d\s].*)", r"\1", t, flags=re.IGNORECASE)
+    return t.strip()
 
 
 def _equipment_icon_key(equipment_type: str, name: Optional[str] = None) -> Optional[str]:
@@ -363,6 +368,14 @@ async def _get_poles_geojson_impl(db: AsyncSession):
                 properties["is_tap_pole"] = True
                 # Оранжевый = отпайка не начата, зелёный = от отпаечной уже есть опоры
                 properties["tap_branch_has_poles"] = pole.id in tap_pole_ids_with_branch
+
+            # Карточка опоры (комментарий и вложения) — для панели свойств на карте
+            cc = getattr(pole, "card_comment", None)
+            if cc:
+                properties["card_comment"] = str(cc)
+            ca = getattr(pole, "card_comment_attachment", None)
+            if ca:
+                properties["card_comment_attachment"] = str(ca)
 
             # Убеждаемся, что координаты - это числа, а не None
             feature = {
@@ -837,12 +850,15 @@ async def get_spans_geojson(
                 segment_name = None
                 segment_branch_type = None
                 segment_tap_pole_id = None
+                segment_is_tap = None
                 if span.line_section and span.line_section.acline_segment:
                     seg = span.line_section.acline_segment
                     acline_segment_id = seg.id
                     segment_name = getattr(seg, "name", None)
                     segment_branch_type = getattr(seg, "branch_type", None)
                     segment_tap_pole_id = getattr(seg, "tap_pole_id", None)
+                    if getattr(seg, "is_tap", None) is not None:
+                        segment_is_tap = bool(seg.is_tap)
                 
                 feature = {
                     "type": "Feature",
@@ -877,6 +893,10 @@ async def get_spans_geojson(
                     feature["properties"]["branch_type"] = str(segment_branch_type)
                 if segment_tap_pole_id is not None:
                     feature["properties"]["tap_pole_id"] = int(segment_tap_pole_id)
+                if span.line and getattr(span.line, "voltage_level", None) is not None:
+                    feature["properties"]["voltage_level"] = float(span.line.voltage_level)
+                if segment_is_tap is not None:
+                    feature["properties"]["segment_is_tap"] = segment_is_tap
                 features.append(feature)
     
     return {

@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 import '../config/app_config.dart';
@@ -185,6 +186,8 @@ class SyncService extends StateNotifier<SyncState> {
     // Вложения с локальным путём (p) загружаем на сервер и подставляем url; для новых опор — после создания пакета.
     final powerLineMapping = _getSyncPowerLineMapping();
     final newPolesWithPendingAttachments = <({Pole pole, List<Map<String, dynamic>> pending, List<Map<String, dynamic>> resolved})>[];
+    /// После успешного upload обновим локальный Drift, чтобы download не затёр путями/пустотой.
+    final Map<int, String?> poleCardAttachmentAfterUpload = {};
     for (final pole in poles) {
       var poleData = _toSnakeCaseMap(pole.toJson());
       final plId = pole.lineId;
@@ -233,7 +236,11 @@ class SyncService extends StateNotifier<SyncState> {
             }
           }
           if (pole.id > 0) {
-            poleData['card_comment_attachment'] = resolved.isEmpty ? null : jsonEncode(resolved);
+            final enc = resolved.isEmpty ? null : jsonEncode(resolved);
+            poleData['card_comment_attachment'] = enc;
+            if (enc != null) {
+              poleCardAttachmentAfterUpload[pole.id] = enc;
+            }
           } else {
             poleData['card_comment_attachment'] = resolved.isEmpty ? null : jsonEncode(resolved);
             if (pendingForNew != null && pendingForNew.isNotEmpty) {
@@ -278,6 +285,10 @@ class SyncService extends StateNotifier<SyncState> {
     };
     final response = await _apiService.uploadSyncBatch(batch);
     if (response['success'] == true) {
+      for (final e in poleCardAttachmentAfterUpload.entries) {
+        await _database.setPoleCardCommentAttachment(e.key, e.value);
+      }
+
       final idMapping = response['id_mapping'];
       final idMappingPole = idMapping is Map && idMapping['pole'] is Map
           ? Map<String, dynamic>.from(idMapping['pole'] as Map)
@@ -285,6 +296,22 @@ class SyncService extends StateNotifier<SyncState> {
       final idMappingPowerLine = idMapping is Map && idMapping['power_line'] is Map
           ? Map<String, dynamic>.from(idMapping['power_line'] as Map)
           : <String, dynamic>{};
+
+      // Маппинг ЛЭП из ЭТОГО ответа нужен до загрузки вложений: иначе для офлайн-созданной линии
+      // powerLineMapping из prefs пуст и updatePole с вложениями не вызывается.
+      final effectivePowerLineMapping = Map<int, int>.from(_getSyncPowerLineMapping());
+      for (final e in idMappingPowerLine.entries) {
+        final k = int.tryParse(e.key.toString());
+        final v = e.value is int
+            ? e.value as int
+            : (e.value is num
+                ? (e.value as num).toInt()
+                : int.tryParse(e.value?.toString() ?? ''));
+        if (k != null && v != null && v > 0) {
+          effectivePowerLineMapping[k] = v;
+        }
+      }
+
       if (idMappingPole.isNotEmpty) {
         _saveSyncPoleMapping(idMappingPole);
         for (final entry in idMappingPole.entries) {
@@ -300,7 +327,7 @@ class SyncService extends StateNotifier<SyncState> {
         final serverPoleId = serverPoleIdRaw is int
             ? serverPoleIdRaw
             : (serverPoleIdRaw is num ? serverPoleIdRaw.toInt() : int.tryParse(serverPoleIdRaw?.toString() ?? ''));
-        final serverLineId = powerLineMapping[item.pole.lineId];
+        final serverLineId = effectivePowerLineMapping[item.pole.lineId];
         if (serverPoleId == null || serverPoleId <= 0 || serverLineId == null || serverLineId <= 0) continue;
         final resolved = List<Map<String, dynamic>>.from(item.resolved);
         for (final m in item.pending) {
@@ -318,7 +345,11 @@ class SyncService extends StateNotifier<SyncState> {
               if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
               resolved.add(entry);
             }
-          } catch (_) {}
+          } catch (e, st) {
+            if (kDebugMode) {
+              debugPrint('sync: upload attachment for new pole failed: $e\n$st');
+            }
+          }
         }
         final pole = item.pole;
         final poleCreate = PoleCreate(
@@ -337,8 +368,35 @@ class SyncService extends StateNotifier<SyncState> {
         );
         try {
           await _apiService.updatePole(serverLineId, serverPoleId, poleCreate);
-        } catch (_) {}
+          final attJson =
+              resolved.isEmpty ? null : jsonEncode(resolved);
+          await _database.setPoleCardCommentAttachment(item.pole.id, attJson);
+        } catch (e, st) {
+          if (kDebugMode) {
+            debugPrint(
+              'sync: updatePole with attachments line=$serverLineId pole=$serverPoleId: $e\n$st',
+            );
+          }
+        }
       }
+
+      // Одна строка опоры с серверным id: копируем данные с локального отрицательного id.
+      for (final e in idMappingPole.entries) {
+        final localId = int.tryParse(e.key.toString());
+        final srvRaw = e.value;
+        final serverPoleId = srvRaw is int
+            ? srvRaw
+            : (srvRaw is num
+                ? srvRaw.toInt()
+                : int.tryParse(srvRaw?.toString() ?? ''));
+        if (localId != null &&
+            localId < 0 &&
+            serverPoleId != null &&
+            serverPoleId > 0) {
+          await _database.reassignPoleLocalToServerId(localId, serverPoleId);
+        }
+      }
+
       if (idMappingPowerLine.isNotEmpty) {
         final plMapping = idMappingPowerLine;
           _saveSyncPowerLineMapping(plMapping);
@@ -588,6 +646,8 @@ class SyncService extends StateNotifier<SyncState> {
         final createdAt = _parseDateTime(data['created_at']) ?? DateTime.now();
         final updatedAt = _parseDateTime(data['updated_at']);
 
+        final existingBeforeMerge = await _database.getPole(id);
+
         // Координаты, пришедшие с сервера (или из longitude/latitude).
         double? xPos =
             data['x_position'] != null ? _toDouble(data['x_position']) : null;
@@ -605,16 +665,30 @@ class SyncService extends StateNotifier<SyncState> {
 
         // Если сервер не прислал валидные координаты, пробуем сохранить локальные.
         if (!serverSentCoords) {
-          final existing = await _database.getPole(id);
-          if (existing != null &&
-              (existing.xPosition != 0 || existing.yPosition != 0)) {
-            xPos = existing.xPosition;
-            yPos = existing.yPosition;
+          if (existingBeforeMerge != null &&
+              (existingBeforeMerge.xPosition != 0 ||
+                  existingBeforeMerge.yPosition != 0)) {
+            xPos = existingBeforeMerge.xPosition;
+            yPos = existingBeforeMerge.yPosition;
           }
         }
 
         final xFinal = xPos ?? 0.0;
         final yFinal = yPos ?? 0.0;
+
+        // Сервер в sync/download может не прислать card_* — insertOrReplace иначе затирает локальные вложения.
+        final serverComment = data['card_comment'] as String?;
+        final serverAttach = data['card_comment_attachment'] as String?;
+        String? mergedComment = serverComment;
+        if (mergedComment == null || mergedComment.isEmpty) {
+          final ex = existingBeforeMerge?.cardComment;
+          if (ex != null && ex.isNotEmpty) mergedComment = ex;
+        }
+        String? mergedAttach = serverAttach;
+        if (mergedAttach == null || mergedAttach.isEmpty) {
+          final ex = existingBeforeMerge?.cardCommentAttachment;
+          if (ex != null && ex.isNotEmpty) mergedAttach = ex;
+        }
 
         await _database.insertPoleOrReplace(
           PolesCompanion.insert(
@@ -634,6 +708,8 @@ class SyncService extends StateNotifier<SyncState> {
                 data['year_installed'] != null ? _toInt(data['year_installed']) : null),
             condition: drift.Value(data['condition'] as String? ?? 'good'),
             notes: drift.Value(data['notes'] as String?),
+            cardComment: drift.Value(mergedComment),
+            cardCommentAttachment: drift.Value(mergedAttach),
             createdBy: _toInt(data['created_by']),
             createdAt: createdAt,
             updatedAt: drift.Value(updatedAt),

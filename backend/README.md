@@ -46,6 +46,22 @@ SECRET_KEY=your-secret-key-here-change-in-production
 REDIS_URL=redis://localhost:6379
 ```
 
+### Вложения опор (MinIO / S3)
+
+Фото, аудио и видео карточки опоры сохраняются через `POST /api/v1/attachments/...`.  
+Если заданы **`S3_ENDPOINT_URL`**, **`S3_ACCESS_KEY`**, **`S3_SECRET_KEY`**, **`S3_BUCKET_MEDIA`**, backend использует MinIO/S3. Иначе файлы пишутся в каталог `uploads/pole_attachments/` на диске backend.
+
+**Режим development:** если `S3_ENDPOINT_URL` в `.env` не задан, подставляется **`http://127.0.0.1:9000`** и учётные данные **`minioadmin` / `minioadmin`** (как у MinIO по умолчанию), чтобы при запуске API на хосте и MinIO из `docker compose up minio` вложения сразу шли в S3. Отключить: **`DISABLE_LOCAL_MINIO=1`**.
+
+При старте API в консоли печатается строка вида `OK: Вложения опор — MinIO/S3 (...)` или предупреждение про локальный диск.
+
+При локальном **docker-compose** сервис **backend** получает **`S3_ENDPOINT_URL=http://minio:9000`** (из контейнера). MinIO поднимается на **9000** (API) и **9001** (консоль).
+
+Если в логах контейнера **`No module named 'boto3'`**, образ собран без зависимостей (старый кэш). Пересоберите backend:  
+`docker compose build --no-cache backend` затем `docker compose up -d backend`.
+
+**Сборка образа:** в `Dockerfile` сначала копируется только `requirements.txt` и выполняется `pip install` — при изменении кода в `app/` слой с зависимостями берётся из кэша Docker и **не переустанавливает пакеты**. Дополнительно включён кэш pip (BuildKit). Имеет смысл включить: `DOCKER_BUILDKIT=1` (в Docker Desktop обычно уже включён). Файл **`.dockerignore`** уменьшает контекст сборки и исключает лишнее из слоя `COPY . .`.
+
 ### 4. Инициализация базы данных
 
 ```bash

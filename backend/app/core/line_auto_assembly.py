@@ -73,6 +73,22 @@ async def get_or_create_connectivity_node_for_pole(
     return node
 
 
+async def _get_substation_connectivity_node_for_line(
+    db: AsyncSession, substation_id: int, power_line_id: int
+) -> Optional[ConnectivityNode]:
+    """Один CN подстанции на пару линия–ПС; при дубликатах в БД — первый по id (без MultipleResultsFound)."""
+    result = await db.execute(
+        select(ConnectivityNode)
+        .where(
+            ConnectivityNode.substation_id == substation_id,
+            ConnectivityNode.line_id == power_line_id,
+        )
+        .order_by(ConnectivityNode.id.asc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def _connectivity_node_display_name(
     db: AsyncSession, connectivity_node_id: int
 ) -> str:
@@ -88,17 +104,26 @@ async def _connectivity_node_display_name(
     node = result.scalar_one_or_none()
     if not node:
         return f"Узел {connectivity_node_id}"
-    if getattr(node, "substation_id", None) and node.substation:
-        return (node.substation.name or node.substation.dispatcher_name or "ПС")[:50]
+    # Узел подстанции: имя ПС без приставки «Опора» (даже если relationship не подгрузился)
+    if getattr(node, "substation_id", None):
+        sub = node.substation
+        if sub is None:
+            sub_result = await db.execute(
+                select(Substation).where(Substation.id == node.substation_id)
+            )
+            sub = sub_result.scalar_one_or_none()
+        if sub:
+            return (sub.name or sub.dispatcher_name or "ПС")[:50]
     if node.pole:
         raw = (node.pole.pole_number or "").strip() or f"{node.pole.id}"
-        # Единообразие с API: «3», «3/2», «3/2 а» -> «Опора 3», «Опора 3/2», «Опора 3/2 а»
+        # Единообразие с API: «3», «3/2», «3/2 а» -> «Опора 3», …
         if re.match(r"^\d+$", raw):
             return f"Опора {raw}"
         if re.match(r"^\d+/\s*\d+", raw) or re.match(r"^\d+\s*/\s*\d+", raw):
             return f"Опора {raw}"
+        # Текстовые подписи («старт», «вход») — без «Опора»: иначе в UI получается «оп. старт» у подписи ПС/границы
         if raw and not raw.lower().startswith(("опора", "оп.")):
-            return f"Опора {raw}"
+            return raw
         return raw or f"Опора {node.pole.id}"
     return f"Узел {connectivity_node_id}"
 
@@ -690,10 +715,18 @@ async def auto_create_span(
         tap_branch_index=getattr(new_pole, "tap_branch_index", None),
     )
     
-    # Конец участка (to_connectivity_node) только на реальных CN: отпаечная опора, ПС или оборудование.
-    # На обочных опорах CN виртуальный — участок не закрываем, только добавляем пролёт.
+    # Конец участка (to_connectivity_node): на магистрали и на отпайках всегда фиксируем на новой опоре,
+    # иначе у отпаечных опор с виртуальным CN конец сегмента «застревает» на первой опоре ветки (3/1),
+    # и пролёт к ТП строится от неверной опоры. На обочных опорах магистрали без tap_pole_id раньше
+    # тоже не продлевали to — из-за этого терялся последний узел перед подстанцией.
     is_real_cn = not getattr(new_connectivity_node, "is_virtual", False)
-    if is_real_cn:
+    on_main_span = getattr(new_pole, "tap_pole_id", None) is None
+    extend_segment_end = (
+        is_real_cn
+        or getattr(acline_segment, "is_tap", False)
+        or on_main_span
+    )
+    if extend_segment_end:
         acline_segment.to_connectivity_node_id = new_connectivity_node.id
         from_name = await _connectivity_node_display_name(db, acline_segment.from_connectivity_node_id)
         to_name = await _connectivity_node_display_name(db, new_connectivity_node.id)
@@ -810,13 +843,7 @@ async def link_line_to_substation(
         sub_lon = first_cn.x_position
 
     # Узел подстанции для этой линии (один на пару линия–подстанция)
-    result = await db.execute(
-        select(ConnectivityNode).where(
-            ConnectivityNode.substation_id == substation_id,
-            ConnectivityNode.line_id == power_line_id,
-        )
-    )
-    substation_cn = result.scalar_one_or_none()
+    substation_cn = await _get_substation_connectivity_node_for_line(db, substation_id, power_line_id)
     if not substation_cn:
         substation_cn = ConnectivityNode(
             mrid=generate_mrid(),
@@ -979,13 +1006,7 @@ async def add_substation_span_from_last_pole(
         sub_lat = last_cn.y_position
         sub_lon = last_cn.x_position
 
-    result = await db.execute(
-        select(ConnectivityNode).where(
-            ConnectivityNode.substation_id == substation_id,
-            ConnectivityNode.line_id == power_line_id,
-        )
-    )
-    substation_cn = result.scalar_one_or_none()
+    substation_cn = await _get_substation_connectivity_node_for_line(db, substation_id, power_line_id)
     if not substation_cn:
         substation_cn = ConnectivityNode(
             mrid=generate_mrid(),
@@ -1070,6 +1091,55 @@ async def add_substation_span_from_last_pole(
     return segment
 
 
+async def refresh_acline_and_line_section_names(db: AsyncSession, power_line_id: int) -> None:
+    """
+    Пересчитать наименования ACLineSegment и LineSection по фактическим ConnectivityNode
+    (ПС, опоры). Нужно после автосборки с подстанциями на концах: иначе часть записей
+    остаётся с шаблоном «Сегмент N линии …» / «Секция N (провод …)».
+    """
+    result = await db.execute(
+        select(AClineSegment)
+        .where(AClineSegment.line_id == power_line_id)
+        .options(
+            selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
+        )
+        .order_by(AClineSegment.sequence_number.asc())
+    )
+    segments = result.scalars().all()
+    for seg in segments:
+        if not seg.from_connectivity_node_id:
+            continue
+        fn = await _connectivity_node_display_name(db, seg.from_connectivity_node_id)
+        if seg.to_connectivity_node_id:
+            tn = await _connectivity_node_display_name(db, seg.to_connectivity_node_id)
+            seg.name = f"{fn} - {tn}"
+        else:
+            seg.name = f"{fn} - ..."
+        line_sections = sorted(
+            seg.line_sections or [],
+            key=lambda x: (x.sequence_number or 0),
+        )
+        for ls in line_sections:
+            ct = (ls.conductor_type or "—").strip() or "—"
+            spans = sorted(ls.spans or [], key=lambda s: (s.sequence_number or 0))
+            if spans:
+                fna = await _connectivity_node_display_name(
+                    db, spans[0].from_connectivity_node_id
+                )
+                tna = await _connectivity_node_display_name(
+                    db, spans[-1].to_connectivity_node_id
+                )
+                ls.name = f"{fna} - {tna} ({ct})"
+            elif seg.to_connectivity_node_id:
+                tn_ls = await _connectivity_node_display_name(
+                    db, seg.to_connectivity_node_id
+                )
+                ls.name = f"{fn} - {tn_ls} ({ct})"
+            else:
+                ls.name = f"{fn} - ... ({ct})"
+    await db.flush()
+
+
 async def extend_tap_segment_to_substation(
     db: AsyncSession,
     power_line_id: int,
@@ -1079,7 +1149,7 @@ async def extend_tap_segment_to_substation(
     current_user_id: int,
 ) -> Optional[AClineSegment]:
     """
-    Расширить уже существующий отпаечный участок (AClineSegment.is_tap=True) до подстанции.
+    Расширить уже существующий участок (отпайка или магистраль после отпаечной опоры) до подстанции.
 
     В отличие от add_substation_span_from_last_pole НЕ создаёт новый AClineSegment, а:
     - находит/создаёт ConnectivityNode подстанции для этой линии;
@@ -1113,14 +1183,7 @@ async def extend_tap_segment_to_substation(
         sub_lat = last_cn.y_position
         sub_lon = last_cn.x_position
 
-    # CN подстанции для этой линии
-    result = await db.execute(
-        select(ConnectivityNode).where(
-            ConnectivityNode.substation_id == substation_id,
-            ConnectivityNode.line_id == power_line_id,
-        )
-    )
-    substation_cn = result.scalar_one_or_none()
+    substation_cn = await _get_substation_connectivity_node_for_line(db, substation_id, power_line_id)
     if not substation_cn:
         substation_cn = ConnectivityNode(
             mrid=generate_mrid(),
@@ -1208,6 +1271,7 @@ async def extend_tap_segment_to_substation(
         from_name_segment = from_name_span
     segment.name = f"{from_name_segment} - {to_name}"
     segment.to_connectivity_node_id = substation_cn.id
+    segment.to_substation_id = substation_id
 
     await db.flush()
     return segment

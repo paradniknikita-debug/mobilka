@@ -19,7 +19,9 @@ import '../../../../core/utils/pole_number_mask.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'pole_number_mask_field.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/pole_card_attachment_codec.dart';
 import 'add_equipment_dialog.dart';
+import 'pole_attachments_table_sheet.dart';
 
 /// Категории оборудования на опоре (по макету карточки опоры).
 class _EquipmentCategory {
@@ -114,7 +116,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   String? _branchSelection;
 
   final _cardCommentController = TextEditingController();
-  final List<Map<String, String>> _cardCommentAttachments = [];
+  final List<Map<String, dynamic>> _cardCommentAttachments = [];
   final AudioRecorder _cardCommentRecorder = AudioRecorder();
   bool _cardCommentRecording = false;
 
@@ -189,12 +191,47 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     prefs.setString(AppConfig.autofillEquipmentTemplateKey, jsonEncode(toSave));
   }
 
+  String? _encodeCardAttachmentsForDb() {
+    return _encodeAttachmentListForDb(_cardCommentAttachments);
+  }
+
+  String? _encodeAttachmentListForDb(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) return null;
+    final uid = ref.read(prefsProvider).getInt(AppConfig.userIdKey) ?? 0;
+    final auth = ref.read(authServiceProvider);
+    String? uname;
+    if (auth is AuthStateAuthenticated) {
+      uname = auth.user.fullName.isNotEmpty ? auth.user.fullName : auth.user.username;
+    }
+    final enc = PoleCardAttachmentCodec.encodeForStorage(
+      List<Map<String, dynamic>>.from(
+        items.map((e) => Map<String, dynamic>.from(e)),
+      ),
+      userId: uid,
+      userName: uname,
+      lastKind: 'edit',
+    );
+    return enc.isEmpty ? null : enc;
+  }
+
   Future<void> _pickCommentImage() async {
     try {
       final picker = ImagePicker();
       final file = await picker.pickImage(source: ImageSource.gallery);
       if (file == null || !mounted) return;
-      setState(() => _cardCommentAttachments.add({'t': 'photo', 'p': file.path}));
+      final uid = ref.read(prefsProvider).getInt(AppConfig.userIdKey) ?? 0;
+      final auth = ref.read(authServiceProvider);
+      String? uname;
+      if (auth is AuthStateAuthenticated) {
+        uname = auth.user.fullName.isNotEmpty ? auth.user.fullName : auth.user.username;
+      }
+      setState(() => _cardCommentAttachments.add(
+            PoleCardAttachmentCodec.newPhotoAttachment(
+              file.path,
+              userId: uid,
+              userName: uname,
+            ),
+          ));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -240,8 +277,20 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       try {
         final path = await _cardCommentRecorder.stop();
         if (path != null && path.isNotEmpty && mounted) {
+          final uid = ref.read(prefsProvider).getInt(AppConfig.userIdKey) ?? 0;
+          final auth = ref.read(authServiceProvider);
+          String? uname;
+          if (auth is AuthStateAuthenticated) {
+            uname = auth.user.fullName.isNotEmpty ? auth.user.fullName : auth.user.username;
+          }
           setState(() {
-            _cardCommentAttachments.add({'t': 'voice', 'p': path});
+            _cardCommentAttachments.add(
+              PoleCardAttachmentCodec.newVoiceAttachment(
+                path,
+                userId: uid,
+                userName: uname,
+              ),
+            );
             _cardCommentRecording = false;
           });
         }
@@ -381,6 +430,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _branchSelection = null;
       }
       _loadedEquipment = equipmentList;
+      _cardCommentController.text = pole.cardComment ?? '';
+      _cardCommentAttachments
+        ..clear()
+        ..addAll(PoleCardAttachmentCodec.parseItemsJson(pole.cardCommentAttachment));
       for (final eq in equipmentList) {
         final typeLower = eq.equipmentType.trim().toLowerCase();
         for (var i = 0; i < _equipmentCategories.length; i++) {
@@ -524,6 +577,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           yearInstalled: driftPole.yearInstalled,
           condition: driftPole.condition ?? 'good',
           notes: driftPole.notes,
+          cardComment: driftPole.cardComment,
+          cardCommentAttachment: driftPole.cardCommentAttachment,
           createdBy: driftPole.createdBy,
           createdAt: driftPole.createdAt,
           updatedAt: driftPole.updatedAt,
@@ -553,6 +608,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     final existing = await db.getPole(poleId);
     if (existing == null) return;
 
+    final cardAttJson = _encodeCardAttachmentsForDb();
     await db.updatePole(PolesCompanion(
       id: drift.Value(poleId),
       lineId: drift.Value(widget.lineId),
@@ -569,9 +625,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       cardComment: _cardCommentController.text.trim().isEmpty
           ? const drift.Value.absent()
           : drift.Value(_cardCommentController.text.trim()),
-      cardCommentAttachment: _cardCommentAttachments.isEmpty
+      cardCommentAttachment: cardAttJson == null
           ? const drift.Value.absent()
-          : drift.Value(jsonEncode(_cardCommentAttachments)),
+          : drift.Value(cardAttJson),
       createdBy: drift.Value(existing.createdBy),
       createdAt: drift.Value(existing.createdAt),
       updatedAt: drift.Value(now),
@@ -690,6 +746,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       await prefs.setInt(AppConfig.lastLocalPoleIdKey, localId);
       final userId = prefs.getInt(AppConfig.userIdKey) ?? 0;
       final now = DateTime.now();
+      final newPoleCardAtt = _encodeCardAttachmentsForDb();
       await db.insertPole(PolesCompanion.insert(
         id: drift.Value(localId),
         lineId: widget.lineId,
@@ -706,9 +763,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         cardComment: _cardCommentController.text.trim().isEmpty
             ? const drift.Value.absent()
             : drift.Value(_cardCommentController.text.trim()),
-        cardCommentAttachment: _cardCommentAttachments.isEmpty
+        cardCommentAttachment: newPoleCardAtt == null
             ? const drift.Value.absent()
-            : drift.Value(jsonEncode(_cardCommentAttachments)),
+            : drift.Value(newPoleCardAtt),
         createdBy: userId,
         createdAt: now,
         updatedAt: drift.Value(now),
@@ -925,6 +982,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       if (widget.isEditMode && widget.poleId != null) {
         // Редактирование: загружаем вложения, затем обновляем опору
         final resolvedAttachments = await _resolveCardCommentAttachments(apiService, widget.poleId);
+        final attJsonResolved = _encodeAttachmentListForDb(resolvedAttachments);
         final poleDataWithAttachments = PoleCreate(
           poleNumber: poleData.poleNumber,
           xPosition: poleData.xPosition,
@@ -941,7 +999,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           conductorMaterial: poleData.conductorMaterial,
           conductorSection: poleData.conductorSection,
           cardComment: poleData.cardComment,
-          cardCommentAttachment: resolvedAttachments.isEmpty ? null : jsonEncode(resolvedAttachments),
+          cardCommentAttachment: attJsonResolved,
           tapPoleId: poleData.tapPoleId,
           branchType: poleData.branchType,
           tapBranchIndex: poleData.tapBranchIndex,
@@ -967,9 +1025,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             cardComment: cardCommentText.isEmpty
                 ? const drift.Value.absent()
                 : drift.Value(cardCommentText),
-            cardCommentAttachment: resolvedAttachments.isEmpty
+            cardCommentAttachment: attJsonResolved == null
                 ? const drift.Value.absent()
-                : drift.Value(jsonEncode(resolvedAttachments)),
+                : drift.Value(attJsonResolved),
             createdBy: drift.Value(updatedPole.createdBy),
             createdAt: drift.Value(updatedPole.createdAt),
             updatedAt: drift.Value(updatedPole.updatedAt),
@@ -1051,10 +1109,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       );
       // Загружаем вложения на сервер и обновляем опору
       List<Map<String, dynamic>> resolvedAttachmentsCreate = [];
+      String? attJsonCreate;
       if (_cardCommentAttachments.isNotEmpty) {
         resolvedAttachmentsCreate = await _resolveCardCommentAttachments(apiService, createdPole.id);
         if (resolvedAttachmentsCreate.isNotEmpty) {
           try {
+            attJsonCreate = _encodeAttachmentListForDb(resolvedAttachmentsCreate);
             final poleDataWithAttachments = PoleCreate(
               poleNumber: createdPole.poleNumber,
               xPosition: createdPole.xPosition,
@@ -1071,7 +1131,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               conductorMaterial: poleData.conductorMaterial,
               conductorSection: poleData.conductorSection,
               cardComment: cardCommentText.isEmpty ? null : cardCommentText,
-              cardCommentAttachment: jsonEncode(resolvedAttachmentsCreate),
+              cardCommentAttachment: attJsonCreate,
               tapPoleId: poleData.tapPoleId,
               branchType: poleData.branchType,
               tapBranchIndex: poleData.tapBranchIndex,
@@ -1105,9 +1165,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           cardComment: cardCommentText.isEmpty
               ? const drift.Value.absent()
               : drift.Value(cardCommentText),
-          cardCommentAttachment: resolvedAttachmentsCreate.isEmpty
+          cardCommentAttachment: attJsonCreate == null
               ? const drift.Value.absent()
-              : drift.Value(jsonEncode(resolvedAttachmentsCreate)),
+              : drift.Value(attJsonCreate),
           createdBy: createdPole.createdBy,
           createdAt: createdPole.createdAt,
           updatedAt: drift.Value(createdPole.updatedAt),
@@ -1711,13 +1771,27 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                           ),
                           if (!kIsWeb) ...[
                             const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: _recordCommentVoice,
+                            icon: Icon(_cardCommentRecording ? Icons.stop : Icons.mic, size: 20),
+                            label: Text(_cardCommentRecording ? 'Стоп' : 'Голос'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _cardCommentRecording ? Colors.red : PatrolColors.textPrimary,
+                            ),
+                          ),
+                          ],
+                          if (_cardCommentAttachments.isNotEmpty) ...[
+                            const SizedBox(width: 8),
                             OutlinedButton.icon(
-                              onPressed: _recordCommentVoice,
-                              icon: Icon(_cardCommentRecording ? Icons.stop : Icons.mic, size: 20),
-                              label: Text(_cardCommentRecording ? 'Стоп' : 'Голос'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _cardCommentRecording ? Colors.red : PatrolColors.textPrimary,
-                              ),
+                              onPressed: () {
+                                final raw = _encodeCardAttachmentsForDb();
+                                if (raw != null) {
+                                  showPoleAttachmentsTable(context, raw);
+                                }
+                              },
+                              icon: const Icon(Icons.table_rows, size: 20),
+                              label: const Text('Таблица'),
+                              style: OutlinedButton.styleFrom(foregroundColor: PatrolColors.textPrimary),
                             ),
                           ],
                         ],

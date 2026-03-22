@@ -313,6 +313,74 @@ class AppDatabase extends _$AppDatabase {
       (update(poles)..where((tbl) => tbl.id.equals(poleId)))
           .write(PolesCompanion(needsSync: Value(needsSync)));
 
+  /// Обновить JSON вложений карточки после загрузки файлов на сервер (до смены id опоры).
+  Future<int> setPoleCardCommentAttachment(int poleId, String? json) =>
+      (update(poles)..where((tbl) => tbl.id.equals(poleId)))
+          .write(PolesCompanion(cardCommentAttachment: Value(json)));
+
+  /// После синка: локальная опора (id &lt; 0) → серверный id. Иначе остаются две строки и UI теряет вложения.
+  Future<void> reassignPoleLocalToServerId(int localId, int serverId) async {
+    if (localId >= 0 || serverId <= 0 || localId == serverId) return;
+    final p = await getPole(localId);
+    if (p == null) return;
+
+    final existingServer = await getPole(serverId);
+    if (existingServer != null) {
+      final locA = p.cardCommentAttachment;
+      final srvA = existingServer.cardCommentAttachment;
+      final locC = p.cardComment;
+      final srvC = existingServer.cardComment;
+      final patch = PolesCompanion(
+        cardComment: (srvC == null || srvC.isEmpty) &&
+                locC != null &&
+                locC.isNotEmpty
+            ? Value(locC)
+            : const Value.absent(),
+        cardCommentAttachment: (srvA == null || srvA.isEmpty) &&
+                locA != null &&
+                locA.isNotEmpty
+            ? Value(locA)
+            : const Value.absent(),
+      );
+      if (patch.cardComment.present || patch.cardCommentAttachment.present) {
+        await (update(poles)..where((tbl) => tbl.id.equals(serverId))).write(
+          patch,
+        );
+      }
+      await (update(equipment)..where((tbl) => tbl.poleId.equals(localId)))
+          .write(EquipmentCompanion(poleId: Value(serverId)));
+      await deletePole(localId);
+      return;
+    }
+
+    await insertPoleOrReplace(
+      PolesCompanion.insert(
+        id: Value(serverId),
+        lineId: p.lineId,
+        poleNumber: p.poleNumber,
+        xPosition: Value(p.xPosition),
+        yPosition: Value(p.yPosition),
+        poleType: Value(p.poleType),
+        height: Value(p.height),
+        foundationType: Value(p.foundationType),
+        material: Value(p.material),
+        yearInstalled: Value(p.yearInstalled),
+        condition: Value(p.condition),
+        notes: Value(p.notes),
+        cardComment: Value(p.cardComment),
+        cardCommentAttachment: Value(p.cardCommentAttachment),
+        createdBy: p.createdBy,
+        createdAt: p.createdAt,
+        updatedAt: Value(p.updatedAt),
+        isLocal: const Value(false),
+        needsSync: const Value(false),
+      ),
+    );
+    await (update(equipment)..where((tbl) => tbl.poleId.equals(localId)))
+        .write(EquipmentCompanion(poleId: Value(serverId)));
+    await deletePole(localId);
+  }
+
   // Методы для работы с оборудованием
   Future<List<EquipmentData>> getAllEquipment() => select(equipment).get();
   

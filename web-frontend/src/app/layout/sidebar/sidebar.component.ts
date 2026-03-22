@@ -400,7 +400,27 @@ export class SidebarComponent implements OnInit, OnDestroy {
     return str;
   }
 
-  /** Подпись участка в формате «оп.1-оп.3»: по пролётам (первая опора первого пролёта — последняя опора последнего) или по опорам */
+  /**
+   * Конец участка в дереве: номера опор — с префиксом «оп.»; подстанции и текстовые имена — без «оп.»
+   * (иначе «старт» → «оп.старт»).
+   */
+  private segmentEndpointLabelForTree(raw: string | null | undefined): string {
+    if (raw == null || raw === '') return '';
+    const t = String(raw).trim();
+    if (/^\d+$/.test(t)) {
+      return `оп.${t}`;
+    }
+    if (/^\d+\s*\/\s*\d+/i.test(t) || /^\d+\/\d+/i.test(t)) {
+      return `оп.${t.replace(/\s+/g, '')}`;
+    }
+    return t;
+  }
+
+  /**
+   * Подпись участка: «оп.1-оп.3» или «оп.3 - тптыв» (конец на ПС: to_pole_id у пролёта null).
+   * Раньше при ПС в конце отпайки last не находился, срабатывал fallback по списку опор сегмента
+   * (часто только отпаечная опора) — получалось «оп.3-оп.3».
+   */
   getSegmentDisplayName(item: PowerLineTreeItem, segment: { segmentId: number | null; segmentName: string | null; poles: GeoJSONFeature[]; spans?: GeoJSONFeature[] }): string {
     const spans = segment.spans ?? [];
     if (spans.length >= 1) {
@@ -412,16 +432,73 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const allPoles = item.allPoles ?? [];
       const fromPole = fromPoleId != null ? allPoles.find((p: GeoJSONFeature) => p.properties['id'] === fromPoleId) : undefined;
       const toPole = toPoleId != null ? allPoles.find((p: GeoJSONFeature) => p.properties['id'] === toPoleId) : undefined;
-      const first = fromPole ? this.shortPoleLabelForSegment(fromPole.properties['pole_number'] ?? fromPole.properties['sequence_number']) : null;
-      const last = toPole ? this.shortPoleLabelForSegment(toPole.properties['pole_number'] ?? toPole.properties['sequence_number']) : null;
-      if (first != null && last != null) return `оп.${first}-оп.${last}`;
+      let first = fromPole
+        ? this.shortPoleLabelForSegment(fromPole.properties['pole_number'] ?? fromPole.properties['sequence_number'])
+        : this.startLabelFromSpanNumber(String(firstSpan.properties['span_number'] ?? ''));
+      let last: string | null = toPole
+        ? this.shortPoleLabelForSegment(toPole.properties['pole_number'] ?? toPole.properties['sequence_number'])
+        : null;
+      if (last == null && toPoleId == null) {
+        last = this.endLabelFromSpanNumber(String(lastSpan.properties['span_number'] ?? ''));
+      }
+      if (first != null && last != null) {
+        const a = this.segmentEndpointLabelForTree(first);
+        const b = this.segmentEndpointLabelForTree(last);
+        if (toPoleId == null) {
+          return `${a} - ${b}`;
+        }
+        return `${a}-${b}`;
+      }
+    }
+    const rawName = (segment.segmentName || '').trim();
+    if (rawName) {
+      return this.normalizeSegmentNameFromApi(rawName);
     }
     const poles = segment.poles || [];
-    if (poles.length === 0) return segment.segmentName || `Участок ${segment.segmentId ?? '?'}`;
+    if (poles.length === 0) return `Участок ${segment.segmentId ?? '?'}`;
     const sorted = [...poles].sort((a, b) => (a.properties['sequence_number'] ?? 0) - (b.properties['sequence_number'] ?? 0));
     const first = this.shortPoleLabelForSegment(sorted[0].properties['pole_number'] ?? sorted[0].properties['sequence_number']);
     const last = this.shortPoleLabelForSegment(sorted[sorted.length - 1].properties['pole_number'] ?? sorted[sorted.length - 1].properties['sequence_number']);
-    return `оп.${first}-оп.${last}`;
+    return `${this.segmentEndpointLabelForTree(first)}-${this.segmentEndpointLabelForTree(last)}`;
+  }
+
+  /**
+   * Имя участка с API / GeoJSON: «Опора 3» → «оп.3»; «Опора старт» → «старт» (не «оп.старт»).
+   */
+  private normalizeSegmentNameFromApi(name: string): string {
+    let t = name
+      .replace(/\bОпора\s+(?=\d)/gi, 'оп.')
+      .replace(/\bОпора\s+([^\d\s][^\n\r-]*)/gi, '$1')
+      .replace(/\s*-\s*/g, ' - ')
+      .trim();
+    t = t.replace(/\bоп\.\s*(?=[^\d\n\r])/gi, ''); // на случай «оп. старт» от старого бэкенда
+    return t.replace(/\s+/g, ' ').trim();
+  }
+
+  /** «Пролёт оп.3-оп.3/1» → номер начала для подписи: «3» (даёт «оп.3») */
+  private startLabelFromSpanNumber(spanNumber: string): string | null {
+    const s = spanNumber.replace(/^\s*пролёт\s+/i, '').trim();
+    const dash = s.indexOf('-');
+    if (dash < 0) {
+      return null;
+    }
+    let head = s.slice(0, dash).trim();
+    if (head.toLowerCase().startsWith('оп.')) {
+      head = head.slice(3).trim();
+    } else if (head.toLowerCase().startsWith('опора')) {
+      head = head.slice(5).trim();
+    }
+    return head || null;
+  }
+
+  /** «Пролёт оп.3/3-тптыв» или «оп.3/3-тптыв» → «тптыв» (конец на подстанции) */
+  private endLabelFromSpanNumber(spanNumber: string): string | null {
+    const s = spanNumber.replace(/^\s*пролёт\s+/i, '').trim();
+    const dash = s.lastIndexOf('-');
+    if (dash < 0) {
+      return null;
+    }
+    return s.slice(dash + 1).trim() || null;
   }
 
   /** Подпись пролёта в формате «Пролёт 1-2» (без суффикса «(отпайка)») */

@@ -8,6 +8,12 @@ import { Pole } from '../../../core/models/pole.model';
 import { SpanCreate } from '../../../core/models/cim.model';
 import { LineSection } from '../../../core/models/cim.model';
 
+/** Допустимое отклонение введённой длины от расчётной по GPS (20%). */
+const SPAN_LENGTH_GPS_WARN_RATIO = 0.2;
+
+const SPAN_LENGTH_WARN_MESSAGE =
+  'Введенная длина значительно отличается от расчетной по координатам опор. Проверьте правильность ввода или точность привязки опор.';
+
 @Component({
   selector: 'app-create-span-dialog',
   templateUrl: './create-span-dialog.component.html',
@@ -302,6 +308,40 @@ export class CreateSpanDialogComponent implements OnInit {
     document.body.removeChild(ta);
   }
 
+  /** Есть ли у опоры не нулевые координаты для расчёта по GPS. */
+  private poleHasGps(pole: Pole | undefined): boolean {
+    if (!pole) return false;
+    const x = Number(pole.x_position);
+    const y = Number(pole.y_position);
+    if (!isFinite(x) || !isFinite(y)) return false;
+    return Math.abs(x) > 1e-9 && Math.abs(y) > 1e-9;
+  }
+
+  /** Расчётная длина пролёта по координатам опор (м) или null, если нельзя посчитать. */
+  getGpsSpanLengthMeters(): number | null {
+    const fromPoleId = this.spanForm.get('from_pole_id')?.value;
+    const toPoleId = this.spanForm.get('to_pole_id')?.value;
+    if (!fromPoleId || !toPoleId) return null;
+    const fromPole = this.poles.find(p => p.id === fromPoleId);
+    const toPole = this.poles.find(p => p.id === toPoleId);
+    if (!this.poleHasGps(fromPole) || !this.poleHasGps(toPole)) return null;
+    return this.calculateHaversineDistance(
+      fromPole!.y_position,
+      fromPole!.x_position,
+      toPole!.y_position,
+      toPole!.x_position
+    );
+  }
+
+  /**
+   * Введённая длина существенно отличается от расчётной по GPS (>20%).
+   */
+  private isSpanLengthGpsMismatch(enteredM: number, gpsM: number): boolean {
+    if (!isFinite(enteredM) || enteredM <= 0 || !isFinite(gpsM) || gpsM <= 0) return false;
+    const rel = Math.abs(enteredM - gpsM) / Math.max(gpsM, 1e-6);
+    return rel > SPAN_LENGTH_GPS_WARN_RATIO;
+  }
+
   calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000; // Радиус Земли в метрах
     const phi1 = lat1 * Math.PI / 180;
@@ -361,12 +401,26 @@ export class CreateSpanDialogComponent implements OnInit {
 
     // Используем старый API для создания пролёта (обратная совместимость)
     // API автоматически создаст необходимые CIM структуры (LineSection, AClineSegment)
+    const enteredLen = normalizeNumber(formValue.length);
+    const gpsLen = this.getGpsSpanLengthMeters();
+    const lengthGpsMismatch =
+      enteredLen != null &&
+      gpsLen != null &&
+      this.isSpanLengthGpsMismatch(enteredLen, gpsLen);
+
+    if (lengthGpsMismatch) {
+      this.snackBar.open(SPAN_LENGTH_WARN_MESSAGE, 'Понятно', {
+        duration: 12000,
+        panelClass: ['span-length-warn-snack']
+      });
+    }
+
     const spanData: any = {
       line_id: this.lineId,
       from_pole_id: fromPoleId,
       to_pole_id: toPoleId,
       span_number: spanNumber || (fromPole && toPole ? `Пролёт ${this.shortPoleLabel(fromPole.pole_number)}-${this.shortPoleLabel(toPole.pole_number)}` : ''),
-      length: normalizeNumber(formValue.length),
+      length: enteredLen,
       conductor_type: formValue.conductor_type?.trim() || undefined,
       conductor_material: formValue.conductor_material?.trim() || undefined,
       conductor_section: formValue.conductor_section?.trim() || undefined,
@@ -384,6 +438,28 @@ export class CreateSpanDialogComponent implements OnInit {
       next: (span) => {
         const message = this.isEditMode ? 'Пролёт успешно обновлён' : 'Пролёт успешно создан';
         this.snackBar.open(message, 'Закрыть', { duration: 3000 });
+
+        if (lengthGpsMismatch && enteredLen != null && gpsLen != null) {
+          const diffPct = Math.round((Math.abs(enteredLen - gpsLen) / Math.max(gpsLen, 1e-6)) * 1000) / 10;
+          const sid = (span as any)?.id ?? this.spanId ?? null;
+          this.apiService.createChangeLogEntry({
+            source: 'web',
+            action: this.isEditMode ? 'update' : 'create',
+            entity_type: 'span',
+            entity_id: typeof sid === 'number' ? sid : null,
+            payload: {
+              data_quality_warning: true,
+              kind: 'span_length_gps_mismatch',
+              line_id: this.lineId,
+              span_id: typeof sid === 'number' ? sid : null,
+              entered_length_m: enteredLen,
+              gps_length_m: Math.round(gpsLen * 100) / 100,
+              relative_diff_percent: diffPct,
+              message_ru: `Пролёт: введённая длина ${enteredLen} м отличается от расчётной по GPS ${Math.round(gpsLen * 100) / 100} м (~${diffPct}%). ${SPAN_LENGTH_WARN_MESSAGE}`
+            }
+          }).subscribe({ error: () => {} });
+        }
+
         // Обновляем данные на карте
         this.mapService.refreshData();
         this.dialogRef.close({ success: true, span });

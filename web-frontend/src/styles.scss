@@ -196,3 +196,14 @@ body {
   background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.2) 50%);
 }
 
+/* Предупреждение: длина пролёта сильно отличается от расчёта по GPS */
+.span-length-warn-snack {
+  background: #5d4037 !important;
+  color: #fff !important;
+  max-width: min(96vw, 520px) !important;
+  .mat-mdc-snack-bar-label {
+    white-space: normal;
+    line-height: 1.35;
+  }
+}
+

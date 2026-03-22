@@ -106,6 +106,14 @@ export class ChangeLogComponent implements OnInit {
       const msg = typeof p['message'] === 'string' ? p['message'] : 'Автосборка топологии';
       return n != null ? `${msg}: ${n} пролётов` : msg;
     }
+    /** Карточка опоры: вложения и комментарий (сервер формирует summary_ru) */
+    if (p['pole_card'] === true && typeof p['summary_ru'] === 'string') {
+      return p['summary_ru'] as string;
+    }
+    /** Предупреждение по качеству данных (например длина пролёта vs GPS) */
+    if (p['data_quality_warning'] === true && typeof p['message_ru'] === 'string') {
+      return p['message_ru'] as string;
+    }
     const v = p?.name ?? p?.['title'];
     return typeof v === 'string' ? v : (entry.entity_name ?? '—');
   }

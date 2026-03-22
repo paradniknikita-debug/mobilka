@@ -16,6 +16,7 @@ from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
 from app.models.change_log import ChangeLog
+from app.core.card_attachment_audit import build_pole_card_change_payload
 from app.models.patrol_session import PatrolSession
 from app.schemas.power_line import (
     PowerLineCreate,
@@ -1337,6 +1338,8 @@ async def update_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pole not found"
         )
+    _snap_cc = pole.card_comment
+    _snap_ca = pole.card_comment_attachment
     pole_dict = pole_data.dict(exclude_unset=True, exclude={'mrid', 'x_position', 'y_position'})
     x_position = getattr(pole_data, 'x_position', None) if 'x_position' in pole_data.dict(exclude_unset=True) else None
     y_position = getattr(pole_data, 'y_position', None) if 'y_position' in pole_data.dict(exclude_unset=True) else None
@@ -1396,7 +1399,27 @@ async def update_pole(
                 cn.x_position = x_position
             if y_position is not None:
                 cn.y_position = y_position
-    
+
+    card_payload = build_pole_card_change_payload(
+        _snap_cc,
+        _snap_ca,
+        pole.card_comment,
+        pole.card_comment_attachment,
+        line_id=power_line_id,
+        pole_number=pole.pole_number,
+    )
+    if card_payload:
+        db.add(
+            ChangeLog(
+                user_id=current_user.id,
+                source="web",
+                action="update",
+                entity_type="pole",
+                entity_id=pole_id,
+                payload=card_payload,
+            )
+        )
+
     await db.commit()
     await db.refresh(pole)
     
@@ -1906,10 +1929,14 @@ async def auto_create_spans(
         )
     
     if mode == "full":
-        # Сохраняем ТП в конце отпаек (to_substation_id), чтобы восстановить после пересборки
+        # Сохраняем ТП только у отпаек (is_tap). Магистраль до конечной ПС (substation_end_id)
+        # пересобирается ниже через extend_tap_segment_to_substation — иначе в список попадал
+        # участок «оп.N–ПС» с tap_pole_id=NULL и в цикле восстановления вызывался
+        # add_substation_span_from_last_pole → дубликат участка «оп.5–йцу» при уже включённом пролёте в «оп.3–йцу».
         segs_with_tp = await db.execute(
             select(AClineSegment.tap_pole_id, AClineSegment.tap_number, AClineSegment.to_substation_id).where(
                 AClineSegment.line_id == power_line_id,
+                AClineSegment.is_tap == True,
                 AClineSegment.to_substation_id.isnot(None),
             )
         )
@@ -2023,7 +2050,13 @@ async def auto_create_spans(
     # Перечитываем ЛЭП из БД, чтобы гарантированно иметь актуальные substation_start_id/substation_end_id
     await db.refresh(power_line)
     # Пролёты от/до подстанций (если заданы начало и/или конец линии)
-    from app.core.line_auto_assembly import link_line_to_substation, add_substation_span_from_last_pole
+    from app.core.line_auto_assembly import (
+        link_line_to_substation,
+        add_substation_span_from_last_pole,
+        refresh_acline_and_line_section_names,
+        get_or_create_connectivity_node_for_pole,
+        extend_tap_segment_to_substation,
+    )
     substation_start_id = getattr(power_line, "substation_start_id", None)
     substation_end_id = getattr(power_line, "substation_end_id", None)
     if main_poles:
@@ -2034,10 +2067,7 @@ async def auto_create_spans(
                 )
             except ValueError:
                 pass  # участок уже есть
-        if substation_end_id and len(main_poles) > 0:
-            await add_substation_span_from_last_pole(
-                db, power_line_id, main_poles[-1], substation_end_id, current_user.id
-            )
+        # Пролёт до конечной ПС создаём после цепочки опора–опора (см. ниже), иначе путается порядок сегментов/имена
     await db.flush()
     
     # Используем ту же логику, что и при пошаговом добавлении опор: создаются
@@ -2109,7 +2139,28 @@ async def auto_create_spans(
             continue
         seg.to_substation_id = sub_id
         await db.flush()
-        last_pole = await db.get(Pole, to_node.pole_id)
+        # Последняя опора ветки (макс. sequence в паре tap_pole_id + tap_branch_index), а не seg.to_node:
+        # ранее to мог «застревать» на первой опоре отпайки из-за виртуальных CN.
+        last_pole = None
+        if tap_num and "/" in str(tap_num):
+            try:
+                branch_idx = int(str(tap_num).rsplit("/", 1)[-1])
+            except (ValueError, IndexError):
+                branch_idx = None
+            if branch_idx is not None:
+                lp_r = await db.execute(
+                    select(Pole)
+                    .where(
+                        Pole.line_id == power_line_id,
+                        Pole.tap_pole_id == tap_pid,
+                        Pole.tap_branch_index == branch_idx,
+                    )
+                    .order_by(Pole.sequence_number.desc())
+                    .limit(1)
+                )
+                last_pole = lp_r.scalar_one_or_none()
+        if not last_pole:
+            last_pole = await db.get(Pole, to_node.pole_id)
         if last_pole:
             # Для настоящих отпаек (is_tap=True, branch_type='tap' или есть tap_pole_id)
             # расширяем существующий сегмент до подстанции, а не создаём новый.
@@ -2118,8 +2169,6 @@ async def auto_create_spans(
                 and ((getattr(seg, "branch_type", None) or "") == "tap" or getattr(seg, "tap_pole_id", None) is not None)
             )
             if is_tap_segment:
-                from app.core.line_auto_assembly import extend_tap_segment_to_substation
-
                 await extend_tap_segment_to_substation(
                     db, power_line_id, seg, last_pole, sub_id, current_user.id
                 )
@@ -2127,6 +2176,40 @@ async def auto_create_spans(
                 await add_substation_span_from_last_pole(
                     db, power_line_id, last_pole, sub_id, current_user.id
                 )
+
+    # Конец линии: пролёт до ПС внутри последнего магистрального участка (тот же AClineSegment, что
+    # заканчивается на последней опоре), а не отдельный сегмент «оп.N–ПС» — имя участка: от начала
+    # сегмента (напр. оп.3) до подстанции (напр. «йцу»).
+    if substation_end_id and main_poles:
+        last_main = main_poles[-1]
+        last_cn = last_main.get_connectivity_node_for_line(power_line_id)
+        if last_cn is None:
+            last_cn = await get_or_create_connectivity_node_for_pole(
+                db, last_main, power_line_id, force=True
+            )
+        seg_end_result = await db.execute(
+            select(AClineSegment)
+            .where(
+                AClineSegment.line_id == power_line_id,
+                AClineSegment.is_tap == False,
+                AClineSegment.to_connectivity_node_id == last_cn.id,
+            )
+            .order_by(AClineSegment.sequence_number.desc())
+            .limit(1)
+        )
+        main_seg = seg_end_result.scalar_one_or_none()
+        if main_seg:
+            main_seg.to_substation_id = substation_end_id
+            await db.flush()
+            await extend_tap_segment_to_substation(
+                db, power_line_id, main_seg, last_main, substation_end_id, current_user.id
+            )
+        else:
+            await add_substation_span_from_last_pole(
+                db, power_line_id, last_main, substation_end_id, current_user.id
+            )
+
+    await refresh_acline_and_line_section_names(db, power_line_id)
 
     await db.commit()
 

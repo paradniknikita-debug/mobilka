@@ -17,6 +17,8 @@ from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.models.patrol_session import PatrolSession
 from app.models.sync_client_mapping import SyncClientMapping
+from app.models.change_log import ChangeLog
+from app.core.card_attachment_audit import build_pole_card_change_payload
 from app.schemas.sync import SyncBatch, SyncResponse, SyncRecord, SyncStatus, SyncAction, ENTITY_SCHEMAS
 from app.schemas.power_line import PowerLineCreate, PoleCreate, EquipmentCreate
 from app.models.base import generate_mrid
@@ -87,6 +89,40 @@ def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _log_pole_card_from_sync(
+    db: AsyncSession,
+    user: User,
+    pole_id: int,
+    line_id: int,
+    pole_number: Optional[str],
+    old_cc: Optional[str],
+    old_ca: Optional[str],
+    new_cc: Optional[str],
+    new_ca: Optional[str],
+) -> None:
+    """Журнал изменений карточки опоры при синхронизации с Flutter."""
+    payload = build_pole_card_change_payload(
+        old_cc,
+        old_ca,
+        new_cc,
+        new_ca,
+        line_id=line_id,
+        pole_number=pole_number,
+    )
+    if not payload:
+        return
+    db.add(
+        ChangeLog(
+            user_id=user.id,
+            source="flutter",
+            action="update",
+            entity_type="pole",
+            entity_id=pole_id,
+            payload=payload,
+        )
+    )
 
 
 async def _upsert_pole_mapping(user_id: int, client_id: int, server_id: int, db: AsyncSession) -> None:
@@ -321,6 +357,12 @@ async def _download_sync_data_impl(
             "created_at": pole.created_at.isoformat() if pole.created_at else None,
             "updated_at": pole.updated_at.isoformat() if pole.updated_at else None,
         }
+        cc = getattr(pole, "card_comment", None)
+        if cc is not None:
+            pole_data["card_comment"] = cc
+        ca = getattr(pole, "card_comment_attachment", None)
+        if ca is not None:
+            pole_data["card_comment_attachment"] = ca
         if getattr(pole, "mrid", None) is not None:
             pole_data["mrid"] = pole.mrid
         records.append({
@@ -482,6 +524,8 @@ async def process_sync_record(
             existing_pole = existing.scalar_one_or_none()
             client_id = data.get('id')
             if existing_pole:
+                _old_cc = existing_pole.card_comment
+                _old_ca = existing_pole.card_comment_attachment
                 pl_id_val = _to_int(data.get('line_id'))
                 if pl_id_val is not None:
                     existing_pole.line_id = pl_id_val
@@ -490,6 +534,17 @@ async def process_sync_record(
                         continue
                     if hasattr(existing_pole, key):
                         setattr(existing_pole, key, value)
+                _log_pole_card_from_sync(
+                    db,
+                    user,
+                    existing_pole.id,
+                    existing_pole.line_id,
+                    existing_pole.pole_number,
+                    _old_cc,
+                    _old_ca,
+                    existing_pole.card_comment,
+                    existing_pole.card_comment_attachment,
+                )
                 client_id_int = _to_int(client_id)
                 if client_id_int is not None and client_id_int < 0:
                     id_mapping["pole"][client_id_int] = existing_pole.id
@@ -515,6 +570,8 @@ async def process_sync_record(
                     year_installed=_to_int(data.get('year_installed')),
                     condition=data.get('condition') or 'good',
                     notes=data.get('notes'),
+                    card_comment=data.get('card_comment'),
+                    card_comment_attachment=data.get('card_comment_attachment'),
                     created_by=user.id
                 )
                 db.add(db_pole)
@@ -528,6 +585,17 @@ async def process_sync_record(
                     )
                     db.add(pp)
                     await db.flush()
+                _log_pole_card_from_sync(
+                    db,
+                    user,
+                    db_pole.id,
+                    db_pole.line_id,
+                    db_pole.pole_number,
+                    None,
+                    None,
+                    db_pole.card_comment,
+                    db_pole.card_comment_attachment,
+                )
                 client_id_int = _to_int(client_id)
                 if client_id_int is not None and client_id_int < 0:
                     id_mapping["pole"][client_id_int] = db_pole.id
@@ -544,6 +612,8 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
+                _old_cc = pole.card_comment
+                _old_ca = pole.card_comment_attachment
                 pl_id_val = _to_int(data.get('line_id'))
                 if pl_id_val is not None:
                     pole.line_id = pl_id_val
@@ -561,6 +631,17 @@ async def process_sync_record(
                         continue
                     if hasattr(pole, key):
                         setattr(pole, key, value)
+                _log_pole_card_from_sync(
+                    db,
+                    user,
+                    pole.id,
+                    pole.line_id,
+                    pole.pole_number,
+                    _old_cc,
+                    _old_ca,
+                    pole.card_comment,
+                    pole.card_comment_attachment,
+                )
                 if x_pos is not None or y_pos is not None:
                     pp_res = await db.execute(select(PositionPoint).where(PositionPoint.pole_id == pole.id).limit(1))
                     pp = pp_res.scalar_one_or_none()

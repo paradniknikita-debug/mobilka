@@ -82,6 +82,8 @@ POLE_SCHEMA = {
         "year_installed": {"type": ["integer", "null"]},
         "condition": {"type": "string"},
         "notes": {"type": ["string", "null"]},
+        "card_comment": {"type": ["string", "null"]},
+        "card_comment_attachment": {"type": ["string", "null"]},
         "created_by": {"type": ["integer", "null"]},
         "created_at": {"type": ["string", "number"]},
         "updated_at": {"type": ["string", "number", "null"]}

@@ -62,7 +62,7 @@
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Длина (м)</mat-label>
         <input matInput type="number" formControlName="length" step="0.01" placeholder="Автоматически">
-        <mat-hint>Расстояние между опорами. Рассчитывается автоматически при выборе опор.</mat-hint>
+        <mat-hint>Расстояние между опорами по GPS (Гаверсинус). Если введёте значение, которое сильнее чем на 20% отличается от расчётного, появится предупреждение (сохранение не блокируется).</mat-hint>
         <mat-error>{{ getFieldError('length') }}</mat-error>
         <button mat-icon-button matSuffix (click)="calculateDistance()" type="button" matTooltip="Пересчитать расстояние">
           <mat-icon>refresh</mat-icon>

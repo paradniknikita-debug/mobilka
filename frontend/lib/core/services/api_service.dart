@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:retrofit/retrofit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,23 @@ import 'base_url_manager.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
 
 part 'api_service.g.dart';
+
+/// MIME для multipart вложений опоры (когда клиент не задаёт Content-Type части).
+String _guessMimeForPoleAttachment(String filename) {
+  final f = filename.toLowerCase();
+  if (f.endsWith('.jpg') || f.endsWith('.jpeg')) return 'image/jpeg';
+  if (f.endsWith('.png')) return 'image/png';
+  if (f.endsWith('.gif')) return 'image/gif';
+  if (f.endsWith('.webp')) return 'image/webp';
+  if (f.endsWith('.svg')) return 'image/svg+xml';
+  if (f.endsWith('.pdf')) return 'application/pdf';
+  if (f.endsWith('.m4a')) return 'audio/mp4';
+  if (f.endsWith('.mp3')) return 'audio/mpeg';
+  if (f.endsWith('.wav')) return 'audio/wav';
+  if (f.endsWith('.webm')) return 'video/webm';
+  if (f.endsWith('.mp4')) return 'video/mp4';
+  return 'application/octet-stream';
+}
 
 @RestApi()
 abstract class ApiService {
@@ -324,8 +342,9 @@ final apiServiceProvider = Provider<ApiServiceWithExport>((ref) {
   }
 });
 
-// Провайдер для прямого доступа к Dio (для тестовых запросов)
+// Провайдер для прямого доступа к Dio (вложения, бинарные ответы и т.д.)
 final dioProvider = Provider<Dio>((ref) {
+  final prefs = ref.watch(prefsProvider);
   final dio = Dio();
   final urlManager = BaseUrlManager();
   dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
@@ -343,13 +362,17 @@ final dioProvider = Provider<Dio>((ref) {
     );
   }
   
-  // Interceptor для автоматического fallback HTTPS -> HTTP
+  // Interceptor для автоматического fallback HTTPS -> HTTP + Bearer (как у ApiService)
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
         // Обновляем baseUrl перед каждым запросом
         dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
         options.baseUrl = dio.options.baseUrl;
+        final token = prefs.getString(AppConfig.authTokenKey);
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
         handler.next(options);
       },
       onError: (error, handler) async {
@@ -436,6 +459,7 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
       'file': MultipartFile.fromBytes(
         fileBytes,
         filename: filename,
+        contentType: MediaType.parse(_guessMimeForPoleAttachment(filename)),
       ),
     });
     final response = await _dio.post<Map<String, dynamic>>(

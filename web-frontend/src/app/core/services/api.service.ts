@@ -413,6 +413,7 @@ export class ApiService {
     if (params?.source) httpParams = httpParams.set('source', params.source);
     if (params?.action) httpParams = httpParams.set('action', params.action);
     if (params?.entity_type) httpParams = httpParams.set('entity_type', params.entity_type);
+    if (params?.entity_id != null) httpParams = httpParams.set('entity_id', String(params.entity_id));
     if (params?.limit != null) httpParams = httpParams.set('limit', params.limit.toString());
     if (params?.offset != null) httpParams = httpParams.set('offset', params.offset.toString());
     return this.http.get<ChangeLogEntry[]>(`${this.apiUrl}/change-log`, { params: httpParams });

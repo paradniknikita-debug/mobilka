@@ -34,6 +34,7 @@ import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/models/substation.dart';
+import '../../../../core/map/voltage_level_colors.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
 import '../../../home/presentation/pages/home_page.dart' show activeSessionProvider, recentPatrolsProvider;
 import '../widgets/object_properties_panel.dart' show ObjectPropertiesPanel, ObjectType;
@@ -356,39 +357,17 @@ class _MapPageState extends ConsumerState<MapPage> {
           final y2 = (p2.yPosition ?? 0.0);
           final angleRad = math.atan2(y2 - y1, x2 - x1);
 
-          // Оборудование первой опоры линии — только на первом сегменте (i == 0)
-          if (i == 0) {
-            final eqListP1 = equipmentByPole[p1.id] ?? const <drift_db.EquipmentData>[];
-            final visibleEqP1 = eqListP1.where((e) => _lineEquipmentIconForEquipment(e) != null).toList();
-            for (var j = 0; j < visibleEqP1.length; j++) {
-              final e = visibleEqP1[j];
-              final iconPath = _lineEquipmentIconForEquipment(e)!;
-              final t = visibleEqP1.length == 1 ? 0.2 : 0.15 + (0.15 * (j / (visibleEqP1.length - 1)));
-              final lng = x1 + (x2 - x1) * t;
-              final lat = y1 + (y2 - y1) * t;
-              lineEquipmentFeatures.add({
-                'type': 'Feature',
-                'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
-                'properties': {
-                  'icon': iconPath,
-                  'equipment_type': e.equipmentType,
-                  'name': e.name,
-                  'from_pole_id': p1.id,
-                  'to_pole_id': p2.id,
-                  'line_id': pl.id,
-                  'angle_rad': angleRad,
-                },
-              });
-            }
-          }
-
-          // Оборудование второй опоры сегмента — ближе к p2 (t ≈ 0.8)
-          final eqList = equipmentByPole[p2.id] ?? const <drift_db.EquipmentData>[];
-          final visibleEq = eqList.where((e) => _lineEquipmentIconForEquipment(e) != null).toList();
-          for (var j = 0; j < visibleEq.length; j++) {
-            final e = visibleEq[j];
+          final combined = _combinedLineEquipmentForSegmentLocal(
+            equipmentByPole,
+            p1,
+            p2,
+            i == 0,
+          );
+          final n = combined.length;
+          for (var j = 0; j < combined.length; j++) {
+            final e = combined[j];
             final iconPath = _lineEquipmentIconForEquipment(e)!;
-            final t = visibleEq.length == 1 ? 0.8 : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
+            final t = _tUniformOnSegment(j, n);
             final lng = x1 + (x2 - x1) * t;
             final lat = y1 + (y2 - y1) * t;
             lineEquipmentFeatures.add({
@@ -401,6 +380,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'from_pole_id': p1.id,
                 'to_pole_id': p2.id,
                 'line_id': pl.id,
+                'pole_id': e.poleId,
+                'equipment_id': e.id,
                 'angle_rad': angleRad,
               },
             });
@@ -816,39 +797,17 @@ class _MapPageState extends ConsumerState<MapPage> {
 
           final angleRad = math.atan2(y2 - y1, x2 - x1);
 
-          // Оборудование первой опоры линии рисуем только на первом сегменте (i == 0), иначе дублируется
-          if (i == 0) {
-            final eqListP1 = equipmentByPoleServer[p1Id] ?? <Equipment>[];
-            final visibleEqP1 = eqListP1.where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null).toList();
-            for (var j = 0; j < visibleEqP1.length; j++) {
-              final e = visibleEqP1[j];
-              final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
-              final t = visibleEqP1.length == 1 ? 0.2 : 0.15 + (0.15 * (j / (visibleEqP1.length - 1)));
-              final lng = x1 + (x2 - x1) * t;
-              final lat = y1 + (y2 - y1) * t;
-              lineEquipmentFeatures.add({
-                'type': 'Feature',
-                'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
-                'properties': {
-                  'icon': iconPath,
-                  'equipment_type': e.equipmentType,
-                  'name': e.name,
-                  'from_pole_id': p1Id,
-                  'to_pole_id': p2Id,
-                  'line_id': pl.id,
-                  'angle_rad': angleRad,
-                },
-              });
-            }
-          }
-
-          // Оборудование второй опоры сегмента — ближе к p2 (t ≈ 0.8); каждая опора рисуется один раз
-          final eqList = equipmentByPoleServer[p2Id] ?? <Equipment>[];
-          final visibleEq = eqList.where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null).toList();
-          for (var j = 0; j < visibleEq.length; j++) {
-            final e = visibleEq[j];
+          final combined = _combinedLineEquipmentForSegmentServer(
+            equipmentByPoleServer,
+            p1Id,
+            p2Id,
+            i == 0,
+          );
+          final n = combined.length;
+          for (var j = 0; j < combined.length; j++) {
+            final e = combined[j];
             final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
-            final t = visibleEq.length == 1 ? 0.8 : 0.6 + (0.3 * (j / (visibleEq.length - 1)));
+            final t = _tUniformOnSegment(j, n);
             final lng = x1 + (x2 - x1) * t;
             final lat = y1 + (y2 - y1) * t;
             lineEquipmentFeatures.add({
@@ -861,6 +820,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'from_pole_id': p1Id,
                 'to_pole_id': p2Id,
                 'line_id': pl.id,
+                'pole_id': e.poleId,
+                'equipment_id': e.id,
                 'angle_rad': angleRad,
               },
             });
@@ -1364,6 +1325,14 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
+  double? _voltageKvForPowerLine(int? lineId) {
+    if (lineId == null || _powerLinesList == null) return null;
+    for (final pl in _powerLinesList!) {
+      if (pl.id == lineId) return pl.voltageLevel;
+    }
+    return null;
+  }
+
   List<Polyline> _buildPowerLinePolylines() {
     final polylines = <Polyline>[];
     final features = _powerLinesData?['features'] as List<dynamic>? ?? [];
@@ -1383,15 +1352,15 @@ class _MapPageState extends ConsumerState<MapPage> {
               _toDouble(coord[0]),
             )).toList();
             final isCurrentPatrol = id != null && id == _currentLineId;
-            final isTap = props?['is_tap'] == true;
-            // Магистраль — красная, отпайка — зелёная; при обходе текущей ЛЭП — зелёная и толще
-            final color = isCurrentPatrol
-                ? Colors.green
-                : (isTap ? Colors.green : Colors.red);
+            final isTap = props?['branch_type'] == 'tap' || props?['is_tap'] == true;
+            final vlProp = _toDouble(props?['voltage_level']);
+            final vEff = vlProp > 0 ? vlProp : (_voltageKvForPowerLine(id) ?? 0);
+            final color = VoltageLevelColors.colorForVoltageKv(vEff > 0 ? vEff : null);
+            final stroke = VoltageLevelColors.strokeWidthForLine(isTap: isTap, isPatrol: isCurrentPatrol);
             polylines.add(
               Polyline(
                 points: points,
-                strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
+                strokeWidth: stroke,
                 color: color,
               ),
             );
@@ -1439,11 +1408,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       });
       if (mainList.length >= 2) {
         final points = mainList.map((e) => LatLng(_toDouble(e['lat']), _toDouble(e['lng']))).toList();
+        final vl = _voltageKvForPowerLine(lineId);
         polylines.add(
           Polyline(
             points: points,
-            strokeWidth: isCurrentPatrol ? 5.0 : 3.0,
-            color: isCurrentPatrol ? Colors.green : Colors.red,
+            strokeWidth: VoltageLevelColors.strokeWidthForLine(isTap: false, isPatrol: isCurrentPatrol),
+            color: VoltageLevelColors.colorForVoltageKv(vl),
           ),
         );
       }
@@ -1478,14 +1448,15 @@ class _MapPageState extends ConsumerState<MapPage> {
         final a = byPoleNumber[keyA];
         final b = byPoleNumber[keyB];
         if (a == null || b == null) return;
+        final vl = _voltageKvForPowerLine(lineId);
         polylines.add(
           Polyline(
             points: [
               LatLng(_toDouble(a['lat']), _toDouble(a['lng'])),
               LatLng(_toDouble(b['lat']), _toDouble(b['lng'])),
             ],
-            strokeWidth: isCurrentPatrol ? 5.5 : 4.0,
-            color: Colors.teal,
+            strokeWidth: VoltageLevelColors.strokeWidthForLine(isTap: true, isPatrol: isCurrentPatrol),
+            color: VoltageLevelColors.colorForVoltageKv(vl),
           ),
         );
       }
@@ -1574,6 +1545,51 @@ class _MapPageState extends ConsumerState<MapPage> {
       case 'low': return Colors.amber;
       default: return Colors.blue;
     }
+  }
+
+  /// Равномерное распределение по длине пролёта: t = (j+1)/(n+1).
+  double _tUniformOnSegment(int j, int n) {
+    if (n <= 0) return 0.5;
+    return (j + 1) / (n + 1);
+  }
+
+  /// Оборудование на пролёте p1→p2: у первой опоры линии — только на первом сегменте (как на веб-клиенте).
+  List<drift_db.EquipmentData> _combinedLineEquipmentForSegmentLocal(
+    Map<int, List<drift_db.EquipmentData>> equipmentByPole,
+    drift_db.Pole p1,
+    drift_db.Pole p2,
+    bool isFirstSegmentOfLine,
+  ) {
+    final fromP1 = isFirstSegmentOfLine
+        ? (equipmentByPole[p1.id] ?? const <drift_db.EquipmentData>[])
+            .where((e) => _lineEquipmentIconForEquipment(e) != null)
+            .toList()
+        : <drift_db.EquipmentData>[];
+    final fromP2 = (equipmentByPole[p2.id] ?? const <drift_db.EquipmentData>[])
+        .where((e) => _lineEquipmentIconForEquipment(e) != null)
+        .toList();
+    final combined = <drift_db.EquipmentData>[...fromP1, ...fromP2];
+    combined.sort((a, b) => a.id.compareTo(b.id));
+    return combined;
+  }
+
+  List<Equipment> _combinedLineEquipmentForSegmentServer(
+    Map<int, List<Equipment>> equipmentByPole,
+    int p1Id,
+    int p2Id,
+    bool isFirstSegmentOfLine,
+  ) {
+    final fromP1 = isFirstSegmentOfLine
+        ? (equipmentByPole[p1Id] ?? <Equipment>[])
+            .where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null)
+            .toList()
+        : <Equipment>[];
+    final fromP2 = (equipmentByPole[p2Id] ?? <Equipment>[])
+        .where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null)
+        .toList();
+    final combined = <Equipment>[...fromP1, ...fromP2];
+    combined.sort((a, b) => a.id.compareTo(b.id));
+    return combined;
   }
 
   /// Путь к SVG-иконке линейного оборудования для отображения на линии.
@@ -1741,8 +1757,17 @@ class _MapPageState extends ConsumerState<MapPage> {
 
           final lineId = props?['line_id'];
           final lineIdInt = lineId is int ? lineId : (lineId is num ? lineId.toInt() : null);
-          final isActive = lineIdInt != null && lineIdInt == _currentLineId;
-          final color = isActive ? Colors.green : Colors.red;
+          PowerLine? plForLine;
+          final plList = _powerLinesList;
+          if (lineIdInt != null && plList != null) {
+            for (final pl in plList) {
+              if (pl.id == lineIdInt) {
+                plForLine = pl;
+                break;
+              }
+            }
+          }
+          final color = VoltageLevelColors.colorForVoltageKv(plForLine?.voltageLevel);
 
           const iconSize = 64.0;
           // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
@@ -1911,6 +1936,8 @@ class _MapPageState extends ConsumerState<MapPage> {
               _toDouble(coordinates[0]),
             );
             
+            final tapV = _toDouble(properties?['voltage_level']);
+            final tapColor = VoltageLevelColors.colorForVoltageKv(tapV > 0 ? tapV : null);
             markers.add(
               Marker(
                 point: latLng,
@@ -1919,7 +1946,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.orange,
+                      color: tapColor,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.white, width: 2),
                     ),
@@ -1959,6 +1986,8 @@ class _MapPageState extends ConsumerState<MapPage> {
               _toDouble(coordinates[0]),
             );
             
+            final subV = _toDouble(properties?['voltage_level']);
+            final subColor = VoltageLevelColors.colorForVoltageKv(subV > 0 ? subV : null);
             markers.add(
               Marker(
                 point: latLng,
@@ -1967,7 +1996,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.purple,
+                      color: subColor,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.white, width: 2),
                     ),
@@ -2002,11 +2031,44 @@ class _MapPageState extends ConsumerState<MapPage> {
               'Легенда',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 4),
+            const Text(
+              'Линии и ПС по Uном',
+              style: TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final e in VoltageLevelColors.legendEntries)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: e.value,
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(color: Colors.black26),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${e.key} кВ', style: const TextStyle(fontSize: 10)),
+                    ],
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
-            _buildLegendItem(Icons.electrical_services, Colors.red, 'ЛЭП'),
             _buildLegendItem(MdiIcons.transmissionTower, Colors.blue, 'Опоры'),
-            _buildLegendItem(Icons.electrical_services, Colors.orange, 'Отпайки'),
-            _buildLegendItem(Icons.power, Colors.purple, 'Подстанции'),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Магистраль чуть толще отпайки',
+                style: TextStyle(fontSize: 10, color: Colors.black54),
+              ),
+            ),
           ],
         ),
       ),

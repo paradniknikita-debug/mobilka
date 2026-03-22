@@ -622,7 +622,7 @@ $equip-color: #ba68c8;
   border: 2px solid $equip-color;
 }
 
-// Оборудование на линии — красные иконки как во Flutter (в тон линии)
+// Оборудование на линии — цвет задаётся mask + background (как цвет ЛЭП по напряжению)
 ::ng-deep .equipment-on-line {
   position: relative;
   .equipment-on-line-outline {
@@ -632,13 +632,11 @@ $equip-color: #ba68c8;
     object-fit: contain;
     pointer-events: none;
   }
-  .equipment-on-line-img {
+  .equipment-on-line-img.equipment-on-line-fill {
     position: relative;
-    object-fit: contain;
-    filter: brightness(0) saturate(100%) invert(27%) sepia(98%) saturate(5000%) hue-rotate(0deg);
+    box-sizing: border-box;
   }
   .equipment-icon-zn {
-    object-fit: contain;
     transform: scale(0.40);
   }
   .equipment-recloser-badge {
@@ -650,20 +648,6 @@ $equip-color: #ba68c8;
     background: #fff;
     border: 1px solid #fff;
     pointer-events: none;
-  }
-  svg {
-    line, path, polyline {
-      stroke: #f44336 !important;
-      fill: none !important;
-    }
-    rect {
-      stroke: #f44336 !important;
-      fill: #ffffff !important;
-    }
-    circle {
-      stroke: #f44336 !important;
-      fill: #ffffff !important;
-    }
   }
 }
 

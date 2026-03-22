@@ -28,6 +28,34 @@ ALLOWED_VIDEO = {"video/mp4", "video/webm", "video/quicktime"}
 MAX_SIZE_MB = 25
 
 
+def _guess_content_type_from_name(name: str) -> str:
+    """Если клиент не прислал Content-Type (часто у multipart), определяем по имени файла."""
+    lower = (name or "").lower()
+    if lower.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if lower.endswith(".png"):
+        return "image/png"
+    if lower.endswith(".gif"):
+        return "image/gif"
+    if lower.endswith(".webp"):
+        return "image/webp"
+    if lower.endswith(".svg"):
+        return "image/svg+xml"
+    if lower.endswith(".pdf"):
+        return "application/pdf"
+    if lower.endswith(".m4a"):
+        return "audio/mp4"
+    if lower.endswith(".mp3"):
+        return "audio/mpeg"
+    if lower.endswith(".wav"):
+        return "audio/wav"
+    if lower.endswith(".webm"):
+        return "video/webm"
+    if lower.endswith(".mp4"):
+        return "video/mp4"
+    return ""
+
+
 def _extension_for_content_type(content_type: str, attachment_type: str) -> str:
     if attachment_type == "voice":
         return ".m4a" if "m4a" in (content_type or "") or "mp4" in content_type else ".mp3"
@@ -66,7 +94,17 @@ async def upload_pole_attachment(
     if not pole:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Опора не найдена")
 
-    content_type = file.content_type or ""
+    content_type = (file.content_type or "").strip()
+    if not content_type and file.filename:
+        content_type = _guess_content_type_from_name(file.filename)
+    if not content_type:
+        # Последний fallback (клиент не прислал ни типа, ни осмысленного имени)
+        content_type = {
+            "photo": "image/jpeg",
+            "voice": "audio/mp4",
+            "schema": "image/jpeg",
+            "video": "video/mp4",
+        }.get(attachment_type, "application/octet-stream")
     if attachment_type == "photo" and content_type not in ALLOWED_IMAGE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

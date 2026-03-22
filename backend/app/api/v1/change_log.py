@@ -103,6 +103,7 @@ async def get_change_log(
     source: Optional[str] = Query(None, description="Фильтр: web | flutter"),
     action: Optional[str] = Query(None, description="Фильтр: create | update | delete | session_start | session_end"),
     entity_type: Optional[str] = Query(None, description="Фильтр по типу сущности"),
+    entity_id: Optional[int] = Query(None, description="Фильтр по ID сущности (например id опоры)"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_active_user),
@@ -116,6 +117,8 @@ async def get_change_log(
         q = q.where(ChangeLog.action == action)
     if entity_type:
         q = q.where(ChangeLog.entity_type == entity_type)
+    if entity_id is not None:
+        q = q.where(ChangeLog.entity_id == entity_id)
     result = await db.execute(q)
     rows = result.scalars().all()
 

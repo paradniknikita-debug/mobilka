@@ -26,6 +26,8 @@ export interface ChangeLogFilters {
   source?: string;
   action?: string;
   entity_type?: string;
+  /** Например id опоры — фильтр по сущности */
+  entity_id?: number;
   limit?: number;
   offset?: number;
 }

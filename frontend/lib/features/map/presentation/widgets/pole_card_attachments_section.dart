@@ -1,0 +1,213 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../../../../core/config/app_config.dart';
+import '../../../../core/services/api_service.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/attachment_urls.dart';
+
+/// Блок «Комментарий карточки» и превью вложений (с Bearer для API).
+class PoleCardAttachmentsSection extends ConsumerWidget {
+  final Map<String, dynamic> objectProperties;
+
+  const PoleCardAttachmentsSection({
+    super.key,
+    required this.objectProperties,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final comment = objectProperties['card_comment']?.toString().trim();
+    final raw = objectProperties['card_comment_attachment']?.toString();
+    final prefs = ref.watch(prefsProvider);
+    final token = prefs.getString(AppConfig.authTokenKey);
+    final dio = ref.watch(dioProvider);
+
+    List<Map<String, dynamic>>? items;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          items = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      } catch (_) {
+        items = null;
+      }
+    }
+
+    if ((comment == null || comment.isEmpty) && (items == null || items.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+
+    final headers = <String, String>{};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (comment != null && comment.isNotEmpty) ...[
+          Text(
+            'Комментарий карточки',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(comment, style: const TextStyle(color: Colors.black87)),
+          const SizedBox(height: 12),
+        ],
+        if (items != null && items.isNotEmpty) ...[
+          Text(
+            'Вложения',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...items.asMap().entries.map((e) {
+            final m = e.value;
+            final t = m['t']?.toString() ?? '';
+            final url = m['url']?.toString();
+            if (url == null || url.isEmpty) return const SizedBox.shrink();
+            final thumb = m['thumbnail_url']?.toString();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _AttachmentRow(
+                type: t,
+                relativeUrl: url,
+                thumbnailUrl: thumb,
+                authHeaders: headers,
+                dio: dio,
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+}
+
+class _AttachmentRow extends StatelessWidget {
+  final String type;
+  final String relativeUrl;
+  final String? thumbnailUrl;
+  final Map<String, String> authHeaders;
+  final Dio dio;
+
+  const _AttachmentRow({
+    required this.type,
+    required this.relativeUrl,
+    this.thumbnailUrl,
+    required this.authHeaders,
+    required this.dio,
+  });
+
+  String get _loadPath {
+    final th = thumbnailUrl?.trim();
+    if (th != null && th.isNotEmpty) return th;
+    return relativeUrl;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final abs = resolveAttachmentAbsoluteUrl(_loadPath);
+    switch (type) {
+      case 'photo':
+      case 'schema':
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            abs,
+            height: type == 'schema' ? 120 : 100,
+            fit: BoxFit.cover,
+            headers: authHeaders.isEmpty ? null : authHeaders,
+            errorBuilder: (_, __, ___) => _fallbackChip(context, 'Не удалось загрузить'),
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return SizedBox(
+                height: 100,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      case 'voice':
+      case 'video':
+        return OutlinedButton.icon(
+          onPressed: authHeaders.isEmpty
+              ? null
+              : () => _openMediaFile(context, relativeUrl),
+          icon: Icon(type == 'voice' ? Icons.mic : Icons.videocam),
+          label: Text(type == 'voice' ? 'Воспроизвести запись' : 'Открыть видео'),
+        );
+      default:
+        return _fallbackChip(context, type.isEmpty ? 'Вложение' : type);
+    }
+  }
+
+  Widget _fallbackChip(BuildContext context, String text) {
+    return Chip(
+      label: Text(text),
+      backgroundColor: Colors.grey.shade200,
+    );
+  }
+
+  Future<void> _openMediaFile(BuildContext context, String rel) async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Скачивание медиа в браузере пока не поддерживается')),
+      );
+      return;
+    }
+    try {
+      // Относительный путь API: baseUrl уже содержит /api/v1
+      var apiPath = rel.trim();
+      if (apiPath.startsWith('/api/${AppConfig.apiVersion}/')) {
+        apiPath = apiPath.substring('/api/${AppConfig.apiVersion}'.length);
+      } else if (apiPath.startsWith('api/${AppConfig.apiVersion}/')) {
+        apiPath = '/${apiPath.substring('api/${AppConfig.apiVersion}'.length)}';
+      }
+      if (!apiPath.startsWith('/')) apiPath = '/$apiPath';
+
+      final resp = await dio.get<List<int>>(
+        apiPath,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = resp.data;
+      if (bytes == null || bytes.isEmpty) {
+        throw Exception('Пустой ответ');
+      }
+      final parts = rel.split('/');
+      final name = parts.isNotEmpty ? parts.last : 'attachment.bin';
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/$name';
+      final f = File(path);
+      await f.writeAsBytes(bytes, flush: true);
+      await OpenFile.open(path);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось открыть файл: $e')),
+        );
+      }
+    }
+  }
+}

@@ -16,6 +16,7 @@ import { ImagePreviewDialogComponent } from './image-preview-dialog/image-previe
 import { ApiService } from '../../core/services/api.service';
 import { Pole } from '../../core/models/pole.model';
 import { Equipment } from '../../core/models/equipment.model';
+import { colorForVoltageKv, lineWeightForBranch } from '../../core/map/voltage-level-colors';
 
 @Component({
   selector: 'app-map',
@@ -498,12 +499,13 @@ export class MapComponent implements OnInit, OnDestroy {
       if (latlngs.length < 2) return;
 
       const isTap = feature.properties['branch_type'] === 'tap';
-      const lineColor = isTap ? '#4CAF50' : '#f44336';
+      const vlRaw = Number(feature.properties['voltage_level']);
+      const lineColor = colorForVoltageKv(Number.isFinite(vlRaw) ? vlRaw : null);
 
       const polyline = L.polyline(latlngs, {
         color: lineColor,
-        weight: 3,
-        opacity: 0.8
+        weight: lineWeightForBranch(!!isTap),
+        opacity: 0.85
       }).bindPopup(`
           <strong>${feature.properties['name'] || 'ЛЭП'}</strong><br>
           Напряжение: ${feature.properties['voltage_level']} кВ<br>
@@ -630,6 +632,22 @@ export class MapComponent implements OnInit, OnDestroy {
     return sub[iconKey] ? `assets/equipment/${sub[iconKey]}` : '';
   }
 
+  /** Иконка на линии в цвете напряжения (mask + background), контур выключателя — отдельным слоем. */
+  private buildLineEquipmentMarkerHtml(iconKey: string, lineColor: string): string {
+    const iconSize = 64;
+    const path = this.getLineEquipmentAssetPath(iconKey);
+    if (!path) return '';
+    const useOutline = iconKey === 'breaker';
+    const outlineHtml = useOutline
+      ? `<img src="${this.getLineEquipmentAssetPath(iconKey, true)}" class="equipment-on-line-outline" width="${iconSize}" height="${iconSize}" alt="">`
+      : '';
+    const znClass = iconKey === 'zn' ? ' equipment-icon-zn' : '';
+    const escapedPath = path.replace(/'/g, "\\'");
+    const mainHtml = `<div class="equipment-on-line-img equipment-on-line-fill${znClass}" style="width:${iconSize}px;height:${iconSize}px;-webkit-mask-image:url('${escapedPath}');mask-image:url('${escapedPath}');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;background-color:${lineColor};"></div>`;
+    const recloserBadge = iconKey === 'recloser' ? '<div class="equipment-recloser-badge"></div>' : '';
+    return outlineHtml + mainHtml + recloserBadge;
+  }
+
   /**
    * Ключ иконки для оборудования на линии (null = не рисовать на линии).
    * Учитываем русские и английские типы/имена с сервера — как во Flutter и бэкенде.
@@ -677,9 +695,36 @@ export class MapComponent implements OnInit, OnDestroy {
     return [T1, T2];
   }
 
+  /** Оборудование на пролёте (p1→p2): у первой опоры линии — включаем её ТОЛЬКО на первом пролёте. */
+  private combinedLineEquipmentForSegment(
+    p1: GeoJSONFeature,
+    p2: GeoJSONFeature,
+    isFirstSegmentOfLine: boolean
+  ): Equipment[] {
+    const sortEq = (list: Equipment[]) =>
+      list
+        .map((eq) => ({ eq, key: this.getLineEquipmentIconKey(eq) }))
+        .filter((x) => x.key != null)
+        .sort((a, b) => (a.eq.id ?? 0) - (b.eq.id ?? 0))
+        .map((x) => x.eq);
+    const id1 = Number(p1.properties?.['id']);
+    const id2 = Number(p2.properties?.['id']);
+    const fromP1 = isFirstSegmentOfLine
+      ? sortEq(this.equipmentByPoleId.get(id1) || [])
+      : [];
+    const fromP2 = sortEq(this.equipmentByPoleId.get(id2) || []);
+    return [...fromP1, ...fromP2].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  }
+
+  /** Равномерно по длине пролёта: t = (j+1)/(n+1), без скученности у опор. */
+  private tUniformOnSegment(j: number, n: number): number {
+    if (n <= 0) return 0.5;
+    return (j + 1) / (n + 1);
+  }
+
   /**
    * Вычисляет координаты центра иконки оборудования на карте (для центрирования при клике по дереву).
-   * Использует ту же логику, что и отрисовка: сегмент, tBase/tSpread, порядок оборудования по id.
+   * Совпадает с отрисовкой: сегмент пролёта, объединённый список оборудования, t = (j+1)/(n+1).
    */
   private getEquipmentCenterLatLng(poleId: number, equipmentId: number): L.LatLng | null {
     const data = this.mapData;
@@ -701,52 +746,35 @@ export class MapComponent implements OnInit, OnDestroy {
     const orderedPoles = Array.from(byId.values()).sort(
       (a, b) => (a.properties?.['sequence_number'] ?? 0) - (b.properties?.['sequence_number'] ?? 0)
     );
-    const poleIndex = orderedPoles.findIndex((p) => Number(p.properties?.['id']) === poleId);
-    if (poleIndex < 0) return null;
-    let p1: GeoJSONFeature; let p2: GeoJSONFeature; let tBase: number; let tSpread: number;
-    if (poleIndex + 1 < orderedPoles.length) {
-      p1 = orderedPoles[poleIndex];
-      p2 = orderedPoles[poleIndex + 1];
-      tBase = 0.2;
-      tSpread = 0.1;
-    } else if (poleIndex > 0) {
-      p1 = orderedPoles[poleIndex - 1];
-      p2 = orderedPoles[poleIndex];
-      tBase = 0.8;
-      tSpread = 0.2;
-    } else {
+    if (orderedPoles.length < 2) {
       const c = poleFeature.geometry?.coordinates as number[] | undefined;
       if (!c?.length || c.length < 2) return null;
       return L.latLng(Number(c[1]), Number(c[0]));
     }
-    const c1 = p1.geometry?.coordinates as number[] | undefined;
-    const c2 = p2.geometry?.coordinates as number[] | undefined;
-    if (!c1?.length || !c2?.length) return null;
-    const lng1 = Number(c1[0]);
-    const lat1 = Number(c1[1]);
-    const lng2 = Number(c2[0]);
-    const lat2 = Number(c2[1]);
-    const dx = lng2 - lng1;
-    const dy = lat2 - lat1;
-    const rawList = (this.equipmentByPoleId.get(poleId) || []).filter(
-      (eq) => this.getLineEquipmentIconKey(eq) != null
-    );
-    const sortEq = (list: Equipment[]) =>
-      list
-        .map((eq) => ({ eq, key: this.getLineEquipmentIconKey(eq) }))
-        .filter((x) => x.key != null)
-        .sort((a, b) => (a.eq.id ?? 0) - (b.eq.id ?? 0))
-        .map((x) => x.eq);
-    const sorted = sortEq(rawList);
-    const eqIndex = sorted.findIndex((eq) => eq.id != null && Number(eq.id) === equipmentId);
-    if (eqIndex < 0) return null;
-    const n = sorted.length;
-    const tStart = n === 1 ? tBase : tBase - tSpread / 2;
-    const tStep = n > 1 ? tSpread / (n - 1) : 0;
-    const t = n === 1 ? tBase : tStart + tStep * eqIndex;
-    const lng = lng1 + dx * t;
-    const lat = lat1 + dy * t;
-    return L.latLng(lat, lng);
+    for (let i = 0; i < orderedPoles.length - 1; i++) {
+      const p1 = orderedPoles[i];
+      const p2 = orderedPoles[i + 1];
+      const combined = this.combinedLineEquipmentForSegment(p1, p2, i === 0);
+      const idx = combined.findIndex((eq) => eq.id != null && Number(eq.id) === equipmentId);
+      if (idx < 0) continue;
+      const c1 = p1.geometry?.coordinates as number[] | undefined;
+      const c2 = p2.geometry?.coordinates as number[] | undefined;
+      if (!c1?.length || !c2?.length) return null;
+      const lng1 = Number(c1[0]);
+      const lat1 = Number(c1[1]);
+      const lng2 = Number(c2[0]);
+      const lat2 = Number(c2[1]);
+      const dx = lng2 - lng1;
+      const dy = lat2 - lat1;
+      const n = combined.length;
+      const t = this.tUniformOnSegment(idx, n);
+      const lng = lng1 + dx * t;
+      const lat = lat1 + dy * t;
+      return L.latLng(lat, lng);
+    }
+    const c = poleFeature.geometry?.coordinates as number[] | undefined;
+    if (!c?.length || c.length < 2) return null;
+    return L.latLng(Number(c[1]), Number(c[0]));
   }
 
   /**
@@ -769,43 +797,22 @@ export class MapComponent implements OnInit, OnDestroy {
     const lat2 = c2[1] as number;
     const dx = lng2 - lng1;
     const dy = lat2 - lat1;
-    const sortEq = (list: Equipment[]) =>
-      list
-        .map((eq) => ({ eq, key: this.getLineEquipmentIconKey(eq) }))
-        .filter((x) => x.key != null)
-        .sort((a, b) => (a.eq.id ?? 0) - (b.eq.id ?? 0))
-        .map((x) => x.eq);
 
     const points: L.LatLng[] = [];
     points.push(L.latLng(lat1, lng1));
 
-    const collectEquipment = (poleId: number, tBase: number, tSpread: number) => {
-      const rawList = (this.equipmentByPoleId.get(poleId) || []).filter(
-        (eq) => this.getLineEquipmentIconKey(eq) != null
-      );
-      const sorted = sortEq(rawList);
-      if (!sorted.length) return;
-      const n = sorted.length;
-      const tStart = n === 1 ? tBase : tBase - tSpread / 2;
-      const tStep = n > 1 ? tSpread / (n - 1) : 0;
-      sorted.forEach((eq, j) => {
-        const iconKey = this.getLineEquipmentIconKey(eq);
-        if (!iconKey) return;
-        const t = n === 1 ? tBase : tStart + tStep * j;
-        const lng = lng1 + dx * t;
-        const lat = lat1 + dy * t;
-        const center = L.latLng(lat, lng);
-        const terminals = this.getEquipmentTerminalsLatLng(center, iconKey, dx, dy);
-        points.push(...terminals);
-      });
-    };
-
-    if (segmentIndex === 0) {
-      const p1Id = p1.properties?.['id'];
-      if (p1Id != null) collectEquipment(Number(p1Id), 0.2, 0.1);
-    }
-    const p2Id = p2.properties?.['id'];
-    if (p2Id != null) collectEquipment(Number(p2Id), 0.8, 0.2);
+    const combined = this.combinedLineEquipmentForSegment(p1, p2, segmentIndex === 0);
+    const n = combined.length;
+    combined.forEach((eq, j) => {
+      const iconKey = this.getLineEquipmentIconKey(eq);
+      if (!iconKey) return;
+      const t = this.tUniformOnSegment(j, n);
+      const lng = lng1 + dx * t;
+      const lat = lat1 + dy * t;
+      const center = L.latLng(lat, lng);
+      const terminals = this.getEquipmentTerminalsLatLng(center, iconKey, dx, dy);
+      points.push(...terminals);
+    });
 
     return points;
   }
@@ -816,7 +823,7 @@ export class MapComponent implements OnInit, OnDestroy {
    */
   private renderEquipmentBetweenPoles(
     polesFeatures: GeoJSONFeature[],
-    powerLinesList: { id: number }[]
+    powerLinesList: { id: number; voltage_level?: number | null }[]
   ): void {
     if (!this.map || !polesFeatures?.length) return;
 
@@ -880,76 +887,46 @@ export class MapComponent implements OnInit, OnDestroy {
         const getIconAnchor = (iconKey: string): [number, number] => {
           return (iconKey === 'arrester' || iconKey === 'zn') ? [0, iconAnchorCenter] : [iconAnchorCenter, iconAnchorCenter];
         };
-        const buildLineIconHtml = (iconKey: string) => {
-          const path = this.getLineEquipmentAssetPath(iconKey);
-          if (!path) return '';
-          const useOutline = iconKey === 'breaker';
-          const outlineHtml = useOutline
-            ? `<img src="${this.getLineEquipmentAssetPath(iconKey, true)}" class="equipment-on-line-outline" width="${iconSize}" height="${iconSize}" alt="">`
-            : '';
-          const znClass = iconKey === 'zn' ? ' equipment-icon-zn' : '';
-          const mainHtml = `<img src="${path}" class="equipment-on-line-img${znClass}" width="${iconSize}" height="${iconSize}" alt="">`;
-          const recloserBadge = iconKey === 'recloser' ? '<div class="equipment-recloser-badge"></div>' : '';
-          return outlineHtml + mainHtml + recloserBadge;
-        };
-        // Порядок по id (последовательность создания), без разделения на main/aux
-        const sortEq = (list: Equipment[]) => {
-          return list
-            .map(eq => ({ eq, key: this.getLineEquipmentIconKey(eq) }))
-            .filter(x => x.key != null)
-            .sort((a, b) => (a.eq.id ?? 0) - (b.eq.id ?? 0))
-            .map(x => x.eq);
-        };
+        const lineColor = colorForVoltageKv(
+          pl.voltage_level != null && !Number.isNaN(Number(pl.voltage_level)) ? Number(pl.voltage_level) : NaN
+        );
+        const combined = this.combinedLineEquipmentForSegment(p1, p2, i === 0);
+        const nEq = combined.length;
+        const lineId = pl.id;
 
-        const addEquipmentAt = (poleId: number, tBase: number, tSpread: number, poleFeature: GeoJSONFeature) => {
-          // Берём всё линейное оборудование опоры, рисуем на линии (как во Flutter — все по t, без смещения вбок)
-          const rawList = (this.equipmentByPoleId.get(poleId) || []).filter(
-            (eq) => this.getLineEquipmentIconKey(eq) != null
-          );
-          const sorted = sortEq(rawList);
-          if (!sorted.length) return;
-
-          const n = sorted.length;
-          const tStart = n === 1 ? tBase : tBase - tSpread / 2;
-          const tStep = n > 1 ? tSpread / (n - 1) : 0;
-          const lineId = pl.id;
-
-          sorted.forEach((eq, j) => {
-            const iconKey = this.getLineEquipmentIconKey(eq);
-            if (!iconKey) return;
-            const t = n === 1 ? tBase : tStart + tStep * j;
-            const lng = lng1 + dx * t;
-            const lat = lat1 + dy * t;
-            const inner = buildLineIconHtml(iconKey);
-            const rot = getIconRotation(iconKey);
-            const anchor = getIconAnchor(iconKey);
-            const html = `<div class="equipment-geojson-marker equipment-on-line" style="transform: rotate(${rot}deg); width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}</div>`;
-            const marker = L.marker([lat, lng], {
-              icon: L.divIcon({ className: 'equipment-geojson-icon', html, iconSize: [iconSize, iconSize], iconAnchor: anchor }),
-              interactive: true
-            });
-            marker.bindTooltip(`${eq.equipment_type || ''}${eq.name ? ': ' + eq.name : ''}`, { permanent: false, direction: 'top' });
-            (marker as any).poleFeature = poleFeature;
-            (marker as any).lineId = lineId;
-            marker.on('click', () => {
-              const feat = (marker as any).poleFeature as GeoJSONFeature;
-              const plId = (marker as any).lineId as number;
-              if (feat?.properties) {
-                this.mapService.requestSelectPoleInTree(plId, feat.properties['id'], feat.properties['segment_id'] ?? undefined);
-                this.mapService.requestShowPoleProperties(feat);
-              }
-            });
-            marker.addTo(this.map!);
-            this.equipmentGeoJsonMarkers.push(marker);
+        combined.forEach((eq, j) => {
+          const iconKey = this.getLineEquipmentIconKey(eq);
+          if (!iconKey) return;
+          const t = this.tUniformOnSegment(j, nEq);
+          const lng = lng1 + dx * t;
+          const lat = lat1 + dy * t;
+          const poleIdForClick = Number(eq.pole_id);
+          const poleFeature =
+            (!Number.isNaN(poleIdForClick) &&
+              poles.find((pf) => Number(pf.properties?.['id']) === poleIdForClick)) ||
+            p2;
+          const inner = this.buildLineEquipmentMarkerHtml(iconKey, lineColor);
+          const rot = getIconRotation(iconKey);
+          const anchor = getIconAnchor(iconKey);
+          const html = `<div class="equipment-geojson-marker equipment-on-line" style="transform: rotate(${rot}deg); width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}</div>`;
+          const marker = L.marker([lat, lng], {
+            icon: L.divIcon({ className: 'equipment-geojson-icon', html, iconSize: [iconSize, iconSize], iconAnchor: anchor }),
+            interactive: true
           });
-        };
-
-        if (i === 0) {
-          const p1Id = p1.properties?.['id'];
-          if (p1Id != null) addEquipmentAt(Number(p1Id), 0.2, 0.1, p1);
-        }
-        const p2Id = p2.properties?.['id'];
-        if (p2Id != null) addEquipmentAt(Number(p2Id), 0.8, 0.2, p2);
+          marker.bindTooltip(`${eq.equipment_type || ''}${eq.name ? ': ' + eq.name : ''}`, { permanent: false, direction: 'top' });
+          (marker as any).poleFeature = poleFeature;
+          (marker as any).lineId = lineId;
+          marker.on('click', () => {
+            const feat = (marker as any).poleFeature as GeoJSONFeature;
+            const plId = (marker as any).lineId as number;
+            if (feat?.properties) {
+              this.mapService.requestSelectPoleInTree(plId, feat.properties['id'], feat.properties['segment_id'] ?? undefined);
+              this.mapService.requestShowPoleProperties(feat);
+            }
+          });
+          marker.addTo(this.map!);
+          this.equipmentGeoJsonMarkers.push(marker);
+        });
       }
     });
   }
@@ -1231,10 +1208,12 @@ export class MapComponent implements OnInit, OnDestroy {
       const coords = feature.geometry.coordinates as number[][];
       if (!Array.isArray(coords) || coords.length < 2) return;
       const latlngs = coords.map(c => [c[1], c[0]] as L.LatLngExpression);
+      const vlRaw = Number(props['voltage_level']);
+      const isTapSeg = props['segment_is_tap'] === true;
       const line = L.polyline(latlngs, {
-        color: '#9C27B0',
-        weight: 3,
-        opacity: 0.8,
+        color: colorForVoltageKv(Number.isFinite(vlRaw) ? vlRaw : null),
+        weight: lineWeightForBranch(!!isTapSeg),
+        opacity: 0.85,
         dashArray: '6, 6'
       });
       line.addTo(this.map!);
@@ -1319,10 +1298,12 @@ export class MapComponent implements OnInit, OnDestroy {
         const coordinates = feature.geometry.coordinates as number[];
         const latlng = L.latLng(Number(coordinates[1]), Number(coordinates[0]));
         
+        const vl = Number(feature.properties['voltage_level']);
+        const tapBg = colorForVoltageKv(Number.isFinite(vl) ? vl : null);
         const marker = L.marker(latlng, {
           icon: L.divIcon({
             className: 'tap-marker',
-            html: '<div style="background-color: #FF9800; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>',
+            html: `<div style="background-color: ${tapBg}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
             iconSize: [20, 20],
             iconAnchor: [10, 10]
           })
@@ -1346,10 +1327,12 @@ export class MapComponent implements OnInit, OnDestroy {
         const coordinates = feature.geometry.coordinates as number[];
         const latlng = L.latLng(Number(coordinates[1]), Number(coordinates[0]));
         
+        const vl = Number(feature.properties['voltage_level']);
+        const subBg = colorForVoltageKv(Number.isFinite(vl) ? vl : null);
         const marker = L.marker(latlng, {
           icon: L.divIcon({
             className: 'substation-marker',
-            html: '<div style="background-color: #9C27B0; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>',
+            html: `<div style="background-color: ${subBg}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
             iconSize: [20, 20],
             iconAnchor: [10, 10]
           })
@@ -1393,7 +1376,7 @@ export class MapComponent implements OnInit, OnDestroy {
       poles.sort((a, b) => (a.properties?.['sequence_number'] ?? 0) - (b.properties?.['sequence_number'] ?? 0));
     });
 
-    data.powerLinesList.forEach((pl: { id: number; name?: string; substation_start_id?: number | null; substation_end_id?: number | null }) => {
+    data.powerLinesList.forEach((pl: { id: number; name?: string; substation_start_id?: number | null; substation_end_id?: number | null; voltage_level?: number | null }) => {
       const lineId = pl.id;
       const poles = polesByLine.get(lineId);
       if (!poles?.length) return;
@@ -1413,10 +1396,11 @@ export class MapComponent implements OnInit, OnDestroy {
           const subLatLng: L.LatLngExpression = [subCoords[1], subCoords[0]];
           const poleLatLng = getPoleLatLng(firstPole);
           if (poleLatLng) {
+            const vlRaw = pl.voltage_level != null ? Number(pl.voltage_level) : NaN;
             const line = L.polyline([subLatLng, poleLatLng], {
-              color: '#9C27B0',
-              weight: 3,
-              opacity: 0.8,
+              color: colorForVoltageKv(Number.isFinite(vlRaw) ? vlRaw : null),
+              weight: lineWeightForBranch(false),
+              opacity: 0.85,
               dashArray: '6, 6'
             }).bindPopup(`Подстанция → ЛЭП «${pl.name ?? lineId}»`);
             line.addTo(this.map!);
@@ -1431,10 +1415,11 @@ export class MapComponent implements OnInit, OnDestroy {
           const subLatLng: L.LatLngExpression = [subCoords[1], subCoords[0]];
           const poleLatLng = getPoleLatLng(lastPole);
           if (poleLatLng) {
+            const vlRaw = pl.voltage_level != null ? Number(pl.voltage_level) : NaN;
             const line = L.polyline([poleLatLng, subLatLng], {
-              color: '#9C27B0',
-              weight: 3,
-              opacity: 0.8,
+              color: colorForVoltageKv(Number.isFinite(vlRaw) ? vlRaw : null),
+              weight: lineWeightForBranch(false),
+              opacity: 0.85,
               dashArray: '6, 6'
             }).bindPopup(`ЛЭП «${pl.name ?? lineId}» → Подстанция`);
             line.addTo(this.map!);

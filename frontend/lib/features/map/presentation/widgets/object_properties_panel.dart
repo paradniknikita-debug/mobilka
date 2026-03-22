@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'pole_card_attachments_section.dart';
 
 enum ObjectType { pole, substation, tap }
 
-class ObjectPropertiesPanel extends StatelessWidget {
+class ObjectPropertiesPanel extends ConsumerWidget {
   final Map<String, dynamic> objectProperties;
   final ObjectType objectType;
   final VoidCallback onClose;
@@ -73,7 +76,7 @@ class ObjectPropertiesPanel extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef _) {
     final lineId = _toInt(objectProperties['line_id']);
 
     return Container(
@@ -324,6 +327,10 @@ class ObjectPropertiesPanel extends StatelessWidget {
           seq.toString(),
           isLast: true,
         ),
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: PoleCardAttachmentsSection(objectProperties: objectProperties),
+      ),
     ];
   }
 

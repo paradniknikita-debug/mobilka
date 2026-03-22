@@ -14,6 +14,7 @@ from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, sub
 # Временно закомментировано до применения миграции
 # from app.api.v1 import base_voltage, wire_info
 from app.core.config import settings
+from app.core.media_storage import log_media_storage_mode
 from app.core.redis_client import set_redis_client, get_redis_client
 
 # Импортируем модели, чтобы они зарегистрировались в Base.metadata
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
         print(f"ERROR: Критическая ошибка: не удалось инициализировать базу данных.")
         print(f"Приложение не может быть запущено без подключения к БД.")
         raise
+    log_media_storage_mode()
     # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
     yield

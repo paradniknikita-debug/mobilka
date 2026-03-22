@@ -227,6 +227,10 @@ class Pole {
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
+  @JsonKey(name: 'card_comment')
+  final String? cardComment;
+  @JsonKey(name: 'card_comment_attachment')
+  final String? cardCommentAttachment;
   @JsonKey(name: 'created_by')
   final int createdBy;
   @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
@@ -256,6 +260,8 @@ class Pole {
     this.tapBranchIndex,
     required this.condition,
     this.notes,
+    this.cardComment,
+    this.cardCommentAttachment,
     required this.createdBy,
     required this.createdAt,
     this.updatedAt,
@@ -286,6 +292,8 @@ class Pole {
     int? tapBranchIndex,
     String? condition,
     String? notes,
+    String? cardComment,
+    String? cardCommentAttachment,
     int? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -312,6 +320,8 @@ class Pole {
     tapBranchIndex: tapBranchIndex ?? this.tapBranchIndex,
     condition: condition ?? this.condition,
       notes: notes ?? this.notes,
+      cardComment: cardComment ?? this.cardComment,
+      cardCommentAttachment: cardCommentAttachment ?? this.cardCommentAttachment,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
