@@ -411,6 +411,32 @@ async def _download_sync_data_impl(
             "data": eq_data,
             "timestamp": (eq.updated_at or eq.created_at).isoformat() if (eq.updated_at or eq.created_at) else datetime.now(timezone.utc).isoformat(),
         })
+
+    # Явные удаления (tombstones) из ChangeLog, чтобы клиенты удаляли сущности,
+    # исчезнувшие на сервере (например, удалили ЛЭП в веб-клиенте).
+    delete_logs_result = await db.execute(
+        select(ChangeLog).where(
+            and_(
+                ChangeLog.action == "delete",
+                ChangeLog.entity_type.in_(["power_line", "pole", "equipment"]),
+                ChangeLog.entity_id.isnot(None),
+                ChangeLog.created_at >= last_sync_dt,
+            )
+        )
+    )
+    delete_logs = delete_logs_result.scalars().all()
+    for log in delete_logs:
+        ts = _ensure_utc(log.created_at) or datetime.now(timezone.utc)
+        records.append({
+            "id": str(uuid.uuid4()),
+            "entity_type": log.entity_type,
+            "action": "delete",
+            "data": {"id": log.entity_id},
+            "timestamp": ts.isoformat(),
+        })
+
+    # Применяем изменения в хронологическом порядке (create/update/delete).
+    records.sort(key=lambda r: r.get("timestamp") or "")
     
     return {
         "records": records,

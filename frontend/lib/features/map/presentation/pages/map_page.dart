@@ -345,46 +345,63 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         }
 
-        // Линейное оборудование: только между соседними по порядку (после сортировки по poleNumber).
-        final plPolesSorted = List<drift_db.Pole>.from(plPoles)
-          ..sort((a, b) => a.poleNumber.compareTo(b.poleNumber));
-        for (var i = 0; i < plPolesSorted.length - 1; i++) {
-          final p1 = plPolesSorted[i];
-          final p2 = plPolesSorted[i + 1];
-          final x1 = (p1.xPosition ?? 0.0);
-          final y1 = (p1.yPosition ?? 0.0);
-          final x2 = (p2.xPosition ?? 0.0);
-          final y2 = (p2.yPosition ?? 0.0);
-          final angleRad = math.atan2(y2 - y1, x2 - x1);
-
-          final combined = _combinedLineEquipmentForSegmentLocal(
-            equipmentByPole,
-            p1,
-            p2,
-            i == 0,
-          );
-          final n = combined.length;
-          for (var j = 0; j < combined.length; j++) {
-            final e = combined[j];
-            final iconPath = _lineEquipmentIconForEquipment(e)!;
-            final t = _tUniformOnSegment(j, n);
-            final lng = x1 + (x2 - x1) * t;
-            final lat = y1 + (y2 - y1) * t;
-            lineEquipmentFeatures.add({
-              'type': 'Feature',
-              'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
-              'properties': {
-                'icon': iconPath,
-                'equipment_type': e.equipmentType,
-                'name': e.name,
-                'from_pole_id': p1.id,
-                'to_pole_id': p2.id,
-                'line_id': pl.id,
-                'pole_id': e.poleId,
-                'equipment_id': e.id,
-                'angle_rad': angleRad,
-              },
+        // Линейное оборудование считаем отдельно по веткам (магистраль/отпайки),
+        // чтобы не связывать "соседями" опоры из разных веток одной ЛЭП.
+        final polesByBranch = <String, List<drift_db.Pole>>{};
+        for (final p in plPoles) {
+          final k = _branchKeyLocalPole(p);
+          polesByBranch.putIfAbsent(k, () => <drift_db.Pole>[]).add(p);
+        }
+        for (final branchPoles in polesByBranch.values) {
+          final ordered = List<drift_db.Pole>.from(branchPoles)
+            ..sort((a, b) {
+              final oa = _poleOrderFromNumber(a.poleNumber);
+              final ob = _poleOrderFromNumber(b.poleNumber);
+              if (oa != ob) return oa.compareTo(ob);
+              return a.poleNumber.compareTo(b.poleNumber);
             });
+          for (var i = 0; i < ordered.length - 1; i++) {
+            final p1 = ordered[i];
+            final p2 = ordered[i + 1];
+            final x1 = (p1.xPosition ?? 0.0);
+            final y1 = (p1.yPosition ?? 0.0);
+            final x2 = (p2.xPosition ?? 0.0);
+            final y2 = (p2.yPosition ?? 0.0);
+            final angleRad = math.atan2(y2 - y1, x2 - x1);
+
+            final combined = _combinedLineEquipmentForSegmentLocal(
+              equipmentByPole,
+              p1,
+              p2,
+              i == 0,
+            );
+            final n = combined.length;
+            for (var j = 0; j < combined.length; j++) {
+              final e = combined[j];
+              final iconPath = _lineEquipmentIconForEquipment(e)!;
+              final t = _tUniformOnSegment(j, n);
+              final lng = x1 + (x2 - x1) * t;
+              final lat = y1 + (y2 - y1) * t;
+              lineEquipmentFeatures.add({
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
+                'properties': {
+                  'icon': iconPath,
+                  'equipment_type': e.equipmentType,
+                  'name': e.name,
+                  'from_pole_id': p1.id,
+                  'to_pole_id': p2.id,
+                  'line_id': pl.id,
+                  'pole_id': e.poleId,
+                  'equipment_id': e.id,
+                  'angle_rad': angleRad,
+                  'from_lng': x1,
+                  'from_lat': y1,
+                  'to_lng': x2,
+                  'to_lat': y2,
+                },
+              });
+            }
           }
         }
       }
@@ -627,7 +644,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       final serverPlFeatures = List<dynamic>.from(powerLinesData['features'] ?? []);
 
       for (final pl in localPowerLines) {
-        if (!serverIds.contains(pl.id)) {
+        final isPureLocalPending = pl.id < 0 || pl.needsSync || pl.isLocal;
+        if (!serverIds.contains(pl.id) && isPureLocalPending) {
           powerLinesList.add(PowerLine(
             id: pl.id,
             name: pl.name,
@@ -764,6 +782,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           'x_position': x.toDouble(),
           'y_position': y.toDouble(),
           'sequence_number': _toInt(props['sequence_number']),
+          'tap_pole_id': _toInt(props['tap_pole_id']),
+          'tap_branch_index': _toInt(props['tap_branch_index']),
         });
       }
       for (final list in serverPolesByLine.values) {
@@ -784,47 +804,69 @@ class _MapPageState extends ConsumerState<MapPage> {
       for (final pl in powerLinesList) {
         final plPoles = serverPolesByLine[pl.id] ?? [];
         if (plPoles.length < 2) continue;
-        for (var i = 0; i < plPoles.length - 1; i++) {
-          final p1 = plPoles[i];
-          final p2 = plPoles[i + 1];
-          final p1Id = p1['id'] as int;
-          final p2Id = p2['id'] as int;
-          final x1 = (p1['x_position'] as num?)?.toDouble();
-          final y1 = (p1['y_position'] as num?)?.toDouble();
-          final x2 = (p2['x_position'] as num?)?.toDouble();
-          final y2 = (p2['y_position'] as num?)?.toDouble();
-          if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
-
-          final angleRad = math.atan2(y2 - y1, x2 - x1);
-
-          final combined = _combinedLineEquipmentForSegmentServer(
-            equipmentByPoleServer,
-            p1Id,
-            p2Id,
-            i == 0,
-          );
-          final n = combined.length;
-          for (var j = 0; j < combined.length; j++) {
-            final e = combined[j];
-            final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
-            final t = _tUniformOnSegment(j, n);
-            final lng = x1 + (x2 - x1) * t;
-            final lat = y1 + (y2 - y1) * t;
-            lineEquipmentFeatures.add({
-              'type': 'Feature',
-              'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
-              'properties': {
-                'icon': iconPath,
-                'equipment_type': e.equipmentType,
-                'name': e.name,
-                'from_pole_id': p1Id,
-                'to_pole_id': p2Id,
-                'line_id': pl.id,
-                'pole_id': e.poleId,
-                'equipment_id': e.id,
-                'angle_rad': angleRad,
-              },
+        final polesByBranch = <String, List<Map<String, dynamic>>>{};
+        for (final p in plPoles) {
+          final k = _branchKeyServerPole(p);
+          polesByBranch.putIfAbsent(k, () => <Map<String, dynamic>>[]).add(p);
+        }
+        for (final branchPoles in polesByBranch.values) {
+          final ordered = List<Map<String, dynamic>>.from(branchPoles)
+            ..sort((a, b) {
+              final snA = a['sequence_number'] as int?;
+              final snB = b['sequence_number'] as int?;
+              if (snA != null && snB != null && snA != snB) return snA.compareTo(snB);
+              final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
+              final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
+              if (oa != ob) return oa.compareTo(ob);
+              return ((a['pole_number']?.toString()) ?? '')
+                  .compareTo((b['pole_number']?.toString()) ?? '');
             });
+          for (var i = 0; i < ordered.length - 1; i++) {
+            final p1 = ordered[i];
+            final p2 = ordered[i + 1];
+            final p1Id = p1['id'] as int;
+            final p2Id = p2['id'] as int;
+            final x1 = (p1['x_position'] as num?)?.toDouble();
+            final y1 = (p1['y_position'] as num?)?.toDouble();
+            final x2 = (p2['x_position'] as num?)?.toDouble();
+            final y2 = (p2['y_position'] as num?)?.toDouble();
+            if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+
+            final angleRad = math.atan2(y2 - y1, x2 - x1);
+
+            final combined = _combinedLineEquipmentForSegmentServer(
+              equipmentByPoleServer,
+              p1Id,
+              p2Id,
+              i == 0,
+            );
+            final n = combined.length;
+            for (var j = 0; j < combined.length; j++) {
+              final e = combined[j];
+              final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
+              final t = _tUniformOnSegment(j, n);
+              final lng = x1 + (x2 - x1) * t;
+              final lat = y1 + (y2 - y1) * t;
+              lineEquipmentFeatures.add({
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
+                'properties': {
+                  'icon': iconPath,
+                  'equipment_type': e.equipmentType,
+                  'name': e.name,
+                  'from_pole_id': p1Id,
+                  'to_pole_id': p2Id,
+                  'line_id': pl.id,
+                  'pole_id': e.poleId,
+                  'equipment_id': e.id,
+                  'angle_rad': angleRad,
+                  'from_lng': x1,
+                  'from_lat': y1,
+                  'to_lng': x2,
+                  'to_lat': y2,
+                },
+              });
+            }
           }
         }
       }
@@ -1103,6 +1145,11 @@ class _MapPageState extends ConsumerState<MapPage> {
                       PolylineLayer(
                         key: ValueKey<Object?>(_powerLinesData),
                         polylines: _buildPowerLinePolylines(),
+                      ),
+
+                    if (_lineEquipmentData != null)
+                      PolylineLayer(
+                        polylines: _buildLineEquipmentConnectionPolylines(),
                       ),
                     
                     if (_polesData != null)
@@ -1553,6 +1600,149 @@ class _MapPageState extends ConsumerState<MapPage> {
     return (j + 1) / (n + 1);
   }
 
+  /// Геометрические параметры «полюсов» для типа линейного оборудования.
+  /// У ЗН/разрядника/разъединителя — один шаблон, у выключателя/реклоузера — другой.
+  ({double halfGapFactor, double tickHalfFactor}) _lineEquipmentPoleTemplateByIcon(
+    String iconPath,
+  ) {
+    final isZn = iconPath.contains('/zn/');
+    final isArrester = iconPath.contains('/arrester/');
+    final isDisconnector = iconPath.contains('/disconnector/');
+    final isBreaker = iconPath.contains('/breaker/');
+    final isRecloser = iconPath.contains('/recloser/');
+    if (isZn || isArrester || isDisconnector) {
+      return (halfGapFactor: 0.085, tickHalfFactor: 0.028);
+    }
+    if (isBreaker || isRecloser) {
+      return (halfGapFactor: 0.07, tickHalfFactor: 0.03);
+    }
+    return (halfGapFactor: 0.075, tickHalfFactor: 0.028);
+  }
+
+  List<Polyline> _buildLineEquipmentConnectionPolylines() {
+    final polylines = <Polyline>[];
+    final data = _lineEquipmentData;
+    final features = data == null ? const <dynamic>[] : (data['features'] as List<dynamic>? ?? const <dynamic>[]);
+
+    for (final feature in features) {
+      try {
+        final geometry = feature['geometry'] as Map<String, dynamic>?;
+        final props = feature['properties'] as Map<String, dynamic>?;
+        if (geometry == null || geometry['type'] != 'Point' || props == null) continue;
+
+        final coordsDyn = geometry['coordinates'];
+        if (coordsDyn is! List || coordsDyn.length < 2) continue;
+        final centerLng = (coordsDyn[0] as num?)?.toDouble();
+        final centerLat = (coordsDyn[1] as num?)?.toDouble();
+        if (centerLng == null || centerLat == null) continue;
+
+        final fromLng = (props['from_lng'] as num?)?.toDouble();
+        final fromLat = (props['from_lat'] as num?)?.toDouble();
+        final toLng = (props['to_lng'] as num?)?.toDouble();
+        final toLat = (props['to_lat'] as num?)?.toDouble();
+        if (fromLng == null || fromLat == null || toLng == null || toLat == null) continue;
+
+        final dx = toLng - fromLng;
+        final dy = toLat - fromLat;
+        final segmentLen = math.sqrt(dx * dx + dy * dy);
+        if (segmentLen <= 0) continue;
+
+        final ux = dx / segmentLen;
+        final uy = dy / segmentLen;
+        final px = -uy;
+        final py = ux;
+
+        final iconPath = props['icon']?.toString() ?? '';
+        final tpl = _lineEquipmentPoleTemplateByIcon(iconPath);
+        final distFromStart = math.sqrt(
+          (centerLng - fromLng) * (centerLng - fromLng) +
+              (centerLat - fromLat) * (centerLat - fromLat),
+        );
+        final distToEnd = math.sqrt(
+          (toLng - centerLng) * (toLng - centerLng) +
+              (toLat - centerLat) * (toLat - centerLat),
+        );
+        final maxHalfGap = math.max(0.0, math.min(distFromStart, distToEnd) * 0.85);
+        final halfGap = math.min(segmentLen * tpl.halfGapFactor, maxHalfGap);
+        if (halfGap <= 0) continue;
+        final tickHalf = segmentLen * tpl.tickHalfFactor;
+
+        final p1 = LatLng(fromLat, fromLng);
+        final p2 = LatLng(toLat, toLng);
+        final poleA = LatLng(centerLat - uy * halfGap, centerLng - ux * halfGap);
+        final poleB = LatLng(centerLat + uy * halfGap, centerLng + ux * halfGap);
+
+        final lineId = _toInt(props['line_id']);
+        final isCurrentPatrol = lineId != null && lineId == _currentLineId;
+        final vl = _voltageKvForPowerLine(lineId);
+        final lineColor = VoltageLevelColors.colorForVoltageKv(vl);
+        final stroke = VoltageLevelColors.strokeWidthForLine(isTap: false, isPatrol: isCurrentPatrol);
+
+        // Соединяем опоры со строго осевыми полюсами оборудования.
+        polylines.add(
+          Polyline(
+            points: [p1, poleA],
+            strokeWidth: stroke,
+            color: lineColor,
+          ),
+        );
+        polylines.add(
+          Polyline(
+            points: [poleB, p2],
+            strokeWidth: stroke,
+            color: lineColor,
+          ),
+        );
+
+        // Визуализируем сами полюса короткими штрихами, перпендикулярными оси пролёта.
+        polylines.add(
+          Polyline(
+            points: [
+              LatLng(poleA.latitude - py * tickHalf, poleA.longitude - px * tickHalf),
+              LatLng(poleA.latitude + py * tickHalf, poleA.longitude + px * tickHalf),
+            ],
+            strokeWidth: stroke + 0.8,
+            color: lineColor,
+          ),
+        );
+        polylines.add(
+          Polyline(
+            points: [
+              LatLng(poleB.latitude - py * tickHalf, poleB.longitude - px * tickHalf),
+              LatLng(poleB.latitude + py * tickHalf, poleB.longitude + px * tickHalf),
+            ],
+            strokeWidth: stroke + 0.8,
+            color: lineColor,
+          ),
+        );
+      } catch (_) {}
+    }
+
+    return polylines;
+  }
+
+  int _poleOrderFromNumber(String poleNumber) {
+    final t = poleNumber.trim();
+    if (t.isEmpty) return 1 << 30;
+    if (!t.contains('/')) return int.tryParse(t) ?? (1 << 30);
+    final parts = t.split('/');
+    if (parts.length < 2) return 1 << 30;
+    return int.tryParse(parts[1].trim()) ?? (1 << 30);
+  }
+
+  String _branchKeyLocalPole(drift_db.Pole p) {
+    final pn = p.poleNumber.trim();
+    if (!pn.contains('/')) return 'main';
+    final root = pn.split('/').first.trim();
+    return root.isEmpty ? 'main' : 'tap:$root';
+  }
+
+  String _branchKeyServerPole(Map<String, dynamic> p) {
+    final tapPoleId = _toInt(p['tap_pole_id']) ?? 0;
+    final tapBranchIndex = _toInt(p['tap_branch_index']) ?? 0;
+    return '$tapPoleId:$tapBranchIndex';
+  }
+
   /// Оборудование на пролёте p1→p2: у первой опоры линии — только на первом сегменте (как на веб-клиенте).
   List<drift_db.EquipmentData> _combinedLineEquipmentForSegmentLocal(
     Map<int, List<drift_db.EquipmentData>> equipmentByPole,
@@ -1610,16 +1800,30 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (type.contains('выключател') || n.contains('выключател') || type == 'breaker' || n.contains('breaker')) {
       return 'assets/equipment/breaker/breaker.svg';
     }
-    // ЗН / заземление: русские названия и API-тип grounding_switch
-    if (type.contains('зн') || type.contains('заземлен') || type == 'grounding_switch' || type.contains('grounding')) {
+    // ЗН / заземление: проверяем и type, и name (часто приходит "ЗН-35" в name).
+    if (type.contains('зн') ||
+        n.contains('зн') ||
+        n.contains('zn') ||
+        type.contains('заземлен') ||
+        n.contains('заземл') ||
+        type == 'grounding_switch' ||
+        type.contains('grounding') ||
+        n.contains('ground')) {
       return 'assets/equipment/zn/zn.svg';
     }
     if (type.contains('разъединитель') || type.contains('разъеденитель') ||
         type.contains('разъедин') || type == 'disconnector' || type.contains('disconnector')) {
       return 'assets/equipment/disconnector/disconnector.svg';
     }
-    // Разрядник / ОПН: русские названия и API-тип surge_arrester
-    if (type.contains('разрядник') || n.contains('опн') || type == 'surge_arrester' || type.contains('arrester') || type.contains('surge')) {
+    // Разрядник / ОПН: проверяем и type, и name.
+    if (type.contains('разрядник') ||
+        n.contains('разряд') ||
+        n.contains('опн') ||
+        type == 'surge_arrester' ||
+        type.contains('arrester') ||
+        type.contains('surge') ||
+        n.contains('arrester') ||
+        n.contains('surge')) {
       return 'assets/equipment/arrester/arrester.svg';
     }
     // Фундамент, изоляторы, траверсы, грозоотвод — на линии не отображаются по дизайну, не логируем.
@@ -1745,11 +1949,16 @@ class _MapPageState extends ConsumerState<MapPage> {
           final coordsDyn = geometry['coordinates'];
           if (coordsDyn is! List || coordsDyn.length < 2) continue;
           final coords = coordsDyn as List;
-
-          final latLng = LatLng(
-            (coords[1] as num).toDouble(),
-            (coords[0] as num).toDouble(),
-          );
+          final latRaw = coords[1];
+          final lngRaw = coords[0];
+          final lat = latRaw is num ? latRaw.toDouble() : null;
+          final lng = lngRaw is num ? lngRaw.toDouble() : null;
+          if (lat == null || lng == null) {
+            // В редких случаях при частично синхронизированных данных координаты могут быть null.
+            // Такой маркер пропускаем, чтобы не ронять всю загрузку карты.
+            continue;
+          }
+          final latLng = LatLng(lat, lng);
           final iconPath = props?['icon'] as String?;
           if (iconPath == null) {
             continue;
@@ -1772,9 +1981,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           const iconSize = 64.0;
           // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
           final isZn = iconPath.contains('/zn/');
-          final isArrester = iconPath.contains('/arrester/');
           final isDisconnector = iconPath.contains('/disconnector/');
-          final isZnOrArrester = isZn || isArrester;
 
           // Иконка с заливкой (цвет по линии)
           Widget iconWidget = SvgPicture.asset(
@@ -1802,40 +2009,10 @@ class _MapPageState extends ConsumerState<MapPage> {
           final isBreaker = iconPath.contains('/breaker/');
 
           Widget child = iconWidget;
-          // Для ЗН смещаем локальную систему координат так, чтобы «начало» символа
-          // (точка подключения к вертикальному проводу) совпадало с центром маркера.
-          // В SVG `zn.svg` (viewBox 0..200 x 0..80) эта точка — вход провода
-          // в символ по левой кромке viewBox: x=0, y≈40 (центр прямоугольника 35..45).
-          // Центр итогового виджета 64x64 — точка (32,32).
+          // ЗН в исходном SVG очень вытянут по горизонтали — немного уменьшаем.
           if (isZn) {
-            const double viewBoxWidth = 200.0;
-            const double viewBoxHeight = 80.0;
-            const double anchorX = 0.0;
-            const double anchorY = 40.0;
-            final double dx = 32.0 - (anchorX * iconSize / viewBoxWidth);
-            final double dy = 32.0 - (anchorY * iconSize / viewBoxHeight);
-            child = Transform.translate(
-              offset: Offset(dx, dy),
-              child: Transform.scale(
-                scale: 0.40,
-                child: child,
-              ),
-            );
-          } else if (isArrester) {
-            // Для разрядника используем «начало» в точке подключения к линии.
-            // В `arrester.svg` (viewBox 0..200 x 0..200, <g transform="translate(100,100)">)
-            // точка подключения — левый конец шины в команде "M -80 0 L -40 0",
-            // после трансформации имеющая координаты (20,100).
-            // Смещаем локальную систему координат так, чтобы эта точка совпала
-            // с центром маркера (32,32) в итоговом виджете 64x64.
-            const double viewBoxWidth = 200.0;
-            const double viewBoxHeight = 200.0;
-            const double anchorX = 20.0;
-            const double anchorY = 100.0;
-            final double dx = 32.0 - (anchorX * iconSize / viewBoxWidth);
-            final double dy = 32.0 - (anchorY * iconSize / viewBoxHeight);
-            child = Transform.translate(
-              offset: Offset(dx, dy),
+            child = Transform.scale(
+              scale: 0.40,
               child: child,
             );
           }
@@ -1861,41 +2038,27 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
 
-          // Поворот иконки по тем же правилам, что и на веб-карте (Angular):
-          // - ЗН и разрядник: шина сонаправлена пролёту;
-          // - выключатель, разъединитель, реклоузер: боковая сторона перпендикулярна линии с небольшими поправками.
+          // Поворот иконки: оборудование рисуем перпендикулярно пролёту,
+          // при этом anchor-точка остаётся на самой линии.
           final angleValue = props?['angle_rad'];
           if (angleValue is num) {
             final lineAngleRad = angleValue.toDouble();
             final lineAngleDeg = lineAngleRad * 180.0 / math.pi;
-            const rotOffsetDeg = -10.0;
-            final iconAngleDegMain = lineAngleDeg + rotOffsetDeg;
-            final iconAngleDegZnArrester = 90.0 - lineAngleDeg + rotOffsetDeg;
+            final iconAngleDegPerp = lineAngleDeg + 90.0;
 
             double iconDeg;
-            if (isZn || isArrester) {
-              iconDeg = iconAngleDegZnArrester;
-            } else if (isDisconnector) {
-              iconDeg = iconAngleDegMain + 85.0;
+            if (isDisconnector) {
+              iconDeg = iconAngleDegPerp - 5.0;
             } else if (isBreaker) {
-              iconDeg = iconAngleDegMain - 3.0;
-            } else if (isRecloser) {
-              iconDeg = iconAngleDegMain - 90.0;
+              iconDeg = iconAngleDegPerp - 3.0;
             } else {
-              iconDeg = iconAngleDegMain;
+              iconDeg = iconAngleDegPerp;
             }
 
             final iconRad = iconDeg * math.pi / 180.0;
             child = Transform.rotate(
               angle: iconRad,
               alignment: Alignment.center,
-              child: child,
-            );
-          } else if (isZnOrArrester) {
-            // Для старых данных без angle_rad оставляем лёгкий сдвиг значка,
-            // чтобы контакт был ближе к линии.
-            child = Transform.translate(
-              offset: const Offset(16, -8),
               child: child,
             );
           }
@@ -2806,19 +2969,50 @@ class _MapPageState extends ConsumerState<MapPage> {
     final linePoles = await db.getPolesByLine(lineId);
     final existingPolesCount = linePoles.length;
     if (!mounted) return;
-    // Запоминаем контекст отпайки: до завершения обхода следующие опоры будут 3/2, 3/3, ...
+    // Для старта новой ветки от этой же опоры используем следующий индекс ветки:
+    // если уже есть 3/1, 3/2, то новая ветка начинается с 3/3.
+    int nextBranchIndex = 1;
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final serverPoles = await apiService.getPoles(lineId);
+      for (final p in serverPoles) {
+        if (p.tapPoleId == tapPoleId) {
+          final bi = p.tapBranchIndex ?? 1;
+          if (bi >= nextBranchIndex) nextBranchIndex = bi + 1;
+        }
+      }
+    } catch (_) {
+      // fallback на вычисление из локальных номеров ниже
+    }
+    if (nextBranchIndex == 1 && tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
+      final root = tapPoleNumber.trim();
+      for (final p in linePoles) {
+        final n = p.poleNumber.trim();
+        if (!n.startsWith('$root/')) continue;
+        final parts = n.split('/');
+        if (parts.length < 2) continue;
+        final suffix = int.tryParse(parts[1].trim());
+        if (suffix != null && suffix >= nextBranchIndex) {
+          nextBranchIndex = suffix + 1;
+        }
+      }
+    }
+    if (nextBranchIndex < 1) nextBranchIndex = 1;
+
+    // Запоминаем контекст отпайки: до завершения обхода следующие опоры будут root/(N+1), root/(N+2), ...
     if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
       setState(() => _currentTapRoot = tapPoleNumber);
     }
-    // Нумерация опор отпайки: «номер исходной опоры/номер в отпайке» (3/1, 3/2, ...)
+    // Нумерация первой опоры новой ветки: «номер исходной опоры/индекс ветки» (3/1, затем 3/2, ...).
     final String? initialPoleNumberForTap = (tapPoleNumber != null && tapPoleNumber.isNotEmpty)
-        ? '$tapPoleNumber/1'
+        ? '$tapPoleNumber/$nextBranchIndex'
         : null;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
         lineId: lineId,
         tapPoleId: tapPoleId,
+        tapBranchIndex: nextBranchIndex,
         startNewTap: true,
         initialLatitude: _currentLocation?.latitude,
         initialLongitude: _currentLocation?.longitude,

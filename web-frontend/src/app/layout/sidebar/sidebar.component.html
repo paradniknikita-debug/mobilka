@@ -43,19 +43,24 @@
       <!-- Вложенные элементы ЛЭП: участки (под каждым — пролёты без папки) и одна папка «Опоры» -->
       <div *ngIf="isPowerLineExpanded(item.powerLine.properties['id'])" class="tree-children">
         <!-- Участки: раскрытие только по стрелке, по клику на строку — зум на участок -->
-        <div *ngFor="let segment of item.segments" class="tree-node segment-node">
+        <div *ngFor="let segment of item.segments; let segIdx = index" class="tree-node segment-node">
           <div class="tree-node-header" 
                (contextmenu)="onSegmentRightClick(segment.segmentId, item.powerLine.properties['id'], $event)"
                (dblclick)="segment.segmentId != null && openSegmentCard(segment.segmentId, item.powerLine.properties['id'], segment.segmentName)"
-               [class.expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId)">
-            <mat-icon class="expand-icon" (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId); $event.stopPropagation()">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+               [class.expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)">
+            <button type="button" class="tree-expand-btn"
+                    (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId, segIdx); $event.stopPropagation(); $event.preventDefault()"
+                    (mousedown)="$event.stopPropagation()"
+                    [attr.aria-expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)">
+              <mat-icon class="expand-icon">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            </button>
             <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">linear_scale</mat-icon>
             <span class="node-label" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ getSegmentDisplayName(item, segment) }}</span>
             <span class="node-description" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ segment.spans.length }} прол.</span>
           </div>
           
           <!-- Пролёты участка (без обобщающей папки) -->
-          <div *ngIf="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId)" class="tree-children poles-list">
+          <div *ngIf="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)" class="tree-children poles-list">
             <div *ngFor="let span of segment.spans" 
                  class="tree-node pole-node"
                  (click)="onFeatureClick(span, $event)"

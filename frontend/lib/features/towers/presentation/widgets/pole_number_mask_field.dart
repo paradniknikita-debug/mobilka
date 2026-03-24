@@ -95,7 +95,7 @@ class _PoleNumberMaskFieldState extends State<PoleNumberMaskField> {
     super.dispose();
   }
 
-  static const _digitBoxWidth = 48.0;
+  static const _digitBoxWidth = 68.0;
   static const _letterBoxWidth = 40.0;
   static const _cellRadius = 10.0;
 

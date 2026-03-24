@@ -405,19 +405,30 @@ class PoleCreate {
 
 @JsonSerializable()
 class Equipment {
+  @JsonKey(fromJson: _intFromJson)
   final int id;
+  @JsonKey(name: 'pole_id', fromJson: _intFromJson)
   final int poleId;
+  @JsonKey(name: 'equipment_type', fromJson: _stringFromJson)
   final String equipmentType;
+  @JsonKey(fromJson: _stringFromJson)
   final String name;
   final String? manufacturer;
   final String? model;
+  @JsonKey(name: 'serial_number')
   final String? serialNumber;
+  @JsonKey(name: 'year_manufactured', fromJson: _intFromJsonNullable)
   final int? yearManufactured;
+  @JsonKey(name: 'installation_date', fromJson: _dateTimeFromJsonNullable)
   final DateTime? installationDate;
+  @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
+  @JsonKey(name: 'created_by', fromJson: _intFromJson)
   final int createdBy;
+  @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
   final DateTime createdAt;
+  @JsonKey(name: 'updated_at', fromJson: _dateTimeFromJsonNullable)
   final DateTime? updatedAt;
 
   const Equipment({
@@ -477,12 +488,16 @@ class Equipment {
 
 @JsonSerializable()
 class EquipmentCreate {
+  @JsonKey(name: 'equipment_type')
   final String equipmentType;
   final String name;
   final String? manufacturer;
   final String? model;
+  @JsonKey(name: 'serial_number')
   final String? serialNumber;
+  @JsonKey(name: 'year_manufactured')
   final int? yearManufactured;
+  @JsonKey(name: 'installation_date')
   final DateTime? installationDate;
   final String condition;
   final String? notes;

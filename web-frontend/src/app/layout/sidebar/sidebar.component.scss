@@ -283,11 +283,29 @@
   width: 100%;
 }
 
+.tree-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+
+  &:focus-visible {
+    outline: 2px solid rgba(25, 118, 210, 0.5);
+    outline-offset: 1px;
+  }
+}
+
 .expand-icon {
   width: 18px;
   height: 18px;
   font-size: 18px;
-  margin-right: 4px;
+  margin-right: 0;
   color: rgba(0, 0, 0, 0.54);
   transition: transform 0.2s ease;
 }

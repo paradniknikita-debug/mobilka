@@ -637,7 +637,8 @@ $equip-color: #ba68c8;
     box-sizing: border-box;
   }
   .equipment-icon-zn {
-    transform: scale(0.40);
+    transform: scale(0.58);
+    transform-origin: center center;
   }
   .equipment-recloser-badge {
     position: absolute;

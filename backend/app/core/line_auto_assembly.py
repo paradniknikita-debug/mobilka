@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, or_
 from sqlalchemy.orm import selectinload
 
-from app.models.power_line import Pole, Span
+from app.models.power_line import Pole, Span, Equipment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.models.acline_segment import AClineSegment
 from app.models.substation import Substation
@@ -115,6 +115,12 @@ async def _connectivity_node_display_name(
         if sub:
             return (sub.name or sub.dispatcher_name or "ПС")[:50]
     if node.pole:
+        # Если на опоре есть секционирующее оборудование, граница участка — по имени
+        # оборудования из БД (например «РЛНД-10»), иначе родовое имя типа.
+        sw_parts = await _main_switching_display_parts_on_pole(db, node.pole.id)
+        if sw_parts:
+            return " → ".join(sw_parts)
+
         raw = (node.pole.pole_number or "").strip() or f"{node.pole.id}"
         # Единообразие с API: «3», «3/2», «3/2 а» -> «Опора 3», …
         if re.match(r"^\d+$", raw):
@@ -329,6 +335,115 @@ async def is_branching_pole(db: AsyncSession, pole_id: int, power_line_id: int) 
     return outgoing_spans_count > 1
 
 
+def _normalize_main_switching_equipment_type(equipment_type: Optional[str]) -> Optional[str]:
+    """Канонический тип секционирующего оборудования или None."""
+    et = (equipment_type or "").strip().lower()
+    if not et:
+        return None
+    if "разъедин" in et or "disconnector" in et:
+        return "disconnector"
+    if "выключат" in et or "breaker" in et:
+        return "breaker"
+    if "реклозер" in et or "recloser" in et:
+        return "recloser"
+    return None
+
+
+def _is_main_switching_equipment_type(equipment_type: Optional[str]) -> bool:
+    """
+    Коммутационное оборудование, которое должно разрывать участок:
+    - разъединитель
+    - выключатель
+    - реклоузер
+    ЗН/разрядник здесь НЕ учитываются.
+    """
+    return _normalize_main_switching_equipment_type(equipment_type) is not None
+
+
+async def _main_switching_sequence_on_pole(
+    db: AsyncSession,
+    pole_id: Optional[int],
+) -> List[str]:
+    """
+    Последовательность секционирующих устройств на опоре.
+    Одинаковые подряд устройства (например, 3 одинаковых разъединителя по фазам)
+    схлопываются в один элемент.
+    """
+    if pole_id is None:
+        return []
+    result = await db.execute(
+        select(Equipment).where(Equipment.pole_id == pole_id).order_by(Equipment.id.asc())
+    )
+    eq_list = result.scalars().all()
+    seq: List[str] = []
+    for eq in eq_list:
+        kind = _normalize_main_switching_equipment_type(getattr(eq, "equipment_type", None))
+        if kind is None:
+            continue
+        if not seq or seq[-1] != kind:
+            seq.append(kind)
+    return seq
+
+
+def _generic_label_for_switching_kind(kind: str) -> str:
+    labels = {
+        "disconnector": "Разъединитель",
+        "breaker": "Выключатель",
+        "recloser": "Реклозер",
+    }
+    return labels.get(kind, kind)
+
+
+async def _main_switching_display_parts_on_pole(
+    db: AsyncSession,
+    pole_id: Optional[int],
+) -> List[str]:
+    """
+    Подписи для отображения: имя оборудования из БД, иначе родовое (Разъединитель, …).
+    Трёхфазное однотипное оборудование — одна подпись (первое по id).
+    """
+    if pole_id is None:
+        return []
+    result = await db.execute(
+        select(Equipment).where(Equipment.pole_id == pole_id).order_by(Equipment.id.asc())
+    )
+    eq_list = result.scalars().all()
+    parts: List[str] = []
+    last_kind: Optional[str] = None
+    for eq in eq_list:
+        kind = _normalize_main_switching_equipment_type(getattr(eq, "equipment_type", None))
+        if kind is None:
+            continue
+        if last_kind == kind:
+            continue
+        raw_name = (getattr(eq, "name", None) or "").strip()
+        parts.append((raw_name if raw_name else _generic_label_for_switching_kind(kind))[:100])
+        last_kind = kind
+    return parts
+
+
+async def _main_switching_label_on_pole(
+    db: AsyncSession,
+    pole_id: Optional[int],
+) -> Optional[str]:
+    """Подпись секционирующего оборудования для пролётов (имена из БД, как в дереве)."""
+    parts = await _main_switching_display_parts_on_pole(db, pole_id)
+    if not parts:
+        return None
+    return " -> ".join(parts)
+
+
+async def _has_main_switching_equipment_on_pole(
+    db: AsyncSession,
+    pole_id: Optional[int],
+) -> bool:
+    """Проверяет, есть ли на опоре секционирующее оборудование (разъединитель/выключатель/реклоузер)."""
+    if pole_id is None:
+        return False
+    seq = await _main_switching_sequence_on_pole(db, pole_id)
+    return len(seq) > 0
+
+
 async def find_or_create_acline_segment(
     db: AsyncSession,
     power_line_id: int,
@@ -447,9 +562,14 @@ async def find_or_create_acline_segment(
     if not from_node:
         raise ValueError(f"ConnectivityNode {from_connectivity_node_id} not found")
     
-    # Определяем структурное ветвление по флагу is_tap_pole на опоре,
-    # а не по количеству исходящих пролётов (Span), чтобы магистральный
-    # сегмент не обрывался раньше времени (как ПС–оп.2 вместо ПС–оп.3).
+    # Определяем структурное ветвление:
+    # 1) отпаечная опора (is_tap_pole=True)
+    # 2) на опоре установлено секционирующее оборудование
+    #    (разъединитель/выключатель/реклоузер).
+    # ЗН/разрядники НЕ считаются границей участка.
+    #
+    # Это позволяет делить AClineSegment по коммутационному оборудованию
+    # так же, как по отпаечным опорам.
     result = await db.execute(
         select(Pole).where(
             Pole.id == from_node.pole_id,
@@ -457,7 +577,13 @@ async def find_or_create_acline_segment(
         )
     )
     pole = result.scalar_one_or_none()
-    is_branching = bool(getattr(pole, "is_tap_pole", False)) if pole is not None else False
+    has_main_switch = await _has_main_switching_equipment_on_pole(
+        db,
+        getattr(pole, "id", None) if pole is not None else None,
+    )
+    is_branching = (
+        bool(getattr(pole, "is_tap_pole", False)) if pole is not None else False
+    ) or has_main_switch
     
     # Проверяем, является ли опора «стартом» магистрали только один раз,
     # когда ещё нет ни одного сегмента в линии.
@@ -751,26 +877,69 @@ async def auto_create_span(
     to_display = await _connectivity_node_display_name(db, new_connectivity_node.id)
     from_short = _short_label_for_span(from_display)
     to_short = _short_label_for_span(to_display)
-    span_number = f"Пролёт {from_short}-{to_short}"
+    switch_label = await _main_switching_label_on_pole(db, previous_pole.id)
 
-    # Создаём пролёт
-    span = Span(
-        mrid=generate_mrid(),
-        span_number=span_number,
-        line_id=power_line_id,
-        from_pole_id=previous_pole.id,
-        to_pole_id=new_pole.id,
-        from_connectivity_node_id=previous_cn.id,
-        to_connectivity_node_id=new_connectivity_node.id,
-        line_section_id=line_section.id,
-        length=distance,  # в метрах
-        conductor_type=conductor_type or "AC-70",
-        conductor_material=conductor_material or "алюминий",
-        sequence_number=span_count + 1,
-        created_by=current_user_id
-    )
-    db.add(span)
-    await db.flush()
+    # Если на начальной опоре пролёта есть секционирующее оборудование:
+    # моделируем разбиение как два пролёта внутри той же геометрии:
+    # 1) опора -> оборудование
+    # 2) оборудование -> следующая опора
+    # Длину делим пополам, чтобы суммарная длина не изменилась.
+    if switch_label:
+        span_a = Span(
+            mrid=generate_mrid(),
+            span_number=f"Пролёт {from_short}-{switch_label}",
+            line_id=power_line_id,
+            from_pole_id=previous_pole.id,
+            to_pole_id=new_pole.id,
+            from_connectivity_node_id=previous_cn.id,
+            to_connectivity_node_id=new_connectivity_node.id,
+            line_section_id=line_section.id,
+            length=distance / 2.0,
+            conductor_type=conductor_type or "AC-70",
+            conductor_material=conductor_material or "алюминий",
+            sequence_number=span_count + 1,
+            created_by=current_user_id,
+        )
+        db.add(span_a)
+        await db.flush()
+
+        span_b = Span(
+            mrid=generate_mrid(),
+            span_number=f"Пролёт {switch_label}-{to_short}",
+            line_id=power_line_id,
+            from_pole_id=previous_pole.id,
+            to_pole_id=new_pole.id,
+            from_connectivity_node_id=previous_cn.id,
+            to_connectivity_node_id=new_connectivity_node.id,
+            line_section_id=line_section.id,
+            length=distance / 2.0,
+            conductor_type=conductor_type or "AC-70",
+            conductor_material=conductor_material or "алюминий",
+            sequence_number=span_count + 2,
+            created_by=current_user_id,
+        )
+        db.add(span_b)
+        await db.flush()
+        span = span_b
+    else:
+        span_number = f"Пролёт {from_short}-{to_short}"
+        span = Span(
+            mrid=generate_mrid(),
+            span_number=span_number,
+            line_id=power_line_id,
+            from_pole_id=previous_pole.id,
+            to_pole_id=new_pole.id,
+            from_connectivity_node_id=previous_cn.id,
+            to_connectivity_node_id=new_connectivity_node.id,
+            line_section_id=line_section.id,
+            length=distance,  # в метрах
+            conductor_type=conductor_type or "AC-70",
+            conductor_material=conductor_material or "алюминий",
+            sequence_number=span_count + 1,
+            created_by=current_user_id
+        )
+        db.add(span)
+        await db.flush()
     
     # Обновляем общую длину секции
     result = await db.execute(

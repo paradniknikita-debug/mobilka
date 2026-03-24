@@ -168,7 +168,7 @@ export class ApiService {
     return this.http.delete<void>(`${this.apiUrl}/power-lines/${lineId}/spans/${spanId}`);
   }
 
-  autoCreateSpans(lineId: number, mode: 'full' | 'preserve' = 'preserve'): Observable<any> {
+  autoCreateSpans(lineId: number, mode: 'full' | 'preserve' = 'full'): Observable<any> {
     const params = new HttpParams().set('mode', mode);
     return this.http.post<any>(`${this.apiUrl}/power-lines/${lineId}/spans/auto-create`, {}, { params });
   }

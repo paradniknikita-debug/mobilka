@@ -632,9 +632,27 @@ class SyncService extends StateNotifier<SyncState> {
         );
         break;
       case 'delete':
-        await _database.deletePowerLine(_toInt(data['id']));
+        final plId = _toInt(data['id']);
+        if (plId != 0) {
+          await _deleteLocalPowerLineCascade(plId);
+        }
         break;
     }
+  }
+
+  /// Локальный каскад при удалении ЛЭП с сервера:
+  /// удаляем оборудование и опоры линии, сессии обхода и саму линию.
+  Future<void> _deleteLocalPowerLineCascade(int powerLineId) async {
+    final poles = await _database.getPolesByLine(powerLineId);
+    for (final p in poles) {
+      final eqList = await _database.getEquipmentByPole(p.id);
+      for (final eq in eqList) {
+        await _database.deleteEquipment(eq.id);
+      }
+      await _database.deletePole(p.id);
+    }
+    await _database.deletePatrolSessionsByLineId(powerLineId);
+    await _database.deletePowerLine(powerLineId);
   }
 
   Future<void> _processPoleRecord(String action, Map<String, dynamic> data) async {
@@ -719,7 +737,14 @@ class SyncService extends StateNotifier<SyncState> {
         );
         break;
       case 'delete':
-        await _database.deletePole(_toInt(data['id']));
+        final poleId = _toInt(data['id']);
+        if (poleId != 0) {
+          final eqList = await _database.getEquipmentByPole(poleId);
+          for (final eq in eqList) {
+            await _database.deleteEquipment(eq.id);
+          }
+          await _database.deletePole(poleId);
+        }
         break;
     }
   }

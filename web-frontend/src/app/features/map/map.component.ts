@@ -106,6 +106,62 @@ export class MapComponent implements OnInit, OnDestroy {
   // Оборудование по опорам для отрисовки SVG-значков на карте
   private allEquipment: Equipment[] = [];
   private equipmentByPoleId = new Map<number, Equipment[]>();
+  // Спецификация терминалов SVG (координаты в системе viewBox).
+  private readonly equipmentTerminalSpec: Record<string, {
+    viewBox: [number, number, number, number];
+    t1: [number, number];
+    t2?: [number, number] | null;
+    anchor?: [number, number] | null;
+    rotationOffsetDeg?: number;
+    // Для SVG, где геометрия задана в локальной системе вокруг (0,0) и затем сдвинута transform=translate(...).
+    localOriginToViewBox?: [number, number] | null;
+    localRotateDeg?: number;
+    iconScale?: number;
+  }> = {
+    zn: {
+      viewBox: [0, 0, 200, 80],
+      t1: [-30, 40],
+      t2: null,
+      anchor: [-30, 40],
+      rotationOffsetDeg: 90,
+      iconScale: 0.58,
+    },
+    arrester: {
+      viewBox: [0, 0, 200, 200],
+      t1: [-80, -40],
+      t2: null,
+      anchor: [-80, -40],
+      rotationOffsetDeg: 0,
+      localOriginToViewBox: [100, 100],
+    },
+    disconnector: {
+      viewBox: [0, 0, 200, 200],
+      t1: [0, -40],
+      t2: [0, 40],
+      anchor: null,
+      rotationOffsetDeg: 0,
+      localOriginToViewBox: [100, 100],
+      // В исходном SVG есть rotate(90) внутри transform.
+      // Применяем ту же локальную ротацию к терминалам/anchor из спецификации.
+      localRotateDeg: 90,
+    },
+    breaker: {
+      viewBox: [0, 0, 200, 200],
+      t1: [-40, 0],
+      t2: [40, 0],
+      anchor: null,
+      rotationOffsetDeg: 0,
+      localOriginToViewBox: [100, 100],
+    },
+    recloser: {
+      viewBox: [0, 0, 200, 200],
+      t1: [-40, 0],
+      t2: [40, 0],
+      anchor: null,
+      rotationOffsetDeg: 0,
+      localOriginToViewBox: [100, 100],
+    },
+  };
 
   constructor(
     private mapService: MapService,
@@ -271,6 +327,12 @@ export class MapComponent implements OnInit, OnDestroy {
         this.currentZoom = this.map.getZoom();
         // Обновляем зум в сервисе для доступа из других компонентов
         this.mapService.setCurrentZoom(this.currentZoom);
+        // Важно: терминалы оборудования считаются в пикселях.
+        // При изменении зума пересобираем геометрию, чтобы стыки "опора -> полюс -> опора"
+        // оставались точными и без разрыва на любом масштабе.
+        if (this.mapData) {
+          this.renderMapData(this.mapData);
+        }
         this.updatePoleLabels();
         this.updateEquipmentVisibility();
       }
@@ -427,10 +489,16 @@ export class MapComponent implements OnInit, OnDestroy {
       polesByBranch.get(k)!.push(f);
     });
 
-    // Сортировка внутри веток по sequence_number
+    // Сортировка внутри веток: сначала sequence_number, затем номер опоры.
     polesByBranch.forEach((poles) => {
       poles.sort((a, b) => {
-        return (a.properties?.['sequence_number'] ?? 0) - (b.properties?.['sequence_number'] ?? 0);
+        const sa = Number(a.properties?.['sequence_number']);
+        const sb = Number(b.properties?.['sequence_number']);
+        if (Number.isFinite(sa) && Number.isFinite(sb) && sa !== sb) return sa - sb;
+        const oa = this.poleOrderFromNumber(a.properties?.['pole_number']);
+        const ob = this.poleOrderFromNumber(b.properties?.['pole_number']);
+        if (oa !== ob) return oa - ob;
+        return String(a.properties?.['pole_number'] ?? '').localeCompare(String(b.properties?.['pole_number'] ?? ''));
       });
     });
 
@@ -442,11 +510,12 @@ export class MapComponent implements OnInit, OnDestroy {
       const tapPoleId = feature.properties?.['tap_pole_id'] ?? null;
       const tapBranchIndex = feature.properties?.['tap_branch_index'] ?? null;
       const branchKey = lineId != null ? key(lineId, tapPoleId, tapBranchIndex) : null;
-      let latlngs: L.LatLngExpression[] | undefined;
+      let latlngs: L.LatLngExpression[] | L.LatLngExpression[][] | undefined;
 
       if (branchKey && polesByBranch.has(branchKey)) {
         const poles = polesByBranch.get(branchKey)!;
         const pts: L.LatLngExpression[] = [];
+        const lineParts: L.LatLngExpression[][] = [];
 
         const parts = branchKey.split(':');
         const tapToken = parts[1];
@@ -466,37 +535,36 @@ export class MapComponent implements OnInit, OnDestroy {
           }
         }
 
-        // Линия через полюса оборудования: опора → T1 → T2 → ... (ЗН/разрядник — один полюс, в CIM формируется CN)
+        // Линия через полюса оборудования: опора -> T1, далее от T2 к следующему участку.
+        // Для двухполюсного оборудования участок T1->T2 не рисуем (это "внутри" модельки).
         if (useEquipmentSegments) {
           for (let i = 0; i < poleList.length - 1; i++) {
-            const segPoints = this.buildSegmentConnectionPoints(
+            const segPaths = this.buildSegmentConnectionPaths(
               poleList[i],
               poleList[i + 1],
               i,
               lineId
             );
-            pts.push(...segPoints);
+            lineParts.push(...segPaths.map(path => path.map(p => [p.lat, p.lng] as L.LatLngExpression)));
           }
-          const last = poleList[poleList.length - 1];
-          const lastCoords = last.geometry!.coordinates as number[];
-          pts.push([lastCoords[1], lastCoords[0]]);
+          if (lineParts.length > 0) {
+            latlngs = lineParts;
+          }
         } else {
           poleList.forEach((p: GeoJSONFeature) => {
             const c = p.geometry!.coordinates as number[];
             pts.push([c[1], c[0]]);
           });
-        }
-
-        if (pts.length >= 2) {
-          latlngs = pts;
+          if (pts.length >= 2) {
+            latlngs = pts;
+          }
         }
       }
-      if (!latlngs || latlngs.length < 2) {
+      if (!latlngs || latlngs.length < 1) {
         const coordinates = geom.coordinates as number[][];
         latlngs = coordinates.map(coord => [coord[1], coord[0]] as L.LatLngExpression);
       }
-
-      if (latlngs.length < 2) return;
+      if (Array.isArray(latlngs) && latlngs.length === 0) return;
 
       const isTap = feature.properties['branch_type'] === 'tap';
       const vlRaw = Number(feature.properties['voltage_level']);
@@ -505,7 +573,9 @@ export class MapComponent implements OnInit, OnDestroy {
       const polyline = L.polyline(latlngs, {
         color: lineColor,
         weight: lineWeightForBranch(!!isTap),
-        opacity: 0.85
+        opacity: 0.85,
+        lineCap: 'round',
+        lineJoin: 'round'
       }).bindPopup(`
           <strong>${feature.properties['name'] || 'ЛЭП'}</strong><br>
           Напряжение: ${feature.properties['voltage_level']} кВ<br>
@@ -657,42 +727,167 @@ export class MapComponent implements OnInit, OnDestroy {
     const n = (eq.name || '').toLowerCase();
     if (t.includes('реклоузер') || n.includes('реклоузер') || t === 'recloser' || n.includes('recloser')) return 'recloser';
     if (t.includes('выключател') || n.includes('выключател') || t === 'breaker' || n.includes('breaker')) return 'breaker';
-    if (t.includes('зн') || t.includes('заземлен') || t === 'grounding_switch' || t.includes('grounding')) return 'zn';
+    if (
+      t.includes('зн') ||
+      n.includes('зн') ||
+      n.includes('zn') ||
+      t.includes('заземлен') ||
+      n.includes('заземл') ||
+      t === 'grounding_switch' ||
+      t.includes('grounding') ||
+      n.includes('ground')
+    ) return 'zn';
     if (t.includes('разъединитель') || t.includes('разъеденитель') || t.includes('разъедин') || t === 'disconnector' || t.includes('disconnector')) return 'disconnector';
-    if (t.includes('разрядник') || n.includes('опн') || t === 'surge_arrester' || t.includes('arrester') || t.includes('surge')) return 'arrester';
+    if (
+      t.includes('разрядник') ||
+      n.includes('разряд') ||
+      n.includes('опн') ||
+      t === 'surge_arrester' ||
+      t.includes('arrester') ||
+      t.includes('surge') ||
+      n.includes('arrester') ||
+      n.includes('surge')
+    ) return 'arrester';
     const noIcon = ['фундамент', 'foundation', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
     if (noIcon.some(x => t.includes(x))) return null;
     return null;
   }
 
-  /**
-   * Один полюс у ЗН и разрядника (точка крепления к линии); два полюса T1/T2 у выключателя, реклоузера, разъединителя.
-   * Для ЗН/разрядника в CIM в этой точке формируется Connectivity Node (CN).
-   */
-  private hasTwoTerminals(iconKey: string): boolean {
-    return iconKey === 'breaker' || iconKey === 'recloser' || iconKey === 'disconnector';
+  private toViewBoxPoint(iconKey: string, p: [number, number]): [number, number] {
+    const spec = this.equipmentTerminalSpec[iconKey];
+    if (!spec) return p;
+    let x = p[0];
+    let y = p[1];
+    const localRotateDeg = spec.localRotateDeg ?? 0;
+    if (localRotateDeg !== 0) {
+      const a = localRotateDeg * Math.PI / 180;
+      const cosA = Math.cos(a);
+      const sinA = Math.sin(a);
+      const rx = x * cosA - y * sinA;
+      const ry = x * sinA + y * cosA;
+      x = rx;
+      y = ry;
+    }
+    if (!spec.localOriginToViewBox) return [x, y];
+    return [x + spec.localOriginToViewBox[0], y + spec.localOriginToViewBox[1]];
+  }
+
+  private rotatePointAround(px: number, py: number, cx: number, cy: number, angleRad: number): [number, number] {
+    const dx = px - cx;
+    const dy = py - cy;
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    return [cx + dx * cosA - dy * sinA, cy + dx * sinA + dy * cosA];
+  }
+
+  private poleOrderFromNumber(poleNumber: any): number {
+    const raw = (poleNumber ?? '').toString().trim();
+    if (!raw) return Number.MAX_SAFE_INTEGER;
+    if (!raw.includes('/')) {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+    }
+    const parts = raw.split('/');
+    if (parts.length < 2) return Number.MAX_SAFE_INTEGER;
+    const n = Number(parts[1].trim());
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  }
+
+  private viewBoxPointToIconPixels(iconKey: string, p: [number, number], iconSize: number): [number, number] {
+    const spec = this.equipmentTerminalSpec[iconKey];
+    if (!spec) return [iconSize / 2, iconSize / 2];
+
+    const [minX, minY, vbW, vbH] = spec.viewBox;
+    const scale = Math.min(iconSize / vbW, iconSize / vbH);
+    const drawW = vbW * scale;
+    const drawH = vbH * scale;
+    const offsetX = (iconSize - drawW) / 2;
+    const offsetY = (iconSize - drawH) / 2;
+
+    const [vxRaw, vyRaw] = this.toViewBoxPoint(iconKey, p);
+    let px = offsetX + (vxRaw - minX) * scale;
+    let py = offsetY + (vyRaw - minY) * scale;
+
+    const iconScale = spec.iconScale ?? 1;
+    if (iconScale !== 1) {
+      const cx = iconSize / 2;
+      const cy = iconSize / 2;
+      px = cx + (px - cx) * iconScale;
+      py = cy + (py - cy) * iconScale;
+    }
+    return [px, py];
+  }
+
+  private getRotatedAnchorPx(iconKey: string, lineAngleRad: number, iconSize: number): [number, number] {
+    const spec = this.equipmentTerminalSpec[iconKey];
+    const center: [number, number] = [iconSize / 2, iconSize / 2];
+    if (!spec) return center;
+    const anchorVb = spec.anchor ?? null;
+    if (!anchorVb) return center;
+    const base = this.viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
+    const angle = lineAngleRad + ((spec.rotationOffsetDeg ?? 0) * Math.PI / 180);
+    return this.rotatePointAround(base[0], base[1], center[0], center[1], angle);
+  }
+
+  private getIconRotationDeg(iconKey: string, lineAngleDeg: number): number {
+    const spec = this.equipmentTerminalSpec[iconKey];
+    const extra = spec?.rotationOffsetDeg ?? 0;
+    return lineAngleDeg + extra;
+  }
+
+  private modelAngleRadForIcon(iconKey: string, lineAngleRad: number): number {
+    // Для разъединителя фиксируем осевой угол (без направления p1->p2),
+    // чтобы на всех линиях символ выглядел одинаково.
+    if (iconKey === 'disconnector') {
+      let a = lineAngleRad % Math.PI;
+      if (a < 0) a += Math.PI;
+      return a;
+    }
+    return lineAngleRad;
+  }
+
+  private latLngDist2(a: L.LatLng, b: L.LatLng): number {
+    const dLat = a.lat - b.lat;
+    const dLng = a.lng - b.lng;
+    return dLat * dLat + dLng * dLng;
   }
 
   /**
    * Вычисляет координаты полюсов оборудования в карте (lat/lng).
-   * ЗН/разрядник: один полюс (center = точка крепления).
-   * Выключатель/реклоузер/разъединитель: T1 и T2 вдоль сегмента; смещение = доля длины сегмента (dx, dy), чтобы не сдвигать опоры.
+   * Точки терминалов берём из явной SVG-спецификации (viewBox + t1/t2),
+   * затем поворачиваем на угол пролёта и проецируем в карту.
    */
   private getEquipmentTerminalsLatLng(
     center: L.LatLng,
     iconKey: string,
-    dxLng: number,
-    dyLat: number
+    lineAngleRad: number
   ): L.LatLng[] {
-    if (!this.hasTwoTerminals(iconKey)) {
+    const spec = this.equipmentTerminalSpec[iconKey];
+    if (!spec) {
       return [center];
     }
-    const k = 0.015;
-    const offLng = k * dxLng;
-    const offLat = k * dyLat;
-    const T1 = L.latLng(center.lat - offLat, center.lng - offLng);
-    const T2 = L.latLng(center.lat + offLat, center.lng + offLng);
-    return [T1, T2];
+    if (!this.map) return [center];
+    const iconSize = 64;
+    const centerPx = this.map.latLngToContainerPoint(center);
+
+    const t1PxLocal = this.viewBoxPointToIconPixels(iconKey, spec.t1, iconSize);
+    const t2Raw = spec.t2 ?? null;
+    const t2PxLocal = t2Raw ? this.viewBoxPointToIconPixels(iconKey, t2Raw, iconSize) : null;
+
+    const angle = lineAngleRad + ((spec.rotationOffsetDeg ?? 0) * Math.PI / 180);
+    const c = iconSize / 2;
+
+    const [t1xRot, t1yRot] = this.rotatePointAround(t1PxLocal[0], t1PxLocal[1], c, c, angle);
+    const t1Px = L.point(centerPx.x + (t1xRot - c), centerPx.y + (t1yRot - c));
+    const t1 = this.map.containerPointToLatLng(t1Px);
+
+    if (!t2PxLocal) return [t1];
+
+    const [t2xRot, t2yRot] = this.rotatePointAround(t2PxLocal[0], t2PxLocal[1], c, c, angle);
+    const t2Px = L.point(centerPx.x + (t2xRot - c), centerPx.y + (t2yRot - c));
+    const t2 = this.map.containerPointToLatLng(t2Px);
+
+    return [t1, t2];
   }
 
   /** Оборудование на пролёте (p1→p2): у первой опоры линии — включаем её ТОЛЬКО на первом пролёте. */
@@ -743,9 +938,15 @@ export class MapComponent implements OnInit, OnDestroy {
       const id = f.properties?.['id'];
       if (id != null && !byId.has(Number(id))) byId.set(Number(id), f);
     });
-    const orderedPoles = Array.from(byId.values()).sort(
-      (a, b) => (a.properties?.['sequence_number'] ?? 0) - (b.properties?.['sequence_number'] ?? 0)
-    );
+    const orderedPoles = Array.from(byId.values()).sort((a, b) => {
+      const sa = Number(a.properties?.['sequence_number']);
+      const sb = Number(b.properties?.['sequence_number']);
+      if (Number.isFinite(sa) && Number.isFinite(sb) && sa !== sb) return sa - sb;
+      const oa = this.poleOrderFromNumber(a.properties?.['pole_number']);
+      const ob = this.poleOrderFromNumber(b.properties?.['pole_number']);
+      if (oa !== ob) return oa - ob;
+      return String(a.properties?.['pole_number'] ?? '').localeCompare(String(b.properties?.['pole_number'] ?? ''));
+    });
     if (orderedPoles.length < 2) {
       const c = poleFeature.geometry?.coordinates as number[] | undefined;
       if (!c?.length || c.length < 2) return null;
@@ -779,14 +980,14 @@ export class MapComponent implements OnInit, OnDestroy {
 
   /**
    * Строит список точек сегмента для отрисовки линии: опора1 → полюса оборудования → (опора2 не включается, добавляется при склейке).
-   * Соединения: опора → T1 первого оборудования → T2 → T1 следующего → ... → для ЗН/разрядника один полюс (CN).
+   * Соединения: опора → T1 первого оборудования → T2 → T1 следующего → ... → опора2.
    */
-  private buildSegmentConnectionPoints(
+  private buildSegmentConnectionPaths(
     p1: GeoJSONFeature,
     p2: GeoJSONFeature,
     segmentIndex: number,
     _lineId: number
-  ): L.LatLng[] {
+  ): L.LatLng[][] {
     if (!this.map) return [];
     const c1 = p1.geometry?.coordinates as number[] | undefined;
     const c2 = p2.geometry?.coordinates as number[] | undefined;
@@ -797,9 +998,11 @@ export class MapComponent implements OnInit, OnDestroy {
     const lat2 = c2[1] as number;
     const dx = lng2 - lng1;
     const dy = lat2 - lat1;
+    const p1Screen = this.map.latLngToContainerPoint(L.latLng(lat1, lng1));
+    const p2Screen = this.map.latLngToContainerPoint(L.latLng(lat2, lng2));
 
-    const points: L.LatLng[] = [];
-    points.push(L.latLng(lat1, lng1));
+    const paths: L.LatLng[][] = [];
+    let currentPoint = L.latLng(lat1, lng1);
 
     const combined = this.combinedLineEquipmentForSegment(p1, p2, segmentIndex === 0);
     const n = combined.length;
@@ -810,11 +1013,27 @@ export class MapComponent implements OnInit, OnDestroy {
       const lng = lng1 + dx * t;
       const lat = lat1 + dy * t;
       const center = L.latLng(lat, lng);
-      const terminals = this.getEquipmentTerminalsLatLng(center, iconKey, dx, dy);
-      points.push(...terminals);
+      const lineAngleRad = this.modelAngleRadForIcon(
+        iconKey,
+        Math.atan2(p2Screen.y - p1Screen.y, p2Screen.x - p1Screen.x),
+      );
+      let terminals = this.getEquipmentTerminalsLatLng(center, iconKey, lineAngleRad);
+      if (terminals.length >= 2 && this.latLngDist2(currentPoint, terminals[0]) > this.latLngDist2(currentPoint, terminals[1])) {
+        terminals = [terminals[1], terminals[0]];
+      }
+      if (terminals.length >= 2) {
+        // Для двухполюсного оборудования не рисуем провод между T1 и T2:
+        // рисуем только до T1 и продолжаем от T2.
+        paths.push([currentPoint, terminals[0]]);
+        currentPoint = terminals[1];
+      } else {
+        // Для однотерминального оборудования (например, ЗН/разрядник по вашей спецификации)
+        // не делаем излом линии: магистраль остаётся прямой между опорами.
+        // Смещается только маркер оборудования (через anchor/terminal), без изменения траектории провода.
+      }
     });
-
-    return points;
+    paths.push([currentPoint, L.latLng(lat2, lng2)]);
+    return paths;
   }
 
   /**
@@ -826,36 +1045,53 @@ export class MapComponent implements OnInit, OnDestroy {
     powerLinesList: { id: number; voltage_level?: number | null }[]
   ): void {
     if (!this.map || !polesFeatures?.length) return;
+    const mapRef = this.map;
 
     this.equipmentGeoJsonMarkers.forEach(m => this.map?.removeLayer(m));
     this.equipmentGeoJsonMarkers = [];
 
-    // Для каждой линии pl — опоры с line_id === pl.id, одна цепочка на линию
-    const polesByLineId = new Map<number, GeoJSONFeature[]>();
+    // Для каждой линии pl группируем опоры по веткам (магистраль/отпайки),
+    // чтобы не смешивать соседство опор из разных веток.
+    const key = (lineId: number, tapPoleId: number | null, tapBranchIndex: number | null) =>
+      `${lineId}:${tapPoleId ?? 'main'}:${tapBranchIndex ?? 0}`;
+    const polesByBranchKey = new Map<string, GeoJSONFeature[]>();
     polesFeatures.forEach((f: GeoJSONFeature) => {
       if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
       const lineId = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
       if (lineId == null) return;
       const lid = Number(lineId);
-      if (!polesByLineId.has(lid)) polesByLineId.set(lid, []);
-      polesByLineId.get(lid)!.push(f);
+      const tapPoleIdRaw = f.properties?.['tap_pole_id'];
+      const tapBranchIndexRaw = f.properties?.['tap_branch_index'];
+      const tapPoleId = tapPoleIdRaw == null ? null : Number(tapPoleIdRaw);
+      const tapBranchIndex = tapBranchIndexRaw == null ? null : Number(tapBranchIndexRaw);
+      const k = key(lid, Number.isFinite(tapPoleId as number) ? tapPoleId : null, Number.isFinite(tapBranchIndex as number) ? tapBranchIndex : null);
+      if (!polesByBranchKey.has(k)) polesByBranchKey.set(k, []);
+      polesByBranchKey.get(k)!.push(f);
     });
 
     powerLinesList.forEach((pl) => {
-      let poles = polesByLineId.get(pl.id) ?? [];
-      const byId = new Map<number, GeoJSONFeature>();
-      poles.forEach((f: GeoJSONFeature) => {
-        const id = f.properties?.['id'];
-        if (id != null && !byId.has(Number(id))) byId.set(Number(id), f);
-      });
-      poles = Array.from(byId.values()).sort(
-        (a, b) => (a.properties?.['sequence_number'] ?? 0) - (b.properties?.['sequence_number'] ?? 0)
-      );
-      if (poles.length < 2) return;
+      const branchEntries = Array.from(polesByBranchKey.entries()).filter(([k]) => k.startsWith(`${pl.id}:`));
+      branchEntries.forEach(([, branchPoles]) => {
+        let poles = branchPoles;
+        const byId = new Map<number, GeoJSONFeature>();
+        poles.forEach((f: GeoJSONFeature) => {
+          const id = f.properties?.['id'];
+          if (id != null && !byId.has(Number(id))) byId.set(Number(id), f);
+        });
+        poles = Array.from(byId.values()).sort((a, b) => {
+          const sa = Number(a.properties?.['sequence_number']);
+          const sb = Number(b.properties?.['sequence_number']);
+          if (Number.isFinite(sa) && Number.isFinite(sb) && sa !== sb) return sa - sb;
+          const oa = this.poleOrderFromNumber(a.properties?.['pole_number']);
+          const ob = this.poleOrderFromNumber(b.properties?.['pole_number']);
+          if (oa !== ob) return oa - ob;
+          return String(a.properties?.['pole_number'] ?? '').localeCompare(String(b.properties?.['pole_number'] ?? ''));
+        });
+        if (poles.length < 2) return;
 
-      for (let i = 0; i < poles.length - 1; i++) {
-        const p1 = poles[i];
-        const p2 = poles[i + 1];
+        for (let i = 0; i < poles.length - 1; i++) {
+          const p1 = poles[i];
+          const p2 = poles[i + 1];
         const c1 = p1.geometry?.coordinates as number[] | undefined;
         const c2 = p2.geometry?.coordinates as number[] | undefined;
         if (!c1?.length || !c2?.length) continue;
@@ -866,27 +1102,17 @@ export class MapComponent implements OnInit, OnDestroy {
         const lat2 = Number(c2[1]);
         const dx = lng2 - lng1;
         const dy = lat2 - lat1;
-        const lineAngleRad = Math.atan2(dy, dx);
-        const lineAngleDeg = lineAngleRad * 180 / Math.PI;
-        const rotOffset = -10; // поворот по часовой стрелке на 10°
-        // Выключатель/разъединитель/реклоузер — боковая сторона перпендикулярна линии
-        const iconAngleDegMain = lineAngleDeg + rotOffset;
-        // ЗН и разрядник — шина сонаправлена пролёту
-        const iconAngleDegZnArrester = 90 - lineAngleDeg + rotOffset;
-
+        const p1Screen = mapRef.latLngToContainerPoint(L.latLng(lat1, lng1));
+        const p2Screen = mapRef.latLngToContainerPoint(L.latLng(lat2, lng2));
+        const lineAngleBaseRad = Math.atan2(p2Screen.y - p1Screen.y, p2Screen.x - p1Screen.x);
         const iconSize = 64;
         const iconAnchorCenter = iconSize / 2;
         const getIconRotation = (iconKey: string) => {
-          if (iconKey === 'zn' || iconKey === 'arrester') return iconAngleDegZnArrester;
-          if (iconKey === 'disconnector') return iconAngleDegMain + 85;
-          if (iconKey === 'breaker') return iconAngleDegMain - 3;
-          if (iconKey === 'recloser') return iconAngleDegMain - 90;
-          return iconAngleDegMain;
+          const modelAngleRad = this.modelAngleRadForIcon(iconKey, lineAngleBaseRad);
+          const modelAngleDeg = modelAngleRad * 180 / Math.PI;
+          return this.getIconRotationDeg(iconKey, modelAngleDeg);
         };
-        // Разрядник и ЗН: линия проходит через начало (крайняя левая точка), якорь — левый центр
-        const getIconAnchor = (iconKey: string): [number, number] => {
-          return (iconKey === 'arrester' || iconKey === 'zn') ? [0, iconAnchorCenter] : [iconAnchorCenter, iconAnchorCenter];
-        };
+        const getIconAnchor = (_iconKey: string): [number, number] => [iconAnchorCenter, iconAnchorCenter];
         const lineColor = colorForVoltageKv(
           pl.voltage_level != null && !Number.isNaN(Number(pl.voltage_level)) ? Number(pl.voltage_level) : NaN
         );
@@ -900,6 +1126,10 @@ export class MapComponent implements OnInit, OnDestroy {
           const t = this.tUniformOnSegment(j, nEq);
           const lng = lng1 + dx * t;
           const lat = lat1 + dy * t;
+          const centerLatLng = L.latLng(lat, lng);
+          const modelAngleRad = this.modelAngleRadForIcon(iconKey, lineAngleBaseRad);
+          const terminals = this.getEquipmentTerminalsLatLng(centerLatLng, iconKey, modelAngleRad);
+          const isSingleTerminal = terminals.length === 1;
           const poleIdForClick = Number(eq.pole_id);
           const poleFeature =
             (!Number.isNaN(poleIdForClick) &&
@@ -907,9 +1137,16 @@ export class MapComponent implements OnInit, OnDestroy {
             p2;
           const inner = this.buildLineEquipmentMarkerHtml(iconKey, lineColor);
           const rot = getIconRotation(iconKey);
-          const anchor = getIconAnchor(iconKey);
-          const html = `<div class="equipment-geojson-marker equipment-on-line" style="transform: rotate(${rot}deg); width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}</div>`;
-          const marker = L.marker([lat, lng], {
+          const anchor = isSingleTerminal
+            ? this.getRotatedAnchorPx(iconKey, modelAngleRad, iconSize)
+            : getIconAnchor(iconKey);
+          const transformOrigin = `${anchor[0]}px ${anchor[1]}px`;
+          const html = `<div class="equipment-geojson-marker equipment-on-line" style="transform: rotate(${rot}deg); transform-origin: ${transformOrigin}; width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}</div>`;
+          // Для однотерминального оборудования линия остаётся прямой:
+          // на ось пролёта ставим именно терминал (через iconAnchor/transform-origin),
+          // а не переносим сам маркер с центра.
+          const markerLatLng = centerLatLng;
+          const marker = L.marker(markerLatLng, {
             icon: L.divIcon({ className: 'equipment-geojson-icon', html, iconSize: [iconSize, iconSize], iconAnchor: anchor }),
             interactive: true
           });
@@ -926,8 +1163,9 @@ export class MapComponent implements OnInit, OnDestroy {
           });
           marker.addTo(this.map!);
           this.equipmentGeoJsonMarkers.push(marker);
-        });
-      }
+          });
+        }
+      });
     });
   }
 

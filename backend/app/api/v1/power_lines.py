@@ -173,6 +173,15 @@ def _is_main_switching_equipment(equipment_type: str) -> bool:
     )
 
 
+async def _pair_needs_switch_split(db: AsyncSession, from_pole_id: int) -> bool:
+    """Нужно ли делить пролёт от этой опоры по секционирующему оборудованию (только начало пары)."""
+    result = await db.execute(
+        select(Equipment.equipment_type).where(Equipment.pole_id == from_pole_id)
+    )
+    eq_types = [row[0] for row in result.all()]
+    return any(_is_main_switching_equipment(t or "") for t in eq_types)
+
+
 async def _sync_equipment_terminals_for_line(db: AsyncSession, power_line_id: int) -> None:
     """
     Синхронизирует терминалы оборудования на опорах линии с ConnectivityNode.
@@ -1908,14 +1917,14 @@ async def delete_span(
 @router.post("/{power_line_id}/spans/auto-create")
 async def auto_create_spans(
     power_line_id: int,
-    mode: str = Query("preserve", description="full — пересобрать с нуля (удалить существующие); preserve — добавить только недостающие"),
+    mode: str = Query("full", description="full — пересобрать с нуля (удалить существующие); preserve — добавить только недостающие"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Автоматическое создание пролётов на основе последовательности опор.
-    - mode=preserve (по умолчанию): существующие пролёты сохраняются, добавляются только недостающие.
-    - mode=full: существующие пролёты и участки линии удаляются, топология строится с нуля.
+    - mode=full (по умолчанию): существующие пролёты и участки линии удаляются, топология строится с нуля.
+    - mode=preserve: существующие пролёты сохраняются, добавляются только недостающие.
     Создаёт пролёты между соседними опорами, участки линии (AClineSegment) и секции линии (LineSection).
     """
     from app.models.base import generate_mrid
@@ -2084,8 +2093,18 @@ async def auto_create_spans(
                 Span.line_id == power_line_id
             )
         )
-        if existing_span.scalar_one_or_none():
-            continue
+        existing_pair_spans = list(existing_span.scalars().all())
+        needs_split = await _pair_needs_switch_split(db, from_pole.id)
+        if existing_pair_spans:
+            if not needs_split:
+                continue
+            # Для секционирующего оборудования ожидаем 2 пролёта пары.
+            # Если уже есть 2+ — ничего не делаем.
+            if len(existing_pair_spans) >= 2:
+                continue
+            # Если есть только 1 старый пролёт пары — удаляем и пересоздаём как два.
+            await db.execute(delete(Span).where(Span.id.in_([s.id for s in existing_pair_spans])))
+            await db.flush()
         new_cn = getattr(to_pole, "_connectivity_node", None)
         # is_tap: первый пролёт отпайки (от отпаечной опоры к первой опоре ветки 3/1),
         # как при пошаговом создании (pole_data.is_tap=True только для первой опоры отпайки).

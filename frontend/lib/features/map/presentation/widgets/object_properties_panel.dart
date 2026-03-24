@@ -64,10 +64,21 @@ class ObjectPropertiesPanel extends ConsumerWidget {
     return null;
   }
 
+  static String _normalizePoleTitle(dynamic value) {
+    final raw = (value?.toString() ?? '').trim();
+    if (raw.isEmpty) return 'N/A';
+    const prefix = 'Опора ';
+    if (raw.toLowerCase().startsWith(prefix.toLowerCase())) {
+      final cut = raw.substring(prefix.length).trim();
+      return cut.isEmpty ? 'N/A' : cut;
+    }
+    return raw;
+  }
+
   String get _title {
     switch (objectType) {
       case ObjectType.pole:
-        return 'Опора ${objectProperties['pole_number'] ?? objectProperties['poleNumber'] ?? 'N/A'}';
+        return 'Опора ${_normalizePoleTitle(objectProperties['pole_number'] ?? objectProperties['poleNumber'])}';
       case ObjectType.substation:
         return 'Подстанция ${objectProperties['name']?.toString() ?? 'N/A'}';
       case ObjectType.tap:
@@ -114,6 +125,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
                     _title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
+                          color: Colors.black,
                         ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

@@ -81,7 +81,10 @@ export class SidebarComponent implements OnInit, OnDestroy {
       .subscribe(({ lineId, segmentId, poleId }) => {
         this.expandedPowerLines.add(lineId);
         if (segmentId != null) {
-          this.expandedSegments.add(`${lineId}-${segmentId}`);
+          const segKey = this.expandSegmentKeyForLine(lineId, segmentId);
+          if (segKey) {
+            this.expandedSegments.add(segKey);
+          }
         }
         this.expandedPolesFolders.add(`${lineId}-all-poles`);
         this.selectedPoleIdFromMap = poleId;
@@ -422,6 +425,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
    * (часто только отпаечная опора) — получалось «оп.3-оп.3».
    */
   getSegmentDisplayName(item: PowerLineTreeItem, segment: { segmentId: number | null; segmentName: string | null; poles: GeoJSONFeature[]; spans?: GeoJSONFeature[] }): string {
+    // Имя участка с бэкенда (ACLineSegment): конец может быть именем оборудования («РЛНД-10»), а не номером опоры.
+    const rawFromApi = (segment.segmentName || '').trim();
+    if (rawFromApi) {
+      return this.normalizeSegmentNameFromApi(rawFromApi);
+    }
     const spans = segment.spans ?? [];
     if (spans.length >= 1) {
       const sortedSpans = [...spans].sort((a, b) => (a.properties['sequence_number'] ?? 0) - (b.properties['sequence_number'] ?? 0));
@@ -449,10 +457,6 @@ export class SidebarComponent implements OnInit, OnDestroy {
         }
         return `${a}-${b}`;
       }
-    }
-    const rawName = (segment.segmentName || '').trim();
-    if (rawName) {
-      return this.normalizeSegmentNameFromApi(rawName);
     }
     const poles = segment.poles || [];
     if (poles.length === 0) return `Участок ${segment.segmentId ?? '?'}`;
@@ -646,7 +650,14 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const zoomSpan = 17;
     const plId = s.item.powerLine.properties['id'];
     this.expandedPowerLines.add(plId);
-    if (s.segment) this.expandedSegments.add(`${plId}-${s.segment.segmentId}`);
+    if (s.segment) {
+      const segIdx = s.item.segments.findIndex(
+        x => x.segmentId === s.segment!.segmentId && (x.segmentName || '') === (s.segment!.segmentName || '')
+      );
+      if (segIdx >= 0) {
+        this.expandedSegments.add(this.segmentExpandKey(plId, s.segment.segmentId, segIdx));
+      }
+    }
     this.expandedPolesFolders.add(`${plId}-all-poles`);
     if (s.pole) this.selectedPoleIdFromMap = s.pole.properties['id'];
     if (s.type === 'power_line') {
@@ -737,9 +748,27 @@ export class SidebarComponent implements OnInit, OnDestroy {
     return this.expandedPowerLines.has(lineId);
   }
 
-  toggleSegment(lineId: number, segmentId: number | null): void {
+  /** Уникальный ключ раскрытия участка в дереве (несколько участков с одним segmentId/null не должны сливаться). */
+  segmentExpandKey(lineId: number, segmentId: number | null, segmentIndex: number): string {
+    return `${lineId}-${segmentId ?? 'null'}-${segmentIndex}`;
+  }
+
+  private expandSegmentKeyForLine(lineId: number, segmentId: number | null): string | null {
+    const items = this.getPowerLinesWithSegmentsAndPoles();
+    const item = items.find(i => Number(i.powerLine.properties['id']) === Number(lineId));
+    if (!item) {
+      return null;
+    }
+    const idx = item.segments.findIndex(s => s.segmentId === segmentId);
+    if (idx < 0) {
+      return null;
+    }
+    return this.segmentExpandKey(lineId, segmentId, idx);
+  }
+
+  toggleSegment(lineId: number, segmentId: number | null, segmentIndex: number): void {
     this.saveTreeStateForUndo();
-    const key = `${lineId}-${segmentId}`;
+    const key = this.segmentExpandKey(lineId, segmentId, segmentIndex);
     if (this.expandedSegments.has(key)) {
       this.expandedSegments.delete(key);
     } else {
@@ -747,9 +776,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
     }
   }
 
-  isSegmentExpanded(lineId: number, segmentId: number | null): boolean {
-    const key = `${lineId}-${segmentId}`;
-    return this.expandedSegments.has(key);
+  isSegmentExpanded(lineId: number, segmentId: number | null, segmentIndex: number): boolean {
+    return this.expandedSegments.has(this.segmentExpandKey(lineId, segmentId, segmentIndex));
   }
 
   togglePolesFolder(lineId: number, folderKey: string): void {

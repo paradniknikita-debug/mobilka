@@ -170,54 +170,52 @@ Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) =>
     };
 
 Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(
-  id: (json['id'] as num).toInt(),
-  poleId: (json['poleId'] as num).toInt(),
-  equipmentType: json['equipmentType'] as String,
-  name: json['name'] as String,
+  id: _intFromJson(json['id']),
+  poleId: _intFromJson(json['pole_id']),
+  equipmentType: _stringFromJson(json['equipment_type']),
+  name: _stringFromJson(json['name']),
   manufacturer: json['manufacturer'] as String?,
   model: json['model'] as String?,
-  serialNumber: json['serialNumber'] as String?,
-  yearManufactured: (json['yearManufactured'] as num?)?.toInt(),
-  installationDate: json['installationDate'] == null
-      ? null
-      : DateTime.parse(json['installationDate'] as String),
-  condition: json['condition'] as String,
+  serialNumber: json['serial_number'] as String?,
+  yearManufactured: _intFromJsonNullable(json['year_manufactured']),
+  installationDate: _dateTimeFromJsonNullable(json['installation_date']),
+  condition: json['condition'] == null
+      ? 'good'
+      : _stringFromJson(json['condition']),
   notes: json['notes'] as String?,
-  createdBy: (json['createdBy'] as num).toInt(),
-  createdAt: DateTime.parse(json['createdAt'] as String),
-  updatedAt: json['updatedAt'] == null
-      ? null
-      : DateTime.parse(json['updatedAt'] as String),
+  createdBy: _intFromJson(json['created_by']),
+  createdAt: _dateTimeFromJson(json['created_at']),
+  updatedAt: _dateTimeFromJsonNullable(json['updated_at']),
 );
 
 Map<String, dynamic> _$EquipmentToJson(Equipment instance) => <String, dynamic>{
   'id': instance.id,
-  'poleId': instance.poleId,
-  'equipmentType': instance.equipmentType,
+  'pole_id': instance.poleId,
+  'equipment_type': instance.equipmentType,
   'name': instance.name,
   'manufacturer': instance.manufacturer,
   'model': instance.model,
-  'serialNumber': instance.serialNumber,
-  'yearManufactured': instance.yearManufactured,
-  'installationDate': instance.installationDate?.toIso8601String(),
+  'serial_number': instance.serialNumber,
+  'year_manufactured': instance.yearManufactured,
+  'installation_date': instance.installationDate?.toIso8601String(),
   'condition': instance.condition,
   'notes': instance.notes,
-  'createdBy': instance.createdBy,
-  'createdAt': instance.createdAt.toIso8601String(),
-  'updatedAt': instance.updatedAt?.toIso8601String(),
+  'created_by': instance.createdBy,
+  'created_at': instance.createdAt.toIso8601String(),
+  'updated_at': instance.updatedAt?.toIso8601String(),
 };
 
 EquipmentCreate _$EquipmentCreateFromJson(Map<String, dynamic> json) =>
     EquipmentCreate(
-      equipmentType: json['equipmentType'] as String,
+      equipmentType: json['equipment_type'] as String,
       name: json['name'] as String,
       manufacturer: json['manufacturer'] as String?,
       model: json['model'] as String?,
-      serialNumber: json['serialNumber'] as String?,
-      yearManufactured: (json['yearManufactured'] as num?)?.toInt(),
-      installationDate: json['installationDate'] == null
+      serialNumber: json['serial_number'] as String?,
+      yearManufactured: (json['year_manufactured'] as num?)?.toInt(),
+      installationDate: json['installation_date'] == null
           ? null
-          : DateTime.parse(json['installationDate'] as String),
+          : DateTime.parse(json['installation_date'] as String),
       condition: json['condition'] as String? ?? 'good',
       notes: json['notes'] as String?,
       defect: json['defect'] as String?,
@@ -226,13 +224,13 @@ EquipmentCreate _$EquipmentCreateFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$EquipmentCreateToJson(EquipmentCreate instance) =>
     <String, dynamic>{
-      'equipmentType': instance.equipmentType,
+      'equipment_type': instance.equipmentType,
       'name': instance.name,
       'manufacturer': instance.manufacturer,
       'model': instance.model,
-      'serialNumber': instance.serialNumber,
-      'yearManufactured': instance.yearManufactured,
-      'installationDate': instance.installationDate?.toIso8601String(),
+      'serial_number': instance.serialNumber,
+      'year_manufactured': instance.yearManufactured,
+      'installation_date': instance.installationDate?.toIso8601String(),
       'condition': instance.condition,
       'notes': instance.notes,
       'defect': instance.defect,
