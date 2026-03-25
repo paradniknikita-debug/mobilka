@@ -487,7 +487,8 @@ def _power_line_to_cim(
         # Добавляем ссылки на LineSection и Terminal
         segment_dict = segment_obj.to_cim_dict()
         if line_sections_list:
-            segment_dict["LineSection"] = [{"mRID": ls.mrid} for ls in line_sections_list]
+            # В профиле FromPlatform секции представлены как ACLineSeriesSection
+            segment_dict["ACLineSeriesSection"] = [{"mRID": ls.mrid} for ls in line_sections_list]
         if terminals_list:
             segment_dict["Terminal"] = [{"mRID": t.mrid} for t in terminals_list]
         

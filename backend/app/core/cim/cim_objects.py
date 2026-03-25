@@ -288,12 +288,13 @@ class LineSectionCIMObject(CIMObject):
         self.spans = spans or []
     
     def get_cim_class(self) -> str:
-        return "LineSection"
+        # В профиле FromPlatform секции пролёта представлены как ACLineSeriesSection
+        return "ACLineSeriesSection"
     
     def to_cim_dict(self) -> Dict[str, Any]:
         result = {
             "mRID": self.mrid,
-            "name": self.name
+            "IdentifiedObject.name": self.name
         }
         
         if self.conductor_type:
@@ -311,7 +312,8 @@ class LineSectionCIMObject(CIMObject):
         if self.g is not None:
             result["g"] = self.g
         if self.total_length is not None:
-            result["totalLength"] = self.total_length
+            # В CIM атрибут секции длина называется Length
+            result["length"] = self.total_length
         if self.wire_info:
             result["WireInfo"] = self.wire_info
         if self.spans:

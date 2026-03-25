@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.cim_line_structure import ConnectivityNode, Terminal, LineSection
 from app.models.acline_segment import AClineSegment
 from app.models.power_line import Pole, Span, PowerLine
+from app.models.substation import Substation
 from app.schemas.cim_line_structure import (
     ConnectivityNodeCreate, ConnectivityNodeResponse,
     TerminalCreate, TerminalResponse,
@@ -359,8 +360,16 @@ async def get_acline_segment(
             .selectinload(ConnectivityNode.pole),
             selectinload(AClineSegment.line_sections)
             .selectinload(LineSection.spans)
+            .selectinload(Span.from_connectivity_node)
+            .selectinload(ConnectivityNode.substation),
+            selectinload(AClineSegment.line_sections)
+            .selectinload(LineSection.spans)
             .selectinload(Span.to_connectivity_node)
             .selectinload(ConnectivityNode.pole),
+            selectinload(AClineSegment.line_sections)
+            .selectinload(LineSection.spans)
+            .selectinload(Span.to_connectivity_node)
+            .selectinload(ConnectivityNode.substation),
             selectinload(AClineSegment.terminals),
         )
         .where(AClineSegment.id == segment_id)
@@ -380,6 +389,41 @@ async def get_acline_segment(
             )
         )).scalar_one() or 0.0
         object.__setattr__(segment, "length", seg_len)
+
+    # Имя участка в БД может устаревать (например, если меняли номера опор).
+    # Для карточки пересчитываем имя по фактическим пролётам (первый/последний).
+    try:
+        all_spans: List[Span] = []
+        for ls in (segment.line_sections or []):
+            for sp in (ls.spans or []):
+                all_spans.append(sp)
+        all_spans = sorted(all_spans, key=lambda s: (getattr(s, "sequence_number", 0) or 0))
+        if all_spans:
+            first = all_spans[0].from_connectivity_node
+            last = all_spans[-1].to_connectivity_node
+
+            def _cn_label(cn: Optional[ConnectivityNode]) -> str:
+                if cn is None:
+                    return "—"
+                if getattr(cn, "substation_id", None):
+                    sub = getattr(cn, "substation", None)
+                    if sub is not None:
+                        return (getattr(sub, "name", None) or getattr(sub, "dispatcher_name", None) or getattr(cn, "name", None) or "ПС").strip()
+                    return (getattr(cn, "name", None) or "ПС").strip()
+                pn = getattr(cn, "pole_number", None)
+                if pn:
+                    s = str(pn).strip()
+                    if s.lower().startswith(("опора", "оп.")):
+                        return s
+                    return f"Опора {s}"
+                return (getattr(cn, "name", None) or f"Узел {getattr(cn, 'id', '')}").strip()
+
+            from_name = _cn_label(first)
+            to_name = _cn_label(last)
+            if from_name != "—" and to_name != "—":
+                object.__setattr__(segment, "name", f"{from_name} - {to_name}")
+    except Exception:
+        pass
     return segment
 
 
