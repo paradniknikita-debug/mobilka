@@ -123,7 +123,8 @@
     <div *ngFor="let substation of substationsFeatures" class="tree-item">
       <div class="tree-node substation-node" 
            (click)="onFeatureClick(substation, $event)"
-           (contextmenu)="onFeatureRightClick(substation, $event, 'substation')">
+           (contextmenu)="onFeatureRightClick(substation, $event, 'substation')"
+           [class.selected-substation]="selectedSubstationIdFromMap === substation.properties['id']">
         <mat-icon class="node-icon" style="color: rgba(156, 39, 176, 0.87);">power</mat-icon>
         <span class="node-label">{{ substation.properties['name'] || 'Без названия' }}</span>
         <span class="node-description">{{ substation.properties['voltage_level'] }} кВ</span>

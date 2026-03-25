@@ -2,7 +2,7 @@
 API endpoints для экспорта данных в CIM форматы
 Соответствует стандартам IEC 61970-301 и IEC 61970-552:2016
 """
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 import tempfile
 import os
@@ -17,7 +17,7 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.substation import Substation, VoltageLevel
-from app.models.power_line import PowerLine, Pole, Span
+from app.models.power_line import PowerLine, Pole, Span, Equipment
 from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
@@ -42,16 +42,17 @@ from app.core.cim.cim_objects import (
     LineSectionCIMObject,
     SpanCIMObject,
     WireInfoCIMObject,
-    TerminalCIMObject
+    TerminalCIMObject,
+    ConductingEquipmentCIMObject,
 )
 
 router = APIRouter()
 
 
-def _substation_to_cim(substation: Substation) -> SubstationCIMObject:
+def _substation_to_cim(substation: Substation, include_gps: bool = True) -> SubstationCIMObject:
     """Преобразование модели Substation в CIM объект"""
     location = None
-    if substation.location:
+    if include_gps and substation.location:
         position_points = []
         for pp in substation.location.position_points:
             position_points.append({
@@ -87,7 +88,11 @@ def _substation_to_cim(substation: Substation) -> SubstationCIMObject:
     )
 
 
-def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
+def _power_line_to_cim(
+    power_line: PowerLine,
+    include_equipment: bool = True,
+    include_gps: bool = True,
+) -> List[CIMObject]:
     """
     Преобразование модели PowerLine в список CIM объектов
     Возвращает список объектов: Line, ACLineSegment, LineSection, Span, ConnectivityNode, Location, PositionPoint, BaseVoltage, WireInfo, Terminal
@@ -130,7 +135,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
             if is_real_cn and segment.from_node.mrid not in connectivity_nodes_dict:
                 # Создаём Location и PositionPoint для опоры
                 location = None
-                if from_pole and from_pole.position_points:
+                if include_gps and from_pole and from_pole.position_points:
                     position_points = []
                     for pp in segment.from_node.pole.position_points:
                         position_points.append({
@@ -174,7 +179,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
             if is_real_cn and segment.to_node.mrid not in connectivity_nodes_dict:
                 # Создаём Location и PositionPoint для опоры
                 location = None
-                if to_pole and to_pole.position_points:
+                if include_gps and to_pole and to_pole.position_points:
                     position_points = []
                     for pp in segment.to_node.pole.position_points:
                         position_points.append({
@@ -244,7 +249,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                     is_real_cn = is_real_cn and not getattr(span.from_connectivity_node, "is_virtual", False)
                     if is_real_cn and span.from_connectivity_node.mrid not in connectivity_nodes_dict:
                         location = None
-                        if from_pole and from_pole.position_points:
+                        if include_gps and from_pole and from_pole.position_points:
                             position_points = []
                             for pp in span.from_connectivity_node.pole.position_points:
                                 position_points.append({
@@ -286,7 +291,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                     is_real_cn = is_real_cn and not getattr(span.to_connectivity_node, "is_virtual", False)
                     if is_real_cn and span.to_connectivity_node.mrid not in connectivity_nodes_dict:
                         location = None
-                        if to_pole and to_pole.position_points:
+                        if include_gps and to_pole and to_pole.position_points:
                             position_points = []
                             for pp in span.to_connectivity_node.pole.position_points:
                                 position_points.append({
@@ -362,7 +367,7 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
                 if terminal.connectivity_node.mrid not in connectivity_nodes_dict:
                     # Создаём ConnectivityNode для терминала
                     location = None
-                    if terminal.connectivity_node.pole and terminal.connectivity_node.pole.position_points:
+                    if include_gps and terminal.connectivity_node.pole and terminal.connectivity_node.pole.position_points:
                         position_points = []
                         for pp in terminal.connectivity_node.pole.position_points:
                             position_points.append({
@@ -427,6 +432,194 @@ def _power_line_to_cim(power_line: PowerLine) -> List[CIMObject]:
         acline_segments_list.append(segment_dict)
         cim_objects.append(segment_obj)
     
+    # 3. Экспорт оборудования (ConductingEquipment) и его терминалов.
+    # Оборудование создаёт отдельные Terminal записи на ConnectivityNode (Pole),
+    # но эти Terminal'ы могут быть не привязаны к AClineSegment.terminals,
+    # поэтому без отдельной обработки они не попадут в CIM выгрузку.
+    if include_equipment:
+        try:
+            # Оборудование хранится на Pole (Pole.equipment), а не на PowerLine.
+            # Поэтому заполняем словарь оборудования через ConnectivityNode->pole.
+            equipment_by_id: Dict[int, Equipment] = {}
+
+            def _parse_equipment_id_from_terminal_desc(desc: Optional[str]) -> Optional[int]:
+                if not desc:
+                    return None
+                low = desc.lower()
+                if "equipment_id=" not in low:
+                    return None
+                try:
+                    part = low.split("equipment_id=", 1)[1]
+                    num_str = ""
+                    for ch in part:
+                        if ch.isdigit():
+                            num_str += ch
+                        else:
+                            break
+                    return int(num_str) if num_str else None
+                except Exception:
+                    return None
+
+            exported_terminals_mrids: set[str] = set()
+            exported_equipment_ids: set[int] = set()
+
+            # Соберём ORM-объекты ConnectivityNode, чтобы вытащить из них Terminal'ы оборудования.
+            cn_orm_by_id: Dict[int, ConnectivityNode] = {}
+            for segment in power_line.acline_segments:
+                if getattr(segment, "from_node", None) is not None:
+                    cn = segment.from_node
+                    cn_id = getattr(cn, "id", None)
+                    if cn_id is not None:
+                        cn_orm_by_id[int(cn_id)] = cn
+
+            # Собираем equipment только из полюсов, которые реально участвуют в данной линии.
+            for cn in cn_orm_by_id.values():
+                pole = getattr(cn, "pole", None)
+                for eq in getattr(pole, "equipment", None) or []:
+                    eq_id = getattr(eq, "id", None)
+                    if eq_id is not None:
+                        equipment_by_id[int(eq_id)] = eq
+                if getattr(segment, "to_node", None) is not None:
+                    cn = segment.to_node
+                    cn_id = getattr(cn, "id", None)
+                    if cn_id is not None:
+                        cn_orm_by_id[int(cn_id)] = cn
+
+            for cn in cn_orm_by_id.values():
+                for term in getattr(cn, "terminals", None) or []:
+                    # Нам нужны терминалы оборудования, которые не привязаны к AClineSegment.
+                    if getattr(term, "acline_segment_id", None) is not None:
+                        continue
+                    eq_id = _parse_equipment_id_from_terminal_desc(getattr(term, "description", None))
+                    if eq_id is None:
+                        continue
+                    if eq_id not in equipment_by_id:
+                        continue
+                    if getattr(term, "mrid", None) in exported_terminals_mrids:
+                        continue
+
+                    eq = equipment_by_id[eq_id]
+
+                    # Создадим CIM-представление оборудования один раз.
+                    if eq_id not in exported_equipment_ids:
+                        location_obj = None
+                        position_points_dicts = []
+                        if include_gps and getattr(eq, "location", None) is not None and getattr(eq.location, "position_points", None):
+                            eq_location = eq.location
+                            if getattr(eq_location, "position_points", None):
+                                for pp in eq_location.position_points:
+                                    position_points_dicts.append({
+                                        "mRID": pp.mrid,
+                                        "xPosition": pp.x_position,
+                                        "yPosition": pp.y_position,
+                                        "zPosition": pp.z_position if pp.z_position is not None else None
+                                    })
+                                location_mrid = eq_location.mrid
+                                location_obj = LocationCIMObject(
+                                    mrid=location_mrid,
+                                    position_points=position_points_dicts
+                                )
+                                cim_objects.append(location_obj)
+                                for pp in eq_location.position_points:
+                                    cim_objects.append(PositionPointCIMObject(
+                                        mrid=pp.mrid,
+                                        x_position=pp.x_position,
+                                        y_position=pp.y_position,
+                                        z_position=pp.z_position
+                                    ))
+
+                        if include_gps and location_obj is None:
+                            x = getattr(eq, "x_position", None)
+                            y = getattr(eq, "y_position", None)
+                            if x is not None and y is not None:
+                                location_mrid = f"LOC_EQ_{eq.id}"
+                                pp_mrid = f"PP_EQ_{eq.id}"
+                                location_obj = LocationCIMObject(
+                                    mrid=location_mrid,
+                                    position_points=[{
+                                        "mRID": pp_mrid,
+                                        "xPosition": x,
+                                        "yPosition": y,
+                                        "zPosition": None
+                                    }]
+                                )
+                                cim_objects.append(location_obj)
+                                cim_objects.append(PositionPointCIMObject(
+                                    mrid=pp_mrid,
+                                    x_position=x,
+                                    y_position=y,
+                                    z_position=None
+                                ))
+
+                        cim_location_ref = {"mRID": location_obj.mrid} if location_obj else None
+
+                        conducting_eq = ConductingEquipmentCIMObject(
+                            mrid=eq.mrid,
+                            name=eq.name,
+                            equipment_type=getattr(eq, "equipment_type", None),
+                            location=cim_location_ref
+                        )
+                        cim_objects.append(conducting_eq)
+                        exported_equipment_ids.add(eq_id)
+
+                    # Убедимся, что ConnectivityNode экспортирован.
+                    cn_mrid = getattr(cn, "mrid", None)
+                    if cn_mrid and cn_mrid not in connectivity_nodes_dict:
+                        location = None
+                        if include_gps and getattr(cn, "pole", None) is not None and getattr(cn.pole, "position_points", None):
+                            if cn.pole.position_points:
+                                position_points = []
+                                for pp in cn.pole.position_points:
+                                    position_points.append({
+                                        "mRID": pp.mrid,
+                                        "xPosition": pp.x_position,
+                                        "yPosition": pp.y_position,
+                                        "zPosition": pp.z_position if pp.z_position is not None else None
+                                    })
+
+                                location_mrid = cn.pole.location.mrid if cn.pole.location else f"LOC_{cn_mrid}"
+                                location = LocationCIMObject(
+                                    mrid=location_mrid,
+                                    position_points=position_points
+                                )
+                                cim_objects.append(location)
+                                for pp in cn.pole.position_points:
+                                    cim_objects.append(PositionPointCIMObject(
+                                        mrid=pp.mrid,
+                                        x_position=pp.x_position,
+                                        y_position=pp.y_position,
+                                        z_position=pp.z_position
+                                    ))
+                        cn_obj = ConnectivityNodeCIMObject(
+                            mrid=cn_mrid,
+                            name=getattr(cn, "name", None) or f"Узел {cn_mrid}",
+                            location={"mRID": location.mrid} if location else None
+                        )
+                        connectivity_nodes_dict[cn_mrid] = cn_obj
+                        cim_objects.append(cn_obj)
+
+                    conducting_eq_ref = {"mRID": eq.mrid}
+                    term_mrid = getattr(term, "mrid", None)
+                    if not term_mrid:
+                        continue
+
+                    term_obj = TerminalCIMObject(
+                        mrid=term_mrid,
+                        name=getattr(term, "name", None),
+                        connectivity_node={"mRID": cn.mrid},
+                        conducting_equipment=conducting_eq_ref,
+                        sequence_number=getattr(term, "sequence_number", None)
+                    )
+                    cim_objects.append(term_obj)
+                    exported_terminals_mrids.add(term_mrid)
+        except Exception as _equip_ex:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Equipment export failed for line_id=%s (skipping equipment in CIM XML): %s",
+                getattr(power_line, "id", None),
+                str(_equip_ex),
+            )
+
     # 4. Создаём Line объект
     line_obj = PowerLineCIMObject(
         mrid=power_line.mrid,
@@ -444,6 +637,9 @@ async def export_cim_xml(
     use_cimpy: bool = Query(True, description="Использовать CIMpy библиотеку (рекомендуется)"),
     include_substations: bool = Query(True, description="Включить подстанции"),
     include_power_lines: bool = Query(True, description="Включить ЛЭП"),
+    include_equipment: bool = Query(True, description="Включить оборудование"),
+    include_gps: bool = Query(True, description="Включить координаты GPS (Location/PositionPoint)"),
+    line_id: Optional[int] = Query(None, description="Экспортировать только указанную ЛЭП (id)"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -457,6 +653,12 @@ async def export_cim_xml(
     """
     substations_list = []
     power_lines_list = []
+
+    # Текущий CIMpy-экспорт в проекте упрощённо собирает только Line/ACLineSegment
+    # и не включает ConductingEquipment/оборудование. Поэтому при включенном оборудовании
+    # форсим ручную реализацию CIM XML, чтобы гарантировать наличие Equipment в выгрузке.
+    if (include_equipment and use_cimpy) or (not include_gps):
+        use_cimpy = False
     
     # Загружаем подстанции
     if include_substations:
@@ -472,17 +674,40 @@ async def export_cim_xml(
     
     # Загружаем ЛЭП с полной структурой (LineSection, Span, ConnectivityNode, Location)
     if include_power_lines:
+        power_line_query = select(PowerLine)
+        if line_id is not None:
+            power_line_query = power_line_query.where(PowerLine.id == line_id)
         result = await db.execute(
-            select(PowerLine)
-            .options(
+            power_line_query.options(
+                selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.from_node)
+                .selectinload(ConnectivityNode.terminals),
                 selectinload(PowerLine.acline_segments)
                 .selectinload(AClineSegment.from_node)
                 .selectinload(ConnectivityNode.pole)
                 .selectinload(Pole.position_points),
                 selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.from_node)
+                .selectinload(ConnectivityNode.pole)
+                .selectinload(Pole.equipment)
+                .selectinload(Equipment.location)
+                .selectinload(Location.position_points),
+                selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.to_node)
+                .selectinload(ConnectivityNode.terminals),
+                selectinload(PowerLine.acline_segments)
                 .selectinload(AClineSegment.to_node)
                 .selectinload(ConnectivityNode.pole)
                 .selectinload(Pole.position_points),
+                selectinload(PowerLine.acline_segments)
+                .selectinload(AClineSegment.to_node)
+                .selectinload(ConnectivityNode.pole)
+                .selectinload(Pole.equipment)
+                .selectinload(Equipment.location)
+                .selectinload(Location.position_points),
+                # В модели PowerLine нет relationship `equipment`,
+                # оборудование хранится на уровне Pole (Pole.equipment),
+                # поэтому тут не загружаем PowerLine.equipment.
                 selectinload(PowerLine.acline_segments)
                 .selectinload(AClineSegment.line_sections)
                 .selectinload(LineSection.spans)
@@ -501,6 +726,16 @@ async def export_cim_xml(
             )
         )
         power_lines_list = result.scalars().all()
+
+    # Если экспортируем только одну ЛЭП — ограничиваем и подстанции старт/финиш.
+    if line_id is not None and include_substations and include_power_lines:
+        final_station_ids: set[int] = set()
+        for pl in power_lines_list:
+            if getattr(pl, "substation_start_id", None) is not None:
+                final_station_ids.add(int(pl.substation_start_id))
+            if getattr(pl, "substation_end_id", None) is not None:
+                final_station_ids.add(int(pl.substation_end_id))
+        substations_list = [s for s in substations_list if getattr(s, "id", None) in final_station_ids]
     
     # Экспорт в XML
     import logging
@@ -525,10 +760,10 @@ async def export_cim_xml(
                 
                 cim_objects = []
                 for substation in substations_list:
-                    cim_objects.append(_substation_to_cim(substation))
+                    cim_objects.append(_substation_to_cim(substation, include_gps=include_gps))
                 for power_line in power_lines_list:
                     # _power_line_to_cim возвращает список объектов
-                    cim_objects.extend(_power_line_to_cim(power_line))
+                    cim_objects.extend(_power_line_to_cim(power_line, include_equipment=include_equipment, include_gps=include_gps))
                 
                 exporter = CIMXMLExporter()
                 xml_content = exporter.export(cim_objects)
@@ -539,10 +774,10 @@ async def export_cim_xml(
                 logger.info("Переключаемся на ручную реализацию из-за ошибки CIMpy")
                 cim_objects = []
                 for substation in substations_list:
-                    cim_objects.append(_substation_to_cim(substation))
+                    cim_objects.append(_substation_to_cim(substation, include_gps=include_gps))
                 for power_line in power_lines_list:
                     # _power_line_to_cim возвращает список объектов
-                    cim_objects.extend(_power_line_to_cim(power_line))
+                    cim_objects.extend(_power_line_to_cim(power_line, include_equipment=include_equipment, include_gps=include_gps))
                 
                 exporter = CIMXMLExporter()
                 xml_content = exporter.export(cim_objects)
@@ -550,9 +785,9 @@ async def export_cim_xml(
             # Используем ручную реализацию
             cim_objects = []
             for substation in substations_list:
-                cim_objects.append(_substation_to_cim(substation))
+                cim_objects.append(_substation_to_cim(substation, include_gps=include_gps))
             for power_line in power_lines_list:
-                cim_objects.append(_power_line_to_cim(power_line))
+                cim_objects.extend(_power_line_to_cim(power_line, include_equipment=include_equipment, include_gps=include_gps))
             
             exporter = CIMXMLExporter()
             xml_content = exporter.export(cim_objects)
@@ -618,7 +853,7 @@ async def export_cim_json(
         
         for power_line in power_lines:
             # _power_line_to_cim возвращает список объектов
-            cim_objects.extend(_power_line_to_cim(power_line))
+            cim_objects.extend(_power_line_to_cim(power_line, include_equipment=False))
     
     # Экспорт в JSON
     exporter = CIMJSONExporter()

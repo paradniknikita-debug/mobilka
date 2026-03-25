@@ -38,8 +38,9 @@ class AppConfig {
   static const double minZoom = 3.0;
   static const double maxZoom = 18.0;
 
-  /// Как на Angular: линейное оборудование при зуме ≤ этого значения скрыто; центрирование не оставляет «обзорный» зум ниже порога.
-  static const double minZoomToShowEquipment = 10.0;
+  /// Как на Angular: линейное оборудование при зуме ≤ этого значения скрыто;
+  /// показывать только после достаточного зума (иначе значки «теряются»).
+  static const double minZoomToShowEquipment = 14.0;
 
   /// Офлайн-карта: границы Беларуси (юг, запад, север, восток) для загрузки тайлов
   static const double belarusSouth = 51.26;

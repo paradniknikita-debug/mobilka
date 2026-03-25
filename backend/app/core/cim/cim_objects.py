@@ -419,10 +419,12 @@ class TerminalCIMObject(CIMObject):
         mrid: str,
         name: Optional[str] = None,
         connectivity_node: Optional[Dict] = None,
+        conducting_equipment: Optional[Dict] = None,
         sequence_number: Optional[int] = None
     ):
         super().__init__(mrid, name)
         self.connectivity_node = connectivity_node
+        self.conducting_equipment = conducting_equipment
         self.sequence_number = sequence_number
     
     def get_cim_class(self) -> str:
@@ -437,8 +439,45 @@ class TerminalCIMObject(CIMObject):
             result["name"] = self.name
         if self.connectivity_node:
             result["ConnectivityNode"] = self.connectivity_node
+        if self.conducting_equipment:
+            result["ConductingEquipment"] = self.conducting_equipment
         if self.sequence_number is not None:
             result["sequenceNumber"] = self.sequence_number
         
+        return result
+
+
+class ConductingEquipmentCIMObject(CIMObject):
+    """CIM представление проводящего оборудования (например разъединители, ЗН и т.п.)"""
+
+    def __init__(
+        self,
+        mrid: str,
+        name: str,
+        equipment_type: Optional[str] = None,
+        location: Optional[Dict] = None,
+        normal_in_service: Optional[bool] = None,
+    ):
+        super().__init__(mrid, name)
+        self.equipment_type = equipment_type
+        self.location = location
+        self.normal_in_service = normal_in_service
+
+    def get_cim_class(self) -> str:
+        return "ConductingEquipment"
+
+    def to_cim_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "mRID": self.mrid,
+            "name": self.name,
+        }
+        if self.equipment_type:
+            # CIM свойство может называться по-разному в разных профилях,
+            # но для ручной выгрузки нам важен сам факт присутствия equipment_type.
+            result["equipmentType"] = self.equipment_type
+        if self.location:
+            result["Location"] = self.location
+        if self.normal_in_service is not None:
+            result["normallyInService"] = self.normal_in_service
         return result
 

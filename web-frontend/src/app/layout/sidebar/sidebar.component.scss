@@ -415,6 +415,22 @@
   }
 }
 
+.substation-node {
+  padding-left: 24px;
+  font-weight: 400;
+  display: flex;
+  width: 100%;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+
+  &.selected-substation {
+    background-color: rgba(156, 39, 176, 0.12);
+    border-left: 3px solid rgba(156, 39, 176, 0.87);
+  }
+}
+
 .tap-pole-dot {
   display: inline-block;
   width: 8px;

@@ -62,14 +62,79 @@ class _MapPageState extends ConsumerState<MapPage> {
   Map<String, dynamic>? _selectedObjectProperties;
   ObjectType? _selectedObjectType;
   bool _showObjectProperties = false;
+
+  // Подсветка в дереве объектов при клике по маркеру карты.
+  int? _selectedPoleIdFromMap;
+  int? _selectedSubstationIdFromMap;
   
   // Режим навигатора для формирования линии
   bool _isNavigatorMode = false;
   int? _startingPoleId; // ID опоры, от которой начинаем формирование линии
   int? _currentLineId; // ID текущей ЛЭП (lineId в БД и API)
+
+  // Текущий z-блок карты, используемый для пересчёта координат терминалов
+  // (pixel -> LatLng) при zuma, чтобы соединения оборудования оставались на оси.
+  double _equipmentZoom = AppConfig.defaultZoom;
   /// Номер исходной опоры текущей отпайки (например "3") — пока не завершён обход, новые опоры получают 3/2, 3/3, ...
   String? _currentTapRoot;
+  /// Индекс активной отпайки (ветки) от якоря [_currentTapRoot].
+  /// Нужен, чтобы `FAB` продолжал создавать опоры именно в той ветке, а не всегда с 1.
+  int? _currentTapBranchIndex;
   StreamSubscription<Position>? _positionSubscription; // Подписка на обновления GPS
+
+  OverlayEntry? _topRightToastEntry;
+  int _topRightToastToken = 0;
+
+  void _showTopRightToast(
+    String message, {
+    Color backgroundColor = Colors.black87,
+    Duration duration = const Duration(seconds: 2),
+  }) {
+    // Убираем предыдущий toast, чтобы не плодить наложения.
+    _topRightToastEntry?.remove();
+    _topRightToastEntry = null;
+    _topRightToastToken++;
+    final token = _topRightToastToken;
+
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+
+    _topRightToastEntry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        top: 16,
+        right: 16,
+        child: SafeArea(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 360),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(_topRightToastEntry!);
+    Future.delayed(duration).then((_) {
+      if (!mounted) return;
+      if (token != _topRightToastToken) return;
+      _topRightToastEntry?.remove();
+      _topRightToastEntry = null;
+    });
+  }
   
   // Настройки для быстрого создания опоры в режиме навигатора
   String _quickPoleNumber = '';
@@ -453,7 +518,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (sessionLineId == null) return;
     final prev = _currentLineId;
     _currentLineId = sessionLineId;
-    if (prev != sessionLineId) _currentTapRoot = null;
+    if (prev != sessionLineId) {
+      _currentTapRoot = null;
+      _currentTapBranchIndex = null;
+    }
   }
 
   /// Сбросить активную сессию обхода, если она привязана к указанной линии (например, при удалении линии).
@@ -537,6 +605,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     setState(() {
       _currentLineId = null;
       _currentTapRoot = null;
+      _currentTapBranchIndex = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1118,6 +1187,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                         print('Ошибка центрирования при готовности карты: $e');
                       }
                     },
+                    onPositionChanged: (camera, hasGesture) {
+                      final z = camera.zoom;
+                      if ((z - _equipmentZoom).abs() > 0.001) {
+                        if (mounted) {
+                          setState(() => _equipmentZoom = z);
+                        }
+                      }
+                    },
                   ),
                   children: [
                     TileLayer(
@@ -1198,6 +1275,53 @@ class _MapPageState extends ConsumerState<MapPage> {
                   right: 0,
                   child: Center(
                     child: _MapConnectionStatusBadge(status: ref.watch(connectivityStatusProvider)),
+                  ),
+                ),
+
+                // Индикатор зума (как на Angular)
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  child: Material(
+                    elevation: 2,
+                    color: Colors.white.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            icon: const Icon(Icons.add, size: 18),
+                            onPressed: _zoomIn,
+                          ),
+                          const SizedBox(width: 6),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'z=${_equipmentZoom.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                _getZoomDistanceText(_equipmentZoom),
+                                style: const TextStyle(fontSize: 10, color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            icon: const Icon(Icons.remove, size: 18),
+                            onPressed: _zoomOut,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
 
@@ -1295,13 +1419,11 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   borderRadius: BorderRadius.circular(24),
                                   child: InkWell(
                                     onTap: () {
-                                      setState(() => _currentTapRoot = null);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Режим магистрали: следующие опоры будут 4, 5, 6…'),
-                                          duration: Duration(seconds: 2),
-                                        ),
-                                      );
+                                      setState(() {
+                                        _currentTapRoot = null;
+                                        _currentTapBranchIndex = null;
+                                      });
+                                      _showTopRightToast('Режим магистрали: следующие опоры будут 4, 5, 6…', duration: const Duration(seconds: 2));
                                     },
                                     borderRadius: BorderRadius.circular(24),
                                     child: Padding(
@@ -1600,26 +1722,226 @@ class _MapPageState extends ConsumerState<MapPage> {
     return (j + 1) / (n + 1);
   }
 
-  /// Геометрические параметры «полюсов» для типа линейного оборудования.
-  /// У ЗН/разрядника/разъединителя — один шаблон, у выключателя/реклоузера — другой.
-  ({double halfGapFactor, double tickHalfFactor}) _lineEquipmentPoleTemplateByIcon(
+  /// Спецификация терминалов SVG (как в Angular): координаты в системе viewBox.
+  static const Map<String, Map<String, dynamic>> _equipmentTerminalSpec = {
+    'zn': {
+      'viewBox': [0.0, 0.0, 200.0, 80.0],
+      't1': [-30.0, 40.0],
+      't2': null,
+      'anchor': [-30.0, 40.0],
+      'rotationOffsetDeg': 90.0,
+      'iconScale': 0.58,
+    },
+    'arrester': {
+      'viewBox': [0.0, 0.0, 200.0, 200.0],
+      't1': [-80.0, -40.0],
+      't2': null,
+      'anchor': [-80.0, -40.0],
+      'rotationOffsetDeg': 0.0,
+      'localOriginToViewBox': [100.0, 100.0],
+    },
+    'disconnector': {
+      'viewBox': [0.0, 0.0, 200.0, 200.0],
+      't1': [0.0, -40.0],
+      't2': [0.0, 40.0],
+      'anchor': null,
+      'rotationOffsetDeg': 0.0,
+      'localOriginToViewBox': [100.0, 100.0],
+      'localRotateDeg': 90.0,
+    },
+    'breaker': {
+      'viewBox': [0.0, 0.0, 200.0, 200.0],
+      't1': [-40.0, 0.0],
+      't2': [40.0, 0.0],
+      'anchor': null,
+      'rotationOffsetDeg': 0.0,
+      'localOriginToViewBox': [100.0, 100.0],
+    },
+    'recloser': {
+      'viewBox': [0.0, 0.0, 200.0, 200.0],
+      't1': [-40.0, 0.0],
+      't2': [40.0, 0.0],
+      'anchor': null,
+      'rotationOffsetDeg': 0.0,
+      'localOriginToViewBox': [100.0, 100.0],
+    },
+  };
+
+  String? _iconKeyFromIconPath(String iconPath) {
+    if (iconPath.contains('/zn/')) return 'zn';
+    if (iconPath.contains('/arrester/')) return 'arrester';
+    if (iconPath.contains('/disconnector/')) return 'disconnector';
+    if (iconPath.contains('/breaker/')) return 'breaker';
+    if (iconPath.contains('/recloser/')) return 'recloser';
+    return null;
+  }
+
+  List<double>? _pairFromSpec(dynamic v) {
+    if (v is List && v.length >= 2 && v[0] is num && v[1] is num) {
+      return [(v[0] as num).toDouble(), (v[1] as num).toDouble()];
+    }
+    return null;
+  }
+
+  Offset _rotatePointAround(Offset p, Offset c, double angleRad) {
+    final dx = p.dx - c.dx;
+    final dy = p.dy - c.dy;
+    final cosA = math.cos(angleRad);
+    final sinA = math.sin(angleRad);
+    return Offset(c.dx + dx * cosA - dy * sinA, c.dy + dx * sinA + dy * cosA);
+  }
+
+  Offset _toViewBoxPoint(String iconKey, List<double> p) {
+    final spec = _equipmentTerminalSpec[iconKey];
+    if (spec == null) return Offset(p[0], p[1]);
+    var x = p[0];
+    var y = p[1];
+    final localRotateDeg = (spec['localRotateDeg'] as num?)?.toDouble() ?? 0.0;
+    if (localRotateDeg != 0.0) {
+      final a = localRotateDeg * math.pi / 180.0;
+      final cosA = math.cos(a);
+      final sinA = math.sin(a);
+      final rx = x * cosA - y * sinA;
+      final ry = x * sinA + y * cosA;
+      x = rx;
+      y = ry;
+    }
+    final origin = _pairFromSpec(spec['localOriginToViewBox']);
+    if (origin == null) return Offset(x, y);
+    return Offset(x + origin[0], y + origin[1]);
+  }
+
+  Offset _viewBoxPointToIconPixels(String iconKey, List<double> p, double iconSize) {
+    final spec = _equipmentTerminalSpec[iconKey];
+    if (spec == null) return Offset(iconSize / 2, iconSize / 2);
+    final vb = (spec['viewBox'] as List).map((e) => (e as num).toDouble()).toList();
+    final minX = vb[0], minY = vb[1], vbW = vb[2], vbH = vb[3];
+    final scale = math.min(iconSize / vbW, iconSize / vbH);
+    final drawW = vbW * scale;
+    final drawH = vbH * scale;
+    final offsetX = (iconSize - drawW) / 2;
+    final offsetY = (iconSize - drawH) / 2;
+    final vbPoint = _toViewBoxPoint(iconKey, p);
+    var px = offsetX + (vbPoint.dx - minX) * scale;
+    var py = offsetY + (vbPoint.dy - minY) * scale;
+    final iconScale = (spec['iconScale'] as num?)?.toDouble() ?? 1.0;
+    if (iconScale != 1.0) {
+      final c = iconSize / 2;
+      px = c + (px - c) * iconScale;
+      py = c + (py - c) * iconScale;
+    }
+    return Offset(px, py);
+  }
+
+  double _modelAngleRadForIcon(String iconKey, double lineAngleRad) {
+    if (iconKey == 'disconnector') {
+      var a = lineAngleRad % math.pi;
+      if (a < 0) a += math.pi;
+      return a;
+    }
+    return lineAngleRad;
+  }
+
+  double _metersPerPixel(double latDeg, double zoom) {
+    final latRad = latDeg * math.pi / 180.0;
+    return 156543.03392 * math.cos(latRad) / math.pow(2.0, zoom);
+  }
+
+  double _screenLineAngleRad(LatLng from, LatLng to) {
+    // Как на Angular: угол берём в экранных координатах, чтобы
+    // проекция WebMercator не давала “косой” поворот.
+    try {
+      final cam = _mapController.camera;
+      final a = cam.latLngToScreenOffset(from);
+      final b = cam.latLngToScreenOffset(to);
+      final dx = b.dx - a.dx;
+      final dy = b.dy - a.dy;
+      return math.atan2(dy, dx);
+    } catch (_) {
+      // fallback на случай, когда camera ещё не готова на первом кадре
+      final dx = to.longitude - from.longitude;
+      final dy = to.latitude - from.latitude;
+      return math.atan2(dy, dx);
+    }
+  }
+
+  LatLng _offsetByScreenPixels(LatLng base, double dxPx, double dyPx, double zoom) {
+    // Предпочтительный (точный) путь: перевод из screen-пикселей через camera.
+    try {
+      final cam = _mapController.camera;
+      final baseScreen = cam.latLngToScreenOffset(base);
+      final movedScreen = baseScreen + Offset(dxPx, dyPx);
+      return cam.screenOffsetToLatLng(movedScreen);
+    } catch (_) {
+      // Fallback на случай, когда camera ещё не готова.
+      final mpp = _metersPerPixel(base.latitude, zoom);
+      final eastMeters = dxPx * mpp;
+      final northMeters = -dyPx * mpp;
+      final latRad = base.latitude * math.pi / 180.0;
+      final dLat = northMeters / 110540.0;
+      final dLng =
+          eastMeters / (111320.0 * math.cos(latRad).abs().clamp(1e-6, 1.0));
+      return LatLng(base.latitude + dLat, base.longitude + dLng);
+    }
+  }
+
+  ({LatLng markerCenter, List<LatLng> terminals, double iconAngleRad}) _equipmentPlacement(
+    LatLng baseCenterOnLine,
     String iconPath,
+    double lineAngleRad,
   ) {
-    final isZn = iconPath.contains('/zn/');
-    final isArrester = iconPath.contains('/arrester/');
-    final isDisconnector = iconPath.contains('/disconnector/');
-    final isBreaker = iconPath.contains('/breaker/');
-    final isRecloser = iconPath.contains('/recloser/');
-    if (isZn || isArrester || isDisconnector) {
-      return (halfGapFactor: 0.085, tickHalfFactor: 0.028);
+    final iconKey = _iconKeyFromIconPath(iconPath);
+    if (iconKey == null) {
+      return (
+        markerCenter: baseCenterOnLine,
+        terminals: [baseCenterOnLine],
+        iconAngleRad: lineAngleRad,
+      );
     }
-    if (isBreaker || isRecloser) {
-      return (halfGapFactor: 0.07, tickHalfFactor: 0.03);
+    final spec = _equipmentTerminalSpec[iconKey];
+    if (spec == null) {
+      return (
+        markerCenter: baseCenterOnLine,
+        terminals: [baseCenterOnLine],
+        iconAngleRad: lineAngleRad,
+      );
     }
-    return (halfGapFactor: 0.075, tickHalfFactor: 0.028);
+    final iconSize = iconKey == 'zn' ? 80.0 : 64.0;
+    final modelAngle = _modelAngleRadForIcon(iconKey, lineAngleRad);
+    var rotOffsetDeg = (spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0;
+    final angle = modelAngle + rotOffsetDeg * math.pi / 180.0;
+    final c = Offset(iconSize / 2, iconSize / 2);
+    final t1Raw = _pairFromSpec(spec['t1']) ?? <double>[0.0, 0.0];
+    final t2Raw = _pairFromSpec(spec['t2']);
+    final t1Px = _viewBoxPointToIconPixels(iconKey, t1Raw, iconSize);
+    final t2Px = t2Raw != null ? _viewBoxPointToIconPixels(iconKey, t2Raw, iconSize) : null;
+    final t1Rot = _rotatePointAround(t1Px, c, angle);
+    final t2Rot = t2Px != null ? _rotatePointAround(t2Px, c, angle) : null;
+    final zoom = _equipmentZoom;
+
+    LatLng markerCenter = baseCenterOnLine;
+    final anchorRaw = _pairFromSpec(spec['anchor']) ?? t1Raw;
+    final anchorPx = _viewBoxPointToIconPixels(iconKey, anchorRaw, iconSize);
+    final anchorRot = _rotatePointAround(anchorPx, c, angle);
+    // Для однотерминального оборудования marker смещаем, чтобы terminal/anchor лег точно на ось линии.
+    if (t2Rot == null) {
+      final dx = c.dx - anchorRot.dx;
+      final dy = c.dy - anchorRot.dy;
+      markerCenter = _offsetByScreenPixels(baseCenterOnLine, dx, dy, zoom);
+    }
+
+    final term1 = _offsetByScreenPixels(markerCenter, t1Rot.dx - c.dx, t1Rot.dy - c.dy, zoom);
+    if (t2Rot == null) {
+      return (markerCenter: markerCenter, terminals: [term1], iconAngleRad: angle);
+    }
+    final term2 = _offsetByScreenPixels(markerCenter, t2Rot.dx - c.dx, t2Rot.dy - c.dy, zoom);
+    return (markerCenter: markerCenter, terminals: [term1, term2], iconAngleRad: angle);
   }
 
   List<Polyline> _buildLineEquipmentConnectionPolylines() {
+    if (_equipmentZoom <= AppConfig.minZoomToShowEquipment) {
+      return <Polyline>[];
+    }
     final polylines = <Polyline>[];
     final data = _lineEquipmentData;
     final features = data == null ? const <dynamic>[] : (data['features'] as List<dynamic>? ?? const <dynamic>[]);
@@ -1647,30 +1969,14 @@ class _MapPageState extends ConsumerState<MapPage> {
         final segmentLen = math.sqrt(dx * dx + dy * dy);
         if (segmentLen <= 0) continue;
 
-        final ux = dx / segmentLen;
-        final uy = dy / segmentLen;
-        final px = -uy;
-        final py = ux;
-
         final iconPath = props['icon']?.toString() ?? '';
-        final tpl = _lineEquipmentPoleTemplateByIcon(iconPath);
-        final distFromStart = math.sqrt(
-          (centerLng - fromLng) * (centerLng - fromLng) +
-              (centerLat - fromLat) * (centerLat - fromLat),
-        );
-        final distToEnd = math.sqrt(
-          (toLng - centerLng) * (toLng - centerLng) +
-              (toLat - centerLat) * (toLat - centerLat),
-        );
-        final maxHalfGap = math.max(0.0, math.min(distFromStart, distToEnd) * 0.85);
-        final halfGap = math.min(segmentLen * tpl.halfGapFactor, maxHalfGap);
-        if (halfGap <= 0) continue;
-        final tickHalf = segmentLen * tpl.tickHalfFactor;
 
         final p1 = LatLng(fromLat, fromLng);
         final p2 = LatLng(toLat, toLng);
-        final poleA = LatLng(centerLat - uy * halfGap, centerLng - ux * halfGap);
-        final poleB = LatLng(centerLat + uy * halfGap, centerLng + ux * halfGap);
+        final lineAngle = _screenLineAngleRad(p1, p2);
+        final placement = _equipmentPlacement(LatLng(centerLat, centerLng), iconPath, lineAngle);
+        final terminals = placement.terminals;
+        if (terminals.isEmpty) continue;
 
         final lineId = _toInt(props['line_id']);
         final isCurrentPatrol = lineId != null && lineId == _currentLineId;
@@ -1678,43 +1984,27 @@ class _MapPageState extends ConsumerState<MapPage> {
         final lineColor = VoltageLevelColors.colorForVoltageKv(vl);
         final stroke = VoltageLevelColors.strokeWidthForLine(isTap: false, isPatrol: isCurrentPatrol);
 
-        // Соединяем опоры со строго осевыми полюсами оборудования.
-        polylines.add(
-          Polyline(
-            points: [p1, poleA],
-            strokeWidth: stroke,
-            color: lineColor,
-          ),
-        );
-        polylines.add(
-          Polyline(
-            points: [poleB, p2],
-            strokeWidth: stroke,
-            color: lineColor,
-          ),
-        );
+        if (terminals.length == 1) {
+          // Однополюсное оборудование: линия остаётся прямой, маркер смещаем к полюсу.
+          final t = terminals.first;
+          polylines.add(Polyline(points: [p1, t], strokeWidth: stroke, color: lineColor));
+          polylines.add(Polyline(points: [t, p2], strokeWidth: stroke, color: lineColor));
+          continue;
+        }
 
-        // Визуализируем сами полюса короткими штрихами, перпендикулярными оси пролёта.
-        polylines.add(
-          Polyline(
-            points: [
-              LatLng(poleA.latitude - py * tickHalf, poleA.longitude - px * tickHalf),
-              LatLng(poleA.latitude + py * tickHalf, poleA.longitude + px * tickHalf),
-            ],
-            strokeWidth: stroke + 0.8,
-            color: lineColor,
-          ),
-        );
-        polylines.add(
-          Polyline(
-            points: [
-              LatLng(poleB.latitude - py * tickHalf, poleB.longitude - px * tickHalf),
-              LatLng(poleB.latitude + py * tickHalf, poleB.longitude + px * tickHalf),
-            ],
-            strokeWidth: stroke + 0.8,
-            color: lineColor,
-          ),
-        );
+        var t1 = terminals[0];
+        var t2 = terminals[1];
+        final d11 = (t1.latitude - p1.latitude) * (t1.latitude - p1.latitude) +
+            (t1.longitude - p1.longitude) * (t1.longitude - p1.longitude);
+        final d21 = (t2.latitude - p1.latitude) * (t2.latitude - p1.latitude) +
+            (t2.longitude - p1.longitude) * (t2.longitude - p1.longitude);
+        if (d21 < d11) {
+          final tmp = t1;
+          t1 = t2;
+          t2 = tmp;
+        }
+        polylines.add(Polyline(points: [p1, t1], strokeWidth: stroke, color: lineColor));
+        polylines.add(Polyline(points: [t2, p2], strokeWidth: stroke, color: lineColor));
       } catch (_) {}
     }
 
@@ -1935,6 +2225,9 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Маркеры линейного оборудования (SVG-иконки на линии между опорами).
   List<Marker> _buildLineEquipmentMarkers() {
+    if (_equipmentZoom <= AppConfig.minZoomToShowEquipment) {
+      return <Marker>[];
+    }
     final markers = <Marker>[];
     final data = _lineEquipmentData;
     final List<dynamic> features =
@@ -1959,6 +2252,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             continue;
           }
           final latLng = LatLng(lat, lng);
+          // Точка маркера должна совпасть с точкой, куда `_equipmentPlacement`
+          // проецирует anchor/терминал на ось. Это устраняет микросдвиги полюса.
+          var markerPoint = latLng;
           final iconPath = props?['icon'] as String?;
           if (iconPath == null) {
             continue;
@@ -1978,9 +2274,9 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
           final color = VoltageLevelColors.colorForVoltageKv(plForLine?.voltageLevel);
 
-          const iconSize = 64.0;
           // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
           final isZn = iconPath.contains('/zn/');
+          final iconSize = isZn ? 80.0 : 64.0;
           final isDisconnector = iconPath.contains('/disconnector/');
 
           // Иконка с заливкой (цвет по линии)
@@ -2009,13 +2305,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           final isBreaker = iconPath.contains('/breaker/');
 
           Widget child = iconWidget;
-          // ЗН в исходном SVG очень вытянут по горизонтали — немного уменьшаем.
-          if (isZn) {
-            child = Transform.scale(
-              scale: 0.40,
-              child: child,
-            );
-          }
 
           if (isRecloser) {
             child = Stack(
@@ -2038,34 +2327,88 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
 
-          // Поворот иконки: оборудование рисуем перпендикулярно пролёту,
-          // при этом anchor-точка остаётся на самой линии.
+          // Поворот/смещение иконки по терминалам SVG (как в Angular):
+          // - Marker.point соответствует координате точки на линии (терминал)
+          // - Внутри маркера SVG смещаем так, чтобы anchor-текстурная точка легла на линию
+          // - Для disconnector используем осевой (axial) угол, чтобы символ не “переворачивался”
+          // Важно: как на Angular, угол линии берем в экранных координатах,
+          // иначе WebMercator даёт “косой” поворот.
           final angleValue = props?['angle_rad'];
-          if (angleValue is num) {
-            final lineAngleRad = angleValue.toDouble();
-            final lineAngleDeg = lineAngleRad * 180.0 / math.pi;
-            final iconAngleDegPerp = lineAngleDeg + 90.0;
+          final fromLat = (props?['from_lat'] as num?)?.toDouble();
+          final fromLng = (props?['from_lng'] as num?)?.toDouble();
+          final toLat = (props?['to_lat'] as num?)?.toDouble();
+          final toLng = (props?['to_lng'] as num?)?.toDouble();
 
-            double iconDeg;
-            if (isDisconnector) {
-              iconDeg = iconAngleDegPerp - 5.0;
-            } else if (isBreaker) {
-              iconDeg = iconAngleDegPerp - 3.0;
-            } else {
-              iconDeg = iconAngleDegPerp;
+          final lineAngleRad = (fromLat != null &&
+                  fromLng != null &&
+                  toLat != null &&
+                  toLng != null)
+              ? _screenLineAngleRad(LatLng(fromLat, fromLng), LatLng(toLat, toLng))
+              : (angleValue is num ? angleValue.toDouble() : null);
+
+          if (lineAngleRad != null) {
+            final placement =
+                _equipmentPlacement(latLng, iconPath, lineAngleRad);
+            markerPoint = placement.markerCenter;
+            final iconKey = _iconKeyFromIconPath(iconPath);
+            final spec = iconKey != null ? _equipmentTerminalSpec[iconKey] : null;
+            if (iconKey != null && spec != null) {
+              final modelAngleRad = _modelAngleRadForIcon(iconKey, lineAngleRad);
+              var rotOffsetDeg =
+                  (spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0;
+              final iconAngleRad = placement.iconAngleRad;
+
+              final iconCenter = Offset(iconSize / 2, iconSize / 2);
+              Offset anchorRot = iconCenter;
+              final anchorVbRaw = spec['anchor'];
+              if (anchorVbRaw != null) {
+                final anchorVb = _pairFromSpec(anchorVbRaw);
+                if (anchorVb != null) {
+                  final anchorPx = _viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
+                  anchorRot = _rotatePointAround(anchorPx, iconCenter, iconAngleRad);
+                }
+              }
+
+              // Подвинем SVG так, чтобы anchorRot совпал с точкой маркера (т.е. с центром Marker bounds).
+              final translate = iconCenter - anchorRot;
+
+              child = Transform.rotate(
+                angle: iconAngleRad,
+                alignment: Alignment.center,
+                child: child,
+              );
+              if (translate.dx.abs() > 0.001 || translate.dy.abs() > 0.001) {
+                child = Transform.translate(
+                  offset: translate,
+                  child: child,
+                );
+              }
             }
+          }
 
-            final iconRad = iconDeg * math.pi / 180.0;
-            child = Transform.rotate(
-              angle: iconRad,
-              alignment: Alignment.center,
+          // Делаем кликабельным линейное оборудование: при клике подсвечиваем
+          // в дереве ту опору, к которой привязано оборудование (`pole_id`).
+          final equipmentPoleId = _toInt(props?['pole_id']);
+          if (equipmentPoleId != null) {
+            child = GestureDetector(
+              onTap: () {
+                final poleFeature = _findPoleInGeoJSON(equipmentPoleId);
+                if (poleFeature == null) return;
+                final poleProps = poleFeature['properties'] as Map<String, dynamic>?;
+                final poleGeom = poleFeature['geometry'] as Map<String, dynamic>?;
+                if (poleProps == null) return;
+                _showPoleInfo(
+                  Map<String, dynamic>.from(poleProps),
+                  geometry: poleGeom,
+                );
+              },
               child: child,
             );
           }
 
           markers.add(
             Marker(
-              point: latLng,
+              point: markerPoint,
               width: iconSize,
               height: iconSize,
               child: child,
@@ -2391,6 +2734,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             child: ListTile(
               dense: true,
               contentPadding: const EdgeInsets.only(left: 32, right: 8),
+              tileColor: (_selectedPoleIdFromMap != null && pole.id == _selectedPoleIdFromMap)
+                  ? Colors.blue.withOpacity(0.12)
+                  : null,
               leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
               title: Text(
                 pole.poleNumber,
@@ -2690,6 +3036,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       return ListTile(
         dense: true,
         leading: const Icon(Icons.power, size: 14, color: Colors.purple),
+        tileColor: (_selectedSubstationIdFromMap != null && _toInt(props['id']) == _selectedSubstationIdFromMap)
+            ? Colors.purple.withOpacity(0.12)
+            : null,
         title: Text(
           props['name'] ?? 'Без названия',
           style: const TextStyle(fontSize: 13),
@@ -2791,9 +3140,12 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (!mounted) return;
     
     // Показываем диалог выбора опций
-    final result = await showDialog<Map<String, bool>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => _ExportCimDialog(),
+      builder: (context) => _ExportCimDialog(
+        powerLines: _powerLinesList ?? const [],
+        initialLineId: _currentLineId,
+      ),
     );
     
     if (result == null) return;
@@ -2814,9 +3166,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       
       // Выполняем экспорт
       final response = await apiService.exportCimXml(
-        true, // useCimpy
-        result['substations'] ?? true,
-        result['powerLines'] ?? true,
+        false, // useCimpy: для оборудования используем ручную реализацию
+        true, // includeSubstations
+        true, // includePowerLines
+        result['includeGps'] == true, // includeGps
+        result['lineId'] as int?, // lineId (null = полный экспорт)
+        true, // includeEquipment
       );
       
       // Закрываем индикатор загрузки
@@ -2905,6 +3260,47 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  void _zoomIn() {
+    try {
+      final center = _mapController.camera.center;
+      final z = (_mapController.camera.zoom + 1).clamp(AppConfig.minZoom, AppConfig.maxZoom);
+      _mapController.move(center, z);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  void _zoomOut() {
+    try {
+      final center = _mapController.camera.center;
+      final z = (_mapController.camera.zoom - 1).clamp(AppConfig.minZoom, AppConfig.maxZoom);
+      _mapController.move(center, z);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  /// Аналог Angular: приблизительная дальность на текущем зуме.
+  String _getZoomDistanceText(double zoom) {
+    try {
+      final center = _mapController.camera.center;
+      final lat = center.latitude;
+      // resolution (м/px) для WebMercator
+      final resolution = 156543.03392 * math.cos(lat * math.pi / 180.0) / math.pow(2.0, zoom);
+      final metersPerPixel = resolution;
+      final mapWidthPx = MediaQuery.of(context).size.width;
+      final distanceMeters = metersPerPixel * mapWidthPx;
+
+      if (distanceMeters >= 1000) return '${(distanceMeters / 1000).toStringAsFixed(1)} км';
+      if (distanceMeters >= 100) return '${distanceMeters.round()} м';
+      if (distanceMeters >= 10) return '${distanceMeters.toStringAsFixed(1)} м';
+      if (distanceMeters >= 1) return '${distanceMeters.toStringAsFixed(2)} м';
+      return '${(distanceMeters * 100).toStringAsFixed(0)} см';
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _showEditPoleDialog() async {
     final poleId = _selectedObjectProperties?['id'] as int?;
     final powerLineId = _selectedObjectProperties?['line_id'] as int?;
@@ -2972,36 +3368,40 @@ class _MapPageState extends ConsumerState<MapPage> {
     // Для старта новой ветки от этой же опоры используем следующий индекс ветки:
     // если уже есть 3/1, 3/2, то новая ветка начинается с 3/3.
     int nextBranchIndex = 1;
-    try {
-      final apiService = ref.read(apiServiceProvider);
-      final serverPoles = await apiService.getPoles(lineId);
-      for (final p in serverPoles) {
-        if (p.tapPoleId == tapPoleId) {
-          final bi = p.tapBranchIndex ?? 1;
-          if (bi >= nextBranchIndex) nextBranchIndex = bi + 1;
-        }
+    // В локальной модели у `Pole` нет полей tapPoleId/tapBranchIndex,
+    // поэтому вычисляем следующую ветку по строковому формату poleNumber: "N/M".
+    String? root;
+    if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
+      root = tapPoleNumber.trim();
+    } else {
+      final rootPole = linePoles.where((p) => p.id == tapPoleId).toList();
+      if (rootPole.isNotEmpty) {
+        final pn = rootPole.first.poleNumber.trim();
+        root = pn.contains('/') ? pn.split('/').first.trim() : pn;
       }
-    } catch (_) {
-      // fallback на вычисление из локальных номеров ниже
     }
-    if (nextBranchIndex == 1 && tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
-      final root = tapPoleNumber.trim();
+
+    if (root != null && root.isNotEmpty) {
+      int? maxSuffix;
       for (final p in linePoles) {
-        final n = p.poleNumber.trim();
+        final n = (p.poleNumber).trim();
         if (!n.startsWith('$root/')) continue;
         final parts = n.split('/');
         if (parts.length < 2) continue;
         final suffix = int.tryParse(parts[1].trim());
-        if (suffix != null && suffix >= nextBranchIndex) {
-          nextBranchIndex = suffix + 1;
-        }
+        if (suffix == null) continue;
+        if (maxSuffix == null || suffix > maxSuffix) maxSuffix = suffix;
       }
+      nextBranchIndex = (maxSuffix ?? 0) + 1;
     }
     if (nextBranchIndex < 1) nextBranchIndex = 1;
 
-    // Запоминаем контекст отпайки: до завершения обхода следующие опоры будут root/(N+1), root/(N+2), ...
+    // Запоминаем контекст отпайки: до завершения обхода следующие опоры будут в этой ветке.
     if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
-      setState(() => _currentTapRoot = tapPoleNumber);
+      setState(() {
+        _currentTapRoot = tapPoleNumber;
+        _currentTapBranchIndex = nextBranchIndex;
+      });
     }
     // Нумерация первой опоры новой ветки: «номер исходной опоры/индекс ветки» (3/1, затем 3/2, ...).
     final String? initialPoleNumberForTap = (tapPoleNumber != null && tapPoleNumber.isNotEmpty)
@@ -3031,12 +3431,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         _mapController.move(LatLng(lat, lng), 18.0);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Опора отпайки создана'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showTopRightToast('Опора отпайки создана', backgroundColor: Colors.green);
       }
     }
   }
@@ -3102,6 +3497,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (!mounted) return;
     _closeObjectProperties();
     final tapBranchIndex = _toInt(_selectedObjectProperties?['tap_branch_index']) ?? 1;
+    // Обновляем текущую ветку, чтобы `FAB` продолжал именно её.
+    setState(() => _currentTapBranchIndex = tapBranchIndex);
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
@@ -3128,12 +3525,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Показываем снова кнопку «К магистрали», чтобы можно было вернуться к магистрали перед добавлением опоры 4
       setState(() => _currentTapRoot = root);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Опора отпайки добавлена. Нажмите «К магистрали», чтобы добавить следующую опору на магистраль.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
-          ),
+        _showTopRightToast(
+          'Опора отпайки добавлена. Нажмите «К магистрали», чтобы добавить следующую опору на магистраль.',
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
         );
       }
     }
@@ -3193,7 +3588,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
       }
       initialPoleNumber = '$_currentTapRoot/${maxSuffix + 1}';
-      tapBranchIndexForFab = 1; // первая ветка от данной отпаечной опоры
+      // Создаём продолжение в текущей активной ветке.
+      tapBranchIndexForFab = _currentTapBranchIndex ?? 1;
     } else {
       // Опоры магистрали (без "/" в номере): следующий номер = max(номера магистрали) + 1
       int maxMainNum = 0;
@@ -3240,12 +3636,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Опора успешно создана'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showTopRightToast('Опора успешно создана', backgroundColor: Colors.green);
       }
     }
   }
@@ -3276,6 +3667,24 @@ class _MapPageState extends ConsumerState<MapPage> {
       _selectedObjectProperties = properties;
       _selectedObjectType = objectType;
       _showObjectProperties = true;
+
+      // Выделение в дереве объектов.
+      // В дереве Flutter показываются только: ЛЭП (их опоры) и подстанции,
+      // поэтому при выборе любого объекта подсвечиваем “ближайший” узел (опора/ПС).
+      final objectId = _toInt(properties['id']);
+
+      if (objectType == ObjectType.pole) {
+        _selectedPoleIdFromMap = objectId;
+        _selectedSubstationIdFromMap = null;
+      } else if (objectType == ObjectType.substation) {
+        _selectedSubstationIdFromMap = objectId;
+        _selectedPoleIdFromMap = null;
+      } else if (objectType == ObjectType.tap) {
+        // Иконка “отпайка” на карте соответствует якорной опоре (у неё `tap_pole_id`).
+        _selectedPoleIdFromMap = _toInt(properties['tap_pole_id']) ?? objectId;
+        _selectedSubstationIdFromMap = null;
+      }
+
       // При клике на опору — раскрываем её ЛЭП в дереве объектов
       if (objectType == ObjectType.pole) {
         final lineId = _toInt(properties['line_id']);
@@ -4838,39 +5247,85 @@ class _MapPageState extends ConsumerState<MapPage> {
 }
 
 class _ExportCimDialog extends StatefulWidget {
+  final List<PowerLine> powerLines;
+  final int? initialLineId;
+
+  const _ExportCimDialog({
+    required this.powerLines,
+    required this.initialLineId,
+  });
+
   @override
   State<_ExportCimDialog> createState() => _ExportCimDialogState();
 }
 
 class _ExportCimDialogState extends State<_ExportCimDialog> {
-  bool _includeSubstations = true;
-  bool _includePowerLines = true;
+  bool _includeGps = true;
+  bool _fullExport = true;
+  int? _selectedLineId;
 
   @override
+  void initState() {
+    super.initState();
+    _selectedLineId = widget.initialLineId;
+  }
+
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Экспорт в CIM XML'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Формат: CIM/XML',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           CheckboxListTile(
-            title: const Text('Включить подстанции'),
-            value: _includeSubstations,
+            title: const Text('Включить координаты GPS'),
+            value: _includeGps,
             onChanged: (value) {
               setState(() {
-                _includeSubstations = value ?? true;
+                _includeGps = value ?? true;
               });
             },
           ),
-          CheckboxListTile(
-            title: const Text('Включить ЛЭП'),
-            value: _includePowerLines,
-            onChanged: (value) {
-              setState(() {
-                _includePowerLines = value ?? true;
-              });
+          const Divider(height: 18),
+          RadioListTile<bool>(
+            value: true,
+            groupValue: _fullExport,
+            onChanged: (v) {
+              setState(() => _fullExport = v ?? true);
             },
+            title: const Text('Полный экспорт'),
           ),
+          RadioListTile<bool>(
+            value: false,
+            groupValue: _fullExport,
+            onChanged: (v) {
+              setState(() => _fullExport = v ?? false);
+            },
+            title: const Text('Частично по ЛЭП'),
+          ),
+          if (!_fullExport)
+            DropdownButtonFormField<int>(
+              value: _selectedLineId,
+              decoration: const InputDecoration(
+                labelText: 'Выберите ЛЭП',
+                isDense: true,
+              ),
+              items: widget.powerLines
+                  .map((pl) => DropdownMenuItem<int>(
+                        value: pl.id,
+                        child: Text(pl.name),
+                      ))
+                  .toList(),
+              onChanged: (v) {
+                setState(() => _selectedLineId = v);
+              },
+            ),
         ],
       ),
       actions: [
@@ -4880,9 +5335,10 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
         ),
         ElevatedButton(
           onPressed: () {
+            if (!_fullExport && _selectedLineId == null) return;
             Navigator.of(context).pop({
-              'substations': _includeSubstations,
-              'powerLines': _includePowerLines,
+              'includeGps': _includeGps,
+              'lineId': _fullExport ? null : _selectedLineId,
             });
           },
           child: const Text('Экспортировать'),
