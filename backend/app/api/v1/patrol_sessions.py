@@ -3,7 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 
 from app.database import get_db
 from app.models.patrol_session import PatrolSession
@@ -151,6 +151,57 @@ async def end_patrol_session(
     await db.commit()
     await db.refresh(session)
 
+    # Собираем сводку: что было сделано в рамках сессии (по журналу изменений).
+    # Окно: started_at .. ended_at. Фильтруем по пользователю и ЛЭП, исключаем записи про саму patrol_session.
+    summary_items = []
+    action_counts: dict[str, int] = {}
+    entity_counts: dict[str, int] = {}
+    try:
+        started = session.started_at
+        ended = session.ended_at or datetime.now(timezone.utc)
+        if started:
+            q = (
+                select(ChangeLog)
+                .where(
+                    and_(
+                        ChangeLog.created_at >= started,
+                        ChangeLog.created_at <= ended,
+                        ChangeLog.user_id == current_user.id,
+                    )
+                )
+                .order_by(ChangeLog.created_at.asc())
+                .limit(500)
+            )
+            rows = (await db.execute(q)).scalars().all()
+            for r in rows:
+                if r.entity_type == "patrol_session" and r.entity_id == session.id:
+                    continue
+                # если запись относится к конкретной ЛЭП — учитываем; иначе не отбрасываем,
+                # но помечаем (например, создание ЛЭП/пользовательские действия вне линии)
+                line_id_in_payload = None
+                try:
+                    if isinstance(r.payload, dict):
+                        line_id_in_payload = r.payload.get("line_id")
+                except Exception:
+                    line_id_in_payload = None
+                if session.line_id is not None and line_id_in_payload is not None and int(line_id_in_payload) != int(session.line_id):
+                    continue
+
+                action_counts[r.action] = action_counts.get(r.action, 0) + 1
+                entity_counts[r.entity_type] = entity_counts.get(r.entity_type, 0) + 1
+                if len(summary_items) < 80:
+                    summary_items.append(
+                        {
+                            "created_at": r.created_at.isoformat() if r.created_at else None,
+                            "action": r.action,
+                            "entity_type": r.entity_type,
+                            "entity_id": r.entity_id,
+                            "payload": r.payload,
+                        }
+                    )
+    except Exception:
+        pass
+
     # Запись в журнал изменений: завершение обхода
     pl_result = await db.execute(select(PowerLine).where(PowerLine.id == session.line_id))
     pl = pl_result.scalar_one_or_none()
@@ -166,6 +217,11 @@ async def end_patrol_session(
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
             "note": session.note,
+            "session_summary": {
+                "by_action": action_counts,
+                "by_entity": entity_counts,
+                "items_preview": summary_items,
+            },
         },
         session_id=str(session.id),
     )

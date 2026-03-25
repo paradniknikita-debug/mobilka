@@ -26,6 +26,28 @@
             {{ selectedFile ? selectedFile.name : 'Выбрать файл' }}
           </button>
         </div>
+        
+        <!-- Параметры экспорта -->
+        <div class="export-options">
+          <mat-checkbox [(ngModel)]="includeGps">Включать координаты GPS</mat-checkbox>
+          
+          <div class="export-scope">
+            <mat-radio-group [(ngModel)]="exportScope">
+              <mat-radio-button value="full">Полный экспорт</mat-radio-button>
+              <mat-radio-button value="partial" class="partial-radio">Частично по ЛЭП</mat-radio-button>
+            </mat-radio-group>
+          </div>
+          
+          <mat-form-field class="export-line" appearance="fill" *ngIf="exportScope === 'partial'">
+            <mat-label>ЛЭП</mat-label>
+            <mat-select [(ngModel)]="selectedLineId">
+              <mat-option *ngFor="let pl of powerLines" [value]="pl.id">
+                {{ pl.name }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
         <div class="card-actions">
           <button mat-raised-button color="primary" (click)="import()" [disabled]="!selectedFile || isUploading">
             <mat-icon *ngIf="isUploading" class="spinning">refresh</mat-icon>
@@ -54,6 +76,28 @@
             {{ selectedDiffFile ? selectedDiffFile.name : 'Выбрать файл' }}
           </button>
         </div>
+
+        <!-- Параметры экспорта 552 diff -->
+        <div class="export-options">
+          <mat-checkbox [(ngModel)]="includeGps">Включать координаты GPS</mat-checkbox>
+
+          <div class="export-scope">
+            <mat-radio-group [(ngModel)]="diffExportScope">
+              <mat-radio-button value="full">Полный экспорт</mat-radio-button>
+              <mat-radio-button value="partial" class="partial-radio">Частично по ЛЭП</mat-radio-button>
+            </mat-radio-group>
+          </div>
+
+          <mat-form-field class="export-line" appearance="fill" *ngIf="diffExportScope === 'partial'">
+            <mat-label>ЛЭП</mat-label>
+            <mat-select [(ngModel)]="diffSelectedLineId">
+              <mat-option *ngFor="let pl of powerLines" [value]="pl.id">
+                {{ pl.name }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
         <div class="card-actions">
           <button mat-raised-button color="primary" (click)="import552()" [disabled]="!selectedDiffFile || isUploading">
             <mat-icon *ngIf="isUploading" class="spinning">refresh</mat-icon>

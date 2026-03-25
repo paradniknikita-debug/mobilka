@@ -4,6 +4,7 @@ API журнала изменений и журнала несоответств
 Отдельный эндпоинт — проверка модели на «забытые» объекты и обрывы линий.
 """
 from typing import List, Optional, Dict, Set, Tuple
+from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -104,6 +105,8 @@ async def get_change_log(
     action: Optional[str] = Query(None, description="Фильтр: create | update | delete | session_start | session_end"),
     entity_type: Optional[str] = Query(None, description="Фильтр по типу сущности"),
     entity_id: Optional[int] = Query(None, description="Фильтр по ID сущности (например id опоры)"),
+    from_dt: Optional[str] = Query(None, description="ISO datetime: начало периода (по created_at)"),
+    to_dt: Optional[str] = Query(None, description="ISO datetime: конец периода (по created_at)"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_active_user),
@@ -119,6 +122,17 @@ async def get_change_log(
         q = q.where(ChangeLog.entity_type == entity_type)
     if entity_id is not None:
         q = q.where(ChangeLog.entity_id == entity_id)
+
+    if from_dt:
+        try:
+            q = q.where(ChangeLog.created_at >= datetime.fromisoformat(from_dt.replace("Z", "+00:00")))
+        except Exception:
+            pass
+    if to_dt:
+        try:
+            q = q.where(ChangeLog.created_at <= datetime.fromisoformat(to_dt.replace("Z", "+00:00")))
+        except Exception:
+            pass
     result = await db.execute(q)
     rows = result.scalars().all()
 

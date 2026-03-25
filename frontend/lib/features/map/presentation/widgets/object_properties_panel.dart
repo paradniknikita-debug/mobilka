@@ -13,6 +13,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
   final VoidCallback? onAutoCreateSpans;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onShowHistory;
   /// Открыть диалог создания опоры «Начать отпайку» от этой опоры (отпаечная опора = точка ветвления, напр. опора 3).
   final VoidCallback? onStartTapPole;
   /// Открыть диалог добавления следующей опоры в отпайку (опора уже в отпайке: 3/1, 3/2 и т.д.).
@@ -27,6 +28,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
     this.onAutoCreateSpans,
     this.onEdit,
     this.onDelete,
+    this.onShowHistory,
     this.onStartTapPole,
     this.onAddPoleToTap,
   });
@@ -246,6 +248,17 @@ class ObjectPropertiesPanel extends ConsumerWidget {
                     const SizedBox(height: 8),
                   ],
                   if (onDelete != null) ...[
+                    if (onShowHistory != null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: onShowHistory,
+                          icon: const Icon(Icons.history),
+                          label: const Text('История объекта'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 8),
@@ -276,17 +289,32 @@ class ObjectPropertiesPanel extends ConsumerWidget {
                   ),
                 ),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete),
-                  label: const Text('Удалить'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
+              child: Column(
+                children: [
+                  if (onShowHistory != null) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: onShowHistory,
+                        icon: const Icon(Icons.history),
+                        label: const Text('История объекта'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete),
+                      label: const Text('Удалить'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
         ],

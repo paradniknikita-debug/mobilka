@@ -15,6 +15,20 @@ interface KeyValueRow {
   removed?: boolean; // только до (удалённое значение)
 }
 
+interface SessionItemPreview {
+  created_at?: string | null;
+  action?: string;
+  entity_type?: string;
+  entity_id?: number | null;
+  payload?: unknown;
+}
+
+interface SessionSummary {
+  by_action?: Record<string, number>;
+  by_entity?: Record<string, number>;
+  items_preview?: SessionItemPreview[];
+}
+
 @Component({
   selector: 'app-change-log-detail-dialog',
   templateUrl: './change-log-detail-dialog.component.html',
@@ -29,6 +43,13 @@ export class ChangeLogDetailDialogComponent {
   get pl(): Record<string, unknown> | null {
     const p = this.entry.payload;
     return p && typeof p === 'object' ? (p as Record<string, unknown>) : null;
+  }
+
+  get sessionSummary(): SessionSummary | null {
+    const p = this.pl;
+    const ss = p?.['session_summary'];
+    if (!ss || typeof ss !== 'object') return null;
+    return ss as SessionSummary;
   }
 
   /** События вложений карточки опоры для *ngFor. */
@@ -92,15 +113,25 @@ export class ChangeLogDetailDialogComponent {
     return s ? new Date(s).toLocaleString('ru-RU') : '—';
   }
 
-  actionLabel(action: string): string {
+  actionLabel(action: string | undefined | null): string {
+    if (!action) return '—';
     const labels: Record<string, string> = {
-      create: 'Создание', update: 'Изменение', delete: 'Удаление',
-      session_start: 'Начало сессии', session_end: 'Завершение сессии'
+      create: 'Создание',
+      update: 'Изменение',
+      delete: 'Удаление',
+      session_start: 'Начало сессии',
+      session_end: 'Завершение сессии',
+      topology_rebuild: 'Пересборка топологии',
+      pole_card_update: 'Обновление карточки опоры',
+      defect_add: 'Добавление дефекта',
+      defect_update: 'Изменение дефекта',
+      defect_media_add: 'Добавление медиа дефекта',
     };
     return labels[action] ?? action;
   }
 
-  entityTypeLabel(type: string): string {
+  entityTypeLabel(type: string | undefined | null): string {
+    if (!type) return '—';
     const labels: Record<string, string> = {
       pole: 'Опора', power_line: 'Линия', span: 'Пролёт', substation: 'Подстанция',
       equipment: 'Оборудование', acline_segment: 'Участок линии', line_section: 'Секция линии', session: 'Сессия'

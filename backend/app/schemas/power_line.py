@@ -196,6 +196,7 @@ class EquipmentBase(BaseModel):
     direction_angle: Optional[float] = None
     defect: Optional[str] = None
     criticality: Optional[str] = None  # low | medium | high
+    defect_attachment: Optional[str] = None
 
 class EquipmentCreate(EquipmentBase):
     # pole_id оставляем опциональным:

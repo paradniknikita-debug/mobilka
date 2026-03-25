@@ -814,6 +814,42 @@ class _ApiService implements ApiService {
   }
 
   @override
+  Future<List<dynamic>> getChangeLog(
+    String? source,
+    String? action,
+    String? entityType,
+    int? entityId,
+    int? limit,
+    int? offset,
+  ) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{
+      r'source': source,
+      r'action': action,
+      r'entity_type': entityType,
+      r'entity_id': entityId,
+      r'limit': limit,
+      r'offset': offset,
+    };
+    queryParameters.removeWhere((k, v) => v == null);
+    final _headers = <String, dynamic>{};
+    const Map<String, dynamic>? _data = null;
+    final _options = _setStreamType<List<dynamic>>(
+      Options(method: 'GET', headers: _headers, extra: _extra)
+          .compose(
+            _dio.options,
+            '/change-log',
+            queryParameters: queryParameters,
+            data: _data,
+          )
+          .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
+    );
+    final _result = await _dio.fetch<List<dynamic>>(_options);
+    final _value = _result.data!;
+    return _value;
+  }
+
+  @override
   Future<dynamic> getAclineSegment(int segmentId) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};

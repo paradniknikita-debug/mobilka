@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.core.security import get_current_active_user
+from app.models.change_log import ChangeLog
 from app.models.user import User
 from app.models.power_line import Pole, Equipment
 from app.models.location import Location
@@ -125,6 +126,7 @@ async def create_equipment(
 
     defect = data.get("defect")
     criticality = data.get("criticality")
+    defect_attachment = data.get("defect_attachment") or data.get("defectAttachment")
     db_equipment = Equipment(
         equipment_type=equipment_type,
         name=name,
@@ -137,6 +139,7 @@ async def create_equipment(
         notes=data.get("notes"),
         defect=defect,
         criticality=criticality,
+        defect_attachment=defect_attachment,
         pole_id=pole_id,
         x_position=float(raw_lon) if raw_lon is not None else None,
         y_position=float(raw_lat) if raw_lat is not None else None,
@@ -148,6 +151,37 @@ async def create_equipment(
         db.add(db_equipment)
         await db.commit()
         await db.refresh(db_equipment)
+
+        # Отдельная запись журнала, если добавлен дефект / медиа дефекта.
+        # Это делает историю понятнее, чем "update без изменений".
+        has_defect = defect is not None and str(defect).strip()
+        has_media = defect_attachment is not None and str(defect_attachment).strip()
+        if has_defect or has_media:
+            try:
+                action = "defect_add"
+                if has_media:
+                    action = "defect_media_add"
+                db.add(
+                    ChangeLog(
+                        user_id=current_user.id,
+                        source="web",
+                        action=action,
+                        entity_type="equipment",
+                        entity_id=db_equipment.id,
+                        payload={
+                            "equipment_type": db_equipment.equipment_type,
+                            "equipment_name": db_equipment.name,
+                            "pole_id": pole_id,
+                            "line_id": pole.line_id,
+                            "defect": defect,
+                            "criticality": criticality,
+                            "has_media": bool(has_media),
+                        },
+                    )
+                )
+                await db.commit()
+            except Exception:
+                await db.rollback()
         return db_equipment
     except Exception as e:
         await db.rollback()

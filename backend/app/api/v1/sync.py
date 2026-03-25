@@ -117,7 +117,7 @@ def _log_pole_card_from_sync(
         ChangeLog(
             user_id=user.id,
             source="flutter",
-            action="update",
+            action="pole_card_update",
             entity_type="pole",
             entity_id=pole_id,
             payload=payload,

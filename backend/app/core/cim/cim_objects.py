@@ -20,14 +20,18 @@ class SubstationCIMObject(CIMObject):
     def to_cim_dict(self) -> Dict[str, Any]:
         result = {
             "mRID": self.mrid,
-            "name": self.name
         }
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
         
         if self.voltage_levels:
-            result["VoltageLevel"] = [vl.to_cim_dict() if hasattr(vl, 'to_cim_dict') else vl for vl in self.voltage_levels]
+            # Подстанция хранит ссылки на VoltageLevel объекты.
+            # Ожидаем список refs вида [{"mRID": "..."}] (только mRID).
+            result["Substation.VoltageLevels"] = self.voltage_levels
         
         if self.location:
-            result["Location"] = self.location
+            # PowerSystemResource.Location rdf:resource="#_..."
+            result["PowerSystemResource.Location"] = self.location
         
         return result
 
@@ -134,8 +138,18 @@ class PowerLineCIMObject(CIMObject):
     def to_cim_dict(self) -> Dict[str, Any]:
         result = {
             "mRID": self.mrid,
-            "name": self.name
         }
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
+
+        # Иерархия объектов (Monitel extension): Line -> Child ACLineSegments
+        if self.acline_segments:
+            child_refs = []
+            for seg in self.acline_segments:
+                if isinstance(seg, dict) and "mRID" in seg:
+                    child_refs.append({"mRID": seg["mRID"]})
+            if child_refs:
+                result["me:IdentifiedObject.ChildObjects"] = child_refs
         
         if self.acline_segments:
             result["ACLineSegment"] = [
@@ -162,7 +176,8 @@ class AClineSegmentCIMObject(CIMObject):
         r: Optional[float] = None,
         x: Optional[float] = None,
         b: Optional[float] = None,
-        g: Optional[float] = None
+        g: Optional[float] = None,
+        parent_object: Optional[Dict] = None
     ):
         super().__init__(mrid, name)
         self.from_node = from_node
@@ -172,6 +187,7 @@ class AClineSegmentCIMObject(CIMObject):
         self.x = x
         self.b = b
         self.g = g
+        self.parent_object = parent_object
     
     def get_cim_class(self) -> str:
         return "ACLineSegment"
@@ -179,8 +195,12 @@ class AClineSegmentCIMObject(CIMObject):
     def to_cim_dict(self) -> Dict[str, Any]:
         result = {
             "mRID": self.mrid,
-            "name": self.name
         }
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
+
+        if self.parent_object:
+            result["me:IdentifiedObject.ParentObject"] = self.parent_object
         
         if self.from_node:
             result["ConnectivityNode"] = self.from_node
@@ -225,11 +245,14 @@ class ConnectivityNodeCIMObject(CIMObject):
     def to_cim_dict(self) -> Dict[str, Any]:
         result = {
             "mRID": self.mrid,
-            "name": self.name
         }
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
         
         if self.location:
-            result["Location"] = self.location
+            # ConnectivityNode наследует PowerSystemResource, поэтому Location должно писаться как
+            # PowerSystemResource.Location (а не просто Location).
+            result["PowerSystemResource.Location"] = self.location
         
         return result
 
@@ -292,7 +315,8 @@ class LineSectionCIMObject(CIMObject):
         if self.wire_info:
             result["WireInfo"] = self.wire_info
         if self.spans:
-            result["Span"] = [
+            # В профиле FromPlatform пролёты представлены как LineSpan, не Span
+            result["LineSpan"] = [
                 span.to_cim_dict() if hasattr(span, 'to_cim_dict') else span
                 for span in self.spans
             ]
@@ -301,7 +325,7 @@ class LineSectionCIMObject(CIMObject):
 
 
 class SpanCIMObject(CIMObject):
-    """CIM представление пролёта (соединение между двумя опорами)"""
+    """Deprecated: оставлено для обратной совместимости (используйте LineSpanCIMObject)."""
     
     def __init__(
         self,
@@ -351,6 +375,74 @@ class SpanCIMObject(CIMObject):
         if self.conductor_section:
             result["conductorSection"] = self.conductor_section
         
+        return result
+
+
+class LineSpanCIMObject(CIMObject):
+    """
+    CIM представление пролёта (LineSpan).
+    По FromPlatform профилю пролёт — это LineSpan с атрибутами провода по фазам и признаком ПС.
+    """
+
+    def __init__(
+        self,
+        mrid: str,
+        name: str,
+        length: float,
+        from_node: Optional[Dict] = None,
+        to_node: Optional[Dict] = None,
+        description: Optional[str] = None,
+        a_wire_type_name: Optional[str] = None,
+        b_wire_type_name: Optional[str] = None,
+        c_wire_type_name: Optional[str] = None,
+        is_from_substation: Optional[bool] = None,
+        is_to_substation: Optional[bool] = None,
+    ):
+        super().__init__(mrid, name)
+        self.length = length
+        self.from_node = from_node
+        self.to_node = to_node
+        self.description = description
+        self.a_wire_type_name = a_wire_type_name
+        self.b_wire_type_name = b_wire_type_name
+        self.c_wire_type_name = c_wire_type_name
+        self.is_from_substation = is_from_substation
+        self.is_to_substation = is_to_substation
+
+    def get_cim_class(self) -> str:
+        return "LineSpan"
+
+    def to_cim_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "mRID": self.mrid,
+        }
+
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
+        if self.description:
+            result["IdentifiedObject.description"] = self.description
+
+        # Ключевые атрибуты из профиля LineSpan
+        result["length"] = self.length
+
+        if self.a_wire_type_name:
+            result["AWireTypeName"] = self.a_wire_type_name
+        if self.b_wire_type_name:
+            result["BWireTypeName"] = self.b_wire_type_name
+        if self.c_wire_type_name:
+            result["CWireTypeName"] = self.c_wire_type_name
+
+        if self.is_from_substation is not None:
+            result["isFromSubstation"] = self.is_from_substation
+        if self.is_to_substation is not None:
+            result["isToSubstation"] = self.is_to_substation
+
+        # Ссылки на узлы (если нужны потребителю)
+        if self.from_node:
+            result["fromConnectivityNode"] = self.from_node
+        if self.to_node:
+            result["toConnectivityNode"] = self.to_node
+
         return result
 
 
@@ -476,7 +568,9 @@ class ConductingEquipmentCIMObject(CIMObject):
             # но для ручной выгрузки нам важен сам факт присутствия equipment_type.
             result["equipmentType"] = self.equipment_type
         if self.location:
-            result["Location"] = self.location
+            # ConductingEquipment наследует PowerSystemResource, поэтому Location должно писаться как
+            # PowerSystemResource.Location (а не просто Location).
+            result["PowerSystemResource.Location"] = self.location
         if self.normal_in_service is not None:
             result["normallyInService"] = self.normal_in_service
         return result

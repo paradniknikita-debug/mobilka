@@ -1485,6 +1485,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ? _showAddPoleToTapDialog
                       : null,
                       onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
+                      onShowHistory: _showSelectedObjectHistory,
                       onDelete: _handleDeleteObject,
                     ),
                   ),
@@ -3715,6 +3716,83 @@ class _MapPageState extends ConsumerState<MapPage> {
       _selectedObjectProperties = null;
       _selectedObjectType = null;
     });
+  }
+
+  String? _historyEntityTypeForSelection() {
+    switch (_selectedObjectType) {
+      case ObjectType.pole:
+        return 'pole';
+      case ObjectType.substation:
+        return 'substation';
+      case ObjectType.tap:
+        return 'tap';
+      case null:
+        return null;
+    }
+  }
+
+  Future<void> _showSelectedObjectHistory() async {
+    final selected = _selectedObjectProperties;
+    final entityType = _historyEntityTypeForSelection();
+    final entityId = _toInt(selected?['id']);
+    if (selected == null || entityType == null || entityId == null) {
+      _showTopRightToast('Не удалось определить объект для истории');
+      return;
+    }
+    try {
+      final rows = await _apiService.getChangeLog(
+        null,
+        null,
+        entityType,
+        entityId,
+        100,
+        0,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          if (rows.isEmpty) {
+            return AlertDialog(
+              title: const Text('История объекта'),
+              content: const Text('По этому объекту пока нет записей'),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Закрыть')),
+              ],
+            );
+          }
+          return AlertDialog(
+            title: const Text('История объекта'),
+            content: SizedBox(
+              width: 640,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: rows.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final m = Map<String, dynamic>.from(rows[i] as Map);
+                  final action = m['action']?.toString() ?? 'update';
+                  final source = m['source']?.toString() ?? 'system';
+                  final at = m['created_at']?.toString() ?? '';
+                  final summary = m['summary']?.toString();
+                  return ListTile(
+                    dense: true,
+                    title: Text('${action.toUpperCase()} • $source'),
+                    subtitle: Text((summary != null && summary.isNotEmpty) ? '$summary\n$at' : at),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Закрыть')),
+            ],
+          );
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showTopRightToast('Не удалось загрузить историю объекта');
+    }
   }
   
   /// [geometry] — GeoJSON точки опоры (в properties координат может не быть).

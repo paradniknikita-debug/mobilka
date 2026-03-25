@@ -12,9 +12,17 @@ import { ChangeLogDetailDialogComponent } from './change-log-detail-dialog/chang
 })
 export class ChangeLogComponent implements OnInit {
   entries: ChangeLogEntry[] = [];
-  displayedColumns: string[] = ['created_at', 'source', 'action', 'entity_type', 'name', 'uid', 'entity_id', 'user_id', 'detail'];
+  displayedColumns: string[] = ['created_at', 'source', 'action', 'entity_type', 'name', 'uid', 'user_name', 'detail'];
   loading = true;
   error: string | null = null;
+
+  // ========== Change log filters ==========
+  logSource: string | null = null; // web | flutter
+  logAction: string | null = null; // create | update | delete | session_start | session_end
+  logEntityType: string | null = null; // pole, power_line, ...
+  logEntityId: number | null = null;
+  logFromDt: string | null = null;
+  logToDt: string | null = null;
 
   issues: ModelIssue[] = [];
   issuesColumns: string[] = ['issue_type', 'entity_type', 'entity_uid', 'line_uid', 'message'];
@@ -35,7 +43,15 @@ export class ChangeLogComponent implements OnInit {
   load(): void {
     this.loading = true;
     this.error = null;
-    this.apiService.getChangeLog({ limit: 200 }).subscribe({
+    this.apiService.getChangeLog({
+      limit: 200,
+      source: this.logSource ?? undefined,
+      action: this.logAction ?? undefined,
+      entity_type: this.logEntityType ?? undefined,
+      entity_id: this.logEntityId ?? undefined,
+      from_dt: this.logFromDt ?? undefined,
+      to_dt: this.logToDt ?? undefined,
+    }).subscribe({
       next: (list) => {
         this.entries = list || [];
         this.loading = false;
@@ -136,7 +152,12 @@ export class ChangeLogComponent implements OnInit {
       update: 'Изменение',
       delete: 'Удаление',
       session_start: 'Начало сессии',
-      session_end: 'Завершение сессии'
+      session_end: 'Завершение сессии',
+      topology_rebuild: 'Пересборка топологии',
+      pole_card_update: 'Обновление карточки опоры',
+      defect_add: 'Добавление дефекта',
+      defect_update: 'Изменение дефекта',
+      defect_media_add: 'Добавление медиа дефекта',
     };
     return labels[action] ?? action;
   }

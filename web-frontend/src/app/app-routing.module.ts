@@ -6,6 +6,7 @@ import { LoginComponent } from './features/auth/login/login.component';
 import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
 import { MapComponent } from './features/map/map.component';
 import { ChangeLogComponent } from './features/change-log/change-log.component';
+import { ReportsComponent } from './features/reports/reports.component';
 import { CimImportComponent } from './features/cim-import/cim-import.component';
 
 const routes: Routes = [
@@ -30,6 +31,10 @@ const routes: Routes = [
       {
         path: 'change-log',
         component: ChangeLogComponent
+      },
+      {
+        path: 'reports',
+        component: ReportsComponent
       },
       {
         path: 'cim-import',

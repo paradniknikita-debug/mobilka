@@ -334,6 +334,8 @@ class Equipment(Base):
     # Дефект (описание), критичность (low | medium | high) — как во Flutter
     defect = Column(Text, nullable=True)
     criticality = Column(String(20), nullable=True)
+    # Мультимедиа дефекта: JSON-список [{t, url|p, thumbnail_url?}]
+    defect_attachment = Column(Text, nullable=True)
 
     # CIM Location - связь с Location для координат оборудования (как отдельного объекта на карте)
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)

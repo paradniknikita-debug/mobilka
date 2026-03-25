@@ -279,12 +279,22 @@ export class ApiService {
   exportCIMXml(
     includeSubstations: boolean = true,
     includePowerLines: boolean = true,
-    useCimpy: boolean = true
+    useCimpy: boolean = true,
+    includeGps: boolean = true,
+    lineId: number | null = null,
+    includeEquipment: boolean = true
   ): Observable<Blob> {
     const params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
-      .set('use_cimpy', String(useCimpy));
+      .set('use_cimpy', String(useCimpy))
+      .set('include_gps', String(includeGps))
+      .set('include_equipment', String(includeEquipment));
+
+    if (lineId != null) {
+      // Частичный экспорт по ЛЭП
+      params.set('line_id', String(lineId));
+    }
     return this.http.get(`${this.apiUrl}/cim/export/xml`, {
       params,
       responseType: 'blob'
@@ -300,10 +310,23 @@ export class ApiService {
     );
   }
 
-  exportCIM552Diff(includeSubstations: boolean = true, includePowerLines: boolean = true): Observable<Blob> {
-    const params = new HttpParams()
+  exportCIM552Diff(
+    includeSubstations: boolean = true,
+    includePowerLines: boolean = true,
+    includeGps: boolean = true,
+    lineId: number | null = null,
+    includeEquipment: boolean = true
+  ): Observable<Blob> {
+    let params = new HttpParams()
       .set('include_substations', String(includeSubstations))
-      .set('include_power_lines', String(includePowerLines));
+      .set('include_power_lines', String(includePowerLines))
+      .set('include_gps', String(includeGps))
+      .set('include_equipment', String(includeEquipment));
+
+    if (lineId != null) {
+      params = params.set('line_id', String(lineId));
+    }
+
     return this.http.get(`${this.apiUrl}/cim/export/552-diff`, {
       params,
       responseType: 'blob'
@@ -414,6 +437,8 @@ export class ApiService {
     if (params?.action) httpParams = httpParams.set('action', params.action);
     if (params?.entity_type) httpParams = httpParams.set('entity_type', params.entity_type);
     if (params?.entity_id != null) httpParams = httpParams.set('entity_id', String(params.entity_id));
+    if (params?.from_dt) httpParams = httpParams.set('from_dt', String(params.from_dt));
+    if (params?.to_dt) httpParams = httpParams.set('to_dt', String(params.to_dt));
     if (params?.limit != null) httpParams = httpParams.set('limit', params.limit.toString());
     if (params?.offset != null) httpParams = httpParams.set('offset', params.offset.toString());
     return this.http.get<ChangeLogEntry[]>(`${this.apiUrl}/change-log`, { params: httpParams });
@@ -432,6 +457,75 @@ export class ApiService {
     session_id?: string | null;
   }): Observable<ChangeLogEntry> {
     return this.http.post<ChangeLogEntry>(`${this.apiUrl}/change-log`, data);
+  }
+
+  // ========== Reports (defects / patrol / by line) ==========
+  getDefectsReport(params: {
+    line_id?: number | null;
+    pole_id?: number | null;
+    criticality?: string | null;
+    defect_contains?: string | null;
+    from_dt?: string | null;
+    to_dt?: string | null;
+    limit?: number | null;
+    offset?: number | null;
+    format?: 'json' | 'csv';
+  }): Observable<any> {
+    let httpParams = new HttpParams();
+    if (params?.line_id != null) httpParams = httpParams.set('line_id', String(params.line_id));
+    if (params?.pole_id != null) httpParams = httpParams.set('pole_id', String(params.pole_id));
+    if (params?.criticality != null) httpParams = httpParams.set('criticality', String(params.criticality));
+    if (params?.defect_contains != null) httpParams = httpParams.set('defect_contains', String(params.defect_contains));
+    if (params?.from_dt != null) httpParams = httpParams.set('from_dt', String(params.from_dt));
+    if (params?.to_dt != null) httpParams = httpParams.set('to_dt', String(params.to_dt));
+    if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
+    if (params?.offset != null) httpParams = httpParams.set('offset', String(params.offset));
+    httpParams = httpParams.set('format', params?.format ?? 'json');
+    return this.http.get<any>(`${this.apiUrl}/reports/defects`, { params: httpParams });
+  }
+
+  downloadDefectsReportCsv(params: {
+    line_id?: number | null;
+    pole_id?: number | null;
+    criticality?: string | null;
+    defect_contains?: string | null;
+    from_dt?: string | null;
+    to_dt?: string | null;
+    limit?: number | null;
+    offset?: number | null;
+  }): Observable<Blob> {
+    let httpParams = new HttpParams();
+    if (params?.line_id != null) httpParams = httpParams.set('line_id', String(params.line_id));
+    if (params?.pole_id != null) httpParams = httpParams.set('pole_id', String(params.pole_id));
+    if (params?.criticality != null) httpParams = httpParams.set('criticality', String(params.criticality));
+    if (params?.defect_contains != null) httpParams = httpParams.set('defect_contains', String(params.defect_contains));
+    if (params?.from_dt != null) httpParams = httpParams.set('from_dt', String(params.from_dt));
+    if (params?.to_dt != null) httpParams = httpParams.set('to_dt', String(params.to_dt));
+    if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
+    if (params?.offset != null) httpParams = httpParams.set('offset', String(params.offset));
+    httpParams = httpParams.set('format', 'csv');
+    return this.http.get(`${this.apiUrl}/reports/defects`, { params: httpParams, responseType: 'blob' });
+  }
+
+  getByLineReport(lineId: number): Observable<any> {
+    const httpParams = new HttpParams().set('line_id', String(lineId));
+    return this.http.get<any>(`${this.apiUrl}/reports/by-line`, { params: httpParams });
+  }
+
+  getPatrolReport(params: {
+    line_id?: number | null;
+    from_dt?: string | null;
+    to_dt?: string | null;
+    limit?: number | null;
+    offset?: number | null;
+  }): Observable<any> {
+    let httpParams = new HttpParams();
+    if (params?.line_id != null) httpParams = httpParams.set('line_id', String(params.line_id));
+    if (params?.from_dt != null) httpParams = httpParams.set('from_dt', String(params.from_dt));
+    if (params?.to_dt != null) httpParams = httpParams.set('to_dt', String(params.to_dt));
+    if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
+    if (params?.offset != null) httpParams = httpParams.set('offset', String(params.offset));
+    return this.http.get<any>(`${this.apiUrl}/reports/patrol`, { params: httpParams });
   }
 }
 

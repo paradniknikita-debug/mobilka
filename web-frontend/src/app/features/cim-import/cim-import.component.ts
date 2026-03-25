@@ -1,15 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { CimPreviewMapDialogComponent, CimPreviewMapDialogData } from './cim-preview-map-dialog/cim-preview-map-dialog.component';
+import { PowerLine } from '../../core/models/power-line.model';
 
 @Component({
   selector: 'app-cim-import',
   templateUrl: './cim-import.component.html',
   styleUrls: ['./cim-import.component.scss']
 })
-export class CimImportComponent {
+export class CimImportComponent implements OnInit {
   selectedFile: File | null = null;
   selectedDiffFile: File | null = null;
   isUploading = false;
@@ -21,11 +22,39 @@ export class CimImportComponent {
   lastImportObjects: any[] = [];
   lastImportSource: 'xml' | '552' | null = null;
 
+  // Параметры экспорта CIM XML
+  exportScope: 'full' | 'partial' = 'full';
+  includeGps: boolean = true;
+  powerLines: PowerLine[] = [];
+  selectedLineId: number | null = null;
+
+  // Отдельные параметры для экспорта 552-diff
+  diffExportScope: 'full' | 'partial' = 'full';
+  diffSelectedLineId: number | null = null;
+
   constructor(
     private apiService: ApiService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar
   ) {}
+
+  ngOnInit(): void {
+    // Загружаем ЛЭП только для UI выбора “частично по ЛЭП”.
+    this.apiService.getPowerLines().subscribe({
+      next: (lines) => {
+        this.powerLines = lines ?? [];
+        if (this.powerLines.length > 0 && this.selectedLineId == null) {
+          this.selectedLineId = this.powerLines[0].id;
+        }
+        if (this.powerLines.length > 0 && this.diffSelectedLineId == null) {
+          this.diffSelectedLineId = this.powerLines[0].id;
+        }
+      },
+      error: () => {
+        // UI всё равно работает для полного экспорта.
+      }
+    });
+  }
 
   onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -69,7 +98,13 @@ export class CimImportComponent {
   }
 
   exportXml(): void {
-    this.apiService.exportCIMXml(true, true, true).subscribe({
+    const lineId = this.exportScope === 'partial' ? this.selectedLineId : null;
+    if (this.exportScope === 'partial' && lineId == null) {
+      this.error = 'Выберите ЛЭП для частичного экспорта';
+      return;
+    }
+
+    this.apiService.exportCIMXml(true, true, true, this.includeGps, lineId, true).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -110,7 +145,13 @@ export class CimImportComponent {
   }
 
   export552(): void {
-    this.apiService.exportCIM552Diff(true, true).subscribe({
+    const lineId = this.diffExportScope === 'partial' ? this.diffSelectedLineId : null;
+    if (this.diffExportScope === 'partial' && lineId == null) {
+      this.error = 'Выберите ЛЭП для частичного экспорта 552 diff';
+      return;
+    }
+
+    this.apiService.exportCIM552Diff(true, true, this.includeGps, lineId, true).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');

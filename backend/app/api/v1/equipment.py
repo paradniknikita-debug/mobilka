@@ -8,6 +8,7 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import Equipment
+from app.models.change_log import ChangeLog
 from app.schemas.power_line import EquipmentResponse, EquipmentCreate
 
 router = APIRouter()
@@ -85,6 +86,11 @@ async def update_equipment(
             detail="Equipment not found",
         )
 
+    # Сохраняем значения для аудита
+    old_defect = equipment.defect
+    old_criticality = equipment.criticality
+    old_defect_attachment = getattr(equipment, "defect_attachment", None)
+
     data = equipment_data.model_dump() if hasattr(equipment_data, "model_dump") else equipment_data.dict()
 
     # Переносим все обновляемые поля; координаты (x_position, y_position) и pole_id
@@ -96,6 +102,44 @@ async def update_equipment(
 
     await db.commit()
     await db.refresh(equipment)
+
+    # Журналим только когда реально менялись дефект или его медиа
+    new_defect = equipment.defect
+    new_criticality = equipment.criticality
+    new_defect_attachment = getattr(equipment, "defect_attachment", None)
+
+    has_media_before = old_defect_attachment is not None and str(old_defect_attachment).strip() != ""
+    has_media_after = new_defect_attachment is not None and str(new_defect_attachment).strip() != ""
+
+    defect_changed = (old_defect != new_defect) or (old_criticality != new_criticality)
+    media_changed = old_defect_attachment != new_defect_attachment
+
+    if defect_changed or media_changed:
+        action = "defect_update"
+        if has_media_after and (media_changed or not has_media_before):
+            action = "defect_media_add"
+
+        db.add(
+            ChangeLog(
+                user_id=current_user.id,
+                source="web",
+                action=action,
+                entity_type="equipment",
+                entity_id=equipment.id,
+                payload={
+                    "equipment_type": equipment.equipment_type,
+                    "equipment_name": equipment.name,
+                    "pole_id": equipment.pole_id,
+                    "line_id": getattr(equipment.pole, "line_id", None) if getattr(equipment, "pole", None) else None,
+                    "old_defect": old_defect,
+                    "new_defect": new_defect,
+                    "old_criticality": old_criticality,
+                    "new_criticality": new_criticality,
+                    "has_media": has_media_after,
+                },
+            )
+        )
+        await db.commit()
     return equipment
 
 

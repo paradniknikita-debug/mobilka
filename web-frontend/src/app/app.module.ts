@@ -60,6 +60,7 @@ import { EditPowerLineDialogComponent } from './features/map/edit-power-line-dia
 import { RebuildTopologyDialogComponent } from './features/map/rebuild-topology-dialog/rebuild-topology-dialog.component';
 import { ChangeLogComponent } from './features/change-log/change-log.component';
 import { ChangeLogDetailDialogComponent } from './features/change-log/change-log-detail-dialog/change-log-detail-dialog.component';
+import { ReportsComponent } from './features/reports/reports.component';
 import { CimImportComponent } from './features/cim-import/cim-import.component';
 import { CimPreviewMapDialogComponent } from './features/cim-import/cim-preview-map-dialog/cim-preview-map-dialog.component';
 import { AttachmentImageViewComponent } from './features/map/attachment-image-view/attachment-image-view.component';
@@ -86,6 +87,7 @@ import { ResizableDialogDirective } from './core/directives/resizable-dialog.dir
     RebuildTopologyDialogComponent,
     ChangeLogComponent,
     ChangeLogDetailDialogComponent,
+    ReportsComponent,
     CimImportComponent,
     CimPreviewMapDialogComponent,
     AttachmentImageViewComponent,

@@ -1422,7 +1422,7 @@ async def update_pole(
             ChangeLog(
                 user_id=current_user.id,
                 source="web",
-                action="update",
+                action="pole_card_update",
                 entity_type="pole",
                 entity_id=pole_id,
                 payload=card_payload,
@@ -2237,7 +2237,7 @@ async def auto_create_spans(
         log_entry = ChangeLog(
             user_id=current_user.id,
             source="web",
-            action="create",
+            action="topology_rebuild",
             entity_type="power_line",
             entity_id=power_line_id,
             payload={

@@ -87,6 +87,23 @@
   }
 }
 
+.export-options {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-line {
+  margin-top: 4px;
+}
+
 .file-area {
   margin-bottom: 16px;
 

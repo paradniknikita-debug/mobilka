@@ -28,6 +28,8 @@ export interface ChangeLogFilters {
   entity_type?: string;
   /** Например id опоры — фильтр по сущности */
   entity_id?: number;
+  from_dt?: string | null;
+  to_dt?: string | null;
   limit?: number;
   offset?: number;
 }

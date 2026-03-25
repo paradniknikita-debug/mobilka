@@ -6,7 +6,7 @@
       <div class="meta-row"><span class="label">Действие:</span> {{ actionLabel(entry.action) }}</div>
       <div class="meta-row"><span class="label">Тип объекта:</span> {{ entityTypeLabel(entry.entity_type) }}</div>
       <div class="meta-row"><span class="label">ID сущности:</span> {{ entry.entity_id ?? '—' }}</div>
-      <div class="meta-row"><span class="label">Кто изменил:</span> {{ entry.user_name ? entry.user_name + ' (' + entry.user_id + ')' : (entry.user_id ?? '—') }}</div>
+      <div class="meta-row"><span class="label">Кто изменил:</span> {{ entry.user_name ?? '—' }}</div>
       <div class="meta-row"><span class="label">Источник:</span> {{ entry.source === 'web' ? 'Веб' : entry.source === 'flutter' ? 'Flutter' : entry.source }}</div>
     </div>
 
@@ -59,9 +59,45 @@
       <p *ngIf="onlyChanges && displayedRows.length === 0" class="no-changes">Нет изменённых полей</p>
     </div>
 
-    <div class="full-payload" *ngIf="entry.payload && !hasPayload && pl?.['pole_card'] !== true && pl?.['data_quality_warning'] !== true">
+    <div class="full-payload" *ngIf="entry.payload && !hasPayload && pl?.['pole_card'] !== true && pl?.['data_quality_warning'] !== true && !sessionSummary">
       <h3>Данные (payload)</h3>
       <pre class="payload-json">{{ entry.payload | json }}</pre>
+    </div>
+
+    <div class="session-summary" *ngIf="sessionSummary">
+      <h3>Итог по сессии</h3>
+      <div class="meta-row" *ngIf="sessionSummary?.by_action">
+        <span class="label">Действия:</span>
+        <span *ngFor="let it of (sessionSummary?.by_action | keyvalue); let last = last">
+          {{ it.key }}: {{ it.value }}<span *ngIf="!last">, </span>
+        </span>
+      </div>
+      <div class="meta-row" *ngIf="sessionSummary?.by_entity">
+        <span class="label">Объекты:</span>
+        <span *ngFor="let it of (sessionSummary?.by_entity | keyvalue); let last = last">
+          {{ entityTypeLabel(it.key) }}: {{ it.value }}<span *ngIf="!last">, </span>
+        </span>
+      </div>
+      <div class="table-wrap" *ngIf="(sessionSummary?.items_preview?.length || 0) > 0">
+        <table class="diff-table">
+          <thead>
+            <tr>
+              <th>Время</th>
+              <th>Действие</th>
+              <th>Объект</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of sessionSummary?.items_preview">
+              <td>{{ r?.created_at ? (r.created_at | date:'dd.MM.yyyy HH:mm:ss') : '—' }}</td>
+              <td>{{ actionLabel(r?.action) }}</td>
+              <td>{{ entityTypeLabel(r?.entity_type) }}</td>
+              <td>{{ r?.entity_id ?? '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">

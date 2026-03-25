@@ -503,6 +503,8 @@ class EquipmentCreate {
   final String? notes;
   final String? defect;
   final String? criticality;
+  @JsonKey(name: 'defect_attachment')
+  final String? defectAttachment;
 
   const EquipmentCreate({
     required this.equipmentType,
@@ -516,6 +518,7 @@ class EquipmentCreate {
     this.notes,
     this.defect,
     this.criticality,
+    this.defectAttachment,
   });
 
   factory EquipmentCreate.fromJson(Map<String, dynamic> json) => _$EquipmentCreateFromJson(json);

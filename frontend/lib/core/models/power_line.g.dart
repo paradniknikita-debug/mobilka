@@ -220,6 +220,7 @@ EquipmentCreate _$EquipmentCreateFromJson(Map<String, dynamic> json) =>
       notes: json['notes'] as String?,
       defect: json['defect'] as String?,
       criticality: json['criticality'] as String?,
+      defectAttachment: json['defect_attachment'] as String?,
     );
 
 Map<String, dynamic> _$EquipmentCreateToJson(EquipmentCreate instance) =>
@@ -235,4 +236,5 @@ Map<String, dynamic> _$EquipmentCreateToJson(EquipmentCreate instance) =>
       'notes': instance.notes,
       'defect': instance.defect,
       'criticality': instance.criticality,
+      'defect_attachment': instance.defectAttachment,
     };

@@ -181,13 +181,13 @@ body {
 
 .app-dialog-resize-handle {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  right: 2px;
+  bottom: 2px;
   width: 24px;
   height: 24px;
   cursor: nwse-resize;
   background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.12) 50%);
-  border-radius: 0 0 8px 0;
+  border-radius: 6px;
   z-index: 10;
   user-select: none;
 }

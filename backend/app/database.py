@@ -239,6 +239,11 @@ async def init_db():
                         THEN
                             ALTER TABLE equipment ADD COLUMN criticality VARCHAR(20);
                         END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'equipment' AND column_name = 'defect_attachment')
+                        THEN
+                            ALTER TABLE equipment ADD COLUMN defect_attachment TEXT;
+                        END IF;
                     END $$;
                 """))
                 await conn.execute(text('CREATE INDEX IF NOT EXISTS idx_line_substation_start_id ON "line"(substation_start_id)'))

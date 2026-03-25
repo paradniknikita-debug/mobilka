@@ -162,6 +162,16 @@ abstract class ApiService {
   @PATCH('/patrol-sessions/{id}')
   Future<dynamic> endPatrolSession(@Path('id') int id);
 
+  @GET('/change-log')
+  Future<List<dynamic>> getChangeLog(
+    @Query('source') String? source,
+    @Query('action') String? action,
+    @Query('entity_type') String? entityType,
+    @Query('entity_id') int? entityId,
+    @Query('limit') int? limit,
+    @Query('offset') int? offset,
+  );
+
   // CIM: карточка участка линии (AClineSegment)
   @GET('/cim/acline-segments/{id}')
   Future<dynamic> getAclineSegment(@Path('id') int segmentId);
@@ -599,6 +609,16 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
     final raw = await _delegate.endPatrolSession(id);
     return Map<String, dynamic>.from(raw as Map);
   }
+
+  @override
+  Future<List<dynamic>> getChangeLog(
+    String? source,
+    String? action,
+    String? entityType,
+    int? entityId,
+    int? limit,
+    int? offset,
+  ) => _delegate.getChangeLog(source, action, entityType, entityId, limit, offset);
 
   @override
   Future<dynamic> uploadSyncBatch(Map<String, dynamic> batch) => _delegate.uploadSyncBatch(batch);

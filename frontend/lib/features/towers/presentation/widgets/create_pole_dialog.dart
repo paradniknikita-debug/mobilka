@@ -272,6 +272,49 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     return resolved;
   }
 
+  /// Загружает мультимедиа дефекта оборудования (из JSON {"t","p"}) и
+  /// возвращает JSON со ссылками {"t","url","thumbnail_url?"}.
+  Future<String?> _resolveEquipmentDefectAttachmentJson(
+    ApiServiceWithExport api,
+    int poleId,
+    String? rawJson,
+  ) async {
+    if (rawJson == null || rawJson.isEmpty) return null;
+    try {
+      final decoded = decodeDefectAttachmentList(rawJson);
+      if (decoded.isEmpty) return null;
+      final resolved = <Map<String, dynamic>>[];
+      for (final m in decoded) {
+        final type = (m['t'] ?? 'photo').toString();
+        final existingUrl = m['url']?.toString();
+        if (existingUrl != null && existingUrl.isNotEmpty) {
+          resolved.add({'t': type, 'url': existingUrl});
+          continue;
+        }
+        final path = m['p']?.toString();
+        if (path == null || path.isEmpty) continue;
+        try {
+          final bytes = await readAttachmentBytes(path);
+          if (bytes.isEmpty) continue;
+          final ext = path.contains('.') ? path.split('.').last : 'jpg';
+          final uploaded = await api.uploadPoleAttachment(poleId, type, bytes, 'defect.$ext');
+          final url = uploaded['url']?.toString();
+          if (url == null || url.isEmpty) continue;
+          final entry = <String, dynamic>{'t': type, 'url': url};
+          final thumb = uploaded['thumbnail_url']?.toString();
+          if (thumb != null && thumb.isNotEmpty) {
+            entry['thumbnail_url'] = thumb;
+          }
+          resolved.add(entry);
+        } catch (_) {}
+      }
+      if (resolved.isEmpty) return null;
+      return jsonEncode(resolved);
+    } catch (_) {
+      return rawJson;
+    }
+  }
+
   Future<void> _recordCommentVoice() async {
     if (_cardCommentRecording) {
       try {
@@ -1053,6 +1096,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                   notes: notesParts.isEmpty ? null : notesParts.join('; '),
                   defect: eq.defect,
                   criticality: eq.criticality,
+                  defectAttachment: await _resolveEquipmentDefectAttachmentJson(
+                    apiService,
+                    updatedPole.id,
+                    eq.defectAttachment,
+                  ),
                 ),
               );
               final db2 = ref.read(databaseProvider);
@@ -1192,6 +1240,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                 notes: notesParts.isEmpty ? null : notesParts.join('; '),
                 defect: eq.defect,
                 criticality: eq.criticality,
+                defectAttachment: await _resolveEquipmentDefectAttachmentJson(
+                  apiService,
+                  createdPole.id,
+                  eq.defectAttachment,
+                ),
               ),
             );
             await db.insertEquipmentOrReplace(EquipmentCompanion.insert(

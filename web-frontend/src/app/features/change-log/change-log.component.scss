@@ -38,15 +38,57 @@
 .log-table {
   width: 100%;
   font-size: 13px;
+  table-layout: fixed;
 
   th {
     font-weight: 500;
     color: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.03);
   }
 
   td, th {
     padding: 8px 12px;
   }
+}
+
+.apply-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 4px;
+}
+
+.th-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.th-title {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.th-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.th-filter-label {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-top: -2px;
+}
+
+.filter-input {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.filter-select-field {
+  width: 100%;
+  min-width: 0;
 }
 
 .mat-row:hover {

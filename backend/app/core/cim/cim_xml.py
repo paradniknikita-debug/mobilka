@@ -24,12 +24,15 @@ class CIMXMLExporter(CIMExporter):
         - IEC 61970-552:2016 (mRID и обмен данными)
         """
         md_namespace = "http://iec.ch/TC57/61970-552/ModelDescription/1#"
+        me_namespace = "http://monitel.com/2014/schema-cim16#"
         
         # Регистрируем namespace'ы ПЕРЕД созданием элементов для использования правильных префиксов (cim:, md:, rdf:)
         # Это нужно делать ДО создания элементов, чтобы ElementTree использовал правильные префиксы
         ET.register_namespace("rdf", CIMObject.RDF_NAMESPACE)
         ET.register_namespace("cim", CIMObject.CIM_NAMESPACE)
         ET.register_namespace("md", md_namespace)
+        # Monitel extension namespace (me:)
+        ET.register_namespace("me", me_namespace)
         
         # Дополнительные namespace'ы (опциональные, для расширений)
         # Можно раскомментировать при необходимости интеграции с российскими системами
@@ -79,44 +82,64 @@ class CIMXMLExporter(CIMExporter):
         """Преобразование CIM объекта в XML элемент"""
         cim_dict = obj.to_cim_dict()
         cim_class = obj.get_cim_class()
+        me_namespace = "http://monitel.com/2014/schema-cim16#"
         
         # Создаем элемент для объекта с префиксом cim: 
         obj_elem = ET.Element(f"{{{CIMObject.CIM_NAMESPACE}}}{cim_class}")
         # Используем формат rdf:about="#_mrid" 
         obj_elem.set(f"{{{CIMObject.RDF_NAMESPACE}}}about", f"#_{obj.mrid}")
         
+        def _ns_and_localname(prop_key: str) -> (str, str):
+            # Поддержка расширений в namespace me: через префикс в ключе словаря.
+            # Пример ключа: "me:IdentifiedObject.ParentObject"
+            if prop_key.startswith("me:"):
+                return me_namespace, prop_key.split(":", 1)[1]
+            return CIMObject.CIM_NAMESPACE, prop_key
+
+        def _is_ref_dict(d: Any) -> bool:
+            return isinstance(d, dict) and "mRID" in d and all(k == "mRID" for k in d.keys())
+
         # Добавляем свойства объекта
         for key, value in cim_dict.items():
             if key == "mRID":  # mRID уже в атрибуте about
                 continue
-            
-            prop_elem = ET.SubElement(obj_elem, f"{{{CIMObject.CIM_NAMESPACE}}}{key}")
-            
+
+            ns_uri, localname = _ns_and_localname(key)
+
+            # Список ссылок вида [{"mRID": "..."}] -> несколько элементов свойства с rdf:resource
+            # Это нужно, чтобы получалось: <cim:Substation.VoltageLevels rdf:resource="#_..."/>
+            if isinstance(value, list) and value and all(_is_ref_dict(it) for it in value):
+                for item in value:
+                    prop_elem = ET.SubElement(obj_elem, f"{{{ns_uri}}}{localname}")
+                    prop_elem.set(f"{{{CIMObject.RDF_NAMESPACE}}}resource", f"#_{item['mRID']}")
+                continue
+
+            prop_elem = ET.SubElement(obj_elem, f"{{{ns_uri}}}{localname}")
+
             if isinstance(value, dict):
-                # Вложенный объект
+                # Вложенный объект как ссылка на другой CIM объект
                 if "mRID" in value:
-                    # Используем формат rdf:resource="#_mrid" 
                     prop_elem.set(f"{{{CIMObject.RDF_NAMESPACE}}}resource", f"#_{value['mRID']}")
                 else:
-                    # Вложенный объект без mRID - создаем inline
                     nested = self._dict_to_xml(value, prop_elem)
             elif isinstance(value, list):
-                # Список объектов или значений
+                # Список объектов или значений (случаи, когда элементы не только ссылки)
                 for item in value:
                     if isinstance(item, dict):
                         if "mRID" in item:
-                            item_elem = ET.SubElement(prop_elem, f"{{{CIMObject.CIM_NAMESPACE}}}{item.get('type', 'Object')}")
-                            # Используем формат rdf:resource="#_mrid" 
+                            # Ссылка на объект, а не inline
+                            item_elem = ET.SubElement(
+                                prop_elem,
+                                f"{{{CIMObject.CIM_NAMESPACE}}}{item.get('type', 'Object')}"
+                            )
                             item_elem.set(f"{{{CIMObject.RDF_NAMESPACE}}}resource", f"#_{item['mRID']}")
                         else:
                             item_elem = ET.SubElement(prop_elem, f"{{{CIMObject.CIM_NAMESPACE}}}{item.get('type', 'Object')}")
                             self._dict_to_xml(item, item_elem)
                     else:
-                        # Простое значение
                         item_elem = ET.SubElement(prop_elem, f"{{{CIMObject.CIM_NAMESPACE}}}value")
                         item_elem.text = str(item)
             elif value is not None:
-                # Простое значение
                 prop_elem.text = str(value)
         
         return obj_elem
