@@ -31,11 +31,37 @@ class ActiveSessionInfo {
 /// сведения о незавершённом обходе (если есть).
 final activeSessionProvider = FutureProvider<ActiveSessionInfo?>((ref) async {
   final prefs = ref.watch(prefsProvider);
+  Future<void> clearActiveSessionPrefs() async {
+    await prefs.remove(AppConfig.activeSessionPowerLineIdKey);
+    await prefs.remove(AppConfig.activeSessionStartTimeKey);
+    await prefs.remove(AppConfig.activeSessionNoteKey);
+    await prefs.remove(AppConfig.activeSessionLatKey);
+    await prefs.remove(AppConfig.activeSessionLonKey);
+    await prefs.remove(AppConfig.activeSessionLocalIdKey);
+    await prefs.remove(AppConfig.activeSessionServerIdKey);
+  }
   int? lineId = prefs.getInt(AppConfig.activeSessionPowerLineIdKey);
   String? startIso = prefs.getString(AppConfig.activeSessionStartTimeKey);
   String note = prefs.getString(AppConfig.activeSessionNoteKey) ?? '';
   DateTime? startTime = startIso != null ? DateTime.tryParse(startIso) : null;
   String? restoredLineName;
+
+  // Валидируем сохранённую активную сессию: показываем кнопку «Продолжить»
+  // только если сессия действительно не завершена.
+  if (lineId != null) {
+    final db = ref.read(drift_db.databaseProvider);
+    final localSessionId = prefs.getInt(AppConfig.activeSessionLocalIdKey);
+    if (localSessionId != null) {
+      final localSession = await db.getPatrolSession(localSessionId);
+      if (localSession == null || localSession.endedAt != null) {
+        await clearActiveSessionPrefs();
+        lineId = null;
+        startIso = null;
+        startTime = null;
+        note = '';
+      }
+    }
+  }
 
   // Если в prefs нет активной сессии — пробуем восстановить по незавершённому обходу с сервера
   if (lineId == null) {

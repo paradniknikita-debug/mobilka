@@ -71,7 +71,12 @@ class _PoleNumberMaskFieldState extends State<PoleNumberMaskField> {
   @override
   void didUpdateWidget(covariant PoleNumberMaskField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initial != widget.initial) {
+    final oldApi = oldWidget.initial.apiString;
+    final newApi = widget.initial.apiString;
+    final currentApi = _currentMask().apiString;
+    // Не перезаписываем ввод пользователя на каждом onChanged/setState родителя.
+    // Обновляем контроллеры только при внешнем изменении initial.
+    if (oldApi != newApi && currentApi != newApi) {
       _suppressEmit = true;
       try {
         final m = widget.initial;

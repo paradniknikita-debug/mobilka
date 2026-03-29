@@ -13,7 +13,6 @@ from app.models.user import User
 from app.models.cim_line_structure import ConnectivityNode, Terminal, LineSection
 from app.models.acline_segment import AClineSegment
 from app.models.power_line import Pole, Span, PowerLine
-from app.models.substation import Substation
 from app.schemas.cim_line_structure import (
     ConnectivityNodeCreate, ConnectivityNodeResponse,
     TerminalCreate, TerminalResponse,

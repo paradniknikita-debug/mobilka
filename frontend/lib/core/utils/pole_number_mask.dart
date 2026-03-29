@@ -153,14 +153,15 @@ class PoleNumberMask {
   }
 }
 
-/// Ввод: только цифры.
+/// Ввод: только цифры, максимум 3 символа.
 class PoleDigitsFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final d = newValue.text.replaceAll(RegExp(r'\D'), '');
+    var d = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (d.length > 3) d = d.substring(0, 3);
     return TextEditingValue(
       text: d,
       selection: TextSelection.collapsed(offset: d.length),

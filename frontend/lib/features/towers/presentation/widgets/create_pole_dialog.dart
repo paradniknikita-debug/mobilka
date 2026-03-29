@@ -510,17 +510,27 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           branchSet.add('${p.tapPoleId}:$bi');
         }
       }
-      final branches = branchSet.map((s) {
+      // Защита от дублей/рассинхрона: формируем уникальный список веток.
+      final byKey = <String, String>{};
+      for (final s in branchSet) {
         final parts = s.split(':');
         final pid = int.tryParse(parts[0]) ?? 0;
         final bi = int.tryParse(parts[1]) ?? 1;
         final label = 'Отпайка от ${tapPoleNames[pid] ?? 'опора $pid'} — ветка $bi';
-        return MapEntry(s, label);
-      }).toList()..sort((a, b) => a.key.compareTo(b.key));
+        byKey[s] = label;
+      }
+      final branches = byKey.entries.map((e) => MapEntry(e.key, e.value)).toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      final allowedValues = branches.map((e) => e.key).toSet();
       setState(() {
         _tapPolesInLine = tapPoles.map((p) => MapEntry(p.id, p.poleNumber)).toList();
         _tapBranchesInLine = branches;
         _showBranchChoice = _tapBranchesInLine.isNotEmpty || _tapPolesInLine.isNotEmpty;
+        // Если текущего значения нет среди items, сбрасываем в магистраль,
+        // чтобы DropdownButton не падал с assertion.
+        if (_branchSelection != null && !allowedValues.contains(_branchSelection)) {
+          _branchSelection = null;
+        }
       });
     } catch (_) {
       if (mounted) setState(() {
@@ -1427,6 +1437,22 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      // Как в Angular: чекбокс задаёт `is_tap` ("Точка отпайки")
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _isTap,
+                            onChanged: (v) => setState(() => _isTap = v ?? false),
+                          ),
+                          Expanded(
+                            child: Text(
+                              'Точка отпайки',
+                              style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 20),
 
                       // Основные параметры + АВТОЗАПОЛНЕНИЕ
@@ -1504,26 +1530,42 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       if (_showBranchChoice && !(widget.tapPoleId != null && widget.startNewTap)) ...[
                         Text('Ветка', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),
                         const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: PatrolColors.surfaceCard,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String?>(
-                              value: _branchSelection,
-                              isExpanded: true,
-                              hint: const Text('Магистраль'),
-                              items: [
-                                DropdownMenuItem<String?>(value: null, child: Text('Магистраль', style: TextStyle(color: PatrolColors.textPrimary))),
-                                ..._tapBranchesInLine.map((e) => DropdownMenuItem<String?>(value: e.key, child: Text(e.value, style: TextStyle(color: PatrolColors.textPrimary)))),
-                              ],
-                              onChanged: (widget.tapPoleId != null && widget.tapBranchIndex != null)
-                                  ? null
-                                  : (v) => setState(() => _branchSelection = v),
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final seen = <String?>{};
+                            final dropdownItems = <DropdownMenuItem<String?>>[
+                              DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Магистраль', style: TextStyle(color: PatrolColors.textPrimary)),
+                              ),
+                              ..._tapBranchesInLine.where((e) => seen.add(e.key)).map(
+                                (e) => DropdownMenuItem<String?>(
+                                  value: e.key,
+                                  child: Text(e.value, style: TextStyle(color: PatrolColors.textPrimary)),
+                                ),
+                              ),
+                            ];
+                            final allowed = dropdownItems.map((e) => e.value).toSet();
+                            final safeValue = allowed.contains(_branchSelection) ? _branchSelection : null;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: PatrolColors.surfaceCard,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String?>(
+                                  value: safeValue,
+                                  isExpanded: true,
+                                  hint: const Text('Магистраль'),
+                                  items: dropdownItems,
+                                  onChanged: (widget.tapPoleId != null && widget.tapBranchIndex != null)
+                                      ? null
+                                      : (v) => setState(() => _branchSelection = v),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 12),
                       ],

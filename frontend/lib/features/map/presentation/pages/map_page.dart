@@ -1506,6 +1506,17 @@ class _MapPageState extends ConsumerState<MapPage> {
   List<Polyline> _buildPowerLinePolylines() {
     final polylines = <Polyline>[];
     final features = _powerLinesData?['features'] as List<dynamic>? ?? [];
+    final poleFeatures = _polesData?['features'] as List<dynamic>? ?? [];
+    final lineIdsFromPolePoints = <int>{};
+    for (final feature in poleFeatures) {
+      try {
+        final props = feature['properties'] as Map<String, dynamic>?;
+        final geom = feature['geometry'] as Map<String, dynamic>?;
+        if (props == null || geom == null || geom['type'] != 'Point') continue;
+        final plId = _toInt(props['line_id']);
+        if (plId != null) lineIdsFromPolePoints.add(plId);
+      } catch (_) {}
+    }
     final lineIdsWithGeometry = <int>{};
 
     for (final feature in features) {
@@ -1513,9 +1524,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         final geometry = feature['geometry'] as Map<String, dynamic>?;
         final props = feature['properties'] as Map<String, dynamic>?;
         if (geometry != null && geometry['type'] == 'LineString') {
+          final id = props != null ? _toInt(props['id']) : null;
+          // Если для линии есть опоры-точки, строим сегменты сами (магистраль/отпайки),
+          // иначе можно использовать готовую LineString геометрию.
+          if (id != null && lineIdsFromPolePoints.contains(id)) continue;
           final coordinates = geometry['coordinates'] as List<dynamic>?;
           if (coordinates != null && coordinates.isNotEmpty) {
-            final id = props != null ? _toInt(props['id']) : null;
             if (id != null) lineIdsWithGeometry.add(id);
             final points = coordinates.map((coord) => LatLng(
               _toDouble(coord[1]),
@@ -1542,7 +1556,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
 
     // Опоры без геометрии с сервера: строим магистраль и отпайки по номерам (N — магистраль, N/1, N/2 — отпайка от N)
-    final poleFeatures = _polesData?['features'] as List<dynamic>? ?? [];
     final polesByPowerLine = <int, List<Map<String, dynamic>>>{};
     for (final feature in poleFeatures) {
       try {
@@ -1554,9 +1567,13 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (coords == null || coords.length < 2) continue;
         final pn = props!['pole_number']?.toString() ?? '';
         polesByPowerLine.putIfAbsent(plId, () => []).add({
+          'id': _toInt(props['id']),
           'lat': _toDouble(coords[1]),
           'lng': _toDouble(coords[0]),
           'pole_number': pn,
+          'tap_pole_id': _toInt(props['tap_pole_id']),
+          'tap_branch_index': _toInt(props['tap_branch_index']),
+          'sequence_number': _toInt(props['sequence_number']),
         });
       } catch (_) {}
     }
@@ -1587,11 +1604,83 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         );
       }
-      // Отпайки: для каждой N/M — линия к корню/предыдущей (2/1→2; 2/2→2/1) и к следующей при наличии (2/1→2/2).
+      // Отпайки:
+      // 1) если есть метаданные (tap_pole_id / tap_branch_index), строим строго по ним:
+      //    - первая опора ветки -> якорная опора tap_pole_id
+      //    - далее только соседние опоры в этой же ветке
+      // 2) fallback (старые данные без метаданных) — по строковым номерам N/M.
       final tapList = list.where((e) => (e['pole_number'] as String).contains('/')).toList();
       if (tapList.isEmpty) continue;
-      final byPoleNumber = {for (var e in list) (e['pole_number'] as String).trim(): e};
       final segmentKeys = <String>{};
+      void addSegmentByNodes(Map<String, dynamic> a, Map<String, dynamic> b) {
+        final idA = _toInt(a['id']);
+        final idB = _toInt(b['id']);
+        if (idA == null || idB == null || idA == idB) return;
+        final key = idA < idB ? '$idA|$idB' : '$idB|$idA';
+        if (segmentKeys.contains(key)) return;
+        segmentKeys.add(key);
+        final vl = _voltageKvForPowerLine(lineId);
+        polylines.add(
+          Polyline(
+            points: [
+              LatLng(_toDouble(a['lat']), _toDouble(a['lng'])),
+              LatLng(_toDouble(b['lat']), _toDouble(b['lng'])),
+            ],
+            strokeWidth: VoltageLevelColors.strokeWidthForLine(isTap: true, isPatrol: isCurrentPatrol),
+            color: VoltageLevelColors.colorForVoltageKv(vl),
+          ),
+        );
+      }
+
+      final tapsWithMeta = tapList.where((e) => _toInt(e['tap_pole_id']) != null).toList();
+      if (tapsWithMeta.isNotEmpty) {
+        final byId = <int, Map<String, dynamic>>{};
+        for (final n in list) {
+          final id = _toInt(n['id']);
+          if (id != null) byId[id] = n;
+        }
+        final byBranch = <String, List<Map<String, dynamic>>>{};
+        for (final t in tapsWithMeta) {
+          final tapPoleId = _toInt(t['tap_pole_id']);
+          if (tapPoleId == null) continue;
+          final bi = _toInt(t['tap_branch_index']) ?? 1;
+          final pn = (t['pole_number'] as String?)?.trim() ?? '';
+          final root = pn.contains('/') ? pn.split('/').first.trim() : '';
+          final k = root.isNotEmpty ? '$tapPoleId:r:$root' : '$tapPoleId:b:$bi';
+          byBranch.putIfAbsent(k, () => <Map<String, dynamic>>[]).add(t);
+        }
+        for (final entryBranch in byBranch.entries) {
+          final branchNodes = entryBranch.value;
+          if (branchNodes.isEmpty) continue;
+          branchNodes.sort((a, b) {
+            final sa = _toInt(a['sequence_number']);
+            final sb = _toInt(b['sequence_number']);
+            if (sa != null && sb != null && sa != sb) return sa.compareTo(sb);
+            int suffix(Map<String, dynamic> n) {
+              final pn = (n['pole_number'] as String?)?.trim() ?? '';
+              final parts = pn.split('/');
+              if (parts.length < 2) return 1 << 30;
+              return int.tryParse(parts[1].trim()) ?? (1 << 30);
+            }
+            final sfxA = suffix(a);
+            final sfxB = suffix(b);
+            if (sfxA != sfxB) return sfxA.compareTo(sfxB);
+            final pna = (a['pole_number'] as String?) ?? '';
+            final pnb = (b['pole_number'] as String?) ?? '';
+            return pna.compareTo(pnb);
+          });
+          final anchorId = _toInt(branchNodes.first['tap_pole_id']);
+          final anchor = anchorId != null ? byId[anchorId] : null;
+          if (anchor != null) {
+            addSegmentByNodes(anchor, branchNodes.first);
+          }
+          for (var i = 1; i < branchNodes.length; i++) {
+            addSegmentByNodes(branchNodes[i - 1], branchNodes[i]);
+          }
+        }
+      }
+
+      final byPoleNumber = {for (var e in list) (e['pole_number'] as String).trim(): e};
       bool areNeighborsInBranch(String a, String b) {
         final hasSlashA = a.contains('/');
         final hasSlashB = b.contains('/');
@@ -1630,7 +1719,12 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         );
       }
-      for (final e in tapList) {
+      // Fallback нужен для старых/смешанных данных без tap_* метаданных.
+      // Если метаданные частично есть, fallback применяем только к опорам без tap_pole_id.
+      final tapsForFallback = tapsWithMeta.isNotEmpty
+          ? tapList.where((e) => _toInt(e['tap_pole_id']) == null).toList()
+          : tapList;
+      for (final e in tapsForFallback) {
         final pn = (e['pole_number'] as String).trim();
         final parts = pn.split('/');
         if (parts.length < 2) continue;
@@ -1727,18 +1821,18 @@ class _MapPageState extends ConsumerState<MapPage> {
   static const Map<String, Map<String, dynamic>> _equipmentTerminalSpec = {
     'zn': {
       'viewBox': [0.0, 0.0, 200.0, 80.0],
-      't1': [-30.0, 40.0],
+      't1': [10.0, 35.0],
       't2': null,
-      'anchor': [-30.0, 40.0],
+      'anchor': [10.0, 35.0],
       'rotationOffsetDeg': 90.0,
       'iconScale': 0.58,
     },
     'arrester': {
       'viewBox': [0.0, 0.0, 200.0, 200.0],
-      't1': [-80.0, -40.0],
+      't1': [-45.0, 0.0],
       't2': null,
-      'anchor': [-80.0, -40.0],
-      'rotationOffsetDeg': 0.0,
+      'anchor': [-45.0, 0.0],
+      'rotationOffsetDeg': 90.0,
       'localOriginToViewBox': [100.0, 100.0],
     },
     'disconnector': {
@@ -2031,7 +2125,11 @@ class _MapPageState extends ConsumerState<MapPage> {
   String _branchKeyServerPole(Map<String, dynamic> p) {
     final tapPoleId = _toInt(p['tap_pole_id']) ?? 0;
     final tapBranchIndex = _toInt(p['tap_branch_index']) ?? 0;
-    return '$tapPoleId:$tapBranchIndex';
+    final poleNumber = (p['pole_number'] as String?)?.trim() ?? '';
+    final root = poleNumber.contains('/') ? poleNumber.split('/').first.trim() : '';
+    // Приоритет root (N в N/M) для устойчивого объединения одной ветки.
+    if (root.isNotEmpty) return '$tapPoleId:r:$root';
+    return '$tapPoleId:b:$tapBranchIndex';
   }
 
   /// Оборудование на пролёте p1→p2: у первой опоры линии — только на первом сегменте (как на веб-клиенте).
@@ -3337,7 +3435,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// Открыть диалог создания опоры «Начать отпайку» по явным lineId и tapPoleId.
-  /// [tapPoleNumber] — номер исходной опоры (например "3") для нумерации опор отпайки как "3/1", "3/2".
+  /// Нумерация отпайки независима от номера опоры-якоря:
+  /// первая новая отпайка в линии — "1/1", вторая — "2/1", третья — "3/1", ...
   Future<void> _openCreatePoleFromTapPole(int lineId, int tapPoleId, [String? tapPoleNumber]) async {
     if (_currentLineId == null || _currentLineId != lineId) {
       if (mounted) {
@@ -3366,48 +3465,78 @@ class _MapPageState extends ConsumerState<MapPage> {
     final linePoles = await db.getPolesByLine(lineId);
     final existingPolesCount = linePoles.length;
     if (!mounted) return;
-    // Для старта новой ветки от этой же опоры используем следующий индекс ветки:
-    // если уже есть 3/1, 3/2, то новая ветка начинается с 3/3.
+    // Для топологии backend по-прежнему используем индекс ветки от этой опоры-якоря
+    // (tap_branch_index / start_new_tap).
     int nextBranchIndex = 1;
-    // В локальной модели у `Pole` нет полей tapPoleId/tapBranchIndex,
-    // поэтому вычисляем следующую ветку по строковому формату poleNumber: "N/M".
-    String? root;
-    if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
-      root = tapPoleNumber.trim();
-    } else {
-      final rootPole = linePoles.where((p) => p.id == tapPoleId).toList();
-      if (rootPole.isNotEmpty) {
-        final pn = rootPole.first.poleNumber.trim();
-        root = pn.contains('/') ? pn.split('/').first.trim() : pn;
-      }
+    // Определяем branch_index по уже существующим отпайкам от этого якоря.
+    // Это исключает повторное использование index=1 для новой ветки.
+    int? maxBranchIndex;
+    final poleFeatures = _polesData?['features'] as List<dynamic>? ?? const [];
+    for (final f in poleFeatures) {
+      try {
+        final props = f['properties'] as Map<String, dynamic>?;
+        if (props == null) continue;
+        final lId = _toInt(props['line_id']);
+        if (lId != lineId) continue;
+        final anchorId = _toInt(props['tap_pole_id']);
+        if (anchorId != tapPoleId) continue;
+        final bi = _toInt(props['tap_branch_index']);
+        if (bi == null || bi < 1) continue;
+        if (maxBranchIndex == null || bi > maxBranchIndex) {
+          maxBranchIndex = bi;
+        }
+      } catch (_) {}
     }
-
-    if (root != null && root.isNotEmpty) {
-      int? maxSuffix;
-      for (final p in linePoles) {
-        final n = (p.poleNumber).trim();
-        if (!n.startsWith('$root/')) continue;
-        final parts = n.split('/');
-        if (parts.length < 2) continue;
-        final suffix = int.tryParse(parts[1].trim());
-        if (suffix == null) continue;
-        if (maxSuffix == null || suffix > maxSuffix) maxSuffix = suffix;
+    if (maxBranchIndex != null) {
+      nextBranchIndex = maxBranchIndex + 1;
+    } else {
+      // Fallback для полностью локального/старого набора данных без tap_* полей.
+      String? root;
+      if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
+        root = tapPoleNumber.trim();
+      } else {
+        final rootPole = linePoles.where((p) => p.id == tapPoleId).toList();
+        if (rootPole.isNotEmpty) {
+          final pn = rootPole.first.poleNumber.trim();
+          root = pn.contains('/') ? pn.split('/').first.trim() : pn;
+        }
       }
-      nextBranchIndex = (maxSuffix ?? 0) + 1;
+      if (root != null && root.isNotEmpty) {
+        int? maxSuffix;
+        for (final p in linePoles) {
+          final n = (p.poleNumber).trim();
+          if (!n.startsWith('$root/')) continue;
+          final parts = n.split('/');
+          if (parts.length < 2) continue;
+          final suffix = int.tryParse(parts[1].trim());
+          if (suffix == null) continue;
+          if (maxSuffix == null || suffix > maxSuffix) maxSuffix = suffix;
+        }
+        nextBranchIndex = (maxSuffix ?? 0) + 1;
+      }
     }
     if (nextBranchIndex < 1) nextBranchIndex = 1;
 
-    // Запоминаем контекст отпайки: до завершения обхода следующие опоры будут в этой ветке.
-    if (tapPoleNumber != null && tapPoleNumber.isNotEmpty) {
-      setState(() {
-        _currentTapRoot = tapPoleNumber;
-        _currentTapBranchIndex = nextBranchIndex;
-      });
+    // Корень номера отпайки (левую часть N/M) задаем последовательным индексом по линии:
+    // 1/*, 2/*, 3/* ... независимо от номера якорной опоры.
+    int maxTapRoot = 0;
+    for (final p in linePoles) {
+      final n = p.poleNumber.trim();
+      if (!n.contains('/')) continue;
+      final rootStr = n.split('/').first.trim();
+      final r = int.tryParse(rootStr);
+      if (r != null && r > maxTapRoot) maxTapRoot = r;
     }
-    // Нумерация первой опоры новой ветки: «номер исходной опоры/индекс ветки» (3/1, затем 3/2, ...).
-    final String? initialPoleNumberForTap = (tapPoleNumber != null && tapPoleNumber.isNotEmpty)
-        ? '$tapPoleNumber/$nextBranchIndex'
-        : null;
+    final newTapRoot = '${maxTapRoot + 1}';
+
+    // Запоминаем контекст активной отпайки для FAB: продолжение будет N/2, N/3, ...
+    setState(() {
+      _currentTapRoot = newTapRoot;
+      _currentTapBranchIndex = nextBranchIndex;
+    });
+
+    // Первая опора каждой новой отпайки — N/1.
+    final String initialPoleNumberForTap = '$newTapRoot/1';
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
@@ -3740,7 +3869,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       return;
     }
     try {
-      final rows = await _apiService.getChangeLog(
+      final apiService = ref.read(apiServiceProvider);
+      final rows = await apiService.getChangeLog(
         null,
         null,
         entityType,
