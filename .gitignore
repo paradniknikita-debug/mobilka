@@ -1,0 +1,81 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Backend secrets & runtime
+.env
+backend/.env
+backend/app/__pycache__/
+backend/static/
+
+# SSL сертификаты (не коммитим реальные)
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+*.pem
+*.key
+*.crt
+
+# Flutter / Dart
+frontend/.dart_tool/
+frontend/build/
+frontend/.packages
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+
+# Vendored Flutter SDK (не коммитим огромный SDK)
+flutter/
+
+# Сгенерированный Dart-код (по умолчанию не коммитим)
+*.freezed.dart
+*.g.dart
+# Исключение: код под frontend/lib нужен в git — иначе при cache hit в CI не запускается build_runner и сборка web падает.
+!frontend/lib/**/*.freezed.dart
+!frontend/lib/**/*.g.dart
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Документация (игнорируем все .md файлы кроме README.md и DEVELOPMENT_GUIDE.md)
+*.md
+!README.md
+!DEVELOPMENT_GUIDE.md
+!**/README.md
+
+# Временные скрипты миграций
+apply_connectivity_migration.py
+backend/apply_migration_manually.py
+backend/migration.sql
+backend/create_segment.py
+backend/create_user.py
+
+# Build файлы
+frontend/android/build/
+frontend/build/
+web-frontend/dist/
+backend/static/
+
+# Экспорт CIM/временные XML в корне
+/*.xml
+
+# Личные материалы в корне (диплом, черновики) — не в репозитории
+/Автом*.doc
+/Автом*.txt
+/Диплом*.docx
+/Диплом*.txt
+/Пояснительная записка*.docx
+/Программа*.doc
+/Программа*.txt
+/Статья.docx
+
+# Кэш Angular (на случай если создаётся вне web-frontend/.gitignore)
+web-frontend/.angular/

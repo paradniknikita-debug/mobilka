@@ -1,0 +1,594 @@
+<div class="create-object-dialog" [class.substation-edit]="isEditMode && selectedObjectType === 'substation'" appResizableDialog>
+  <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : isEditMode && selectedObjectType === 'substation' ? 'Редактирование подстанции' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
+
+  <mat-dialog-content>
+    <!-- Шаг 1: Выбор типа объекта -->
+    <div *ngIf="!selectedObjectType" class="step-container">
+      <form [formGroup]="objectTypeForm">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Тип объекта</mat-label>
+          <mat-select formControlName="objectType" (selectionChange)="onObjectTypeSelected($event)">
+          <mat-option value="powerline">ЛЭП</mat-option>
+          <mat-option value="substation">Подстанция</mat-option>
+          <mat-option value="pole">Опора</mat-option>
+          <mat-option value="equipment">Оборудование</mat-option>
+        </mat-select>
+        <mat-error *ngIf="objectTypeForm.get('objectType')?.hasError('required')">
+          Выберите тип объекта
+        </mat-error>
+      </mat-form-field>
+      </form>
+    </div>
+
+    <!-- Шаг 2: Форма создания опоры (компактная) -->
+    <div *ngIf="selectedObjectType === 'pole'" class="step-container pole-form-compact">
+      <form [formGroup]="poleForm" class="pole-form">
+        <div class="form-section form-section--main">
+          <h3 class="section-title">Основные данные</h3>
+          
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Номер опоры</mat-label>
+            <input matInput formControlName="pole_number" placeholder="ОП-001">
+            <mat-error>{{ getFieldError('pole_number') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>ЛЭП</mat-label>
+            <input 
+              type="text"
+              matInput
+              formControlName="line_id"
+              [matAutocomplete]="autoPowerLine"
+              placeholder="Выберите ЛЭП">
+            <mat-autocomplete #autoPowerLine="matAutocomplete" [displayWith]="displayPowerLine">
+              <mat-option *ngFor="let line of filteredPowerLines | async" [value]="line">
+                {{ line.name }}
+              </mat-option>
+            </mat-autocomplete>
+            <mat-error>{{ getFieldError('line_id') }}</mat-error>
+          </mat-form-field>
+
+          <!-- Ветка: магистраль или отпайка (несколько веток от одной опоры с разными подписями) -->
+          <mat-form-field *ngIf="showBranchChoice && (tapBranchesInLine.length || tapPolesInLine.length)" appearance="outline" class="full-width field-tap">
+            <mat-label>{{ tapBranchLabel }}</mat-label>
+            <mat-select formControlName="branch_selection" placeholder="Магистраль или отпайка">
+              <mat-option [value]="null">Магистраль</mat-option>
+              <mat-option *ngFor="let tb of tapBranchesInLine" [value]="tb.value">{{ tb.label }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <div class="row-2">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Широта</mat-label>
+              <input matInput type="text" formControlName="latitude" placeholder="55.755800">
+              <mat-error>{{ getFieldError('latitude') }}</mat-error>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Долгота</mat-label>
+              <input matInput type="text" formControlName="longitude" placeholder="37.617300">
+              <mat-error>{{ getFieldError('longitude') }}</mat-error>
+            </mat-form-field>
+          </div>
+
+          <div class="row-2">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Тип опоры</mat-label>
+              <mat-select formControlName="pole_type">
+                <mat-option *ngFor="let type of poleTypes" [value]="type">{{ type }}</mat-option>
+              </mat-select>
+              <mat-error>{{ getFieldError('pole_type') }}</mat-error>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Порядок</mat-label>
+              <input matInput type="number" formControlName="sequence_number" min="1" placeholder="Авто">
+              <mat-error>{{ getFieldError('sequence_number') }}</mat-error>
+            </mat-form-field>
+          </div>
+
+          <div class="tap-checkbox-row">
+            <mat-checkbox formControlName="is_tap">Точка отпайки</mat-checkbox>
+          </div>
+        </div>
+
+        <!-- Дополнительно: кабель и прочее — в раскрывающихся блоках -->
+        <mat-expansion-panel class="expansion-section">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Параметры кабеля и UID</mat-panel-title>
+          </mat-expansion-panel-header>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Марка провода</mat-label>
+            <mat-select formControlName="conductor_type">
+              <mat-option value="">— не указана</mat-option>
+              <mat-option *ngFor="let t of conductorTypes" [value]="t">{{ t }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Материал</mat-label>
+            <mat-select formControlName="conductor_material">
+              <mat-option value="">— не указан</mat-option>
+              <mat-option *ngFor="let m of conductorMaterials" [value]="m">{{ m }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Сечение, мм²</mat-label>
+            <input matInput type="text" formControlName="conductor_section" placeholder="70">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>UID (MRID)</mat-label>
+            <input matInput formControlName="mrid" placeholder="UUID">
+            <button mat-icon-button matSuffix (click)="generateMRID()" type="button" matTooltip="Сгенерировать">
+              <mat-icon>refresh</mat-icon>
+            </button>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
+          </mat-form-field>
+        </mat-expansion-panel>
+
+        <mat-expansion-panel class="expansion-section">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Дополнительные характеристики</mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="row-2">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Высота, м</mat-label>
+              <input matInput type="number" formControlName="height" step="0.1">
+              <mat-error>{{ getFieldError('height') }}</mat-error>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Год установки</mat-label>
+              <input matInput type="number" formControlName="year_installed">
+              <mat-error>{{ getFieldError('year_installed') }}</mat-error>
+            </mat-form-field>
+          </div>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Тип фундамента</mat-label>
+            <input matInput formControlName="foundation_type">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Материал</mat-label>
+            <mat-select formControlName="material">
+              <mat-option value="">Не указано</mat-option>
+              <mat-option *ngFor="let material of materials" [value]="material">{{ material }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Состояние</mat-label>
+            <mat-select formControlName="condition">
+              <mat-option *ngFor="let cond of conditions" [value]="cond">
+                {{ cond === 'good' ? 'Хорошее' : cond === 'satisfactory' ? 'Удовлетворительное' : 'Плохое' }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Примечания</mat-label>
+            <textarea matInput formControlName="notes" rows="2"></textarea>
+          </mat-form-field>
+        </mat-expansion-panel>
+
+        <mat-expansion-panel class="expansion-section" *ngIf="selectedObjectType === 'pole'">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Комментарий и медиа карточки</mat-panel-title>
+          </mat-expansion-panel-header>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Комментарий карточки</mat-label>
+            <textarea matInput formControlName="card_comment" rows="2" placeholder="Текст комментария к опоре"></textarea>
+          </mat-form-field>
+          <ng-container *ngIf="isEditMode && poleId && lineId">
+            <p class="pole-attachments-label">Вложения (фото, схемы, голос, видео)</p>
+            <div class="pole-attachments-actions">
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('photo')" matTooltip="Изображение (фото, схема)" class="upload-btn">
+                <mat-icon>image</mat-icon>
+              </button>
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('voice')" matTooltip="Голос" class="upload-btn">
+                <mat-icon>mic</mat-icon>
+              </button>
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('video')" matTooltip="Видео" class="upload-btn">
+                <mat-icon>videocam</mat-icon>
+              </button>
+              <input #poleAttachmentFileInput type="file" class="upload-input-hidden" [accept]="poleAttachmentAccept" (change)="onPoleAttachmentFileSelected($event)" />
+            </div>
+            <div class="pole-attachments-list" *ngIf="poleAttachments.length">
+              <div class="pole-attachment-item" *ngFor="let att of poleAttachments; let i = index">
+                <ng-container [ngSwitch]="att.t">
+                  <div *ngSwitchCase="'photo'" class="attachment-preview-wrap">
+                    <app-attachment-image-view
+                      [url]="att.url"
+                      [thumbnailUrl]="att.thumbnail"
+                      cssClass="attachment-thumb"
+                      (openPreview)="openImagePreview($event)"
+                    ></app-attachment-image-view>
+                  </div>
+                  <div *ngSwitchCase="'schema'" class="attachment-preview-wrap">
+                    <app-attachment-image-view
+                      [url]="att.url"
+                      [thumbnailUrl]="att.thumbnail"
+                      cssClass="attachment-thumb"
+                      (openPreview)="openImagePreview($event)"
+                    ></app-attachment-image-view>
+                  </div>
+                  <div *ngSwitchCase="'voice'" class="attachment-audio-wrap">
+                    <app-attachment-media-view [url]="att.url" type="voice"></app-attachment-media-view>
+                  </div>
+                  <div *ngSwitchCase="'video'" class="attachment-video-wrap">
+                    <app-attachment-media-view [url]="att.url" type="video"></app-attachment-media-view>
+                  </div>
+                  <span *ngSwitchDefault class="attachment-unknown">{{ att.t || 'файл' }}</span>
+                </ng-container>
+                <div class="attachment-item-actions">
+                  <button mat-icon-button type="button" (click)="downloadPoleAttachment(att)" matTooltip="Скачать">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+        </mat-expansion-panel>
+      </form>
+    </div>
+
+    <!-- Форма создания ЛЭП -->
+    <div *ngIf="selectedObjectType === 'powerline'" class="step-container">
+      <form [formGroup]="powerLineForm" class="powerline-form">
+        <!-- Обязательные поля -->
+        <div class="form-section">
+          <h3>Обязательные поля</h3>
+          
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Название</mat-label>
+            <input matInput formControlName="name" placeholder="Например: Минск-Западная">
+            <mat-error>{{ getFieldError('name') }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Уникальный UID (MRID)</mat-label>
+            <input matInput formControlName="mrid" placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx">
+            <mat-hint>Генерируется автоматически. Можно изменить вручную (формат UUID).</mat-hint>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
+            <button mat-icon-button matSuffix (click)="generatePowerLineMRID()" type="button" matTooltip="Сгенерировать новый UID">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </mat-form-field>
+        </div>
+
+        <!-- Дополнительные поля -->
+        <div class="form-section">
+          <h3>Дополнительные характеристики</h3>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Номинальное напряжение (кВ)</mat-label>
+            <input matInput type="number" formControlName="voltage_level" step="0.1" placeholder="0.4, 6, 10, 35, 110, 220, 330, 500, 750">
+            <mat-hint>Стандартные значения: 0.4, 6, 10, 35, 110, 220, 330, 500, 750 кВ</mat-hint>
+            <mat-error>{{ getFieldError('voltage_level') }}</mat-error>
+          </mat-form-field>
+
+          <p class="auto-calc-hint">Длина линии рассчитывается автоматически по сумме пролётов.</p>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Диспетчерское наименование</mat-label>
+            <input matInput formControlName="dispatcher_name" placeholder="Например: ЛЭП-110 Минск-Западная">
+            <mat-hint>Официальное диспетчерское наименование</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Административная принадлежность к филиалу</mat-label>
+            <input matInput formControlName="branch_name" placeholder="Например: РУП Минскэнерго">
+            <mat-hint>Название филиала или организации</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Балансовая принадлежность</mat-label>
+            <input matInput formControlName="balance_ownership" placeholder="Например: РУП Минскэнерго">
+            <mat-hint>Организация, на балансе которой находится ЛЭП</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Географический регион</mat-label>
+            <input matInput formControlName="region_name" placeholder="Например: Минская область">
+            <mat-hint>Название географического региона</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Статус</mat-label>
+            <mat-select formControlName="status">
+              <mat-option value="active">Активная</mat-option>
+              <mat-option value="inactive">Неактивная</mat-option>
+              <mat-option value="maintenance">На обслуживании</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Описание</mat-label>
+            <textarea matInput formControlName="description" rows="3" placeholder="Дополнительная информация"></textarea>
+          </mat-form-field>
+        </div>
+      </form>
+    </div>
+
+    <!-- Форма создания подстанции -->
+    <div *ngIf="selectedObjectType === 'substation'" class="step-container">
+      <form [formGroup]="substationForm">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Название *</mat-label>
+          <input matInput formControlName="name" maxlength="100">
+          <mat-error *ngIf="substationForm.get('name')?.hasError('required')">
+            Название обязательно
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>UID</mat-label>
+          <input matInput formControlName="uid" maxlength="36" placeholder="Пусто — автогенерация (как у опор)">
+          <button mat-icon-button matSuffix (click)="generateSubstationUID()" type="button" matTooltip="Сгенерировать UID">
+            <mat-icon>refresh</mat-icon>
+          </button>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Диспетчерское наименование</mat-label>
+          <input matInput formControlName="dispatcher_name" maxlength="100" placeholder="По желанию">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Напряжение (кВ) *</mat-label>
+          <mat-select formControlName="voltage_level">
+            <mat-option *ngFor="let voltage of voltageLevels" [value]="voltage">
+              {{ voltage }} кВ
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="substationForm.get('voltage_level')?.hasError('required')">
+            Напряжение обязательно
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('voltage_level')?.hasError('invalidVoltage')">
+            Выберите стандартное значение напряжения
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('voltage_level')?.hasError('negativeNumber')">
+            Напряжение не может быть отрицательным
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Широта *</mat-label>
+          <input matInput type="number" formControlName="latitude" step="any">
+          <mat-error *ngIf="substationForm.get('latitude')?.hasError('required')">
+            Широта обязательна
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('latitude')?.hasError('invalidCoordinate')">
+            Широта от -90 до 90°
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Долгота *</mat-label>
+          <input matInput type="number" formControlName="longitude" step="any">
+          <mat-error *ngIf="substationForm.get('longitude')?.hasError('required')">
+            Долгота обязательна
+          </mat-error>
+          <mat-error *ngIf="substationForm.get('longitude')?.hasError('invalidCoordinate')">
+            Долгота от -180 до 180°
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Адрес</mat-label>
+          <textarea matInput formControlName="address" rows="2"></textarea>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Описание</mat-label>
+          <textarea matInput formControlName="description" rows="3"></textarea>
+        </mat-form-field>
+
+        <!-- Связь подстанции с линиями (только в режиме редактирования) -->
+        <div *ngIf="isEditMode && substationId" class="form-section line-links-section">
+          <h3 class="section-title">Связь с линиями</h3>
+
+          <div class="line-link-block">
+            <h4>Подстанция в начале линии</h4>
+            <p *ngIf="linesWhereSubstationIsStart.length" class="current-link">
+              Сейчас в начале: <strong>{{ linesWhereSubstationIsStartNames }}</strong>
+              <button mat-button color="warn" (click)="clearSubstationFromLineStart(linesWhereSubstationIsStart[0].id)" [disabled]="linkingLineStart">Снять</button>
+            </p>
+            <p *ngIf="linesWhereSubstationIsStart.length > 1" class="current-link">
+              <button mat-button color="warn" *ngFor="let line of linesWhereSubstationIsStart.slice(1)" (click)="clearSubstationFromLineStart(line.id)" [disabled]="linkingLineStart">Снять с «{{ line.name }}»</button>
+            </p>
+            <div class="link-controls">
+              <mat-form-field appearance="outline" class="line-select">
+                <mat-label>ЛЭП</mat-label>
+                <mat-select [(ngModel)]="lineForStartId" [ngModelOptions]="{standalone: true}" placeholder="Выберите линию">
+                  <mat-option [value]="null">— не выбрано</mat-option>
+                  <mat-option *ngFor="let line of powerLines" [value]="line.id">{{ line.name }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-raised-button color="primary" (click)="setSubstationAsLineStart()" [disabled]="lineForStartId == null || linkingLineStart">
+                {{ linkingLineStart ? '...' : 'Установить' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="line-link-block">
+            <h4>Подстанция в конце линии</h4>
+            <p *ngIf="linesWhereSubstationIsEnd.length" class="current-link">
+              Сейчас в конце: <strong>{{ linesWhereSubstationIsEndNames }}</strong>
+              <button mat-button color="warn" (click)="clearSubstationFromLineEnd(linesWhereSubstationIsEnd[0].id)" [disabled]="linkingLineEnd">Снять</button>
+            </p>
+            <p *ngIf="linesWhereSubstationIsEnd.length > 1" class="current-link">
+              <button mat-button color="warn" *ngFor="let line of linesWhereSubstationIsEnd.slice(1)" (click)="clearSubstationFromLineEnd(line.id)" [disabled]="linkingLineEnd">Снять с «{{ line.name }}»</button>
+            </p>
+            <div class="link-controls">
+              <mat-form-field appearance="outline" class="line-select">
+                <mat-label>ЛЭП</mat-label>
+                <mat-select [(ngModel)]="lineForEndId" [ngModelOptions]="{standalone: true}" placeholder="Выберите линию">
+                  <mat-option [value]="null">— не выбрано</mat-option>
+                  <mat-option *ngFor="let line of powerLines" [value]="line.id">{{ line.name }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-raised-button color="primary" (click)="setSubstationAsLineEnd()" [disabled]="lineForEndId == null || linkingLineEnd">
+                {{ linkingLineEnd ? '...' : 'Установить' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="line-link-block">
+            <h4>Подстанция на конце отпайки</h4>
+            <p class="hint">Выберите отпаечный участок, который приходит на эту подстанцию (система сама свяжет его с последней опорой отпайки).</p>
+            <p *ngIf="segmentsWhereSubstationIsTapEnd.length" class="current-link">
+              Сейчас отпаека, приходящая на подстанцию: <strong>{{ segmentsWhereSubstationIsTapEndNames }}</strong>
+              <span class="clear-buttons">
+                <button mat-button color="warn" *ngFor="let s of segmentsWhereSubstationIsTapEnd" (click)="clearSubstationFromTapEnd(s.lineId, s.segmentId)" [disabled]="linkingTapEnd">Снять с «{{ s.segmentName }}»</button>
+              </span>
+            </p>
+            <div class="link-controls" *ngIf="tapSegmentsOptions.length">
+              <mat-form-field appearance="outline" class="line-select">
+                <mat-label>Отпаечный участок</mat-label>
+                <mat-select [(ngModel)]="selectedTapSegmentForEnd" [ngModelOptions]="{standalone: true}" placeholder="Выберите отпайку">
+                  <mat-option [value]="null">— не выбрано</mat-option>
+                  <mat-option *ngFor="let opt of tapSegmentsOptions" [value]="{ lineId: opt.lineId, segmentId: opt.segmentId }">
+                    {{ opt.lineName }} — {{ opt.segmentName }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-raised-button color="primary" (click)="setSubstationAsTapEnd()" [disabled]="!selectedTapSegmentForEnd || linkingTapEnd">
+                {{ linkingTapEnd ? '...' : 'Установить' }}
+              </button>
+            </div>
+            <p *ngIf="tapSegmentsOptions.length === 0 && isEditMode && substationId" class="no-taps">Нет отпаечных участков. Отпайки создаются при наличии опор с направлением «отпайка» и пересборке топологии по ЛЭП.</p>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div *ngIf="selectedObjectType === 'equipment'" class="step-container">
+      <form [formGroup]="equipmentForm" class="equipment-form">
+        <h3>Оборудование на опоре</h3>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Наименование</mat-label>
+          <input matInput formControlName="name" placeholder="Например: QF-1, Разъединитель 10 кВ">
+          <mat-error *ngIf="equipmentForm.get('name')?.hasError('required')">
+            Укажите наименование оборудования
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Тип оборудования</mat-label>
+          <mat-select formControlName="equipment_type">
+            <mat-option value="breaker">Выключатель</mat-option>
+            <mat-option value="disconnector">Разъединитель</mat-option>
+            <mat-option value="recloser">Реклозер</mat-option>
+            <mat-option value="grounding_switch">Заземляющий нож</mat-option>
+            <mat-option value="surge_arrester">Разрядник</mat-option>
+          </mat-select>
+          <mat-error *ngIf="equipmentForm.get('equipment_type')?.hasError('required')">
+            Укажите тип оборудования
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width" *ngIf="equipmentForm.get('pole_id')?.value">
+          <mat-label>Опора</mat-label>
+          <input matInput [value]="equipmentForm.get('pole_id')?.value" disabled>
+          <mat-hint>Оборудование привязывается к выбранной опоре</mat-hint>
+        </mat-form-field>
+
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Ном. ток</mat-label>
+            <input matInput formControlName="nominal_current" placeholder="Например: 400 А">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Ном. напряжение</mat-label>
+            <input matInput formControlName="nominal_voltage" placeholder="Например: 10 кВ">
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Марка / серия</mat-label>
+          <input matInput formControlName="mark" placeholder="Марка аппарата (по желанию)">
+        </mat-form-field>
+
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Производитель</mat-label>
+            <input matInput formControlName="manufacturer">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Модель</mat-label>
+            <input matInput formControlName="model">
+          </mat-form-field>
+        </div>
+
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Серийный номер</mat-label>
+            <input matInput formControlName="serial_number">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Год выпуска</mat-label>
+            <input matInput type="number" formControlName="year_manufactured">
+          </mat-form-field>
+        </div>
+
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Дата установки</mat-label>
+            <input matInput type="date" formControlName="installation_date">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Состояние</mat-label>
+            <mat-select formControlName="condition">
+              <mat-option value="good">Хорошее</mat-option>
+              <mat-option value="satisfactory">Удовлетворительное</mat-option>
+              <mat-option value="poor">Плохое</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Описание / примечания</mat-label>
+          <textarea matInput formControlName="notes" rows="2" placeholder="Доп. информация по оборудованию"></textarea>
+        </mat-form-field>
+        <p class="equipment-hint">
+          Ном. ток, напряжение и марка сохраняются в описании оборудования. Для логики соединений терминалы будут создаваться автоматически как T1/T2.
+        </p>
+      </form>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="cancel()">Отмена</button>
+    <button 
+      *ngIf="selectedObjectType === 'pole'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="poleForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
+    </button>
+    <button 
+      *ngIf="selectedObjectType === 'powerline'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="powerLineForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
+    </button>
+    <button 
+      *ngIf="selectedObjectType === 'substation'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="substationForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
+    </button>
+    <button 
+      *ngIf="selectedObjectType === 'equipment'"
+      mat-raised-button 
+      color="primary" 
+      (click)="onSubmit()"
+      [disabled]="equipmentForm.invalid || isSubmitting">
+      <mat-icon *ngIf="isSubmitting" class="spinning">refresh</mat-icon>
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
+    </button>
+  </mat-dialog-actions>
+</div>
+

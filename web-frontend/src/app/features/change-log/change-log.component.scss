@@ -1,0 +1,136 @@
+.change-log-page {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+  }
+}
+
+.loading,
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+}
+
+.log-table {
+  width: 100%;
+  font-size: 13px;
+  table-layout: fixed;
+
+  th {
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  td, th {
+    padding: 8px 12px;
+  }
+}
+
+.apply-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 4px;
+}
+
+.th-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.th-title {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.th-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.th-filter-label {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-top: -2px;
+}
+
+.filter-input {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.filter-select-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.mat-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.journal-tabs {
+  margin-top: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  ::ng-deep .mat-mdc-tab-body-wrapper {
+    flex: 1;
+    overflow: auto;
+  }
+}
+
+.tab-description {
+  margin: 0 0 12px 0;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+.refresh-issues {
+  margin-bottom: 16px;
+}
+
+.issues-table {
+  margin-top: 8px;
+}
+
+.uid-cell {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  &:hover {
+    color: var(--mat-primary-color, #1976d2);
+  }
+  &.uid-cell--empty {
+    cursor: default;
+    text-decoration: none;
+  }
+}

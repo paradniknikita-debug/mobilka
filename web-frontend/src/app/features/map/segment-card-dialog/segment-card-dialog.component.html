@@ -1,0 +1,93 @@
+<div class="segment-card-dialog" appResizableDialog>
+  <h2 mat-dialog-title class="dialog-title">
+    <mat-icon class="title-icon">linear_scale</mat-icon>
+    <span class="title-text">Карточка участка линии</span>
+    <button mat-icon-button class="close-btn" mat-dialog-close aria-label="Закрыть" title="Закрыть">
+      <mat-icon>close</mat-icon>
+    </button>
+  </h2>
+
+  <mat-dialog-content *ngIf="loading" class="loading">
+    <mat-spinner diameter="36"></mat-spinner>
+    <p>Загрузка данных участка…</p>
+  </mat-dialog-content>
+
+  <mat-dialog-content *ngIf="error" class="error">
+    <mat-icon color="warn">error</mat-icon>
+    <p>{{ error }}</p>
+  </mat-dialog-content>
+
+  <mat-dialog-content *ngIf="!loading && !error && segment" class="content">
+    <div class="field">
+      <span class="label">Наименование</span>
+      <span class="value">{{ segmentNameDisplay() }}</span>
+    </div>
+    <div class="field">
+      <span class="label">Длина (по пролётам)</span>
+      <span class="value">{{ lengthKm() | number:'1.2-2' }} км</span>
+    </div>
+
+    <div *ngIf="segment.is_tap" class="tap-substation-section">
+      <h3 class="sections-title">ТП в конце участка (отпайки)</h3>
+      <div class="field">
+        <span class="label">Сейчас в конце:</span>
+        <span class="value">{{ segment.to_substation_id != null ? getSubstationNameById(segment.to_substation_id) : 'нет' }}</span>
+        <button *ngIf="segment.to_substation_id != null" mat-button color="warn" (click)="clearTapSubstation()" [disabled]="savingTapSubstation">Снять</button>
+      </div>
+      <div class="field link-controls">
+        <mat-form-field appearance="outline" class="line-select">
+          <mat-label>Подстанция (ТП)</mat-label>
+          <mat-select [(value)]="selectedSubstationIdForTap">
+            <mat-option [value]="null">— не выбрана —</mat-option>
+            <mat-option *ngFor="let s of substations" [value]="s.id">{{ s.name || s.dispatcher_name || 'ПС ' + s.id }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-flat-button color="primary" (click)="setTapSubstation()" [disabled]="savingTapSubstation || selectedSubstationIdForTap == null">Установить</button>
+      </div>
+    </div>
+
+    <h3 class="sections-title">Секции линии (по марке провода)</h3>
+    <div class="sections-table-wrap" *ngIf="lineSections.length; else noSections">
+      <table class="sections-table">
+        <thead>
+          <tr>
+            <th class="col-range">Участок (опоры)</th>
+            <th class="col-wire">Марка провода</th>
+            <th class="col-material">Материал</th>
+            <th class="col-section">Сечение</th>
+            <th class="col-length">Длина</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let sec of lineSections; let i = index">
+            <td class="col-range">{{ i + 1 }}. {{ sectionLabel(sec) }}</td>
+            <td class="col-wire">{{ sec.conductor_type || '—' }}</td>
+            <td class="col-material">{{ sec.conductor_material || '—' }}</td>
+            <td class="col-section">{{ sec.conductor_section || '—' }}</td>
+            <td class="col-length">{{ sectionLengthDisplay(sec) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noSections>
+      <p class="no-sections">Секции не заданы.</p>
+    </ng-template>
+
+    <h3 class="sections-title">Терминалы участка</h3>
+    <div class="terminals-list" *ngIf="segment?.terminals?.length; else noTerminals">
+      <div class="terminal-row" *ngFor="let t of segment?.terminals">
+        <span class="terminal-name">{{ t.name || ('T' + t.sequence_number) }}</span>
+        <span class="terminal-dir">({{ t.connection_direction }})</span>
+        <span class="terminal-uid">{{ t.mrid }}</span>
+        <span class="terminal-desc" *ngIf="t.description">&mdash; {{ t.description }}</span>
+      </div>
+    </div>
+    <ng-template #noTerminals>
+      <p class="no-sections">Терминалы для участка ещё не созданы.</p>
+    </ng-template>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Закрыть</button>
+  </mat-dialog-actions>
+</div>

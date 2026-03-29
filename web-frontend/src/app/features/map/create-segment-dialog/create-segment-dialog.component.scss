@@ -1,0 +1,69 @@
+.create-segment-dialog {
+  min-width: 320px;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.full-width {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.half-width {
+  width: calc(50% - 8px);
+  margin-bottom: 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.branch-choice-block {
+  margin-bottom: 16px;
+  .branch-choice-label {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.87);
+  }
+  .branch-radio-group {
+    display: flex;
+    gap: 16px;
+  }
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.info-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+  
+  &.warning {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+  
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+mat-dialog-actions {
+  padding: 16px 24px;
+}
+

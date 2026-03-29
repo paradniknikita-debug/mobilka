@@ -1,0 +1,164 @@
+<div class="map-container">
+  <div id="map" class="map"></div>
+  
+  <div class="map-controls">
+    <button mat-icon-button color="primary" (click)="openCreateDialog()" matTooltip="Создать объект" class="map-control-btn">
+      <mat-icon>add</mat-icon>
+    </button>
+    <button mat-icon-button color="accent" (click)="refreshData()" matTooltip="Обновить данные" class="map-control-btn">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
+
+  <!-- Индикатор уровня зума (левый нижний угол), компактный -->
+  <div class="zoom-indicator" [class.sidebar-open]="isSidebarOpen" [style.left.px]="isSidebarOpen ? sidebarWidth + 16 : 16">
+    <button mat-icon-button (click)="zoomIn()" class="zoom-button" matTooltip="Увеличить зум">
+      <mat-icon>add</mat-icon>
+    </button>
+    <span class="zoom-value">{{ invertedZoom }}</span>
+    <span class="zoom-distance">{{ zoomDistance }}</span>
+    <button mat-icon-button (click)="zoomOut()" class="zoom-button" matTooltip="Уменьшить зум">
+      <mat-icon>remove</mat-icon>
+    </button>
+  </div>
+
+  <div *ngIf="isLoading" class="loading-overlay">
+    <mat-spinner></mat-spinner>
+    <p>Загрузка данных карты...</p>
+  </div>
+
+  <!-- Панель свойств опоры (правый нижний угол), компактная, в стиле дерева объектов -->
+  <div *ngIf="showPoleProperties && selectedPole" class="pole-properties-panel">
+    <div class="pole-properties-header">
+      <span class="pole-properties-title">Свойства опоры</span>
+      <button mat-icon-button (click)="closePoleProperties()" class="close-button" aria-label="Закрыть">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    <div class="pole-properties-content">
+      <!-- Как во Flutter: Название, UID, Участок линии, Позиция, Порядок, Узел соединения, затем остальное -->
+      <div class="property-item">
+        <span class="property-label">Название:</span>
+        <span class="property-value">{{ selectedPole.pole_number ?? selectedPole.poleNumber ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">UID:</span>
+        <span class="property-value uid-value">{{ selectedPole.mrid ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Участок линии:</span>
+        <span class="property-value">{{ selectedPole.segment_name ?? selectedPole.power_line_name ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Координаты (x, y / ш, д):</span>
+        <span class="property-value coord">
+          {{ getPoleLat() != null ? (getPoleLat() | number:'1.6-6') : '—' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.6-6') : '—' }}
+        </span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.sequence_number != null">
+        <span class="property-label">Порядок в линии:</span>
+        <span class="property-value">{{ selectedPole.sequence_number }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Узел соединения:</span>
+        <span class="property-value" *ngIf="selectedPole.is_tap_pole && selectedPole.connectivity_node; else noCn">
+          <span class="status-badge success">Есть</span>
+          <span class="cn-name">{{ selectedPole.connectivity_node.name }}</span>
+          <span class="cn-uid" *ngIf="selectedPole.connectivity_node.mrid">UID: {{ selectedPole.connectivity_node.mrid }}</span>
+        </span>
+        <ng-template #noCn>
+          <span class="property-value">
+            <span class="status-badge warning">
+              {{ selectedPole.is_tap_pole ? 'Нет' : 'Не используется' }}
+            </span>
+          </span>
+        </ng-template>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Тип:</span>
+        <span class="property-value">{{ selectedPole.pole_type ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Высота:</span>
+        <span class="property-value">{{ selectedPole.height != null ? selectedPole.height + ' м' : '—' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.foundation_type">
+        <span class="property-label">Фундамент:</span>
+        <span class="property-value">{{ selectedPole.foundation_type }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.material">
+        <span class="property-label">Материал:</span>
+        <span class="property-value">{{ selectedPole.material }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.year_installed != null">
+        <span class="property-label">Год установки:</span>
+        <span class="property-value">{{ selectedPole.year_installed }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Состояние:</span>
+        <span class="property-value">{{ selectedPole.condition ?? '—' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.notes">
+        <span class="property-label">Заметки:</span>
+        <span class="property-value card-comment">{{ selectedPole.notes }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.conductor_type || selectedPole.conductor_material || selectedPole.conductor_section">
+        <span class="property-label">Марка провода:</span>
+        <span class="property-value">
+          {{ (selectedPole.conductor_type || '') + (selectedPole.conductor_material ? ' · ' + selectedPole.conductor_material : '') + (selectedPole.conductor_section ? ' · ' + selectedPole.conductor_section + ' мм²' : '') || '—' }}
+        </span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.card_comment">
+        <span class="property-label">Комментарий карточки:</span>
+        <span class="property-value card-comment">{{ selectedPole.card_comment }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">
+        <span class="property-label">Терминалы:</span>
+        <span class="property-value">
+          <ng-container *ngFor="let t of selectedPole.terminals; let i = index">
+            <span class="terminal-chip">
+              {{ t.name || ('T' + t.sequence_number) }}
+              <span class="terminal-dir">({{ t.connection_direction }})</span>
+            </span><span *ngIf="i < selectedPole.terminals.length - 1">, </span>
+          </ng-container>
+        </span>
+      </div>
+      <div class="property-item property-item--equipment-list" *ngIf="getPoleEquipmentForCard().length">
+        <span class="property-label">Оборудование:</span>
+        <span class="property-value equipment-list">
+          <ng-container *ngFor="let eq of getPoleEquipmentForCard()">
+            <div class="equipment-block">
+              <span class="equipment-chip">
+                {{ eq.name || eq.equipment_type }}
+                <span class="equipment-type">({{ eq.equipment_type }})</span>
+              </span>
+              <div class="equipment-defect" *ngIf="getEquipmentDefect(eq)">
+                <span class="defect-label">Дефект:</span> {{ getEquipmentDefect(eq) }}
+              </div>
+              <span
+                class="criticality-badge"
+                *ngIf="getEquipmentCriticality(eq) as crit"
+                [class]="'criticality-badge--' + crit"
+              >
+                {{ crit === 'high' ? 'Высокая' : crit === 'medium' ? 'Средняя' : 'Низкая' }}
+              </span>
+            </div>
+          </ng-container>
+        </span>
+      </div>
+    </div>
+    <div class="pole-properties-actions">
+      <button 
+        mat-stroked-button 
+        (click)="openCreatePoleFromTapPolePanel()" 
+        class="action-button action-button--tap"
+        *ngIf="selectedPole.is_tap_pole"
+        matTooltip="Создать отпайку от этой опоры (новая ветка)"
+      >
+        <mat-icon>call_split</mat-icon>
+        Начать отпайку
+      </button>
+    </div>
+  </div>
+</div>
+

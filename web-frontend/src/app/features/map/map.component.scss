@@ -1,0 +1,654 @@
+.map-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-controls {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.map-control-btn {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  padding: 0;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  border-radius: 4px;
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.zoom-indicator {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  z-index: 1000;
+  background: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: left 0.3s ease;
+  
+  .zoom-button {
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    padding: 0;
+    
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+  }
+  
+  .zoom-value {
+    min-width: 18px;
+    text-align: center;
+  }
+  
+  .zoom-distance {
+    margin-left: 2px;
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 11px;
+  }
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.loading-overlay p {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+// Скрываем атрибуцию OpenStreetMap
+::ng-deep .leaflet-control-attribution {
+  display: none !important;
+}
+
+// Убираем артефакт/контрол Leaflet в левом верхнем углу (рядом со стрелкой дерева объектов)
+::ng-deep .leaflet-top.leaflet-left {
+  display: none !important;
+}
+
+// Панель свойств опоры — компактная, в стиле дерева объектов (шрифт 12px, отступы как в сайдбаре)
+.pole-properties-panel {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 280px;
+  max-width: calc(100% - 24px);
+  background: white;
+  border-radius: 8px 0 0 0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: slideInUp 0.3s ease-out;
+  font-size: 12px;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pole-properties-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 4px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+
+  .pole-properties-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.7);
+  }
+
+  .close-button {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    .mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+.pole-properties-content {
+  padding: 8px 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.pole-properties-content .property-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+
+  &:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .property-label {
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.6);
+    margin-right: 8px;
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+
+  .property-value {
+    color: rgba(0, 0, 0, 0.87);
+    text-align: right;
+    word-break: break-word;
+    font-size: 12px;
+
+    &.coord {
+      font-size: 11px;
+    }
+
+    &.uid-value {
+      font-size: 11px;
+      word-break: break-all;
+    }
+
+    .cn-name {
+      margin-left: 6px;
+      font-weight: 500;
+    }
+
+    .cn-uid {
+      display: block;
+      font-size: 11px;
+      color: rgba(0, 0, 0, 0.6);
+      margin-top: 2px;
+      word-break: break-all;
+    }
+
+    .terminal-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      margin: 0 2px;
+      border-radius: 10px;
+      background: rgba(33, 150, 243, 0.08);
+      border: 1px solid rgba(33, 150, 243, 0.3);
+      font-size: 11px;
+
+      .terminal-dir {
+        margin-left: 4px;
+        color: rgba(0, 0, 0, 0.6);
+      }
+    }
+
+    &.card-comment {
+      white-space: pre-wrap;
+      text-align: left;
+    }
+  }
+
+  &.property-item--attachments .attachments-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+
+    .attachment-block {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+
+      .attachment-preview-link {
+        display: block;
+        line-height: 0;
+      }
+
+      .attachment-img {
+        max-width: 80px;
+        max-height: 80px;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+      }
+
+      .attachment-voice-wrap,
+      .attachment-video-wrap {
+        max-width: 100%;
+      }
+
+      .attachment-audio {
+        max-width: 100%;
+        min-width: 160px;
+        height: 28px;
+      }
+
+      .attachment-video {
+        max-width: 100%;
+        max-height: 120px;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .attachment-unknown {
+        font-size: 11px;
+        color: rgba(0, 0, 0, 0.5);
+      }
+
+  .attachment-preview-wrap {
+    display: inline-block;
+    line-height: 0;
+  }
+
+      .attachment-actions {
+        display: flex;
+        gap: 2px;
+
+        .attachment-download-btn {
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          padding: 0;
+
+          .mat-icon {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+          }
+        }
+      }
+    }
+  }
+
+  &.property-item--equipment-list .equipment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+    text-align: right;
+
+    .equipment-block {
+      width: 100%;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+
+      .equipment-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 10px;
+        background: rgba(33, 150, 243, 0.08);
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        font-size: 11px;
+
+        .equipment-type {
+          margin-left: 4px;
+          color: rgba(0, 0, 0, 0.6);
+        }
+      }
+
+      .equipment-defect {
+        margin-top: 4px;
+        font-size: 11px;
+        color: rgba(0, 0, 0, 0.75);
+
+        .defect-label {
+          font-weight: 500;
+          color: rgba(0, 0, 0, 0.6);
+        }
+      }
+
+      .criticality-badge {
+        display: inline-block;
+        margin-top: 2px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 500;
+
+        &.criticality-badge--high {
+          background: rgba(244, 67, 54, 0.2);
+          color: #c62828;
+        }
+
+        &.criticality-badge--medium {
+          background: rgba(255, 152, 0, 0.2);
+          color: #e65100;
+        }
+
+        &.criticality-badge--low {
+          background: rgba(76, 175, 80, 0.2);
+          color: #2e7d32;
+        }
+      }
+    }
+  }
+}
+
+.pole-properties-actions {
+  padding: 8px 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .action-button {
+    width: 100%;
+    font-size: 12px;
+    line-height: 32px;
+
+    mat-icon {
+      margin-right: 6px;
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &.action-button--tap {
+      background-color: #FF9800;
+      color: #fff;
+      border: none;
+      &:hover {
+        background-color: #F57C00;
+        color: #fff;
+      }
+    }
+  }
+}
+
+// Стили для скроллбара в окне свойств
+.pole-properties-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pole-properties-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pole-properties-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.pole-properties-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+// Стили для подписей опор
+::ng-deep .pole-label {
+  pointer-events: none !important;
+  
+  .pole-label-text {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #2196F3;
+    text-align: center;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(33, 150, 243, 0.3);
+  }
+}
+
+// Оборудование как элементы линии (рядом с опорой)
+::ng-deep .equipment-inline-marker {
+  pointer-events: none !important;
+}
+
+::ng-deep .equipment-inline-group {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  transform: translateY(4px); // чуть ниже линии, как на схеме
+}
+
+::ng-deep .equipment-inline {
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+}
+
+// Базовый цвет схемы (как на скрине — фиолетовый)
+$equip-color: #ba68c8;
+
+// Выключатель: прямоугольник с ножом
+::ng-deep .equipment-inline--breaker {
+  border: 2px solid $equip-color;
+  border-radius: 1px;
+  position: relative;
+}
+
+::ng-deep .equipment-inline--breaker::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 3px;
+  border-top: 1.5px solid $equip-color;
+  transform: rotate(20deg);
+  transform-origin: left center;
+}
+
+// Разъединитель: нож на двух опорах
+::ng-deep .equipment-inline--disconnector {
+  position: relative;
+}
+
+::ng-deep .equipment-inline--disconnector::before,
+::ng-deep .equipment-inline--disconnector::after {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 6px;
+  bottom: 0;
+  background: $equip-color;
+}
+
+::ng-deep .equipment-inline--disconnector::before {
+  left: 0;
+}
+
+::ng-deep .equipment-inline--disconnector::after {
+  right: 0;
+}
+
+::ng-deep .equipment-inline--disconnector {
+  &:after {
+    box-shadow: none;
+  }
+}
+
+::ng-deep .equipment-inline--disconnector::marker {
+  display: none;
+}
+
+::ng-deep .equipment-inline--disconnector::before,
+::ng-deep .equipment-inline--disconnector::after {
+  border-radius: 1px;
+}
+
+::ng-deep .equipment-inline--disconnector::marker {
+  display: none;
+}
+
+::ng-deep .equipment-inline--disconnector::before {
+  box-shadow: 0 0 0 0 transparent;
+}
+
+::ng-deep .equipment-inline--disconnector::after {
+  box-shadow: 0 0 0 0 transparent;
+}
+
+::ng-deep .equipment-inline--disconnector::before,
+::ng-deep .equipment-inline--disconnector::after {
+  background-clip: padding-box;
+}
+
+::ng-deep .equipment-inline--disconnector {
+  &::marker {
+    display: none;
+  }
+}
+
+::ng-deep .equipment-inline--disconnector {
+  &::before {
+    box-shadow: none;
+  }
+}
+
+// Реклозер: круг с дугой
+::ng-deep .equipment-inline--recloser {
+  border-radius: 50%;
+  border: 2px solid $equip-color;
+  position: relative;
+}
+
+::ng-deep .equipment-inline--recloser::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  border-bottom: 1.5px solid $equip-color;
+  border-radius: 50%;
+}
+
+// Заземляющий нож: стойка и «земля»
+::ng-deep .equipment-inline--grounding {
+  position: relative;
+}
+
+::ng-deep .equipment-inline--grounding::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 0;
+  bottom: 3px;
+  border-left: 1.5px solid $equip-color;
+}
+
+::ng-deep .equipment-inline--grounding::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  border-top: 1.5px solid $equip-color;
+}
+
+// Разрядник: маленькая молния
+::ng-deep .equipment-inline--arrester {
+  position: relative;
+}
+
+::ng-deep .equipment-inline--arrester::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 2px;
+  height: 8px;
+  background: transparent;
+  border-left: 1.5px solid $equip-color;
+  border-bottom: 1.5px solid $equip-color;
+  transform: skewX(-20deg);
+}
+
+// Универсальный значок
+::ng-deep .equipment-inline--generic {
+  border-radius: 1px;
+  border: 2px solid $equip-color;
+}
+
+// Оборудование на линии — цвет задаётся mask + background (как цвет ЛЭП по напряжению)
+::ng-deep .equipment-on-line {
+  position: relative;
+  .equipment-on-line-outline {
+    position: absolute;
+    left: 0;
+    top: 0;
+    object-fit: contain;
+    pointer-events: none;
+  }
+  .equipment-on-line-img.equipment-on-line-fill {
+    position: relative;
+    box-sizing: border-box;
+  }
+  .equipment-icon-zn {
+    transform: scale(0.58);
+    transform-origin: center center;
+  }
+  .equipment-recloser-badge {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border: 1px solid #fff;
+    pointer-events: none;
+  }
+}
+

@@ -1,0 +1,416 @@
+.create-object-dialog {
+  width: 100%;
+  min-width: 320px;
+  max-width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  // Редактирование подстанции — шире контент
+  &.substation-edit {
+    max-width: 100%;
+    mat-dialog-content {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+    h2 {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+    mat-dialog-actions {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+  }
+
+  h2 {
+    margin: 0;
+    padding: 16px 24px;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    background: linear-gradient(to bottom, #fafafa, #f5f5f5);
+  }
+
+  mat-dialog-content {
+    padding: 20px 24px;
+    max-height: 65vh;
+    overflow-y: auto;
+    border-radius: 0 0 8px 8px;
+    background: #fff;
+  }
+
+  .step-container {
+    padding: 0;
+  }
+
+  .pole-form-compact .pole-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .form-section--main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+
+    .section-title {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.75);
+    }
+
+    .row-2 {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .half-width {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .field-tap {
+      margin-top: 4px;
+    }
+
+    .tap-checkbox-row {
+      margin-top: 8px;
+      mat-checkbox {
+        font-size: 13px;
+      }
+    }
+  }
+
+  .expansion-section {
+    margin-bottom: 8px;
+    box-shadow: none;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+
+    .mat-expansion-panel-header {
+      padding: 0 12px;
+      height: 40px;
+    }
+    .mat-expansion-panel-body {
+      padding: 0 12px 12px;
+    }
+    .row-2 {
+      display: flex;
+      gap: 12px;
+      .half-width { flex: 1; min-width: 0; }
+    }
+  }
+
+  .pole-attachments-label {
+    margin: 12px 0 8px 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.7);
+  }
+
+  .pole-attachments-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+
+    .upload-btn {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      padding: 0;
+      .mat-icon {
+        font-size: 22px;
+        width: 22px;
+        height: 22px;
+      }
+    }
+
+    .upload-input-hidden {
+      position: absolute;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+
+  .pole-attachments-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    .pole-attachment-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+
+      .attachment-preview-link {
+        display: block;
+        line-height: 0;
+      }
+
+      .attachment-thumb {
+        max-width: 80px;
+        max-height: 80px;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+
+      .attachment-audio-wrap .attachment-audio {
+        min-width: 180px;
+        height: 32px;
+      }
+
+      .attachment-video-wrap .attachment-video {
+        max-width: 100%;
+        max-height: 120px;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+
+      .attachment-unknown {
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.5);
+      }
+
+      .attachment-item-actions button {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        padding: 0;
+        .mat-icon {
+          font-size: 20px;
+          width: 20px;
+          height: 20px;
+        }
+      }
+    }
+  }
+
+  .pole-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+
+    h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      font-weight: 500;
+      color: rgba(0, 0, 0, 0.87);
+    }
+  }
+
+  .line-links-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+
+    .section-title {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.75);
+    }
+
+    .line-link-block {
+      margin-bottom: 16px;
+
+      h4 {
+        margin: 0 0 8px 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(0, 0, 0, 0.7);
+      }
+
+      .current-link {
+        margin: 4px 0 8px 0;
+        font-size: 13px;
+        color: rgba(0, 0, 0, 0.7);
+
+        button {
+          margin-left: 8px;
+        }
+      }
+
+      .hint {
+        margin: 0 0 8px 0;
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.6);
+      }
+
+      .clear-buttons {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-left: 8px;
+      }
+
+      .no-taps {
+        margin: 8px 0 0 0;
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.55);
+        font-style: italic;
+      }
+
+      .link-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+
+        .line-select {
+          min-width: 200px;
+          flex: 1;
+        }
+      }
+    }
+  }
+
+  .auto-calc-hint {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .tap-checkbox-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .tap-label {
+      font-weight: 500;
+    }
+
+    .tap-hint {
+      margin: 0;
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    mat-checkbox {
+      margin-top: 4px;
+    }
+  }
+
+  .full-width {
+    width: 100%;
+  }
+
+  .half-width {
+    width: calc(50% - 8px);
+  }
+
+  .coordinates-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .import-section {
+    margin-top: 16px;
+    padding: 16px;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+
+    button {
+      margin-bottom: 8px;
+    }
+
+    .import-hint {
+      margin: 8px 0 0 0;
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  mat-dialog-actions {
+    padding: 16px 24px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 0;
+    background: #fafafa;
+    border-radius: 0 0 8px 8px;
+
+    button {
+      margin-left: 8px;
+    }
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Стили для скроллбара с округленными углами
+mat-dialog-content {
+  // Для WebKit браузеров
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 4px 0;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #555;
+    background-clip: padding-box;
+  }
+}
+
+::ng-deep .create-object-dialog-panel {
+  margin: auto !important;
+}
+
+// Глобальные стили для диалога Material — центрирование и оформление (overflow задаётся глобально для растягивания)
+::ng-deep .mat-dialog-container {
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+  padding: 0 !important;
+  max-width: 96vw !important;
+}
+
+::ng-deep .mat-dialog-content {
+  border-radius: 0 0 8px 8px !important;
+}
+
+// Стили для ошибок
+::ng-deep .error-snackbar {
+  background-color: #f44336 !important;
+  color: white !important;
+}
+

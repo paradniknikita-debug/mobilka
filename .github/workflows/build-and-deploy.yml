@@ -1,0 +1,255 @@
+# CI/CD: сборка при пуше в master и опциональный деплой на сервер.
+# - Backend: образ пушится в ghcr.io/<owner>/mobilka-backend:latest
+# - Flutter web и Angular: артефакты собираются; при заданных секретах деплоятся на сервер по SSH
+# Без секретов: скачать артефакты из Run → Artifacts и распаковать на сервер вручную.
+name: Build and Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-backend:
+    name: Build Backend Docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/mobilka-backend:latest
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/mobilka-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-flutter-web:
+    name: Build Flutter Web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore Flutter web build cache
+        uses: actions/cache@v4
+        id: flutter-cache
+        with:
+          path: frontend/build/web
+          key: flutter-web-${{ hashFiles('frontend/pubspec.lock', 'frontend/pubspec.yaml', 'frontend/lib/**', 'frontend/tool/**') }}
+
+      - name: Install dependencies
+        if: steps.flutter-cache.outputs.cache-hit != 'true'
+        run: |
+          cd frontend
+          flutter pub get
+
+      - name: Generate code (freezed, json_serializable, etc.)
+        if: steps.flutter-cache.outputs.cache-hit != 'true'
+        run: |
+          cd frontend
+          dart run build_runner build --delete-conflicting-outputs
+          dart tool/fix_retrofit_map.dart
+
+      - name: Build web
+        if: steps.flutter-cache.outputs.cache-hit != 'true'
+        run: |
+          cd frontend
+          flutter build web --release
+
+      - name: Build web (cache hit)
+        if: steps.flutter-cache.outputs.cache-hit == 'true'
+        run: |
+          cd frontend
+          flutter build web --release
+
+      - name: Upload Flutter web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web
+          path: frontend/build/web/
+          retention-days: 14
+
+  build-angular:
+    name: Build Angular
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd web-frontend
+          npm ci
+
+      - name: Build Angular
+        run: |
+          cd web-frontend
+          npm run build
+
+      - name: Upload Angular artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: angular-web
+          path: web-frontend/dist/lepm-web-frontend/
+          retention-days: 14
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-flutter-web, build-angular]
+    if: success() && vars.DEPLOY_ENABLED == 'true'
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Flutter web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: flutter-web
+          path: flutter-web
+
+      - name: Download Angular artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: angular-web
+          path: angular-web
+
+      - name: Setup SSH (key or password)
+        env:
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          if [ "$DEPLOY_AUTH" = "password" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+            python3 -c "import os; open('/tmp/sshpass.txt', 'w').write(os.environ.get('DEPLOY_SSH_PASSWORD', ''))"
+            chmod 600 /tmp/sshpass.txt
+          else
+            python3 -c "import os; open(os.path.expanduser('~/.ssh/deploy_key'), 'w').write(os.environ.get('DEPLOY_SSH_KEY', ''))"
+            chmod 600 ~/.ssh/deploy_key
+          fi
+
+      - name: Copy Flutter web to server
+        env:
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
+        run: |
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          if [ -z "$P" ] || [ "${P#/}" = "$P" ]; then
+            echo "::error::DEPLOY_PATH must be an absolute path (e.g. /root/mobilka)."
+            exit 1
+          fi
+          if [ "$DEPLOY_AUTH" = "password" ]; then
+            RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
+          else
+            RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          fi
+          rsync -avz --delete -e "$RSYNC_SSH" flutter-web/ "$U@$H:$P/frontend/build/web/"
+
+      - name: Copy Angular to server
+        env:
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
+        run: |
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          if [ "$DEPLOY_AUTH" = "password" ]; then
+            RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
+          else
+            RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          fi
+          rsync -avz --delete -e "$RSYNC_SSH" angular-web/ "$U@$H:$P/web-frontend/dist/lepm-web-frontend/"
+
+      - name: Copy compose and nginx to server
+        env:
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
+        run: |
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          if [ "$DEPLOY_AUTH" = "password" ]; then
+            SCP_SSH="sshpass -f /tmp/sshpass.txt scp -o StrictHostKeyChecking=no"
+            RSYNC_SSH="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
+          else
+            SCP_SSH="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+            RSYNC_SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          fi
+          $SCP_SSH docker-compose.prod.yml "$U@$H:$P/"
+          rsync -avz -e "$RSYNC_SSH" nginx/ "$U@$H:$P/nginx/"
+
+      - name: Login to GHCR and deploy on server
+        env:
+          DEPLOY_AUTH: ${{ vars.DEPLOY_AUTH == 'password' && 'password' || 'key' }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          U="$(printf '%s' "$DEPLOY_USER" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          H="$(printf '%s' "$DEPLOY_HOST" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          P="$(printf '%s' "$DEPLOY_PATH" | head -n1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          if [ "$DEPLOY_AUTH" = "password" ]; then
+            SSH_CMD="sshpass -f /tmp/sshpass.txt ssh -o StrictHostKeyChecking=no"
+          else
+            SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          fi
+          TARGET="$U@$H"
+          PATH_ON_SERVER="$P"
+          BACKEND_IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/mobilka-backend:latest"
+          if [ -n "${GHCR_PAT}" ]; then
+            printf '%s' "${GHCR_PAT}" | $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && docker login ghcr.io -u $REPO_OWNER --password-stdin"
+          fi
+          $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && export BACKEND_IMAGE='$BACKEND_IMAGE' && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d && docker image prune -f"
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-flutter-web, build-angular, deploy]
+    if: always() && (needs.build-backend.result == 'success' && needs.build-flutter-web.result == 'success' && needs.build-angular.result == 'success')
+    steps:
+      - run: |
+          echo "Backend image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/mobilka-backend:latest"
+          echo "Flutter and Angular: artifacts built"
+          [ "${{ needs.deploy.result }}" = 'success' ] && echo "Deploy: completed" || echo "Deploy: skipped or failed"

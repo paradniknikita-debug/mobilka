@@ -1,0 +1,106 @@
+<div class="detail-dialog" appResizableDialog>
+  <h2 mat-dialog-title>Детали изменения</h2>
+  <mat-dialog-content>
+    <div class="meta">
+      <div class="meta-row"><span class="label">Дата и время:</span> {{ formatDate(entry.created_at) }}</div>
+      <div class="meta-row"><span class="label">Действие:</span> {{ actionLabel(entry.action) }}</div>
+      <div class="meta-row"><span class="label">Тип объекта:</span> {{ entityTypeLabel(entry.entity_type) }}</div>
+      <div class="meta-row"><span class="label">ID сущности:</span> {{ entry.entity_id ?? '—' }}</div>
+      <div class="meta-row"><span class="label">Кто изменил:</span> {{ entry.user_name ?? '—' }}</div>
+      <div class="meta-row"><span class="label">Источник:</span> {{ entry.source === 'web' ? 'Веб' : entry.source === 'flutter' ? 'Flutter' : entry.source }}</div>
+    </div>
+
+    <div class="payload-section" *ngIf="entry.payload">
+      <div class="meta-row" *ngIf="entry.payload.name"><span class="label">Наименование:</span> {{ entry.payload.name }}</div>
+      <div class="meta-row" *ngIf="entry.payload.mrid || entry.payload['uid']"><span class="label">UID:</span> {{ entry.payload.mrid || entry.payload['uid'] }}</div>
+    </div>
+
+    <div class="data-quality-warning" *ngIf="pl?.['data_quality_warning'] === true">
+      <h3>Предупреждение по данным</h3>
+      <p *ngIf="pl?.['message_ru']">{{ pl?.['message_ru'] }}</p>
+      <p class="meta-row" *ngIf="pl?.['entered_length_m'] != null && pl?.['gps_length_m'] != null">
+        <span class="label">Введено / по GPS (м):</span>
+        {{ pl?.['entered_length_m'] }} / {{ pl?.['gps_length_m'] }}
+        <span *ngIf="pl?.['relative_diff_percent'] != null"> (отклонение ~{{ pl?.['relative_diff_percent'] }}%)</span>
+      </p>
+    </div>
+
+    <div class="pole-card-audit" *ngIf="pl?.['pole_card'] === true">
+      <h3>Карточка опоры</h3>
+      <p class="summary" *ngIf="pl?.['summary_ru']">{{ pl?.['summary_ru'] }}</p>
+      <p class="meta-row" *ngIf="pl?.['line_id'] != null"><span class="label">Линия (id):</span> {{ pl?.['line_id'] }}</p>
+      <p class="meta-row" *ngIf="pl?.['pole_number']"><span class="label">Номер опоры:</span> {{ pl?.['pole_number'] }}</p>
+      <ul class="event-list" *ngIf="attachmentEventsList.length">
+        <li *ngFor="let ev of attachmentEventsList">{{ ev['label_ru'] || ev['kind'] }}</li>
+      </ul>
+    </div>
+
+    <div class="before-after" *ngIf="hasPayload">
+      <h3>До / После</h3>
+      <mat-checkbox [(ngModel)]="onlyChanges">Отобразить только изменения</mat-checkbox>
+      <div class="table-wrap">
+        <table class="diff-table">
+          <thead>
+            <tr>
+              <th>Поле</th>
+              <th>До</th>
+              <th>После</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of displayedRows" [class.changed]="row.changed" [class.row-added]="row.added" [class.row-removed]="row.removed">
+              <td class="key">{{ row.key }}</td>
+              <td class="before">{{ row.before }}</td>
+              <td class="after">{{ row.after }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p *ngIf="onlyChanges && displayedRows.length === 0" class="no-changes">Нет изменённых полей</p>
+    </div>
+
+    <div class="full-payload" *ngIf="entry.payload && !hasPayload && pl?.['pole_card'] !== true && pl?.['data_quality_warning'] !== true && !sessionSummary">
+      <h3>Данные (payload)</h3>
+      <pre class="payload-json">{{ entry.payload | json }}</pre>
+    </div>
+
+    <div class="session-summary" *ngIf="sessionSummary">
+      <h3>Итог по сессии</h3>
+      <div class="meta-row" *ngIf="sessionSummary?.by_action">
+        <span class="label">Действия:</span>
+        <span *ngFor="let it of (sessionSummary?.by_action | keyvalue); let last = last">
+          {{ it.key }}: {{ it.value }}<span *ngIf="!last">, </span>
+        </span>
+      </div>
+      <div class="meta-row" *ngIf="sessionSummary?.by_entity">
+        <span class="label">Объекты:</span>
+        <span *ngFor="let it of (sessionSummary?.by_entity | keyvalue); let last = last">
+          {{ entityTypeLabel(it.key) }}: {{ it.value }}<span *ngIf="!last">, </span>
+        </span>
+      </div>
+      <div class="table-wrap" *ngIf="(sessionSummary?.items_preview?.length || 0) > 0">
+        <table class="diff-table">
+          <thead>
+            <tr>
+              <th>Время</th>
+              <th>Действие</th>
+              <th>Объект</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of sessionSummary?.items_preview">
+              <td>{{ r?.created_at ? (r.created_at | date:'dd.MM.yyyy HH:mm:ss') : '—' }}</td>
+              <td>{{ actionLabel(r?.action) }}</td>
+              <td>{{ entityTypeLabel(r?.entity_type) }}</td>
+              <td>{{ r?.entity_id ?? '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Закрыть</button>
+  </mat-dialog-actions>
+</div>

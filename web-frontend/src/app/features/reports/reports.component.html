@@ -1,0 +1,202 @@
+<div class="reports-page">
+  <div class="toolbar">
+    <h1>Отчёты</h1>
+  </div>
+
+  <div class="reports-toolbar">
+    <mat-form-field appearance="fill">
+      <mat-label>ЛЭП</mat-label>
+      <mat-select [(value)]="selectedLineId">
+        <mat-option [value]="null">Все</mat-option>
+        <mat-option *ngFor="let pl of powerLines" [value]="pl.id">{{ pl.name }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <mat-tab-group (selectedIndexChange)="onReportTabChange($event)" [(selectedIndex)]="reportTabIndex" class="report-tabs">
+    <mat-tab label="Дефекты">
+      <div class="reports-block">
+        <div class="reports-filters">
+          <mat-form-field appearance="fill">
+            <mat-label>Критичность</mat-label>
+            <mat-select [(value)]="defectsCriticality">
+              <mat-option [value]="null">Любая</mat-option>
+              <mat-option value="low">Низкая</mat-option>
+              <mat-option value="medium">Средняя</mat-option>
+              <mat-option value="high">Высокая</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="fill">
+            <mat-label>Период (from)</mat-label>
+            <input matInput [(ngModel)]="defectsFromDt" placeholder="2026-01-01T00:00:00" />
+          </mat-form-field>
+
+          <mat-form-field appearance="fill">
+            <mat-label>Период (to)</mat-label>
+            <input matInput [(ngModel)]="defectsToDt" placeholder="2026-01-31T23:59:59" />
+          </mat-form-field>
+
+          <mat-form-field appearance="fill">
+            <mat-label>Поиск в дефекте</mat-label>
+            <input matInput [(ngModel)]="defectsSearch" placeholder="например: изолятор" />
+          </mat-form-field>
+        </div>
+
+        <div class="reports-actions">
+          <button mat-raised-button color="primary" (click)="loadDefectsReport()" [disabled]="reportsLoading">
+            <mat-icon>search</mat-icon>
+            Показать
+          </button>
+          <button mat-stroked-button color="accent" (click)="downloadDefectsCsv()" [disabled]="reportsLoading || !selectedLineId">
+            <mat-icon>download</mat-icon>
+            CSV
+          </button>
+        </div>
+
+        <div *ngIf="reportsLoading" class="loading">
+          <mat-spinner diameter="40"></mat-spinner>
+          <p>Генерация отчета…</p>
+        </div>
+
+        <div *ngIf="reportsError" class="error">
+          <mat-icon color="warn">error</mat-icon>
+          <p>{{ reportsError }}</p>
+        </div>
+
+        <div *ngIf="!reportsLoading && !reportsError && defectsReport?.items?.length" class="table-wrap">
+          <table mat-table [dataSource]="defectsReport.items" class="log-table">
+            <ng-container matColumnDef="pole_number">
+              <th mat-header-cell *matHeaderCellDef>Опора</th>
+              <td mat-cell *matCellDef="let row">{{ row.pole_number }}</td>
+            </ng-container>
+            <ng-container matColumnDef="equipment_name">
+              <th mat-header-cell *matHeaderCellDef>Оборудование</th>
+              <td mat-cell *matCellDef="let row">{{ row.equipment_name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="criticality">
+              <th mat-header-cell *matHeaderCellDef>Критичность</th>
+              <td mat-cell *matCellDef="let row">{{ row.criticality || '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="defect">
+              <th mat-header-cell *matHeaderCellDef>Дефект</th>
+              <td mat-cell *matCellDef="let row">{{ row.defect }}</td>
+            </ng-container>
+            <ng-container matColumnDef="attachments">
+              <th mat-header-cell *matHeaderCellDef>Медиа</th>
+              <td mat-cell *matCellDef="let row">{{ row.defect_attachments?.length || 0 }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="['pole_number','equipment_name','criticality','defect','attachments']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['pole_number','equipment_name','criticality','defect','attachments'];"></tr>
+          </table>
+        </div>
+
+        <div *ngIf="!reportsLoading && !reportsError && defectsReport && !defectsReport.items?.length" class="tab-description">
+          Записей нет.
+        </div>
+      </div>
+    </mat-tab>
+
+    <mat-tab label="По ЛЭП">
+      <div class="reports-block">
+        <div class="reports-actions">
+          <button mat-raised-button color="primary" (click)="loadByLineReport()" [disabled]="reportsLoading || !selectedLineId">
+            <mat-icon>analytics</mat-icon>
+            Показать
+          </button>
+        </div>
+
+        <div *ngIf="reportsLoading" class="loading">
+          <mat-spinner diameter="40"></mat-spinner>
+          <p>Загрузка…</p>
+        </div>
+        <div *ngIf="reportsError" class="error">
+          <mat-icon color="warn">error</mat-icon>
+          <p>{{ reportsError }}</p>
+        </div>
+
+        <div *ngIf="!reportsLoading && byLineReport" class="reports-summary">
+          <div><b>{{ byLineReport.line_name }}</b></div>
+          <div>Опор: {{ byLineReport.poles_count }}</div>
+          <div>Оборудования с дефектами: {{ byLineReport.equipment_with_defects_total }}</div>
+          <div style="margin-top:12px;">
+            <b>По критичности</b>
+            <div *ngFor="let k of (byLineReport.defects_by_criticality | keyvalue)">
+              {{ k.key }}: {{ k.value }}
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <b>Топ дефектов</b>
+            <div *ngFor="let d of byLineReport.top_defects">{{ d.defect }}: {{ d.count }}</div>
+          </div>
+        </div>
+      </div>
+    </mat-tab>
+
+    <mat-tab label="По обходам">
+      <div class="reports-block">
+        <div class="reports-filters">
+          <mat-form-field appearance="fill">
+            <mat-label>Период (from)</mat-label>
+            <input matInput [(ngModel)]="patrolFromDt" placeholder="2026-01-01T00:00:00" />
+          </mat-form-field>
+          <mat-form-field appearance="fill">
+            <mat-label>Период (to)</mat-label>
+            <input matInput [(ngModel)]="patrolToDt" placeholder="2026-01-31T23:59:59" />
+          </mat-form-field>
+        </div>
+
+        <div class="reports-actions">
+          <button mat-raised-button color="primary" (click)="loadPatrolReport()" [disabled]="reportsLoading">
+            <mat-icon>history</mat-icon>
+            Показать
+          </button>
+        </div>
+
+        <div *ngIf="reportsLoading" class="loading">
+          <mat-spinner diameter="40"></mat-spinner>
+          <p>Загрузка…</p>
+        </div>
+
+        <div *ngIf="reportsError" class="error">
+          <mat-icon color="warn">error</mat-icon>
+          <p>{{ reportsError }}</p>
+        </div>
+
+        <div *ngIf="!reportsLoading && patrolReport?.items?.length" class="table-wrap">
+          <table mat-table [dataSource]="patrolReport.items" class="log-table">
+            <ng-container matColumnDef="started_at">
+              <th mat-header-cell *matHeaderCellDef>Начало</th>
+              <td mat-cell *matCellDef="let row">{{ row.started_at | date:'dd.MM.yyyy HH:mm' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="ended_at">
+              <th mat-header-cell *matHeaderCellDef>Окончание</th>
+              <td mat-cell *matCellDef="let row">{{ row.ended_at ? (row.ended_at | date:'dd.MM.yyyy HH:mm') : '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="user_name">
+              <th mat-header-cell *matHeaderCellDef>Исполнитель</th>
+              <td mat-cell *matCellDef="let row">{{ row.user_name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="line_name">
+              <th mat-header-cell *matHeaderCellDef>ЛЭП</th>
+              <td mat-cell *matCellDef="let row">{{ row.line_name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="changes">
+              <th mat-header-cell *matHeaderCellDef>Изменений</th>
+              <td mat-cell *matCellDef="let row">{{ row.changes_count }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="['started_at','ended_at','user_name','line_name','changes']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['started_at','ended_at','user_name','line_name','changes'];"></tr>
+          </table>
+        </div>
+
+        <div *ngIf="!reportsLoading && !reportsError && patrolReport && !patrolReport.items?.length" class="tab-description">
+          Записей нет.
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>
+

@@ -1,0 +1,16 @@
+<div appResizableDialog>
+<h2 mat-dialog-title>
+  <mat-icon>map</mat-icon>
+  Предпросмотр на карте
+</h2>
+<mat-dialog-content>
+  <p class="hint" *ngIf="points.length === 0">
+    В импортированных данных нет объектов с координатами (PositionPoint с xPosition, yPosition).
+  </p>
+  <div id="cim-preview-map" class="preview-map" *ngIf="points.length > 0"></div>
+  <p class="count" *ngIf="points.length > 0">Точек: {{ points.length }}</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Закрыть</button>
+</mat-dialog-actions>
+</div>
