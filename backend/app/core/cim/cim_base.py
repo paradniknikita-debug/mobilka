@@ -11,13 +11,19 @@ class CIMObject(ABC):
     """Базовый класс для всех CIM объектов"""
     
     # CIM namespace
-    CIM_NAMESPACE = "http://iec.ch/TC57/2013/CIM-schema-cim16#"
+    CIM_NAMESPACE = "http://iec.ch/TC57/2014/CIM-schema-cim16#"
     RDF_NAMESPACE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
     RDFS_NAMESPACE = "http://www.w3.org/2000/01/rdf-schema#"
     
-    def __init__(self, mrid: str, name: Optional[str] = None):
+    def __init__(
+        self,
+        mrid: str,
+        name: Optional[str] = None,
+        about_override: Optional[str] = None,
+    ):
         self.mrid = mrid  # Master Resource Identifier (IEC 61970-552:2016)
         self.name = name
+        self.about_override = about_override
     
     @abstractmethod
     def to_cim_dict(self) -> Dict[str, Any]:
