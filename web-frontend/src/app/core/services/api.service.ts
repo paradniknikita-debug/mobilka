@@ -282,18 +282,23 @@ export class ApiService {
     useCimpy: boolean = true,
     includeGps: boolean = true,
     lineId: number | null = null,
-    includeEquipment: boolean = true
+    includeEquipment: boolean = true,
+    includeElectricalModel: boolean = true,
+    includeDefects: boolean = true,
+    includeSubstationVoltageLevels: boolean = true
   ): Observable<Blob> {
-    const params = new HttpParams()
+    let params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
       .set('use_cimpy', String(useCimpy))
       .set('include_gps', String(includeGps))
-      .set('include_equipment', String(includeEquipment));
+      .set('include_equipment', String(includeEquipment))
+      .set('include_electrical_model', String(includeElectricalModel))
+      .set('include_defects', String(includeDefects))
+      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
 
     if (lineId != null) {
-      // Частичный экспорт по ЛЭП
-      params.set('line_id', String(lineId));
+      params = params.set('line_id', String(lineId));
     }
     return this.http.get(`${this.apiUrl}/cim/export/xml`, {
       params,
@@ -315,13 +320,19 @@ export class ApiService {
     includePowerLines: boolean = true,
     includeGps: boolean = true,
     lineId: number | null = null,
-    includeEquipment: boolean = true
+    includeEquipment: boolean = true,
+    includeElectricalModel: boolean = true,
+    includeDefects: boolean = true,
+    includeSubstationVoltageLevels: boolean = true
   ): Observable<Blob> {
     let params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
       .set('include_gps', String(includeGps))
-      .set('include_equipment', String(includeEquipment));
+      .set('include_equipment', String(includeEquipment))
+      .set('include_electrical_model', String(includeElectricalModel))
+      .set('include_defects', String(includeDefects))
+      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
 
     if (lineId != null) {
       params = params.set('line_id', String(lineId));

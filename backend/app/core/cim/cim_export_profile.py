@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from .cim_base import CIMObject
-from .cim_objects import RDFDescriptionCIMObject
 
 
 EXTERNAL_ROOT_RESOURCE = "gm:#_1033610f-0b5a-4999-ae72-21cb6a6713e4"
@@ -59,41 +58,7 @@ def build_export_tree(
     substations_folder_mrid = FIXED_SUBSTATIONS_FOLDER_MRID
     lines_folder_mrid = FIXED_LINES_FOLDER_MRID
 
-    objects: List[CIMObject] = [
-        RDFDescriptionCIMObject(
-            about_override=EXTERNAL_ROOT_RESOURCE,
-            properties={
-                "me:IdentifiedObject.ChildObjects": [cim_ref(geographical_region_mrid)],
-            },
-        ),
-        RDFDescriptionCIMObject(
-            about_override=f"#_{geographical_region_mrid}",
-            properties={
-                "me:IdentifiedObject.ChildObjects": [cim_ref(sub_geographical_region_mrid)],
-            },
-        ),
-        RDFDescriptionCIMObject(
-            about_override=f"#_{sub_geographical_region_mrid}",
-            properties={
-                "me:IdentifiedObject.ChildObjects": [
-                    cim_ref(substations_folder_mrid),
-                    cim_ref(lines_folder_mrid),
-                ],
-            },
-        ),
-        RDFDescriptionCIMObject(
-            about_override=f"#_{substations_folder_mrid}",
-            properties={
-                "me:IdentifiedObject.ChildObjects": [cim_ref(mrid) for mrid in substation_mrids],
-            },
-        ),
-        RDFDescriptionCIMObject(
-            about_override=f"#_{lines_folder_mrid}",
-            properties={
-                "me:IdentifiedObject.ChildObjects": [cim_ref(mrid) for mrid in power_line_mrids],
-            },
-        ),
-    ]
+    objects: List[CIMObject] = []
 
     return ExportTree(
         objects=objects,

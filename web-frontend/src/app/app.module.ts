@@ -28,6 +28,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatBadgeModule } from '@angular/material/badge';
 
 // CDK Drag & Drop
 import { DragDropModule } from '@angular/cdk/drag-drop';
@@ -62,6 +63,7 @@ import { ChangeLogComponent } from './features/change-log/change-log.component';
 import { ChangeLogDetailDialogComponent } from './features/change-log/change-log-detail-dialog/change-log-detail-dialog.component';
 import { ReportsComponent } from './features/reports/reports.component';
 import { CimImportComponent } from './features/cim-import/cim-import.component';
+import { CimExportSettingsDialogComponent } from './features/cim-import/cim-export-settings-dialog/cim-export-settings-dialog.component';
 import { CimPreviewMapDialogComponent } from './features/cim-import/cim-preview-map-dialog/cim-preview-map-dialog.component';
 import { AttachmentImageViewComponent } from './features/map/attachment-image-view/attachment-image-view.component';
 import { AttachmentMediaViewComponent } from './features/map/attachment-media-view/attachment-media-view.component';
@@ -89,6 +91,7 @@ import { ResizableDialogDirective } from './core/directives/resizable-dialog.dir
     ChangeLogDetailDialogComponent,
     ReportsComponent,
     CimImportComponent,
+    CimExportSettingsDialogComponent,
     CimPreviewMapDialogComponent,
     AttachmentImageViewComponent,
     AttachmentMediaViewComponent,
@@ -126,6 +129,7 @@ import { ResizableDialogDirective } from './core/directives/resizable-dialog.dir
     MatAutocompleteModule,
     MatDividerModule,
     MatTabsModule,
+    MatBadgeModule,
 
     // CDK
     DragDropModule,

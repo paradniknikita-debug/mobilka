@@ -74,6 +74,53 @@ DISCONNECTOR_PSR_TYPE_RESOURCE = "gm:#_6c49d145-bd34-4f17-89f6-34dfc8698998"
 router = APIRouter()
 
 
+def _apply_export_preset(
+    export_preset: Optional[str],
+    *,
+    include_gps: bool,
+    include_equipment: bool,
+    include_electrical_model: bool,
+    include_defects: bool,
+    include_substation_voltage_levels: bool,
+) -> tuple[bool, bool, bool, bool, bool]:
+    """
+    Пресеты выгрузки (атрибутный профиль). Если preset задан, переопределяет соответствующие флаги.
+
+    full — полный набор (как явные query-параметры по умолчанию).
+    coordinates_only — только геометрия: подстанции/опоры с Location, без электромодели и без оборудования.
+    no_equipment — топология ЛЭП без ConductingEquipment.
+    without_defects — как полный, но без полей дефектов оборудования в CIM.
+    """
+    if not export_preset:
+        return (
+            include_gps,
+            include_equipment,
+            include_electrical_model,
+            include_defects,
+            include_substation_voltage_levels,
+        )
+    key = export_preset.strip().lower()
+    if key == "full":
+        # Явный «полный» профиль: не переопределяем остальные query-параметры
+        return (
+            include_gps,
+            include_equipment,
+            include_electrical_model,
+            include_defects,
+            include_substation_voltage_levels,
+        )
+    if key == "coordinates_only":
+        return True, False, False, False, False
+    if key == "no_equipment":
+        return include_gps, False, True, include_defects, include_substation_voltage_levels
+    if key in ("without_defects", "no_defects"):
+        return include_gps, include_equipment, include_electrical_model, False, include_substation_voltage_levels
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Неизвестный export_preset. Допустимо: full, coordinates_only, no_equipment, without_defects",
+    )
+
+
 def _build_export_tree(
     substation_mrids: List[str],
     power_line_mrids: List[str],
@@ -101,6 +148,9 @@ def _manual_cim_objects_list(
     *,
     include_gps: bool,
     include_equipment: bool,
+    include_electrical_model: bool = True,
+    include_defects: bool = True,
+    include_substation_voltage_levels: bool = True,
 ) -> List[CIMObject]:
     """Ручная сборка CIM XML: фиксированная география + подстанции + ЛЭП."""
     tree = _build_export_tree(
@@ -113,6 +163,7 @@ def _manual_cim_objects_list(
             _substation_to_cim_objects_for_xml(
                 substation,
                 include_gps=include_gps,
+                include_voltage_levels=include_substation_voltage_levels,
                 substations_folder_mrid=tree.substations_folder_mrid,
                 sub_geographical_region_mrid=tree.sub_geographical_region_mrid,
             )
@@ -123,6 +174,8 @@ def _manual_cim_objects_list(
                 power_line,
                 include_equipment=include_equipment,
                 include_gps=include_gps,
+                include_electrical_model=include_electrical_model,
+                include_defects=include_defects,
                 line_parent_folder_mrid=tree.lines_folder_mrid,
                 sub_geographical_region_mrid=tree.sub_geographical_region_mrid,
             )
@@ -172,6 +225,7 @@ def _substation_to_cim(substation: Substation, include_gps: bool = True) -> Subs
 def _substation_to_cim_objects_for_xml(
     substation: Substation,
     include_gps: bool = True,
+    include_voltage_levels: bool = True,
     substations_folder_mrid: Optional[str] = None,
     sub_geographical_region_mrid: Optional[str] = None,
 ) -> List[CIMObject]:
@@ -186,17 +240,18 @@ def _substation_to_cim_objects_for_xml(
 
     # VoltageLevels
     voltage_level_refs: List[Dict[str, str]] = []
-    for vl in (getattr(substation, "voltage_levels", None) or []):
-        base_voltage_resource = base_voltage_resource_by_kv(getattr(vl, "nominal_voltage", None))
-        vl_obj = VoltageLevelCIMObject(
-            mrid=vl.mrid,
-            name=vl.name,
-            nominal_voltage=vl.nominal_voltage,
-            base_voltage=external_resource_ref(base_voltage_resource) if base_voltage_resource else None,
-            parent_object=cim_ref(substation.mrid),
-        )
-        objects.append(vl_obj)
-        voltage_level_refs.append(cim_ref(vl_obj.mrid))
+    if include_voltage_levels:
+        for vl in (getattr(substation, "voltage_levels", None) or []):
+            base_voltage_resource = base_voltage_resource_by_kv(getattr(vl, "nominal_voltage", None))
+            vl_obj = VoltageLevelCIMObject(
+                mrid=vl.mrid,
+                name=vl.name,
+                nominal_voltage=vl.nominal_voltage,
+                base_voltage=external_resource_ref(base_voltage_resource) if base_voltage_resource else None,
+                parent_object=cim_ref(substation.mrid),
+            )
+            objects.append(vl_obj)
+            voltage_level_refs.append(cim_ref(vl_obj.mrid))
 
     # Location (+ PositionPoints)
     location_ref: Optional[Dict[str, str]] = None
@@ -248,17 +303,111 @@ def _pole_ref_from_connectivity_node(cn) -> Optional[Dict[str, str]]:
     return None
 
 
+def _power_line_to_cim_geometry_only(
+    power_line: PowerLine,
+    *,
+    include_gps: bool,
+    line_parent_folder_mrid: Optional[str] = None,
+    sub_geographical_region_mrid: Optional[str] = None,
+) -> List[CIMObject]:
+    """
+    Упрощённая выгрузка ЛЭП: только Line + папка опор + Pole + Location/PositionPoint (без ACLineSegment/CN/оборудования).
+    Требует загруженный relationship PowerLine.poles (+ Pole.location + position_points при include_gps).
+    """
+    cim_objects: List[CIMObject] = []
+    folder_mrid = generate_mrid()
+    folder_ref = cim_ref(folder_mrid)
+    pole_child_refs: List[Dict[str, str]] = []
+    poles = sorted(
+        getattr(power_line, "poles", None) or [],
+        key=lambda p: (getattr(p, "sequence_number", 0) or 0, getattr(p, "id", 0)),
+    )
+    for pole in poles:
+        location_ref = None
+        if include_gps and getattr(pole, "location", None) is not None:
+            loc = pole.location
+            pp_refs = [{"mRID": pp.mrid} for pp in (getattr(loc, "position_points", None) or [])]
+            location_obj = LocationCIMObject(
+                mrid=loc.mrid,
+                position_points=pp_refs,
+                parent_object={"mRID": pole.mrid},
+            )
+            cim_objects.append(location_obj)
+            for pp in getattr(loc, "position_points", None) or []:
+                cim_objects.append(
+                    PositionPointCIMObject(
+                        mrid=pp.mrid,
+                        x_position=pp.x_position,
+                        y_position=pp.y_position,
+                        z_position=pp.z_position,
+                        parent_object={"mRID": loc.mrid},
+                    )
+                )
+            location_ref = cim_ref(location_obj.mrid)
+
+        pole_name = (getattr(pole, "pole_number", None) or f"Опора {pole.id}").strip()
+        if not pole_name.lower().startswith(("опора", "оп.")):
+            pole_name = f"Опора {pole_name}"
+
+        pole_obj = PoleCIMObject(
+            mrid=pole.mrid,
+            name=pole_name,
+            location=location_ref,
+            parent_object=folder_ref,
+            child_objects=[],
+            pole_type=getattr(pole, "pole_type", None),
+            material=getattr(pole, "material", None),
+            height=getattr(pole, "height", None),
+            asset_power_system_resource=cim_ref(power_line.mrid),
+        )
+        cim_objects.append(pole_obj)
+        pole_child_refs.append(cim_ref(pole.mrid))
+
+    poles_folder_obj = FolderCIMObject(
+        mrid=folder_mrid,
+        name=f"Опоры {power_line.name}",
+        child_objects=pole_child_refs,
+        creating_node=None,
+        parent_object=cim_ref(power_line.mrid),
+    )
+    cim_objects.append(poles_folder_obj)
+
+    pl_parent = cim_ref(line_parent_folder_mrid) if line_parent_folder_mrid else None
+    line_obj = PowerLineCIMObject(
+        mrid=power_line.mrid,
+        name=power_line.name,
+        acline_segments=[],
+        base_voltage=None,
+        extra_child_objects=[cim_ref(folder_mrid)],
+        parent_object=pl_parent,
+        region=cim_ref(sub_geographical_region_mrid) if sub_geographical_region_mrid else None,
+        connectivity_nodes=[],
+    )
+    cim_objects.insert(0, line_obj)
+    return cim_objects
+
+
 def _power_line_to_cim(
     power_line: PowerLine,
     include_equipment: bool = True,
     include_gps: bool = True,
     line_parent_folder_mrid: Optional[str] = None,
     sub_geographical_region_mrid: Optional[str] = None,
+    include_electrical_model: bool = True,
+    include_defects: bool = True,
 ) -> List[CIMObject]:
     """
     Преобразование модели PowerLine в список CIM объектов
     Возвращает список объектов: Line, ACLineSegment, LineSection, Span, ConnectivityNode, Location, PositionPoint, BaseVoltage, WireInfo, Terminal
     """
+    if not include_electrical_model:
+        return _power_line_to_cim_geometry_only(
+            power_line,
+            include_gps=include_gps,
+            line_parent_folder_mrid=line_parent_folder_mrid,
+            sub_geographical_region_mrid=sub_geographical_region_mrid,
+        )
+
     cim_objects = []
     cn_line_parent = cim_ref(power_line.mrid)
     connectivity_node_terminal_refs: Dict[str, List[Dict[str, str]]] = defaultdict(list)
@@ -624,6 +773,8 @@ def _power_line_to_cim(
                     control_area=None,
                     normal_in_service=True,
                     cim_class=profile.cim_class,
+                    defect_note=(getattr(eq, "defect", None) or None) if include_defects else None,
+                    criticality=(getattr(eq, "criticality", None) or None) if include_defects else None,
                 )
                 cim_objects.append(conducting_eq)
                 equipment_objects_by_id[eq_id] = conducting_eq
@@ -821,6 +972,19 @@ async def export_cim_xml(
     include_equipment: bool = Query(True, description="Включить оборудование"),
     include_gps: bool = Query(True, description="Включить координаты GPS (Location/PositionPoint)"),
     line_id: Optional[int] = Query(None, description="Экспортировать только указанную ЛЭП (id)"),
+    export_preset: Optional[str] = Query(
+        None,
+        description="Пресет профиля: full, coordinates_only, no_equipment, without_defects (переопределяет часть флагов)",
+    ),
+    include_electrical_model: bool = Query(
+        True,
+        description="Включить электрическую модель ЛЭП (сегменты, узлы). False — только геометрия опор/подстанций",
+    ),
+    include_defects: bool = Query(True, description="Включать в CIM поля дефектов оборудования (если есть в БД)"),
+    include_substation_voltage_levels: bool = Query(
+        True,
+        description="Экспортировать уровни напряжения подстанции (VoltageLevel)",
+    ),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -832,6 +996,21 @@ async def export_cim_xml(
     - use_cimpy=True: Использует библиотеку CIMpy (рекомендуется)
     - use_cimpy=False: Использует ручную реализацию
     """
+    (
+        include_gps,
+        include_equipment,
+        include_electrical_model,
+        include_defects,
+        include_substation_voltage_levels,
+    ) = _apply_export_preset(
+        export_preset,
+        include_gps=include_gps,
+        include_equipment=include_equipment,
+        include_electrical_model=include_electrical_model,
+        include_defects=include_defects,
+        include_substation_voltage_levels=include_substation_voltage_levels,
+    )
+
     substations_list = []
     power_lines_list = []
 
@@ -847,16 +1026,20 @@ async def export_cim_xml(
     # и связанных ConnectivityNode/Terminal/оборудования для этой ЛЭП.
     if line_id is not None:
         use_cimpy = False
+
+    # Ручная сборка обязательна для пресетов без электромодели (только опоры/Location).
+    if not include_electrical_model:
+        use_cimpy = False
     
     # Загружаем подстанции
     if include_substations:
+        sub_opts = [selectinload(Substation.location).selectinload(Location.position_points)]
+        if include_substation_voltage_levels:
+            sub_opts.insert(0, selectinload(Substation.voltage_levels))
         result = await db.execute(
             select(Substation)
             .where(Substation.is_active == True)
-            .options(
-                selectinload(Substation.voltage_levels),
-                selectinload(Substation.location).selectinload(Location.position_points)
-            )
+            .options(*sub_opts)
         )
         substations_list = result.scalars().all()
     
@@ -865,8 +1048,17 @@ async def export_cim_xml(
         power_line_query = select(PowerLine)
         if line_id is not None:
             power_line_query = power_line_query.where(PowerLine.id == line_id)
-        result = await db.execute(
-            power_line_query.options(
+        if not include_electrical_model:
+            result = await db.execute(
+                power_line_query.options(
+                    selectinload(PowerLine.poles)
+                    .selectinload(Pole.location)
+                    .selectinload(Location.position_points),
+                )
+            )
+        else:
+            result = await db.execute(
+                power_line_query.options(
                 selectinload(PowerLine.acline_segments)
                 .selectinload(AClineSegment.from_node)
                 .selectinload(ConnectivityNode.terminals),
@@ -979,6 +1171,9 @@ async def export_cim_xml(
                     power_lines_list,
                     include_gps=include_gps,
                     include_equipment=include_equipment,
+                    include_electrical_model=include_electrical_model,
+                    include_defects=include_defects,
+                    include_substation_voltage_levels=include_substation_voltage_levels,
                 )
                 exporter = CIMXMLExporter()
                 xml_content = exporter.export(cim_objects)
@@ -992,6 +1187,9 @@ async def export_cim_xml(
                     power_lines_list,
                     include_gps=include_gps,
                     include_equipment=include_equipment,
+                    include_electrical_model=include_electrical_model,
+                    include_defects=include_defects,
+                    include_substation_voltage_levels=include_substation_voltage_levels,
                 )
                 exporter = CIMXMLExporter()
                 xml_content = exporter.export(cim_objects)
@@ -1004,6 +1202,9 @@ async def export_cim_xml(
                     power_lines_list,
                     include_gps=include_gps,
                     include_equipment=with_equipment,
+                    include_electrical_model=include_electrical_model,
+                    include_defects=include_defects,
+                    include_substation_voltage_levels=include_substation_voltage_levels,
                 )
 
             exporter = CIMXMLExporter()
@@ -1140,6 +1341,10 @@ async def export_cim_552_diff(
     include_gps: bool = Query(True, description="Включить координаты GPS"),
     include_equipment: bool = Query(True, description="Включить оборудование"),
     line_id: Optional[int] = Query(None, description="Экспортировать только указанную ЛЭП (id)"),
+    export_preset: Optional[str] = Query(None, description="Пресет профиля выгрузки (см. /export/xml)"),
+    include_electrical_model: bool = Query(True, description="Включить электрическую модель ЛЭП"),
+    include_defects: bool = Query(True, description="Включать поля дефектов оборудования в CIM"),
+    include_substation_voltage_levels: bool = Query(True, description="Экспортировать уровни напряжения подстанций"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1154,6 +1359,10 @@ async def export_cim_552_diff(
         include_equipment=include_equipment,
         include_gps=include_gps,
         line_id=line_id,
+        export_preset=export_preset,
+        include_electrical_model=include_electrical_model,
+        include_defects=include_defects,
+        include_substation_voltage_levels=include_substation_voltage_levels,
         current_user=current_user,
         db=db,
     )

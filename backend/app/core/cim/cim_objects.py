@@ -938,6 +938,8 @@ class ConductingEquipmentCIMObject(CIMObject):
         psr_type: Optional[Dict[str, str]] = None,
         control_area: Optional[Dict[str, str]] = None,
         cim_class: str = "ConductingEquipment",
+        defect_note: Optional[str] = None,
+        criticality: Optional[str] = None,
     ):
         super().__init__(mrid, name)
         self.equipment_type = equipment_type
@@ -951,6 +953,8 @@ class ConductingEquipmentCIMObject(CIMObject):
         self.psr_type = psr_type
         self.control_area = control_area
         self.cim_class = cim_class
+        self.defect_note = defect_note
+        self.criticality = criticality
 
     def get_cim_class(self) -> str:
         return self.cim_class
@@ -984,6 +988,10 @@ class ConductingEquipmentCIMObject(CIMObject):
             result["PowerSystemResource.PSRType"] = self.psr_type
         if self.control_area:
             result["me:ConductingEquipment.ControlArea"] = self.control_area
+        if self.defect_note:
+            result["me:Equipment.defectDescription"] = self.defect_note
+        if self.criticality:
+            result["me:Equipment.defectCriticality"] = self.criticality
         return result
 
 

@@ -197,8 +197,9 @@ abstract class ApiServiceWithExport implements ApiService {
     bool includePowerLines,
     bool includeGps,
     int? lineId,
-    bool includeEquipment,
-  );
+    bool includeEquipment, {
+    String? exportPreset,
+  });
 
   /// Загружает вложение к карточке опоры (фото, голос, схема, видео).
   /// Возвращает {url, thumbnail_url?, type, filename}.
@@ -443,8 +444,9 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
     bool includePowerLines,
     bool includeGps,
     int? lineId,
-    bool includeEquipment,
-  ) async {
+    bool includeEquipment, {
+    String? exportPreset,
+  }) async {
     final queryParameters = <String, dynamic>{
       'use_cimpy': useCimpy,
       'include_substations': includeSubstations,
@@ -453,7 +455,10 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
       'include_gps': includeGps,
       'line_id': lineId,
     };
-    
+    if (exportPreset != null && exportPreset.isNotEmpty && exportPreset != 'full') {
+      queryParameters['export_preset'] = exportPreset;
+    }
+
     final response = await _dio.get<List<int>>(
       '/cim/export/xml',
       queryParameters: queryParameters,

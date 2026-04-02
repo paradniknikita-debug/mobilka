@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { MatMenuTrigger } from '@angular/material/menu';
 import { ApiService } from '../../core/services/api.service';
 import { ChangeLogEntry, ModelIssue } from '../../core/models/change-log.model';
 import { MatDialog } from '@angular/material/dialog';
@@ -11,6 +12,8 @@ import { ChangeLogDetailDialogComponent } from './change-log-detail-dialog/chang
   styleUrls: ['./change-log.component.scss']
 })
 export class ChangeLogComponent implements OnInit {
+  @ViewChild('filterTrigger') filterMenuTrigger?: MatMenuTrigger;
+
   entries: ChangeLogEntry[] = [];
   displayedColumns: string[] = ['created_at', 'source', 'action', 'entity_type', 'name', 'uid', 'user_name', 'detail'];
   loading = true;
@@ -23,6 +26,9 @@ export class ChangeLogComponent implements OnInit {
   logEntityId: number | null = null;
   logFromDt: string | null = null;
   logToDt: string | null = null;
+
+  /** Панель с кнопками «Фильтры» / «Применить» (стрелка сворачивает её) */
+  filterToolbarExpanded = true;
 
   issues: ModelIssue[] = [];
   issuesColumns: string[] = ['issue_type', 'entity_type', 'entity_uid', 'line_uid', 'message'];
@@ -38,6 +44,31 @@ export class ChangeLogComponent implements OnInit {
 
   ngOnInit(): void {
     this.load();
+  }
+
+  get activeFilterCount(): number {
+    let n = 0;
+    if (this.logSource != null) n++;
+    if (this.logAction != null) n++;
+    if (this.logEntityType != null) n++;
+    if (this.logEntityId != null) n++;
+    if (this.logFromDt != null && String(this.logFromDt).trim() !== '') n++;
+    if (this.logToDt != null && String(this.logToDt).trim() !== '') n++;
+    return n;
+  }
+
+  resetFilters(): void {
+    this.logSource = null;
+    this.logAction = null;
+    this.logEntityType = null;
+    this.logEntityId = null;
+    this.logFromDt = null;
+    this.logToDt = null;
+  }
+
+  applyFiltersFromMenu(): void {
+    this.load();
+    this.filterMenuTrigger?.closeMenu();
   }
 
   load(): void {

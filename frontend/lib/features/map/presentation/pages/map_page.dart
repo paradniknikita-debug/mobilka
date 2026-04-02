@@ -3271,6 +3271,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         result['includeGps'] == true, // includeGps
         result['lineId'] as int?, // lineId (null = полный экспорт)
         true, // includeEquipment
+        exportPreset: result['exportPreset'] as String?,
       );
       
       // Закрываем индикатор загрузки
@@ -5471,6 +5472,8 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
   bool _includeGps = true;
   bool _fullExport = true;
   int? _selectedLineId;
+  /// full | coordinates_only | no_equipment | without_defects
+  String _exportPreset = 'full';
 
   @override
   void initState() {
@@ -5479,11 +5482,14 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
   }
 
   Widget build(BuildContext context) {
+    final gpsLocked = _exportPreset == 'coordinates_only';
     return AlertDialog(
       title: const Text('Экспорт в CIM XML'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -5491,14 +5497,60 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
+          const SizedBox(height: 8),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Профиль выгрузки',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          RadioListTile<String>(
+            value: 'full',
+            groupValue: _exportPreset,
+            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
+            title: const Text('Полный CIM'),
+            subtitle: const Text('Топология ЛЭП, оборудование, дефекты'),
+            dense: true,
+          ),
+          RadioListTile<String>(
+            value: 'coordinates_only',
+            groupValue: _exportPreset,
+            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
+            title: const Text('Только координаты'),
+            subtitle: const Text('Подстанции и опоры с Location, без сегментов и электромодели'),
+            dense: true,
+          ),
+          RadioListTile<String>(
+            value: 'no_equipment',
+            groupValue: _exportPreset,
+            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
+            title: const Text('Без оборудования на ЛЭП'),
+            subtitle: const Text('Топология и опоры, без ConductingEquipment'),
+            dense: true,
+          ),
+          RadioListTile<String>(
+            value: 'without_defects',
+            groupValue: _exportPreset,
+            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
+            title: const Text('Без полей дефектов'),
+            subtitle: const Text('Остальное как полный, без описания дефектов оборудования'),
+            dense: true,
+          ),
+          const Divider(height: 18),
           CheckboxListTile(
             title: const Text('Включить координаты GPS'),
-            value: _includeGps,
-            onChanged: (value) {
-              setState(() {
-                _includeGps = value ?? true;
-              });
-            },
+            subtitle: gpsLocked
+                ? const Text('Для профиля «Только координаты» всегда включено')
+                : null,
+            value: gpsLocked ? true : _includeGps,
+            onChanged: gpsLocked
+                ? null
+                : (value) {
+                    setState(() {
+                      _includeGps = value ?? true;
+                    });
+                  },
           ),
           const Divider(height: 18),
           RadioListTile<bool>(
@@ -5508,6 +5560,7 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               setState(() => _fullExport = v ?? true);
             },
             title: const Text('Полный экспорт'),
+            dense: true,
           ),
           RadioListTile<bool>(
             value: false,
@@ -5516,6 +5569,7 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               setState(() => _fullExport = v ?? false);
             },
             title: const Text('Частично по ЛЭП'),
+            dense: true,
           ),
           if (!_fullExport)
             DropdownButtonFormField<int>(
@@ -5535,6 +5589,7 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               },
             ),
         ],
+        ),
       ),
       actions: [
         TextButton(
@@ -5545,8 +5600,9 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
           onPressed: () {
             if (!_fullExport && _selectedLineId == null) return;
             Navigator.of(context).pop({
-              'includeGps': _includeGps,
+              'includeGps': gpsLocked ? true : _includeGps,
               'lineId': _fullExport ? null : _selectedLineId,
+              'exportPreset': _exportPreset,
             });
           },
           child: const Text('Экспортировать'),
