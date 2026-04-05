@@ -1,0 +1,108 @@
+.detail-dialog {
+  min-width: 400px;
+}
+
+.meta {
+  margin-bottom: 16px;
+}
+
+.meta-row {
+  margin-bottom: 6px;
+  font-size: 13px;
+
+  .label {
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.7);
+    margin-right: 8px;
+  }
+}
+
+.payload-section {
+  margin-bottom: 16px;
+}
+
+.before-after,
+.full-payload {
+  margin-top: 16px;
+  margin-bottom: 8px;
+
+  h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+  }
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.diff-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+
+  th, td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  th {
+    background: rgba(0, 0, 0, 0.04);
+    font-weight: 500;
+  }
+
+  tr.changed {
+    background: rgba(255, 193, 7, 0.25);
+  }
+
+  tr.row-added {
+    background: rgba(76, 175, 80, 0.08);
+  }
+  tr.row-added .after {
+    background: rgba(76, 175, 80, 0.2);
+  }
+
+  tr.row-removed {
+    background: rgba(244, 67, 54, 0.08);
+  }
+  tr.row-removed .before {
+    background: rgba(244, 67, 54, 0.2);
+  }
+
+  .key {
+    font-weight: 500;
+    max-width: 140px;
+    word-break: break-word;
+  }
+
+  .before, .after {
+    max-width: 200px;
+    word-break: break-all;
+  }
+}
+
+.no-changes {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.5);
+  margin: 8px 0 0 0;
+}
+
+.payload-json {
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+mat-dialog-actions {
+  margin-top: 8px;
+}

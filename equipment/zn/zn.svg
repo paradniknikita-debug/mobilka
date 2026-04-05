@@ -1,0 +1,18 @@
+<svg width="220" height="120" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- горизонтальная линия слева -->
+  <rect x="-30" y="35" width="70" height="10" fill="black" />
+
+  <!-- короткая вертикальная стойка -->
+  <rect x="40" y="10" width="10" height="60" fill="black" />
+	
+  <!-- три высокие вертикальные полосы -->
+  <rect x="70" y="0" width="10" height="90" fill="black" />
+  <rect x="100" y="10" width="10" height="60" fill="black" />
+  <rect x="130" y="-10" width="10" height="110" fill="black" />
+  
+  <rect x="100" y="35" width="30" height="10" fill="black" />
+
+  <!-- две короткие полосы справа -->
+  <rect x="150" y="10" width="10" height="60" fill="black" />
+  <rect x="170" y="20" width="10" height="40" fill="black" />
+</svg>

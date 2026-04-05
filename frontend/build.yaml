@@ -1,0 +1,7 @@
+targets:
+  $default:
+    builders:
+      retrofit_generator:
+        generate_for:
+          exclude:
+            - lib/core/services/api_service.dart

@@ -1,0 +1,161 @@
+.info-section {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #e3f2fd;
+  border-radius: 4px;
+  border-left: 4px solid #2196f3;
+
+  p {
+    margin: 5px 0;
+    color: #555;
+    font-size: 14px;
+  }
+}
+
+.actions-section {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+
+  button {
+    mat-icon {
+      margin-right: 5px;
+    }
+  }
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 15px;
+
+  p {
+    color: #666;
+  }
+}
+
+.poles-list {
+  max-height: 500px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.pole-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: move;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #f0f0f0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  &.cdk-drag-preview {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    background-color: white;
+  }
+
+  &.cdk-drag-placeholder {
+    opacity: 0.5;
+  }
+
+  &.cdk-drag-animating {
+    transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+.drag-handle {
+  color: #999;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  mat-icon {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+  }
+}
+
+.pole-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+}
+
+.sequence-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: #2196f3;
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.pole-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  strong {
+    color: #333;
+    font-size: 16px;
+  }
+
+  .coordinates {
+    color: #666;
+    font-size: 12px;
+  }
+}
+
+.pole-type {
+  padding: 4px 12px;
+  background-color: #e0e0e0;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #555;
+}
+
+.no-poles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #999;
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 10px;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+mat-dialog-actions {
+  margin-top: 20px;
+}
+

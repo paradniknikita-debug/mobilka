@@ -1,0 +1,251 @@
+<div class="sidebar-container" (contextmenu)="onRootRightClick($event)">
+  <div class="sidebar-header">
+    <span class="sidebar-header-label">Дерево объектов</span>
+  </div>
+
+  <div class="sidebar-toolbar">
+    <button mat-icon-button (click)="treeUndo()" [disabled]="!canTreeUndo()" matTooltip="Назад (отменить изменение)">
+      <mat-icon>undo</mat-icon>
+    </button>
+    <button mat-icon-button (click)="treeRedo()" [disabled]="!canTreeRedo()" matTooltip="Вперёд (вернуть изменение)">
+      <mat-icon>redo</mat-icon>
+    </button>
+    <div class="tree-search-wrap">
+    <mat-form-field class="tree-search-field" appearance="outline" subscriptSizing="dynamic">
+      <input matInput placeholder="Поиск по UID или названию" [(ngModel)]="treeSearchQuery" (input)="onSearchInput()" (keyup.enter)="treeSearch()">
+      <button mat-icon-button matSuffix (click)="treeSearch()" matTooltip="Найти в дереве">
+        <mat-icon>search</mat-icon>
+      </button>
+    </mat-form-field>
+    <div class="tree-search-suggestions" *ngIf="treeSearchSuggestions.length > 0">
+      <button type="button" class="suggestion-item" *ngFor="let s of treeSearchSuggestions" (click)="applySearchResult(s)">
+        <mat-icon class="suggestion-icon">{{ s.type === 'power_line' ? 'electrical_services' : s.type === 'segment' ? 'linear_scale' : s.type === 'pole' ? 'account_tree' : 'swap_horiz' }}</mat-icon>
+        <span>{{ s.label }}</span>
+      </button>
+    </div>
+    </div>
+    <button mat-icon-button (click)="treeCollapseAll()" matTooltip="Свернуть дерево">
+      <mat-icon>unfold_less</mat-icon>
+    </button>
+  </div>
+
+  <div class="sidebar-content" *ngIf="!isLoading">
+    <div *ngFor="let item of getPowerLinesWithSegmentsAndPoles()" class="tree-item">
+      <!-- ЛЭП: раскрытие только по стрелке, по клику на название — без зума -->
+      <div class="tree-node power-line-node" 
+           (contextmenu)="onFeatureRightClick(item.powerLine, $event, 'powerLine')"
+           [class.expanded]="isPowerLineExpanded(item.powerLine.properties['id'])">
+        <mat-icon class="expand-icon" (click)="togglePowerLine(item.powerLine.properties['id']); $event.stopPropagation()">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+        <span class="node-label">{{ item.powerLine.properties['name'] || 'Без названия' }}</span>
+        <span class="node-description">{{ item.powerLine.properties['voltage_level'] }} кВ</span>
+      </div>
+      
+      <!-- Вложенные элементы ЛЭП: участки (под каждым — пролёты без папки) и одна папка «Опоры» -->
+      <div *ngIf="isPowerLineExpanded(item.powerLine.properties['id'])" class="tree-children">
+        <!-- Участки: раскрытие только по стрелке, по клику на строку — зум на участок -->
+        <div *ngFor="let segment of item.segments; let segIdx = index" class="tree-node segment-node">
+          <div class="tree-node-header" 
+               (contextmenu)="onSegmentRightClick(segment.segmentId, item.powerLine.properties['id'], $event)"
+               (dblclick)="segment.segmentId != null && openSegmentCard(segment.segmentId, item.powerLine.properties['id'], segment.segmentName)"
+               [class.expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)">
+            <button type="button" class="tree-expand-btn"
+                    (click)="toggleSegment(item.powerLine.properties['id'], segment.segmentId, segIdx); $event.stopPropagation(); $event.preventDefault()"
+                    (mousedown)="$event.stopPropagation()"
+                    [attr.aria-expanded]="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)">
+              <mat-icon class="expand-icon">{{ isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            </button>
+            <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">linear_scale</mat-icon>
+            <span class="node-label" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ getSegmentDisplayName(item, segment) }}</span>
+            <span class="node-description" (click)="onSegmentClick(item, segment); $event.stopPropagation()">{{ segment.spans.length }} прол.</span>
+          </div>
+          
+          <!-- Пролёты участка (без обобщающей папки) -->
+          <div *ngIf="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)" class="tree-children poles-list">
+            <div *ngFor="let span of segment.spans" 
+                 class="tree-node pole-node"
+                 (click)="onFeatureClick(span, $event)"
+                 (contextmenu)="onFeatureRightClick(span, $event)"
+                 [matTooltip]="span.properties['mrid'] ? 'UID: ' + span.properties['mrid'] : ''">
+              <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">swap_horiz</mat-icon>
+              <span class="node-label">{{ getSpanDisplayName(span) }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Папка «Опоры»: раскрытие только по стрелке -->
+        <div *ngIf="item.allPoles.length > 0" class="poles-folder-wrapper">
+          <div class="tree-node-header poles-folder-header"
+               (contextmenu)="onFolderRightClick('poles', item.powerLine.properties['id'], null, $event)"
+               [class.expanded]="isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles')">
+            <mat-icon class="expand-icon" (click)="togglePolesFolder(item.powerLine.properties['id'], 'all-poles'); $event.stopPropagation()">{{ isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">folder</mat-icon>
+            <span class="node-label">Опоры ({{ item.allPoles.length }})</span>
+          </div>
+          
+          <div *ngIf="isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles')" class="tree-children poles-list">
+            <div *ngFor="let pole of item.allPoles" 
+                 class="tree-node pole-node"
+                 [class.selected-pole]="selectedPoleIdFromMap === pole.properties['id']"
+                 (click)="onFeatureClick(pole, $event)"
+                 (contextmenu)="onFeatureRightClick(pole, $event)"
+                 [matTooltip]="pole.properties['mrid'] ? 'UID: ' + pole.properties['mrid'] : ''">
+              <mat-icon class="node-icon" style="color: rgba(0, 0, 0, 0.54);">account_tree</mat-icon>
+              <span class="node-label">{{ pole.properties['pole_number'] || 'N/A' }}</span>
+              <span *ngIf="pole.properties['is_tap_pole']" 
+                    class="tap-pole-dot" 
+                    [class.tap-pole-dot--filled]="pole.properties['tap_branch_has_poles']"
+                    [class.tap-pole-dot--empty]="!pole.properties['tap_branch_has_poles']"
+                    [matTooltip]="pole.properties['tap_branch_has_poles'] ? 'Отпайка построена' : 'Отпайка не начата'"></span>
+              <!-- Оборудование на опоре: показываем по типам -->
+              <div class="tree-children equipment-list" *ngIf="getPoleEquipment(pole.properties['id']).length">
+                <div class="tree-node equipment-node" 
+                     *ngFor="let eq of getPoleEquipment(pole.properties['id'])"
+                     (click)="onEquipmentClick(eq, pole, $event)"
+                     (contextmenu)="onEquipmentRightClick(eq, $event)"
+                     [matTooltip]="eq.mrid ? 'UID: ' + eq.mrid : ''">
+                  <span *ngIf="getEquipmentIconKey(eq)" class="tree-equipment-icon-wrap">
+                    <img [src]="getEquipmentAssetPath(getEquipmentIconKey(eq)!)" 
+                         class="node-icon tree-equipment-icon"
+                         [attr.alt]="eq.name || eq.equipment_type">
+                    <span class="tree-recloser-badge" *ngIf="getEquipmentIconKey(eq) === 'recloser'"></span>
+                  </span>
+                  <mat-icon *ngIf="!getEquipmentIconKey(eq)" class="node-icon equipment-icon">electrical_services</mat-icon>
+                  <span class="node-label">{{ eq.name || eq.equipment_type || 'Оборудование' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Подстанции -->
+    <div *ngFor="let substation of substationsFeatures" class="tree-item">
+      <div class="tree-node substation-node" 
+           (click)="onFeatureClick(substation, $event)"
+           (contextmenu)="onFeatureRightClick(substation, $event, 'substation')"
+           [class.selected-substation]="selectedSubstationIdFromMap === substation.properties['id']">
+        <mat-icon class="node-icon" style="color: rgba(156, 39, 176, 0.87);">power</mat-icon>
+        <span class="node-label">{{ substation.properties['name'] || 'Без названия' }}</span>
+        <span class="node-description">{{ substation.properties['voltage_level'] }} кВ</span>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="isLoading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+</div>
+
+<!-- Скрытая кнопка для контекстного меню -->
+<button mat-icon-button 
+        [matMenuTriggerFor]="contextMenu" 
+        style="position: fixed; width: 1px; height: 1px; opacity: 0.01; pointer-events: auto; overflow: visible; border: none; padding: 0; margin: 0; z-index: 1000;" 
+        [style.left]="contextMenuPosition.x" 
+        [style.top]="contextMenuPosition.y" 
+        #menuTrigger></button>
+
+<!-- Контекстное меню -->
+<mat-menu #contextMenu class="context-menu">
+  <ng-container *ngIf="contextMenuType === 'root'">
+    <button mat-menu-item (click)="onCreateObject()">
+      <mat-icon>add</mat-icon>
+      <span>Создать линию</span>
+    </button>
+    <button mat-menu-item (click)="onCreateSubstation()">
+      <mat-icon>power</mat-icon>
+      <span>Создать подстанцию</span>
+    </button>
+  </ng-container>
+  
+  <ng-container *ngIf="contextMenuType === 'powerLine'">
+    <button mat-menu-item (click)="onCreateObject()">
+      <mat-icon>add</mat-icon>
+      <span>Создать опору</span>
+    </button>
+    <button mat-menu-item (click)="onCreateSegment()">
+      <mat-icon>add</mat-icon>
+      <span>Создать участок</span>
+    </button>
+    <button mat-menu-item (click)="onRebuildTopology()">
+      <mat-icon>auto_fix_high</mat-icon>
+      <span>Пересобрать топологию линии</span>
+    </button>
+    <button mat-menu-item (click)="onEditObject()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteObject()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить</span>
+    </button>
+  </ng-container>
+  
+  <ng-container *ngIf="contextMenuType === 'segment'">
+    <button mat-menu-item (click)="contextMenuSegmentId != null && contextMenuLineId != null && openSegmentCard(contextMenuSegmentId, contextMenuLineId)">
+      <mat-icon>info</mat-icon>
+      <span>Карточка участка</span>
+    </button>
+    <button mat-menu-item (click)="onCreateObject()">
+      <mat-icon>add</mat-icon>
+      <span>Создать пролёт</span>
+    </button>
+    <button mat-menu-item (click)="onEditObject()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteObject()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить</span>
+    </button>
+  </ng-container>
+  
+  <ng-container *ngIf="contextMenuType === 'folder'">
+    <button mat-menu-item (click)="onCreateObject()">
+      <mat-icon>add</mat-icon>
+      <span>Создать опору</span>
+    </button>
+  </ng-container>
+
+  <ng-container *ngIf="contextMenuType === 'pole' || contextMenuType === 'span'">
+    <button mat-menu-item *ngIf="contextMenuType === 'pole' && isContextMenuPoleTap()" (click)="onStartTapFromPole()">
+      <mat-icon>call_split</mat-icon>
+      <span>Начать отпайку</span>
+    </button>
+    <button mat-menu-item *ngIf="contextMenuType === 'pole'" (click)="onCreateEquipmentFromPole()">
+      <mat-icon>electrical_services</mat-icon>
+      <span>Создать оборудование</span>
+    </button>
+    <button mat-menu-item (click)="onEditObject()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteObject()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить</span>
+    </button>
+  </ng-container>
+
+  <ng-container *ngIf="contextMenuType === 'equipment'">
+    <button mat-menu-item (click)="onEditEquipment()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать оборудование</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteEquipment()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить оборудование</span>
+    </button>
+  </ng-container>
+  
+  <ng-container *ngIf="contextMenuType === 'substation'">
+    <button mat-menu-item (click)="onEditObject()">
+      <mat-icon>edit</mat-icon>
+      <span>Редактировать</span>
+    </button>
+    <button mat-menu-item (click)="onDeleteObject()">
+      <mat-icon>delete</mat-icon>
+      <span>Удалить</span>
+    </button>
+  </ng-container>
+</mat-menu>
+

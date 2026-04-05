@@ -1,0 +1,41 @@
+<div class="main-container">
+  <!-- Toolbar поверх карты -->
+  <mat-toolbar color="primary" class="top-toolbar">
+    <span class="app-title">ЛЭП Management System</span>
+    <a mat-button routerLink="/map" routerLinkActive="active-tab" class="nav-tab">Карта</a>
+    <a mat-button routerLink="/change-log" routerLinkActive="active-tab" class="nav-tab">Журнал</a>
+    <a mat-button routerLink="/reports" routerLinkActive="active-tab" class="nav-tab">Отчёты</a>
+    <a mat-button routerLink="/cim-import" routerLinkActive="active-tab" class="nav-tab">CIM / 552</a>
+    <span class="spacer"></span>
+    <button mat-icon-button [matMenuTriggerFor]="userMenu">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #userMenu="matMenu" xPosition="before">
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Выйти</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
+  <!-- Карта на весь экран -->
+  <div class="map-wrapper" [style.--sidebar-width.px]="sidebarWidth">
+    <router-outlet></router-outlet>
+  </div>
+
+  <!-- Sidebar поверх карты слева -->
+  <div class="sidebar-overlay" [style.width.px]="sidebarWidth" [class.hidden]="!sidebarVisible">
+    <div class="resize-handle" (mousedown)="startResize($event)"></div>
+    <app-sidebar></app-sidebar>
+  </div>
+  
+  <!-- Кнопка для показа/скрытия sidebar (только на карте; на Журнал и CIM/552 скрыта) -->
+  <button *ngIf="showSidebarToggle"
+          mat-icon-button class="sidebar-toggle" 
+          (click)="toggleSidebar()" 
+          [class.sidebar-open]="sidebarVisible"
+          [style.left.px]="sidebarVisible ? sidebarWidth + 8 : 8"
+          matTooltip="{{ sidebarVisible ? 'Скрыть дерево объектов' : 'Показать дерево объектов' }}">
+    <mat-icon>{{ sidebarVisible ? 'chevron_left' : 'chevron_right' }}</mat-icon>
+  </button>
+</div>
