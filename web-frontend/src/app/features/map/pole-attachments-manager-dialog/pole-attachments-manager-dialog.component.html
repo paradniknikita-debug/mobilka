@@ -1,0 +1,62 @@
+<h2 mat-dialog-title>Вложения карточки опоры</h2>
+
+<mat-dialog-content class="pam-body">
+  <p class="hint">Двойной клик по строке — скачать файл. После добавления или удаления нажмите «Готово» и сохраните опору.</p>
+
+  <div class="toolbar">
+    <button mat-flat-button color="primary" type="button" (click)="triggerPickFile()" [disabled]="uploading">
+      <mat-icon>attach_file</mat-icon>
+      Добавить файл
+    </button>
+    <input #fileInput type="file" class="hidden-file" [accept]="fileAccept" (change)="onFileSelected($event)" />
+  </div>
+
+  <div class="table-wrap" *ngIf="localItems.length; else emptyTpl">
+    <table mat-table [dataSource]="dataSource" class="pam-table">
+      <ng-container matColumnDef="typeLabel">
+        <th mat-header-cell *matHeaderCellDef>Тип</th>
+        <td mat-cell *matCellDef="let row">{{ typeLabel(row.t) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="filename">
+        <th mat-header-cell *matHeaderCellDef>Имя</th>
+        <td mat-cell *matCellDef="let row">{{ displayName(row) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="extension">
+        <th mat-header-cell *matHeaderCellDef>Расширение</th>
+        <td mat-cell *matCellDef="let row">{{ extensionOf(row) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="addedAt">
+        <th mat-header-cell *matHeaderCellDef>Дата</th>
+        <td mat-cell *matCellDef="let row">{{ formatWhen(row) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="addedBy">
+        <th mat-header-cell *matHeaderCellDef>Кто добавил</th>
+        <td mat-cell *matCellDef="let row">{{ who(row) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row; let i = index">
+          <button mat-icon-button type="button" (click)="remove(i)" matTooltip="Убрать из списка (до сохранения опоры)">
+            <mat-icon>delete_outline</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr
+        mat-row
+        *matRowDef="let row; columns: displayedColumns"
+        (dblclick)="download(row)"
+        class="data-row"
+      ></tr>
+    </table>
+  </div>
+  <ng-template #emptyTpl>
+    <p class="empty">Нет вложений. Добавьте файлы кнопками выше.</p>
+  </ng-template>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Отмена</button>
+  <button mat-flat-button color="primary" type="button" (click)="done()">Готово</button>
+</mat-dialog-actions>

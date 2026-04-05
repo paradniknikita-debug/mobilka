@@ -615,12 +615,34 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
+  /// Пока [AuthService] асинхронно проверяет токен при старте, состояние бывает
+  /// [AuthStateInitial] / [AuthStateLoading]. Иначе [MapPage] вызывает [_loadMapData]
+  /// сразу после первого кадра и ошибочно показывает «Требуется авторизация».
+  /// После [await] виджет мог быть уничтожен — не вызывать [ref], иначе
+  /// `Bad state: Cannot use "ref" after the widget was disposed`.
+  Future<AuthState?> _awaitAuthReady() async {
+    const step = Duration(milliseconds: 50);
+    const maxAttempts = 50; // до ~2.5 с
+    for (var i = 0; i < maxAttempts; i++) {
+      if (!mounted) return null;
+      final s = ref.read(authStateProvider);
+      if (s is! AuthStateInitial && s is! AuthStateLoading) {
+        return s;
+      }
+      await Future<void>.delayed(step);
+    }
+    if (!mounted) return null;
+    return ref.read(authStateProvider);
+  }
+
   Future<void> _loadMapData({bool forceFromServer = false, bool skipAutoCenter = false}) async {
     if (!mounted) return;
     
     try {
-      // Проверяем авторизацию перед загрузкой данных
-      final authState = ref.read(authStateProvider);
+      // Дождаться окончания проверки сессии, иначе ложное «не авторизован» при открытии карты
+      final authState = await _awaitAuthReady();
+      if (!mounted) return;
+      if (authState == null) return;
       if (authState is! AuthStateAuthenticated) {
         if (mounted) {
           setState(() {
@@ -645,6 +667,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
 
       final connectivityResult = await Connectivity().checkConnectivity();
+      if (!mounted) return;
       final isOffline = connectivityResult == ConnectivityResult.none;
 
       if (isOffline) {
@@ -663,6 +686,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       // Режим «только вручную»: не обращаемся к серверу при открытии карты, чтобы не упираться в 404.
       // Загружаем с сервера только по явному нажатию «Обновить» (forceFromServer).
+      if (!mounted) return;
       final syncMode = ref.read(syncModeProvider);
       if (syncMode == SyncMode.manual && !forceFromServer) {
         await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
@@ -698,6 +722,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         apiService.getPowerLines(),      // Полные данные ЛЭП для дерева
         apiService.getAllEquipment(),    // Оборудование с сервера
       ]);
+      if (!mounted) return;
 
       var powerLinesData = futures[0] as Map<String, dynamic>;
       var polesData = futures[1] as Map<String, dynamic>;
@@ -1487,6 +1512,11 @@ class _MapPageState extends ConsumerState<MapPage> {
                       onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
                       onShowHistory: _showSelectedObjectHistory,
                       onDelete: _handleDeleteObject,
+                      onPoleAttachmentsChanged: _selectedObjectType == ObjectType.pole
+                          ? () {
+                              _refreshSelectedPoleCardFromServer();
+                            }
+                          : null,
                     ),
                   ),
               ],
@@ -3846,6 +3876,23 @@ class _MapPageState extends ConsumerState<MapPage> {
       _selectedObjectProperties = null;
       _selectedObjectType = null;
     });
+  }
+
+  /// Обновить комментарий и JSON вложений выбранной опоры после правок в таблице вложений.
+  Future<void> _refreshSelectedPoleCardFromServer() async {
+    final props = _selectedObjectProperties;
+    if (props == null || _selectedObjectType != ObjectType.pole) return;
+    final id = _toInt(props['id']);
+    if (id == null) return;
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final pole = await apiService.getPole(id);
+      if (!mounted) return;
+      setState(() {
+        _selectedObjectProperties?['card_comment'] = pole.cardComment;
+        _selectedObjectProperties?['card_comment_attachment'] = pole.cardCommentAttachment;
+      });
+    } catch (_) {}
   }
 
   String? _historyEntityTypeForSelection() {

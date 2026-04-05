@@ -133,14 +133,59 @@ export class ApiService {
   }
 
   /** Загрузить вложение к карточке опоры (фото, голос, схема, видео). Возвращает url для сохранения в card_comment_attachment. */
-  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema' | 'video', file: File): Observable<{ url: string; type: string; filename: string }> {
+  uploadPoleAttachment(poleId: number, attachmentType: 'file' | 'photo' | 'voice' | 'schema' | 'video', file: File): Observable<{
+    url: string;
+    type: string;
+    filename: string;
+    thumbnail_url?: string;
+    added_at?: string;
+    added_by_id?: number;
+    added_by_name?: string;
+  }> {
     const formData = new FormData();
     formData.append('attachment_type', attachmentType);
     formData.append('file', file);
-    return this.http.post<{ url: string; type: string; filename: string }>(
+    return this.http.post<{
+      url: string;
+      type: string;
+      filename: string;
+      thumbnail_url?: string;
+      added_at?: string;
+      added_by_id?: number;
+      added_by_name?: string;
+    }>(
       `${this.apiUrl}/attachments/poles/${poleId}/attachments`,
       formData
     );
+  }
+
+  /** Каталог вложений карточки опоры (нормализованные поля для таблицы). */
+  getPoleAttachmentCatalog(poleId: number): Observable<{
+    items: Array<{
+      t: string;
+      url: string;
+      filename: string;
+      extension: string;
+      added_at?: string;
+      added_by_id?: number;
+      added_by_name?: string;
+      thumbnail_url?: string;
+    }>;
+    card_comment: string | null;
+  }> {
+    return this.http.get<{
+      items: Array<{
+        t: string;
+        url: string;
+        filename: string;
+        extension: string;
+        added_at?: string;
+        added_by_id?: number;
+        added_by_name?: string;
+        thumbnail_url?: string;
+      }>;
+      card_comment: string | null;
+    }>(`${this.apiUrl}/attachments/poles/${poleId}/catalog`);
   }
 
   // ========== Spans ==========

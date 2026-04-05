@@ -27,6 +27,18 @@ String _guessMimeForPoleAttachment(String filename) {
   if (f.endsWith('.wav')) return 'audio/wav';
   if (f.endsWith('.webm')) return 'video/webm';
   if (f.endsWith('.mp4')) return 'video/mp4';
+  if (f.endsWith('.xlsx')) {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (f.endsWith('.xls')) return 'application/vnd.ms-excel';
+  if (f.endsWith('.csv')) return 'text/csv';
+  if (f.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  if (f.endsWith('.doc')) return 'application/msword';
+  if (f.endsWith('.pptx')) {
+    return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  }
   return 'application/octet-stream';
 }
 
@@ -367,7 +379,8 @@ final dioProvider = Provider<Dio>((ref) {
     dio.interceptors.add(
       LogInterceptor(
         requestBody: true,
-        responseBody: true,
+        // Иначе в консоль сыпется весь бинарник (вложения, xlsx и т.д.)
+        responseBody: false,
         requestHeader: true,
         responseHeader: false,
         error: true,
