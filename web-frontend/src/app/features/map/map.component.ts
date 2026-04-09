@@ -475,20 +475,14 @@ export class MapComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Группы по линии и ветке:
-    // - магистраль: key = lineId:main:0
-    // - отпайка:    key = lineId:tapPoleId:branchIndex
-    const key = (lineId: number, tapPoleId: number | null, tapBranchIndex: number | null) =>
-      `${lineId}:${tapPoleId ?? 'main'}:${tapBranchIndex ?? 0}`;
-
     const polesByBranch = new Map<string, GeoJSONFeature[]>();
     polesFeatures.forEach((f: GeoJSONFeature) => {
       if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
       const lineId = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
-      if (lineId == null) return;
       const tapPoleId = f.properties?.['tap_pole_id'] ?? null;
       const tapBranchIndex = f.properties?.['tap_branch_index'] ?? null;
-      const k = key(lineId, tapPoleId, tapBranchIndex);
+      const k = this.branchKeyFromPole(lineId, tapPoleId, tapBranchIndex, f.properties?.['pole_number']);
+      if (!k) return;
       if (!polesByBranch.has(k)) polesByBranch.set(k, []);
       polesByBranch.get(k)!.push(f);
     });
@@ -513,7 +507,7 @@ export class MapComponent implements OnInit, OnDestroy {
       const lineId = feature.properties?.['id'] ?? feature.properties?.['line_id'] ?? feature.properties?.['power_line_id'];
       const tapPoleId = feature.properties?.['tap_pole_id'] ?? null;
       const tapBranchIndex = feature.properties?.['tap_branch_index'] ?? null;
-      const branchKey = lineId != null ? key(lineId, tapPoleId, tapBranchIndex) : null;
+      const branchKey = this.branchKeyFromPole(lineId, tapPoleId, tapBranchIndex, null);
       let latlngs: L.LatLngExpression[] | L.LatLngExpression[][] | undefined;
 
       if (branchKey && polesByBranch.has(branchKey)) {
@@ -797,6 +791,34 @@ export class MapComponent implements OnInit, OnDestroy {
     return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
   }
 
+  private tapRootFromPoleNumber(poleNumber: any): string | null {
+    const raw = String(poleNumber ?? '').trim();
+    if (!raw.includes('/')) return null;
+    const root = raw.split('/')[0]?.trim();
+    return root ? root : null;
+  }
+
+  // Единый ключ ветки: если нет tap_branch_index, используем корень N из номера N/M,
+  // чтобы ветки 3/1 и 3/2 не сливались в Angular в одну.
+  private branchKeyFromPole(lineId: any, tapPoleId: any, tapBranchIndex: any, poleNumber: any): string | null {
+    const lid = Number(lineId);
+    if (!Number.isFinite(lid)) return null;
+    const tapIdNum = tapPoleId == null ? null : Number(tapPoleId);
+    const tapId = Number.isFinite(tapIdNum as number) ? tapIdNum : null;
+    const branchNum = tapBranchIndex == null ? null : Number(tapBranchIndex);
+    if (tapId != null) {
+      if (Number.isFinite(branchNum as number)) {
+        return `${lid}:${tapId}:b:${branchNum}`;
+      }
+      const root = this.tapRootFromPoleNumber(poleNumber);
+      if (root) {
+        return `${lid}:${tapId}:r:${root}`;
+      }
+      return `${lid}:${tapId}:b:1`;
+    }
+    return `${lid}:main:0`;
+  }
+
   private viewBoxPointToIconPixels(iconKey: string, p: [number, number], iconSize: number): [number, number] {
     const spec = this.equipmentTerminalSpec[iconKey];
     if (!spec) return [iconSize / 2, iconSize / 2];
@@ -1056,19 +1078,15 @@ export class MapComponent implements OnInit, OnDestroy {
 
     // Для каждой линии pl группируем опоры по веткам (магистраль/отпайки),
     // чтобы не смешивать соседство опор из разных веток.
-    const key = (lineId: number, tapPoleId: number | null, tapBranchIndex: number | null) =>
-      `${lineId}:${tapPoleId ?? 'main'}:${tapBranchIndex ?? 0}`;
     const polesByBranchKey = new Map<string, GeoJSONFeature[]>();
     polesFeatures.forEach((f: GeoJSONFeature) => {
       if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
       const lineId = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
       if (lineId == null) return;
-      const lid = Number(lineId);
       const tapPoleIdRaw = f.properties?.['tap_pole_id'];
       const tapBranchIndexRaw = f.properties?.['tap_branch_index'];
-      const tapPoleId = tapPoleIdRaw == null ? null : Number(tapPoleIdRaw);
-      const tapBranchIndex = tapBranchIndexRaw == null ? null : Number(tapBranchIndexRaw);
-      const k = key(lid, Number.isFinite(tapPoleId as number) ? tapPoleId : null, Number.isFinite(tapBranchIndex as number) ? tapBranchIndex : null);
+      const k = this.branchKeyFromPole(lineId, tapPoleIdRaw, tapBranchIndexRaw, f.properties?.['pole_number']);
+      if (!k) return;
       if (!polesByBranchKey.has(k)) polesByBranchKey.set(k, []);
       polesByBranchKey.get(k)!.push(f);
     });
@@ -1466,10 +1484,8 @@ export class MapComponent implements OnInit, OnDestroy {
   renderPoleSequence(geoJson: any): void {
     if (!this.map || !geoJson.features) return;
 
-    // Группируем опоры по линии и по ветке (магистраль vs отпайка), чтобы не смешивать в одну линию
-    // Учитываем номер ветки отпайки (tap_branch_index), чтобы 3/1 и 3/2 не соединялись одной линией.
-    const key = (lineId: number, tapPoleId: number | null, tapBranchIndex: number | null) =>
-      `${lineId}:${tapPoleId ?? 'main'}:${tapBranchIndex ?? 0}`;
+    // Группируем опоры по линии и по ветке (магистраль vs отпайка), чтобы не смешивать в одну линию.
+    // Для старых данных без tap_branch_index дополнительно разделяем ветки по корню номера N/M.
     const polesByBranch: { [k: string]: any[] } = {};
     const polesById: { [id: number]: GeoJSONFeature } = {};
 
@@ -1485,7 +1501,8 @@ export class MapComponent implements OnInit, OnDestroy {
       const tapPoleId = feature.properties['tap_pole_id'] ?? null;
       if (lineId != null && feature.properties['sequence_number'] != null) {
         const tapBranchIndex = feature.properties['tap_branch_index'] ?? null;
-        const k = key(lineId, tapPoleId, tapBranchIndex);
+        const k = this.branchKeyFromPole(lineId, tapPoleId, tapBranchIndex, feature.properties['pole_number']);
+        if (!k) return;
         if (!polesByBranch[k]) polesByBranch[k] = [];
         polesByBranch[k].push(feature);
       }

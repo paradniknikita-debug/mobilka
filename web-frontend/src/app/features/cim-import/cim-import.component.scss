@@ -193,7 +193,7 @@
 }
 
 .summary-card {
-  max-width: 480px;
+  max-width: min(560px, 100%);
   border-radius: 8px;
 
   .mat-mdc-card-header {
@@ -224,9 +224,35 @@
   padding-top: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 
+  button {
+    white-space: normal;
+    text-align: left;
+    line-height: 1.2;
+    min-height: 40px;
+  }
+
   button mat-icon {
     margin-right: 6px;
     vertical-align: middle;
+  }
+}
+
+@media (max-width: 720px) {
+  .cim-page {
+    padding: 12px;
+  }
+
+  .summary-card {
+    width: 100%;
+  }
+
+  .preview-actions {
+    flex-direction: column;
+
+    button {
+      width: 100%;
+      justify-content: flex-start;
+    }
   }
 }
 

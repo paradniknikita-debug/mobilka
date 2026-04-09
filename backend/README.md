@@ -78,6 +78,19 @@ alembic upgrade head
 python run.py
 ```
 
+### Быстрое создание пользователей (без SQL)
+
+```bash
+# Интерактивно (скрипт сам спросит недостающие поля)
+python scripts/create_user.py
+
+# Полностью через аргументы
+python scripts/create_user.py --username ivan --password qwerty123 --role engineer --email ivan@example.com
+
+# Обновить существующего пользователя
+python scripts/create_user.py --username ivan --password newpass123 --role dispatcher --update-if-exists
+```
+
 Сервер будет доступен по адресу: `http://localhost:8000`
 
 ## API Endpoints
