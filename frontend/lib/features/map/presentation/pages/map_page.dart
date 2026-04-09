@@ -615,34 +615,12 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  /// Пока [AuthService] асинхронно проверяет токен при старте, состояние бывает
-  /// [AuthStateInitial] / [AuthStateLoading]. Иначе [MapPage] вызывает [_loadMapData]
-  /// сразу после первого кадра и ошибочно показывает «Требуется авторизация».
-  /// После [await] виджет мог быть уничтожен — не вызывать [ref], иначе
-  /// `Bad state: Cannot use "ref" after the widget was disposed`.
-  Future<AuthState?> _awaitAuthReady() async {
-    const step = Duration(milliseconds: 50);
-    const maxAttempts = 50; // до ~2.5 с
-    for (var i = 0; i < maxAttempts; i++) {
-      if (!mounted) return null;
-      final s = ref.read(authStateProvider);
-      if (s is! AuthStateInitial && s is! AuthStateLoading) {
-        return s;
-      }
-      await Future<void>.delayed(step);
-    }
-    if (!mounted) return null;
-    return ref.read(authStateProvider);
-  }
-
   Future<void> _loadMapData({bool forceFromServer = false, bool skipAutoCenter = false}) async {
     if (!mounted) return;
     
     try {
-      // Дождаться окончания проверки сессии, иначе ложное «не авторизован» при открытии карты
-      final authState = await _awaitAuthReady();
-      if (!mounted) return;
-      if (authState == null) return;
+      // Проверяем авторизацию перед загрузкой данных
+      final authState = ref.read(authStateProvider);
       if (authState is! AuthStateAuthenticated) {
         if (mounted) {
           setState(() {
@@ -667,7 +645,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
 
       final connectivityResult = await Connectivity().checkConnectivity();
-      if (!mounted) return;
       final isOffline = connectivityResult == ConnectivityResult.none;
 
       if (isOffline) {
@@ -686,7 +663,6 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       // Режим «только вручную»: не обращаемся к серверу при открытии карты, чтобы не упираться в 404.
       // Загружаем с сервера только по явному нажатию «Обновить» (forceFromServer).
-      if (!mounted) return;
       final syncMode = ref.read(syncModeProvider);
       if (syncMode == SyncMode.manual && !forceFromServer) {
         await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
@@ -722,7 +698,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         apiService.getPowerLines(),      // Полные данные ЛЭП для дерева
         apiService.getAllEquipment(),    // Оборудование с сервера
       ]);
-      if (!mounted) return;
 
       var powerLinesData = futures[0] as Map<String, dynamic>;
       var polesData = futures[1] as Map<String, dynamic>;
@@ -1512,11 +1487,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                       onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
                       onShowHistory: _showSelectedObjectHistory,
                       onDelete: _handleDeleteObject,
-                      onPoleAttachmentsChanged: _selectedObjectType == ObjectType.pole
-                          ? () {
-                              _refreshSelectedPoleCardFromServer();
-                            }
-                          : null,
                     ),
                   ),
               ],
@@ -3301,7 +3271,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         result['includeGps'] == true, // includeGps
         result['lineId'] as int?, // lineId (null = полный экспорт)
         true, // includeEquipment
-        exportPreset: result['exportPreset'] as String?,
       );
       
       // Закрываем индикатор загрузки
@@ -3876,23 +3845,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       _selectedObjectProperties = null;
       _selectedObjectType = null;
     });
-  }
-
-  /// Обновить комментарий и JSON вложений выбранной опоры после правок в таблице вложений.
-  Future<void> _refreshSelectedPoleCardFromServer() async {
-    final props = _selectedObjectProperties;
-    if (props == null || _selectedObjectType != ObjectType.pole) return;
-    final id = _toInt(props['id']);
-    if (id == null) return;
-    try {
-      final apiService = ref.read(apiServiceProvider);
-      final pole = await apiService.getPole(id);
-      if (!mounted) return;
-      setState(() {
-        _selectedObjectProperties?['card_comment'] = pole.cardComment;
-        _selectedObjectProperties?['card_comment_attachment'] = pole.cardCommentAttachment;
-      });
-    } catch (_) {}
   }
 
   String? _historyEntityTypeForSelection() {
@@ -5519,8 +5471,6 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
   bool _includeGps = true;
   bool _fullExport = true;
   int? _selectedLineId;
-  /// full | coordinates_only | no_equipment | without_defects
-  String _exportPreset = 'full';
 
   @override
   void initState() {
@@ -5529,14 +5479,11 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
   }
 
   Widget build(BuildContext context) {
-    final gpsLocked = _exportPreset == 'coordinates_only';
     return AlertDialog(
       title: const Text('Экспорт в CIM XML'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -5544,60 +5491,14 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          const SizedBox(height: 8),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Профиль выгрузки',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          RadioListTile<String>(
-            value: 'full',
-            groupValue: _exportPreset,
-            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
-            title: const Text('Полный CIM'),
-            subtitle: const Text('Топология ЛЭП, оборудование, дефекты'),
-            dense: true,
-          ),
-          RadioListTile<String>(
-            value: 'coordinates_only',
-            groupValue: _exportPreset,
-            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
-            title: const Text('Только координаты'),
-            subtitle: const Text('Подстанции и опоры с Location, без сегментов и электромодели'),
-            dense: true,
-          ),
-          RadioListTile<String>(
-            value: 'no_equipment',
-            groupValue: _exportPreset,
-            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
-            title: const Text('Без оборудования на ЛЭП'),
-            subtitle: const Text('Топология и опоры, без ConductingEquipment'),
-            dense: true,
-          ),
-          RadioListTile<String>(
-            value: 'without_defects',
-            groupValue: _exportPreset,
-            onChanged: (v) => setState(() => _exportPreset = v ?? 'full'),
-            title: const Text('Без полей дефектов'),
-            subtitle: const Text('Остальное как полный, без описания дефектов оборудования'),
-            dense: true,
-          ),
-          const Divider(height: 18),
           CheckboxListTile(
             title: const Text('Включить координаты GPS'),
-            subtitle: gpsLocked
-                ? const Text('Для профиля «Только координаты» всегда включено')
-                : null,
-            value: gpsLocked ? true : _includeGps,
-            onChanged: gpsLocked
-                ? null
-                : (value) {
-                    setState(() {
-                      _includeGps = value ?? true;
-                    });
-                  },
+            value: _includeGps,
+            onChanged: (value) {
+              setState(() {
+                _includeGps = value ?? true;
+              });
+            },
           ),
           const Divider(height: 18),
           RadioListTile<bool>(
@@ -5607,7 +5508,6 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               setState(() => _fullExport = v ?? true);
             },
             title: const Text('Полный экспорт'),
-            dense: true,
           ),
           RadioListTile<bool>(
             value: false,
@@ -5616,7 +5516,6 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               setState(() => _fullExport = v ?? false);
             },
             title: const Text('Частично по ЛЭП'),
-            dense: true,
           ),
           if (!_fullExport)
             DropdownButtonFormField<int>(
@@ -5636,7 +5535,6 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
               },
             ),
         ],
-        ),
       ),
       actions: [
         TextButton(
@@ -5647,9 +5545,8 @@ class _ExportCimDialogState extends State<_ExportCimDialog> {
           onPressed: () {
             if (!_fullExport && _selectedLineId == null) return;
             Navigator.of(context).pop({
-              'includeGps': gpsLocked ? true : _includeGps,
+              'includeGps': _includeGps,
               'lineId': _fullExport ? null : _selectedLineId,
-              'exportPreset': _exportPreset,
             });
           },
           child: const Text('Экспортировать'),

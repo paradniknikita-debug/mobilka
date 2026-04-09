@@ -27,26 +27,17 @@
           </button>
         </div>
         
-        <!-- Параметры экспорта: окно настроек по кнопке -->
+        <!-- Параметры экспорта -->
         <div class="export-options">
-          <div class="export-settings-row">
-            <button mat-stroked-button type="button" color="primary" (click)="openXmlExportSettings()">
-              <mat-icon>tune</mat-icon>
-              Настройки экспорта
-            </button>
-            <p class="export-settings-summary">
-              Сейчас: {{ formatExportSummary(xmlExportOpts) }}
-            </p>
-          </div>
-
+          <mat-checkbox [(ngModel)]="includeGps">Включать координаты GPS</mat-checkbox>
+          
           <div class="export-scope">
-            <span class="export-scope-label">Область выгрузки</span>
             <mat-radio-group [(ngModel)]="exportScope">
-              <mat-radio-button value="full">Все объекты</mat-radio-button>
-              <mat-radio-button value="partial" class="partial-radio">Только выбранная ЛЭП</mat-radio-button>
+              <mat-radio-button value="full">Полный экспорт</mat-radio-button>
+              <mat-radio-button value="partial" class="partial-radio">Частично по ЛЭП</mat-radio-button>
             </mat-radio-group>
           </div>
-
+          
           <mat-form-field class="export-line" appearance="fill" *ngIf="exportScope === 'partial'">
             <mat-label>ЛЭП</mat-label>
             <mat-select [(ngModel)]="selectedLineId">
@@ -88,21 +79,12 @@
 
         <!-- Параметры экспорта 552 diff -->
         <div class="export-options">
-          <div class="export-settings-row">
-            <button mat-stroked-button type="button" color="primary" (click)="openDiffExportSettings()">
-              <mat-icon>tune</mat-icon>
-              Настройки экспорта
-            </button>
-            <p class="export-settings-summary">
-              Сейчас: {{ formatExportSummary(diffExportOpts) }}
-            </p>
-          </div>
+          <mat-checkbox [(ngModel)]="includeGps">Включать координаты GPS</mat-checkbox>
 
           <div class="export-scope">
-            <span class="export-scope-label">Область выгрузки</span>
             <mat-radio-group [(ngModel)]="diffExportScope">
-              <mat-radio-button value="full">Все объекты</mat-radio-button>
-              <mat-radio-button value="partial" class="partial-radio">Только выбранная ЛЭП</mat-radio-button>
+              <mat-radio-button value="full">Полный экспорт</mat-radio-button>
+              <mat-radio-button value="partial" class="partial-radio">Частично по ЛЭП</mat-radio-button>
             </mat-radio-group>
           </div>
 

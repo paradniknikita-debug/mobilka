@@ -213,7 +213,7 @@ class SyncService extends StateNotifier<SyncState> {
             }
             final path = m['p'] as String?;
             if (path == null || path.isEmpty) continue;
-            final type = m['t'] as String? ?? 'file';
+            final type = m['t'] as String? ?? 'photo';
             if (pole.id > 0) {
               try {
                 final bytes = await readAttachmentBytes(path);
@@ -333,7 +333,7 @@ class SyncService extends StateNotifier<SyncState> {
         for (final m in item.pending) {
           final path = m['p'] as String?;
           if (path == null || path.isEmpty) continue;
-          final type = m['t'] as String? ?? 'file';
+          final type = m['t'] as String? ?? 'photo';
           try {
             final bytes = await readAttachmentBytes(path);
             if (bytes.isEmpty) continue;

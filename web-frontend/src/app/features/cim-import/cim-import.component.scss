@@ -91,37 +91,13 @@
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.export-settings-row {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px;
-  background: rgba(25, 118, 210, 0.06);
-  border: 1px solid rgba(25, 118, 210, 0.2);
-  border-radius: 8px;
-}
-
-.export-settings-summary {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: rgba(0, 0, 0, 0.65);
+  gap: 10px;
 }
 
 .export-scope {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.export-scope-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.75);
+  gap: 6px;
 }
 
 .export-line {

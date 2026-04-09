@@ -168,58 +168,58 @@
           <mat-expansion-panel-header>
             <mat-panel-title>Комментарий и медиа карточки</mat-panel-title>
           </mat-expansion-panel-header>
-          <div class="card-comment-chat">
-            <div class="card-comment-messages">
-              <div
-                class="card-comment-bubble"
-                *ngFor="let m of poleCardCommentMessages; trackBy: trackCommentById"
-              >
-                <div class="card-comment-bubble-meta">
-                  <span class="card-comment-author">{{ commentAuthorLabel(m) }}</span>
-                  <span class="card-comment-time">{{ formatCardCommentAt(m.at) }}</span>
-                </div>
-                <div class="card-comment-bubble-text">{{ m.text }}</div>
-              </div>
-              <div class="card-comment-empty" *ngIf="!poleCardCommentMessages.length">
-                Нет сообщений
-              </div>
-            </div>
-            <div class="card-comment-input-row">
-              <mat-form-field appearance="outline" class="card-comment-input-field">
-                <mat-label>Сообщение</mat-label>
-                <textarea
-                  matInput
-                  [(ngModel)]="newCardCommentDraft"
-                  [ngModelOptions]="{standalone: true}"
-                  name="poleCardDraft"
-                  rows="2"
-                  placeholder="Введите текст…"
-                ></textarea>
-              </mat-form-field>
-              <button
-                mat-flat-button
-                color="primary"
-                type="button"
-                class="card-comment-send-btn"
-                (click)="sendCardComment()"
-              >
-                Отправить
-              </button>
-            </div>
-          </div>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Комментарий карточки</mat-label>
+            <textarea matInput formControlName="card_comment" rows="2" placeholder="Текст комментария к опоре"></textarea>
+          </mat-form-field>
           <ng-container *ngIf="isEditMode && poleId && lineId">
-            <button
-              mat-stroked-button
-              type="button"
-              class="pole-attachments-open-btn"
-              (click)="openPoleAttachmentsManager()"
-            >
-              <mat-icon>attach_file</mat-icon>
-              Вложения ({{ poleAttachments.length }})
-            </button>
-            <p class="pole-attachments-hint">
-              Откроется таблица файлов: имя, тип, дата, автор. Двойной клик — скачать. После изменений сохраните опору.
-            </p>
+            <p class="pole-attachments-label">Вложения (фото, схемы, голос, видео)</p>
+            <div class="pole-attachments-actions">
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('photo')" matTooltip="Изображение (фото, схема)" class="upload-btn">
+                <mat-icon>image</mat-icon>
+              </button>
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('voice')" matTooltip="Голос" class="upload-btn">
+                <mat-icon>mic</mat-icon>
+              </button>
+              <button mat-mini-fab type="button" (click)="triggerPoleAttachmentUpload('video')" matTooltip="Видео" class="upload-btn">
+                <mat-icon>videocam</mat-icon>
+              </button>
+              <input #poleAttachmentFileInput type="file" class="upload-input-hidden" [accept]="poleAttachmentAccept" (change)="onPoleAttachmentFileSelected($event)" />
+            </div>
+            <div class="pole-attachments-list" *ngIf="poleAttachments.length">
+              <div class="pole-attachment-item" *ngFor="let att of poleAttachments; let i = index">
+                <ng-container [ngSwitch]="att.t">
+                  <div *ngSwitchCase="'photo'" class="attachment-preview-wrap">
+                    <app-attachment-image-view
+                      [url]="att.url"
+                      [thumbnailUrl]="att.thumbnail"
+                      cssClass="attachment-thumb"
+                      (openPreview)="openImagePreview($event)"
+                    ></app-attachment-image-view>
+                  </div>
+                  <div *ngSwitchCase="'schema'" class="attachment-preview-wrap">
+                    <app-attachment-image-view
+                      [url]="att.url"
+                      [thumbnailUrl]="att.thumbnail"
+                      cssClass="attachment-thumb"
+                      (openPreview)="openImagePreview($event)"
+                    ></app-attachment-image-view>
+                  </div>
+                  <div *ngSwitchCase="'voice'" class="attachment-audio-wrap">
+                    <app-attachment-media-view [url]="att.url" type="voice"></app-attachment-media-view>
+                  </div>
+                  <div *ngSwitchCase="'video'" class="attachment-video-wrap">
+                    <app-attachment-media-view [url]="att.url" type="video"></app-attachment-media-view>
+                  </div>
+                  <span *ngSwitchDefault class="attachment-unknown">{{ att.t || 'файл' }}</span>
+                </ng-container>
+                <div class="attachment-item-actions">
+                  <button mat-icon-button type="button" (click)="downloadPoleAttachment(att)" matTooltip="Скачать">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
           </ng-container>
         </mat-expansion-panel>
       </form>

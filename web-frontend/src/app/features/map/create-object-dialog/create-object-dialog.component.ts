@@ -1,19 +1,10 @@
-import { Component, OnInit, Inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, Inject, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
-import { PoleAttachmentsManagerDialogComponent } from '../pole-attachments-manager-dialog/pole-attachments-manager-dialog.component';
-import { PoleCardAttachmentItem } from '../../../core/models/pole-card-attachment.model';
+import { ImagePreviewDialogComponent } from '../image-preview-dialog/image-preview-dialog.component';
 import { MatSelectChange } from '@angular/material/select';
 import { ApiService } from '../../../core/services/api.service';
-import { AuthService } from '../../../core/services/auth.service';
 import { MapService } from '../../../core/services/map.service';
-import { CardCommentMessage } from '../../../core/models/card-comment.model';
-import {
-  appendCardCommentMessage,
-  formatCardCommentDateTime,
-  parseCardCommentMessages,
-  serializeCardCommentMessages
-} from '../../../core/utils/card-comment.codec';
 import { PowerLine, PowerLineCreate } from '../../../core/models/power-line.model';
 import { Pole, PoleCreate } from '../../../core/models/pole.model';
 import { SubstationCreate } from '../../../core/models/substation.model';
@@ -101,13 +92,9 @@ export class CreateObjectDialogComponent implements OnInit {
   linkingTapEnd = false;
 
   /** Вложения карточки опоры (только в режиме редактирования). */
-  poleAttachments: PoleCardAttachmentItem[] = [];
-
-  /** История текстовых комментариев карточки (JSON в поле card_comment). */
-  poleCardCommentMessages: CardCommentMessage[] = [];
-  newCardCommentDraft = '';
-
-  readonly formatCardCommentAt = formatCardCommentDateTime;
+  poleAttachments: { t: string; url: string; thumbnail?: string }[] = [];
+  @ViewChild('poleAttachmentFileInput') poleAttachmentFileInput?: ElementRef<HTMLInputElement>;
+  currentPoleAttachmentType: 'photo' | 'voice' | 'video' = 'photo';
 
   // Кэшированные вычисления для карточки подстанции,
   // чтобы не гонять тяжёлые циклы в геттерах при каждом цикле change detection
@@ -137,7 +124,6 @@ export class CreateObjectDialogComponent implements OnInit {
     private dialogRef: MatDialogRef<CreateObjectDialogComponent>,
     private dialog: MatDialog,
     private apiService: ApiService,
-    private authService: AuthService,
     private mapService: MapService,
     private snackBar: MatSnackBar,
     private cdr: ChangeDetectorRef,
@@ -182,7 +168,8 @@ export class CreateObjectDialogComponent implements OnInit {
       material: [''],
       year_installed: [null, [this.yearValidator.bind(this)]],
       condition: ['good'],
-      notes: ['']
+      notes: [''],
+      card_comment: ['']
     });
 
     // Автогенерация UID при инициализации (только если не передан defaultObjectType для опоры)
@@ -610,8 +597,8 @@ export class CreateObjectDialogComponent implements OnInit {
           year_installed: pole.installation_date ? new Date(pole.installation_date).getFullYear() : null,
           condition: pole.condition || 'good',
           notes: (pole as any).notes || '',
+          card_comment: (pole as any).card_comment || ''
         });
-        this.poleCardCommentMessages = parseCardCommentMessages((pole as any).card_comment);
         this.poleAttachments = this.parseCardAttachments((pole as any).card_comment_attachment);
         this.isLoading = false;
         // В режиме редактирования показываем выбор направления и загружаем список отпаечных опор
@@ -659,75 +646,84 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   /** Разбор JSON вложений карточки опоры. */
-  parseCardAttachments(json: string | null | undefined): PoleCardAttachmentItem[] {
+  parseCardAttachments(json: string | null | undefined): { t: string; url: string; thumbnail?: string }[] {
     if (!json || !json.trim()) return [];
     try {
-      const data = JSON.parse(json) as any;
-      const arr: any[] = Array.isArray(data) ? data : data?.items && Array.isArray(data.items) ? data.items : [];
+      const arr = JSON.parse(json) as any[];
+      if (!Array.isArray(arr)) return [];
       return arr
-        .filter((item) => item && (item.url || item.p))
-        .map((item) => ({
-          t: item.t || 'photo',
-          url: item.url || item.p,
-          thumbnail: item.thumbnail || item.thumbnail_url,
-          thumbnail_url: item.thumbnail_url || item.thumbnail,
-          filename: item.filename,
-          added_at: item.added_at,
-          added_by_id: item.added_by_id ?? item.added_by,
-          added_by_name: item.added_by_name
-        }));
+        .filter((item) => item && (item.url || item.url === ''))
+        .map((item) => ({ t: item.t || 'photo', url: item.url, thumbnail: item.thumbnail }));
     } catch {
       return [];
     }
   }
 
-  sendCardComment(): void {
-    const text = this.newCardCommentDraft?.trim();
-    if (!text) {
-      return;
-    }
-    const user = this.authService.getCurrentUser();
-    if (!user) {
-      this.snackBar.open('Войдите в систему, чтобы отправить комментарий', 'Закрыть', { duration: 4000 });
-      return;
-    }
-    this.poleCardCommentMessages = appendCardCommentMessage(this.poleCardCommentMessages, text, user);
-    this.newCardCommentDraft = '';
-    this.cdr.markForCheck();
-  }
-
-  trackCommentById(_index: number, m: CardCommentMessage): string {
-    return m.id || String(_index);
-  }
-
-  /** Имя для шапки пузырька без повторения слова «комментарий». */
-  commentAuthorLabel(m: CardCommentMessage): string {
-    const n = m.user_name?.trim();
-    if (n) return n;
-    if (m.user_id != null) return `id ${m.user_id}`;
-    return '—';
-  }
-
-  openPoleAttachmentsManager(): void {
-    if (!this.poleId) return;
-    this.dialog
-      .open(PoleAttachmentsManagerDialogComponent, {
-        width: '880px',
-        maxWidth: '95vw',
-        maxHeight: '90vh',
-        data: { poleId: this.poleId, items: [...this.poleAttachments] }
-      })
-      .afterClosed()
-      .subscribe((result: PoleCardAttachmentItem[] | undefined) => {
-        if (result) {
-          this.poleAttachments = result;
-          this.cdr.markForCheck();
-        }
-      });
+  /** Открыть предпросмотр изображения в модальном окне. */
+  openImagePreview(url: string): void {
+    this.dialog.open(ImagePreviewDialogComponent, {
+      data: { url },
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      panelClass: 'image-preview-dialog-panel'
+    });
   }
 
   getAttachmentUrl(relativeUrl: string): string {
     return this.apiService.getAttachmentUrl(relativeUrl);
+  }
+
+  getAttachmentFilename(url: string): string {
+    if (!url || !url.trim()) return 'attachment';
+    const segment = url.replace(/\/+$/, '').split('/').pop();
+    return segment || 'attachment';
+  }
+
+  downloadPoleAttachment(att: { t: string; url: string }): void {
+    const filename = this.getAttachmentFilename(att.url);
+    this.apiService.getAttachmentBlob(att.url).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.snackBar.open('Файл сохранён', 'Закрыть', { duration: 2000 });
+      },
+      error: () => this.snackBar.open('Ошибка загрузки файла', 'Закрыть', { duration: 3000 })
+    });
+  }
+
+  get poleAttachmentAccept(): string {
+    switch (this.currentPoleAttachmentType) {
+      case 'photo': return 'image/*';
+      case 'voice': return 'audio/*';
+      case 'video': return 'video/*';
+      default: return '*/*';
+    }
+  }
+
+  triggerPoleAttachmentUpload(type: 'photo' | 'voice' | 'video'): void {
+    this.currentPoleAttachmentType = type;
+    setTimeout(() => this.poleAttachmentFileInput?.nativeElement?.click(), 0);
+  }
+
+  onPoleAttachmentFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !this.poleId || !this.lineId) return;
+    this.apiService.uploadPoleAttachment(this.poleId, this.currentPoleAttachmentType, file).subscribe({
+      next: (res) => {
+        const att: { t: string; url: string; thumbnail?: string } = { t: this.currentPoleAttachmentType, url: res.url };
+        if ((res as any).thumbnail_url) att.thumbnail = (res as any).thumbnail_url;
+        this.poleAttachments = [...this.poleAttachments, att];
+        this.cdr.detectChanges();
+        this.snackBar.open('Вложение добавлено. Сохраните опору.', 'Закрыть', { duration: 3000 });
+      },
+      error: () => this.snackBar.open('Ошибка загрузки файла', 'Закрыть', { duration: 3000 })
+    });
   }
 
   generateMRID(): void {
@@ -1121,7 +1117,7 @@ export class CreateObjectDialogComponent implements OnInit {
       year_installed: formValue.year_installed ? parseInt(String(formValue.year_installed)) : undefined,
       condition: formValue.condition || 'good',
       notes: formValue.notes?.trim() || undefined,
-      card_comment: serializeCardCommentMessages(this.poleCardCommentMessages),
+      card_comment: formValue.card_comment?.trim() || undefined,
       card_comment_attachment: this.poleAttachments.length ? JSON.stringify(this.poleAttachments) : undefined
     };
 

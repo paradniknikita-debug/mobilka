@@ -20,7 +20,6 @@ import '../../../../core/theme/app_theme.dart';
 import 'pole_number_mask_field.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
-import '../../../../core/utils/pole_card_comment_codec.dart';
 import 'add_equipment_dialog.dart';
 import 'pole_attachments_table_sheet.dart';
 
@@ -116,8 +115,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   /// Выбранная ветка: null = магистраль, иначе "tapPoleId:tapBranchIndex".
   String? _branchSelection;
 
-  List<Map<String, dynamic>> _cardCommentMessages = [];
-  final _newCardCommentController = TextEditingController();
+  final _cardCommentController = TextEditingController();
   final List<Map<String, dynamic>> _cardCommentAttachments = [];
   final AudioRecorder _cardCommentRecorder = AudioRecorder();
   bool _cardCommentRecording = false;
@@ -257,7 +255,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       }
       final path = m['p'] as String?;
       if (path == null || path.isEmpty) continue;
-      final type = m['t'] as String? ?? 'file';
+      final type = m['t'] as String? ?? 'photo';
       try {
         final bytes = await readAttachmentBytes(path);
         if (bytes.isEmpty) continue;
@@ -287,7 +285,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       if (decoded.isEmpty) return null;
       final resolved = <Map<String, dynamic>>[];
       for (final m in decoded) {
-        final type = (m['t'] ?? 'file').toString();
+        final type = (m['t'] ?? 'photo').toString();
         final existingUrl = m['url']?.toString();
         if (existingUrl != null && existingUrl.isNotEmpty) {
           resolved.add({'t': type, 'url': existingUrl});
@@ -433,9 +431,6 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _loadAutofillTemplate();
       });
     }
-    if (widget.startNewTap) {
-      _isTap = true;
-    }
     if (!widget.isEditMode && !widget.startNewTap) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -475,9 +470,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _branchSelection = null;
       }
       _loadedEquipment = equipmentList;
-      _cardCommentMessages
-        ..clear()
-        ..addAll(PoleCardCommentCodec.parse(pole.cardComment));
+      _cardCommentController.text = pole.cardComment ?? '';
       _cardCommentAttachments
         ..clear()
         ..addAll(PoleCardAttachmentCodec.parseItemsJson(pole.cardCommentAttachment));
@@ -679,9 +672,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       yearInstalled: drift.Value(_yearInstalled),
       condition: drift.Value(_condition),
       notes: drift.Value(_notes),
-      cardComment: _cardCommentSerialized() == null
+      cardComment: _cardCommentController.text.trim().isEmpty
           ? const drift.Value.absent()
-          : drift.Value(_cardCommentSerialized()!),
+          : drift.Value(_cardCommentController.text.trim()),
       cardCommentAttachment: cardAttJson == null
           ? const drift.Value.absent()
           : drift.Value(cardAttJson),
@@ -786,38 +779,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
   }
 
-  String? _cardCommentSerialized() =>
-      PoleCardCommentCodec.serialize(_cardCommentMessages);
-
-  Future<void> _sendCardCommentMessage() async {
-    final text = _newCardCommentController.text;
-    if (text.trim().isEmpty) return;
-    try {
-      final api = ref.read(apiServiceProvider);
-      final user = await api.getCurrentUser();
-      if (!mounted) return;
-      setState(() {
-        _cardCommentMessages = PoleCardCommentCodec.append(
-          List<Map<String, dynamic>>.from(_cardCommentMessages),
-          text,
-          userId: user.id,
-          userName: user.fullName.trim().isNotEmpty ? user.fullName : user.username,
-        );
-        _newCardCommentController.clear();
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось добавить комментарий: $e')),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
     _materialController.dispose();
-    _newCardCommentController.dispose();
+    _cardCommentController.dispose();
     _cardCommentRecorder.dispose();
     super.dispose();
   }
@@ -845,9 +810,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         yearInstalled: drift.Value(_yearInstalled),
         condition: drift.Value(_condition),
         notes: drift.Value(_notes),
-        cardComment: _cardCommentSerialized() == null
+        cardComment: _cardCommentController.text.trim().isEmpty
             ? const drift.Value.absent()
-            : drift.Value(_cardCommentSerialized()!),
+            : drift.Value(_cardCommentController.text.trim()),
         cardCommentAttachment: newPoleCardAtt == null
             ? const drift.Value.absent()
             : drift.Value(newPoleCardAtt),
@@ -1018,7 +983,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final apiService = ref.read(apiServiceProvider);
       _poleNumber = _poleMask.apiString;
       _material = _materialController.text.trim().isEmpty ? null : _materialController.text.trim();
-      final cardCommentJson = _cardCommentSerialized();
+      final cardCommentText = _cardCommentController.text.trim();
 
       // Логика ветки как в Angular: startNewTap | tapPoleId+tapBranchIndex | branch_selection
       int? tapPoleId;
@@ -1052,11 +1017,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         yearInstalled: _yearInstalled,
         condition: _condition,
         notes: _notes?.isEmpty ?? true ? null : _notes,
-        isTap: widget.startNewTap ? true : _isTap,
+        isTap: _isTap,
         conductorType: _conductorType,
         conductorMaterial: _conductorMaterial,
         conductorSection: _conductorSection,
-        cardComment: cardCommentJson,
+        cardComment: cardCommentText.isEmpty ? null : cardCommentText,
         cardCommentAttachment: null, // заполняется после загрузки вложений
         tapPoleId: tapPoleId,
         branchType: branchType,
@@ -1107,9 +1072,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             yearInstalled: drift.Value(updatedPole.yearInstalled),
             condition: drift.Value(updatedPole.condition),
             notes: drift.Value(updatedPole.notes),
-            cardComment: cardCommentJson == null
+            cardComment: cardCommentText.isEmpty
                 ? const drift.Value.absent()
-                : drift.Value(cardCommentJson),
+                : drift.Value(cardCommentText),
             cardCommentAttachment: attJsonResolved == null
                 ? const drift.Value.absent()
                 : drift.Value(attJsonResolved),
@@ -1220,7 +1185,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               conductorType: poleData.conductorType,
               conductorMaterial: poleData.conductorMaterial,
               conductorSection: poleData.conductorSection,
-              cardComment: cardCommentJson,
+              cardComment: cardCommentText.isEmpty ? null : cardCommentText,
               cardCommentAttachment: attJsonCreate,
               tapPoleId: poleData.tapPoleId,
               branchType: poleData.branchType,
@@ -1252,9 +1217,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           yearInstalled: drift.Value(createdPole.yearInstalled),
           condition: drift.Value(createdPole.condition),
           notes: drift.Value(createdPole.notes),
-          cardComment: cardCommentJson == null
+          cardComment: cardCommentText.isEmpty
               ? const drift.Value.absent()
-              : drift.Value(cardCommentJson),
+              : drift.Value(cardCommentText),
           cardCommentAttachment: attJsonCreate == null
               ? const drift.Value.absent()
               : drift.Value(attJsonCreate),
@@ -1871,117 +1836,21 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                         }),
                       ],
                       const SizedBox(height: 20),
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 200),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black26),
-                        ),
-                        child: _cardCommentMessages.isEmpty
-                            ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: Text(
-                                    'Нет сообщений',
-                                    style: TextStyle(
-                                      color: PatrolColors.textSecondary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.all(8),
-                                itemCount: _cardCommentMessages.length,
-                                itemBuilder: (context, i) {
-                                  final m = _cardCommentMessages[i];
-                                  final whoRaw = (m['user_name'] as String?)?.trim();
-                                  final who = whoRaw != null && whoRaw.isNotEmpty
-                                      ? whoRaw
-                                      : (m['user_id'] != null ? 'id ${m['user_id']}' : '—');
-                                  final when = PoleCardCommentCodec.formatDateTime(
-                                    m['at'] as String?,
-                                  );
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: PatrolColors.surfaceCard,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: Colors.black.withValues(alpha: 0.08),
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  who,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Text(
-                                                when,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${m['text']}',
-                                            style: const TextStyle(fontSize: 14, height: 1.35),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                      Text(
+                        'КОММЕНТАРИЙ К ОПОРЕ',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: PatrolColors.textSecondary),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _newCardCommentController,
-                              decoration: InputDecoration(
-                                labelText: 'Сообщение',
-                                hintText: 'Введите текст…',
-                                filled: true,
-                                fillColor: PatrolColors.surfaceCard,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              style: const TextStyle(color: PatrolColors.textPrimary),
-                              minLines: 1,
-                              maxLines: 3,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            onPressed: _isLoading ? null : _sendCardCommentMessage,
-                            icon: const Icon(Icons.send),
-                            tooltip: 'Отправить',
-                            style: IconButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                            ),
-                          ),
-                        ],
+                      TextField(
+                        controller: _cardCommentController,
+                        decoration: InputDecoration(
+                          hintText: 'Текст комментария',
+                          filled: true,
+                          fillColor: PatrolColors.surfaceCard,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        style: const TextStyle(color: PatrolColors.textPrimary),
+                        maxLines: 2,
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -2009,15 +1878,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                               onPressed: () {
                                 final raw = _encodeCardAttachmentsForDb();
                                 if (raw != null) {
-                                  showPoleAttachmentsTable(
-                                    context,
-                                    ref,
-                                    raw,
-                                    poleId: widget.poleId,
-                                    lineId: widget.lineId,
-                                    onRemoteUpdated:
-                                        widget.poleId != null ? _loadPoleForEdit : null,
-                                  );
+                                  showPoleAttachmentsTable(context, raw);
                                 }
                               },
                               icon: const Icon(Icons.table_rows, size: 20),

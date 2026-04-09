@@ -3,12 +3,7 @@ import { ApiService } from '../../core/services/api.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { CimPreviewMapDialogComponent, CimPreviewMapDialogData } from './cim-preview-map-dialog/cim-preview-map-dialog.component';
-import {
-  CimExportSettingsDialogComponent,
-  CimExportSettingsDialogData,
-} from './cim-export-settings-dialog/cim-export-settings-dialog.component';
 import { PowerLine } from '../../core/models/power-line.model';
-import { CimExportOptions, defaultCimExportOptions } from './cim-export-options.model';
 
 @Component({
   selector: 'app-cim-import',
@@ -27,15 +22,14 @@ export class CimImportComponent implements OnInit {
   lastImportObjects: any[] = [];
   lastImportSource: 'xml' | '552' | null = null;
 
-  // Параметры экспорта CIM XML (чекбоксы → query API)
+  // Параметры экспорта CIM XML
   exportScope: 'full' | 'partial' = 'full';
-  xmlExportOpts: CimExportOptions = defaultCimExportOptions();
+  includeGps: boolean = true;
   powerLines: PowerLine[] = [];
   selectedLineId: number | null = null;
 
-  // Параметры экспорта 552-diff (те же атрибуты, без useCimpy в запросе)
+  // Отдельные параметры для экспорта 552-diff
   diffExportScope: 'full' | 'partial' = 'full';
-  diffExportOpts: CimExportOptions = defaultCimExportOptions();
   diffSelectedLineId: number | null = null;
 
   constructor(
@@ -103,92 +97,14 @@ export class CimImportComponent implements OnInit {
     });
   }
 
-  /** Краткая подсказка под кнопкой «Настройки экспорта» */
-  formatExportSummary(o: CimExportOptions): string {
-    const parts: string[] = [];
-    if (o.includeSubstations) {
-      parts.push('подстанции');
-    }
-    if (o.includePowerLines) {
-      parts.push('ЛЭП');
-    }
-    if (o.includeGps) {
-      parts.push('GPS');
-    }
-    if (o.includeSubstationVoltageLevels) {
-      parts.push('уровни напряжения');
-    }
-    if (o.includeElectricalModel) {
-      parts.push('электромодель');
-    }
-    if (o.includeEquipment) {
-      parts.push('оборудование');
-    }
-    if (o.includeDefects) {
-      parts.push('дефекты');
-    }
-    return parts.length ? parts.join(', ') : 'ничего не выбрано';
-  }
-
-  openXmlExportSettings(): void {
-    this.dialog
-      .open<CimExportSettingsDialogComponent, CimExportSettingsDialogData, CimExportOptions | undefined>(
-        CimExportSettingsDialogComponent,
-        {
-          width: '520px',
-          maxWidth: '95vw',
-          data: { mode: 'xml', options: this.xmlExportOpts },
-        }
-      )
-      .afterClosed()
-      .subscribe((result) => {
-        if (result) {
-          this.xmlExportOpts = result;
-        }
-      });
-  }
-
-  openDiffExportSettings(): void {
-    this.dialog
-      .open<CimExportSettingsDialogComponent, CimExportSettingsDialogData, CimExportOptions | undefined>(
-        CimExportSettingsDialogComponent,
-        {
-          width: '520px',
-          maxWidth: '95vw',
-          data: { mode: '552', options: this.diffExportOpts },
-        }
-      )
-      .afterClosed()
-      .subscribe((result) => {
-        if (result) {
-          this.diffExportOpts = result;
-        }
-      });
-  }
-
   exportXml(): void {
     const lineId = this.exportScope === 'partial' ? this.selectedLineId : null;
     if (this.exportScope === 'partial' && lineId == null) {
       this.error = 'Выберите ЛЭП для частичного экспорта';
       return;
     }
-    if (!this.xmlExportOpts.includeSubstations && !this.xmlExportOpts.includePowerLines) {
-      this.error = 'Включите хотя бы один объём: подстанции или ЛЭП';
-      return;
-    }
 
-    const o = this.xmlExportOpts;
-    this.apiService.exportCIMXml(
-      o.includeSubstations,
-      o.includePowerLines,
-      o.useCimpy,
-      o.includeGps,
-      lineId,
-      o.includeEquipment,
-      o.includeElectricalModel,
-      o.includeDefects,
-      o.includeSubstationVoltageLevels
-    ).subscribe({
+    this.apiService.exportCIMXml(true, true, true, this.includeGps, lineId, true).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -234,22 +150,8 @@ export class CimImportComponent implements OnInit {
       this.error = 'Выберите ЛЭП для частичного экспорта 552 diff';
       return;
     }
-    if (!this.diffExportOpts.includeSubstations && !this.diffExportOpts.includePowerLines) {
-      this.error = 'Включите хотя бы один объём: подстанции или ЛЭП';
-      return;
-    }
 
-    const o = this.diffExportOpts;
-    this.apiService.exportCIM552Diff(
-      o.includeSubstations,
-      o.includePowerLines,
-      o.includeGps,
-      lineId,
-      o.includeEquipment,
-      o.includeElectricalModel,
-      o.includeDefects,
-      o.includeSubstationVoltageLevels
-    ).subscribe({
+    this.apiService.exportCIM552Diff(true, true, this.includeGps, lineId, true).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');

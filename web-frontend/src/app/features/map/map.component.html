@@ -108,16 +108,9 @@
           {{ (selectedPole.conductor_type || '') + (selectedPole.conductor_material ? ' · ' + selectedPole.conductor_material : '') + (selectedPole.conductor_section ? ' · ' + selectedPole.conductor_section + ' мм²' : '') || '—' }}
         </span>
       </div>
-      <div class="property-item pole-card-comments" *ngIf="poleCardCommentThread.length">
-        <div class="pole-cc-thread">
-          <div class="pole-cc-bubble" *ngFor="let m of poleCardCommentThread; trackBy: trackCc">
-            <div class="pole-cc-meta">
-              <span class="pole-cc-author">{{ commentAuthorLabel(m) }}</span>
-              <span class="pole-cc-time">{{ formatCardCommentAt(m.at) }}</span>
-            </div>
-            <div class="pole-cc-text">{{ m.text }}</div>
-          </div>
-        </div>
+      <div class="property-item" *ngIf="selectedPole.card_comment">
+        <span class="property-label">Комментарий карточки:</span>
+        <span class="property-value card-comment">{{ selectedPole.card_comment }}</span>
       </div>
       <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">
         <span class="property-label">Терминалы:</span>
