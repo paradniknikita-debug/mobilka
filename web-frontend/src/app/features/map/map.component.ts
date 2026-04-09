@@ -14,8 +14,6 @@ import { PoleSequenceDialogComponent } from './pole-sequence-dialog/pole-sequenc
 import { CreateSpanDialogComponent } from './create-span-dialog/create-span-dialog.component';
 import { ImagePreviewDialogComponent } from './image-preview-dialog/image-preview-dialog.component';
 import { ApiService } from '../../core/services/api.service';
-import { CardCommentMessage } from '../../core/models/card-comment.model';
-import { formatCardCommentDateTime, parseCardCommentMessages } from '../../core/utils/card-comment.codec';
 import { Pole } from '../../core/models/pole.model';
 import { Equipment } from '../../core/models/equipment.model';
 import { colorForVoltageKv, lineWeightForBranch } from '../../core/map/voltage-level-colors';
@@ -26,8 +24,6 @@ import { colorForVoltageKv, lineWeightForBranch } from '../../core/map/voltage-l
   styleUrls: ['./map.component.scss']
 })
 export class MapComponent implements OnInit, OnDestroy {
-  readonly formatCardCommentAt = formatCardCommentDateTime;
-
   map: L.Map | null = null;
   mapData: MapData | null = null;
   isLoading = true;
@@ -1964,22 +1960,6 @@ export class MapComponent implements OnInit, OnDestroy {
         this.snackBar.open('Ошибка загрузки файла', 'Закрыть', { duration: 3000 });
       }
     });
-  }
-
-  /** История комментариев карточки (поле card_comment — JSON или старый plain text). */
-  get poleCardCommentThread(): CardCommentMessage[] {
-    return parseCardCommentMessages(this.selectedPole?.card_comment);
-  }
-
-  trackCc(_index: number, m: CardCommentMessage): string {
-    return m.id || String(_index);
-  }
-
-  commentAuthorLabel(m: CardCommentMessage): string {
-    const n = m.user_name?.trim();
-    if (n) return n;
-    if (m.user_id != null) return `id ${m.user_id}`;
-    return '—';
   }
 
   /** Оборудование для карточки опоры без фундамента (фундамент показывается отдельным полем). */

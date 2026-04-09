@@ -18,8 +18,6 @@ class ObjectPropertiesPanel extends ConsumerWidget {
   final VoidCallback? onStartTapPole;
   /// Открыть диалог добавления следующей опоры в отпайку (опора уже в отпайке: 3/1, 3/2 и т.д.).
   final VoidCallback? onAddPoleToTap;
-  /// После изменения вложений карточки опоры на сервере — обновить панель (например подтянуть card_comment_attachment).
-  final VoidCallback? onPoleAttachmentsChanged;
 
   const ObjectPropertiesPanel({
     super.key,
@@ -33,7 +31,6 @@ class ObjectPropertiesPanel extends ConsumerWidget {
     this.onShowHistory,
     this.onStartTapPole,
     this.onAddPoleToTap,
-    this.onPoleAttachmentsChanged,
   });
 
   /// Безопасное форматирование числа для отображения координат.
@@ -372,10 +369,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
         ),
       Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: PoleCardAttachmentsSection(
-          objectProperties: objectProperties,
-          onAttachmentsChanged: onPoleAttachmentsChanged,
-        ),
+        child: PoleCardAttachmentsSection(objectProperties: objectProperties),
       ),
     ];
   }

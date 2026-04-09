@@ -133,59 +133,14 @@ export class ApiService {
   }
 
   /** Загрузить вложение к карточке опоры (фото, голос, схема, видео). Возвращает url для сохранения в card_comment_attachment. */
-  uploadPoleAttachment(poleId: number, attachmentType: 'file' | 'photo' | 'voice' | 'schema' | 'video', file: File): Observable<{
-    url: string;
-    type: string;
-    filename: string;
-    thumbnail_url?: string;
-    added_at?: string;
-    added_by_id?: number;
-    added_by_name?: string;
-  }> {
+  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema' | 'video', file: File): Observable<{ url: string; type: string; filename: string }> {
     const formData = new FormData();
     formData.append('attachment_type', attachmentType);
     formData.append('file', file);
-    return this.http.post<{
-      url: string;
-      type: string;
-      filename: string;
-      thumbnail_url?: string;
-      added_at?: string;
-      added_by_id?: number;
-      added_by_name?: string;
-    }>(
+    return this.http.post<{ url: string; type: string; filename: string }>(
       `${this.apiUrl}/attachments/poles/${poleId}/attachments`,
       formData
     );
-  }
-
-  /** Каталог вложений карточки опоры (нормализованные поля для таблицы). */
-  getPoleAttachmentCatalog(poleId: number): Observable<{
-    items: Array<{
-      t: string;
-      url: string;
-      filename: string;
-      extension: string;
-      added_at?: string;
-      added_by_id?: number;
-      added_by_name?: string;
-      thumbnail_url?: string;
-    }>;
-    card_comment: string | null;
-  }> {
-    return this.http.get<{
-      items: Array<{
-        t: string;
-        url: string;
-        filename: string;
-        extension: string;
-        added_at?: string;
-        added_by_id?: number;
-        added_by_name?: string;
-        thumbnail_url?: string;
-      }>;
-      card_comment: string | null;
-    }>(`${this.apiUrl}/attachments/poles/${poleId}/catalog`);
   }
 
   // ========== Spans ==========
@@ -327,23 +282,18 @@ export class ApiService {
     useCimpy: boolean = true,
     includeGps: boolean = true,
     lineId: number | null = null,
-    includeEquipment: boolean = true,
-    includeElectricalModel: boolean = true,
-    includeDefects: boolean = true,
-    includeSubstationVoltageLevels: boolean = true
+    includeEquipment: boolean = true
   ): Observable<Blob> {
-    let params = new HttpParams()
+    const params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
       .set('use_cimpy', String(useCimpy))
       .set('include_gps', String(includeGps))
-      .set('include_equipment', String(includeEquipment))
-      .set('include_electrical_model', String(includeElectricalModel))
-      .set('include_defects', String(includeDefects))
-      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
+      .set('include_equipment', String(includeEquipment));
 
     if (lineId != null) {
-      params = params.set('line_id', String(lineId));
+      // Частичный экспорт по ЛЭП
+      params.set('line_id', String(lineId));
     }
     return this.http.get(`${this.apiUrl}/cim/export/xml`, {
       params,
@@ -365,19 +315,13 @@ export class ApiService {
     includePowerLines: boolean = true,
     includeGps: boolean = true,
     lineId: number | null = null,
-    includeEquipment: boolean = true,
-    includeElectricalModel: boolean = true,
-    includeDefects: boolean = true,
-    includeSubstationVoltageLevels: boolean = true
+    includeEquipment: boolean = true
   ): Observable<Blob> {
     let params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
       .set('include_gps', String(includeGps))
-      .set('include_equipment', String(includeEquipment))
-      .set('include_electrical_model', String(includeElectricalModel))
-      .set('include_defects', String(includeDefects))
-      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
+      .set('include_equipment', String(includeEquipment));
 
     if (lineId != null) {
       params = params.set('line_id', String(lineId));

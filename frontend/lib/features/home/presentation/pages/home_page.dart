@@ -278,13 +278,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                       title: 'Продолжить',
                       subtitle: 'НЕЗАВЕРШЕННЫЙ ОБХОД',
                       onPressed: () => context.go('/map'),
-                    )
-                  else
-                    _PatrolMainButton(
-                      icon: Icons.play_arrow,
-                      title: 'Продолжить',
-                      subtitle: 'ОБХОД ПО ЛИНИИ',
-                      onPressed: () => context.go('/session/continue'),
                     ),
                   if (activeSession != null) ...[
                     const SizedBox(height: 12),
