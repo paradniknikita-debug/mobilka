@@ -115,6 +115,98 @@
     color: rgba(0, 0, 0, 0.7);
   }
 
+  .pole-attachments-open-btn {
+    margin-top: 8px;
+    .mat-icon {
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+  }
+
+  .pole-attachments-hint {
+    margin: 8px 0 0 0;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.55);
+    line-height: 1.4;
+  }
+
+  .card-comment-chat {
+    margin-top: 4px;
+  }
+
+  .card-comment-messages {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 8px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .card-comment-bubble {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .card-comment-bubble-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .card-comment-author {
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.75);
+  }
+
+  .card-comment-time {
+    flex-shrink: 0;
+    color: rgba(0, 0, 0, 0.45);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card-comment-bubble-text {
+    font-size: 14px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: rgba(0, 0, 0, 0.87);
+  }
+
+  .card-comment-empty {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.45);
+    padding: 8px 4px;
+  }
+
+  .card-comment-input-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .card-comment-input-field {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .card-comment-send-btn {
+    margin-top: 4px;
+  }
+
   .pole-attachments-actions {
     display: flex;
     flex-wrap: wrap;

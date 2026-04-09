@@ -368,7 +368,7 @@ final dioProvider = Provider<Dio>((ref) {
     dio.interceptors.add(
       LogInterceptor(
         requestBody: true,
-        responseBody: true,
+        responseBody: false,
         requestHeader: true,
         responseHeader: false,
         error: true,

@@ -21,7 +21,7 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
   displayedColumns: string[] = ['typeLabel', 'filename', 'extension', 'addedAt', 'addedBy', 'actions'];
   dataSource = new MatTableDataSource<PoleCardAttachmentItem>([]);
   localItems: PoleCardAttachmentItem[] = [];
-  pendingType: 'file' | 'photo' | 'voice' | 'schema' | 'video' = 'file';
+  pendingType: 'photo' | 'voice' | 'schema' | 'video' = 'schema';
   uploading = false;
 
   constructor(
@@ -83,7 +83,7 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
   }
 
   triggerPickFile(): void {
-    this.pendingType = 'file';
+    this.pendingType = 'schema';
     setTimeout(() => this.fileInput?.nativeElement?.click(), 0);
   }
 
