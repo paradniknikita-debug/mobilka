@@ -43,6 +43,8 @@ export class MapComponent implements OnInit, OnDestroy {
   // Состояние sidebar
   isSidebarOpen: boolean = true;
   sidebarWidth: number = 350;
+  // Режим карты: отображать только объекты с дефектами
+  showOnlyDefective = false;
   
   // Инвертированный зум (1 = минимальный зум/большой масштаб, 28 = максимальный зум/маленький масштаб)
   get invertedZoom(): number {
@@ -590,6 +592,10 @@ export class MapComponent implements OnInit, OnDestroy {
 
     geoJson.features.forEach((feature: GeoJSONFeature) => {
       if (feature.geometry.type === 'Point') {
+        const hasEquipmentDefect = feature.properties['has_equipment_defect'] === true;
+        if (this.showOnlyDefective && !hasEquipmentDefect) {
+          return;
+        }
         const coordinates = feature.geometry.coordinates as number[];
         const lat = Number(coordinates[1]);
         const lng = Number(coordinates[0]);
@@ -615,9 +621,23 @@ export class MapComponent implements OnInit, OnDestroy {
           borderWidth = 3;
           borderColor = tapBranchHasPoles ? '#4CAF50' : '#FF9800'; // зелёный = отпайка построена, оранжевый = нет
         }
-        
-        let markerHtml = `<div style="background-color: ${markerColor}; width: ${sizePx}px; height: ${sizePx}px; border-radius: 50%; border: ${borderWidth}px solid ${borderColor}; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`;
-        
+
+        const poleDefectCriticality = this.normalizeCriticality(feature.properties['equipment_defect_max_criticality']);
+        if (hasEquipmentDefect) {
+          borderColor = this.criticalityColor(poleDefectCriticality);
+          borderWidth = Math.max(borderWidth, 3);
+        }
+
+        const defectBadge = hasEquipmentDefect
+          ? `<div class="map-defect-badge map-defect-badge--${poleDefectCriticality ?? 'none'}">!</div>`
+          : '';
+        const markerHtml = `
+          <div class="pole-marker-wrap">
+            <div style="background-color: ${markerColor}; width: ${sizePx}px; height: ${sizePx}px; border-radius: 50%; border: ${borderWidth}px solid ${borderColor}; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+            ${defectBadge}
+          </div>
+        `;
+
         const iconW = labelText ? (isTapPole ? 24 : 20) : sizePx + borderWidth * 2;
         const iconH = labelText ? (isTapPole ? 36 : 30) : sizePx + borderWidth * 2;
         // Якорь — центр круга, чтобы точка не «съезжала» при изменении зума
@@ -1145,6 +1165,9 @@ export class MapComponent implements OnInit, OnDestroy {
         combined.forEach((eq, j) => {
           const iconKey = this.getLineEquipmentIconKey(eq);
           if (!iconKey) return;
+          const hasDefect = this.hasEquipmentDefect(eq);
+          if (this.showOnlyDefective && !hasDefect) return;
+          const eqCriticality = this.normalizeCriticality((eq as any).criticality);
           const t = this.tUniformOnSegment(j, nEq);
           const lng = lng1 + dx * t;
           const lat = lat1 + dy * t;
@@ -1163,7 +1186,11 @@ export class MapComponent implements OnInit, OnDestroy {
             ? this.getRotatedAnchorPx(iconKey, modelAngleRad, iconSize)
             : getIconAnchor(iconKey);
           const transformOrigin = `${anchor[0]}px ${anchor[1]}px`;
-          const html = `<div class="equipment-geojson-marker equipment-on-line" style="transform: rotate(${rot}deg); transform-origin: ${transformOrigin}; width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}</div>`;
+          const equipmentDefectBadge = hasDefect
+            ? `<div class="map-defect-badge map-defect-badge--${eqCriticality ?? 'none'}">!</div>`
+            : '';
+          const defectClass = hasDefect ? ` equipment-geojson-marker--defect equipment-geojson-marker--${eqCriticality ?? 'none'}` : '';
+          const html = `<div class="equipment-geojson-marker equipment-on-line${defectClass}" style="transform: rotate(${rot}deg); transform-origin: ${transformOrigin}; width: ${iconSize}px; height: ${iconSize}px; position: relative; display: flex; align-items: center; justify-content: center;">${inner}${equipmentDefectBadge}</div>`;
           // Для однотерминального оборудования линия остаётся прямой:
           // на ось пролёта ставим именно терминал (через iconAnchor/transform-origin),
           // а не переносим сам маркер с центра.
@@ -1220,13 +1247,22 @@ export class MapComponent implements OnInit, OnDestroy {
       if (this.getLineEquipmentIconKey(eq) != null) {
         return;
       }
+      const hasDefect = this.hasEquipmentDefect(eq);
+      if (this.showOnlyDefective && !hasDefect) {
+        return;
+      }
       // Не рисуем в точке опоры оборудование без своей иконки (грозоотвод, изолятор, траверс и т.д.) — не дублируем маркер опоры
       const noIconAtPole = ['изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
       if (noIconAtPole.some(x => t.includes(x) || n.includes(x))) {
         return;
       }
 
-      const html = this.buildEquipmentIconsHtml([eq]);
+      const eqCriticality = this.normalizeCriticality((eq as any).criticality);
+      const htmlBase = this.buildEquipmentIconsHtml([eq]);
+      const defectBadge = hasDefect
+        ? `<div class="map-defect-badge map-defect-badge--${eqCriticality ?? 'none'}">!</div>`
+        : '';
+      const html = `<div class="equipment-point-wrap equipment-point-wrap--${eqCriticality ?? 'none'} ${hasDefect ? 'equipment-point-wrap--defect' : ''}">${htmlBase}${defectBadge}</div>`;
       if (!html) {
         return;
       }
@@ -1808,6 +1844,36 @@ export class MapComponent implements OnInit, OnDestroy {
       if (show) { if (!this.map!.hasLayer(m)) m.addTo(this.map!); }
       else { this.map!.removeLayer(m); }
     });
+  }
+
+  onToggleDefectFilter(value: boolean): void {
+    this.showOnlyDefective = !!value;
+    if (this.mapData) {
+      this.renderMapData(this.mapData);
+    }
+  }
+
+  private normalizeCriticality(value: any): 'high' | 'medium' | 'low' | null {
+    if (value == null) return null;
+    const v = String(value).trim().toLowerCase();
+    if (!v) return null;
+    if (v === 'high' || v === 'critical' || v === 'высокая' || v === 'высокий') return 'high';
+    if (v === 'medium' || v === 'med' || v === 'средняя' || v === 'средний') return 'medium';
+    if (v === 'low' || v === 'низкая' || v === 'низкий') return 'low';
+    return null;
+  }
+
+  private criticalityColor(criticality: 'high' | 'medium' | 'low' | null): string {
+    if (criticality === 'high') return '#D32F2F';
+    if (criticality === 'medium') return '#F57C00';
+    if (criticality === 'low') return '#2E7D32';
+    return '#9E9E9E';
+  }
+
+  private hasEquipmentDefect(eq: any): boolean {
+    const d = (eq?.defect ?? '').toString().trim();
+    if (d) return true;
+    return this.getEquipmentDefect(eq) != null;
   }
 
   centerOnObjects(): void {
