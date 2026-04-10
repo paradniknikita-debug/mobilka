@@ -8,6 +8,16 @@
     <button mat-icon-button color="accent" (click)="refreshData()" matTooltip="Обновить данные" class="map-control-btn">
       <mat-icon>refresh</mat-icon>
     </button>
+    <div class="defect-filter-control">
+      <mat-checkbox
+        color="warn"
+        [ngModel]="showOnlyDefective"
+        (ngModelChange)="onToggleDefectFilter($event)"
+        matTooltip="Показывать на карте только дефектные опоры и оборудование"
+      >
+        Только дефектные
+      </mat-checkbox>
+    </div>
   </div>
 
   <!-- Индикатор уровня зума (левый нижний угол), компактный -->
@@ -36,7 +46,7 @@
       </button>
     </div>
     <div class="pole-properties-content">
-      <!-- Как во Flutter: Название, UID, Участок линии, Позиция, Порядок, Узел соединения, затем остальное -->
+      <!-- Как во Flutter: Название, UID, Участок линии, Позиция, Порядок, затем остальное -->
       <div class="property-item">
         <span class="property-label">Название:</span>
         <span class="property-value">{{ selectedPole.pole_number ?? selectedPole.poleNumber ?? '—' }}</span>
@@ -58,21 +68,6 @@
       <div class="property-item" *ngIf="selectedPole.sequence_number != null">
         <span class="property-label">Порядок в линии:</span>
         <span class="property-value">{{ selectedPole.sequence_number }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">Узел соединения:</span>
-        <span class="property-value" *ngIf="selectedPole.is_tap_pole && selectedPole.connectivity_node; else noCn">
-          <span class="status-badge success">Есть</span>
-          <span class="cn-name">{{ selectedPole.connectivity_node.name }}</span>
-          <span class="cn-uid" *ngIf="selectedPole.connectivity_node.mrid">UID: {{ selectedPole.connectivity_node.mrid }}</span>
-        </span>
-        <ng-template #noCn>
-          <span class="property-value">
-            <span class="status-badge warning">
-              {{ selectedPole.is_tap_pole ? 'Нет' : 'Не используется' }}
-            </span>
-          </span>
-        </ng-template>
       </div>
       <div class="property-item">
         <span class="property-label">Тип:</span>

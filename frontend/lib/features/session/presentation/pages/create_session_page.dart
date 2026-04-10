@@ -14,6 +14,8 @@ import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../home/presentation/pages/home_page.dart'
+    show activeSessionProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
 
 class CreateSessionPage extends ConsumerStatefulWidget {
   const CreateSessionPage({super.key});
@@ -472,6 +474,9 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
 
     ref.invalidate(pendingPatrolSessionsCountProvider);
     ref.invalidate(hasPendingSyncProvider);
+    ref.invalidate(activeSessionProvider);
+    ref.invalidate(showContinuePatrolButtonProvider);
+    ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

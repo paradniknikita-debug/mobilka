@@ -98,6 +98,10 @@ class AppConfig {
   static const String activeSessionLocalIdKey = 'active_session_local_id';
   /// Id сессии обхода на сервере (при восстановлении из API — для завершения на сервере)
   static const String activeSessionServerIdKey = 'active_session_server_id';
+  /// Id сессий на сервере: нужно вызвать завершение при синхронизации (офлайн, без строки в Drift)
+  static const String pendingEndPatrolServerIdsKey = 'pending_end_patrol_server_ids';
+  /// Локальная сессия уже на сервере, но завершение не дошло — досылаем через sync
+  static const String patrolSessionSyncStatusPendingEnd = 'pending_end';
 
   // Validation
   static const int minPasswordLength = 6;

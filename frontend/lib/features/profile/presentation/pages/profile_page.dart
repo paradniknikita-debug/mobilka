@@ -8,7 +8,8 @@ import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/theme/app_theme.dart';
-import '../../../home/presentation/pages/home_page.dart';
+import '../../../home/presentation/pages/home_page.dart'
+    show recentPatrolsProvider, activeSessionProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -288,11 +289,13 @@ class ProfilePage extends ConsumerWidget {
   }
 
   Future<void> _runSync(BuildContext context, WidgetRef ref) async {
-    final sync = ref.read(syncServiceProvider);
-    await sync.syncData();
+    await ref.read(syncStateProvider.notifier).syncData();
     ref.invalidate(pendingPatrolSessionsCountProvider);
     ref.invalidate(hasPendingSyncProvider);
     ref.invalidate(recentPatrolsProvider);
+    ref.invalidate(activeSessionProvider);
+    ref.invalidate(showContinuePatrolButtonProvider);
+    ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
     if (!context.mounted) return;
     final state = ref.read(syncStateProvider);
     state.when(
@@ -301,16 +304,21 @@ class ProfilePage extends ConsumerWidget {
         completed: () {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Синхронизация завершена. Данные сохранены на сервере.', style: TextStyle(color: PatrolColors.background)),
+            content: Text('Синхронизация завершена.', style: TextStyle(color: PatrolColors.background)),
             backgroundColor: PatrolColors.statusSynced,
           ),
         );
       },
       error: (message) {
+        final partialPatrol = message.startsWith('Данные обновлены');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка: $message', style: const TextStyle(color: PatrolColors.textPrimary)),
-            backgroundColor: PatrolColors.statusPending,
+            content: Text(
+              partialPatrol ? message : 'Ошибка: $message',
+              style: const TextStyle(color: PatrolColors.textPrimary),
+            ),
+            backgroundColor: partialPatrol ? Colors.deepOrange : PatrolColors.statusPending,
+            duration: const Duration(seconds: 12),
           ),
         );
       },

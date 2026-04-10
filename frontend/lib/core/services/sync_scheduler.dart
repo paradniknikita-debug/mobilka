@@ -79,6 +79,9 @@ class _SyncSchedulerState extends ConsumerState<SyncScheduler>
           ref.invalidate(hasPendingSyncProvider);
           ref.invalidate(pendingPatrolSessionsCountProvider);
           ref.invalidate(recentPatrolsProvider);
+          ref.invalidate(activeSessionProvider);
+          ref.invalidate(showContinuePatrolButtonProvider);
+          ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
         },
         error: (_) {},
       );

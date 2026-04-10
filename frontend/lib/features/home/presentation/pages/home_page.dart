@@ -12,6 +12,11 @@ import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/patrol_session.dart';
 import '../../../../core/theme/app_theme.dart';
 
+/// Локальная сессия ещё не полностью отражена на сервере (новая или завершение не дошло).
+bool patrolSessionRowNeedsSyncUpload(drift_db.PatrolSession row) =>
+    row.syncStatus == 'pending' ||
+    row.syncStatus == AppConfig.patrolSessionSyncStatusPendingEnd;
+
 /// Информация об активной (незавершённой) сессии обхода.
 class ActiveSessionInfo {
   final int lineId;
@@ -114,6 +119,42 @@ final activeSessionProvider = FutureProvider<ActiveSessionInfo?>((ref) async {
   );
 });
 
+/// Кнопка «Продолжить» только при незавершённом обходе (не из‑за одной лишь очереди синхронизации).
+final showContinuePatrolButtonProvider = FutureProvider<bool>((ref) async {
+  final active = await ref.watch(activeSessionProvider.future);
+  if (active == null) return false;
+  final prefs = ref.read(prefsProvider);
+  final localId = prefs.getInt(AppConfig.activeSessionLocalIdKey);
+  if (localId != null) {
+    final row = await ref.read(drift_db.databaseProvider).getPatrolSession(localId);
+    if (row != null && row.endedAt == null) return true;
+    return false;
+  }
+  return prefs.getInt(AppConfig.activeSessionServerIdKey) != null;
+});
+
+/// Есть ли у пользователя незавершённый обход (для напоминания при входе).
+final hasUnfinishedPatrolAnywhereProvider = FutureProvider<bool>((ref) async {
+  final authState = ref.watch(authStateProvider);
+  if (authState is! AuthStateAuthenticated) return false;
+  final uid = authState.user.id;
+  final db = ref.read(drift_db.databaseProvider);
+  final recent = await db.getRecentPatrolSessionsFromDb(120);
+  for (final r in recent) {
+    if (r.endedAt != null) continue;
+    if (r.userId != null && r.userId != uid) continue;
+    return true;
+  }
+  final prefs = ref.read(prefsProvider);
+  if (prefs.getInt(AppConfig.activeSessionServerIdKey) != null) return true;
+  final lid = prefs.getInt(AppConfig.activeSessionLocalIdKey);
+  if (lid != null) {
+    final row = await db.getPatrolSession(lid);
+    if (row != null && row.endedAt == null) return true;
+  }
+  return false;
+});
+
 /// Элемент списка «Последние обходы»: сессия + признак «ожидает синхронизации» (офлайн).
 class RecentPatrolItem {
   const RecentPatrolItem({required this.session, this.isPendingSync = false});
@@ -138,7 +179,7 @@ final recentPatrolsProvider = FutureProvider<List<RecentPatrolItem>>((ref) async
     }
 
     final localRecent = await db.getRecentPatrolSessionsFromDb(15);
-    final localPending = localRecent.where((r) => r.syncStatus == 'pending').toList();
+    final localPending = localRecent.where(patrolSessionRowNeedsSyncUpload).toList();
     final apiIds = apiSessions.map((s) => s.id).toSet();
 
     final List<RecentPatrolItem> items = [];
@@ -161,7 +202,7 @@ final recentPatrolsProvider = FutureProvider<List<RecentPatrolItem>>((ref) async
           userName: '',
           powerLineName: powerLineDisplayName,
         ),
-        isPendingSync: row.syncStatus == 'pending',
+        isPendingSync: patrolSessionRowNeedsSyncUpload(row),
       ));
     }
 
@@ -190,7 +231,41 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.invalidate(recentPatrolsProvider);
       ref.read(connectivityStatusProvider.notifier).refresh();
+      _tryShowUnfinishedPatrolBanner();
     });
+  }
+
+  Future<void> _tryShowUnfinishedPatrolBanner() async {
+    if (!mounted) return;
+    final auth = ref.read(authStateProvider);
+    if (auth is! AuthStateAuthenticated) return;
+    final has = await ref.read(hasUnfinishedPatrolAnywhereProvider.future);
+    if (!mounted || !has) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.clearMaterialBanners();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        backgroundColor: PatrolColors.surfaceCard,
+        content: const Text(
+          'У вас есть незавершённый обход. Откройте карту, чтобы продолжить, или завершите сессию там.',
+          style: TextStyle(color: PatrolColors.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+              context.go('/map');
+            },
+            child: const Text('К карте', style: TextStyle(color: PatrolColors.accent)),
+          ),
+          TextButton(
+            onPressed: () => messenger.hideCurrentMaterialBanner(),
+            child: const Text('Закрыть', style: TextStyle(color: PatrolColors.textSecondary)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -203,6 +278,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(activeSessionProvider);
+      ref.invalidate(showContinuePatrolButtonProvider);
+      ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
       ref.invalidate(recentPatrolsProvider);
       ref.invalidate(hasPendingSyncProvider);
       ref.read(connectivityStatusProvider.notifier).refresh();
@@ -219,6 +296,9 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           ref.invalidate(hasPendingSyncProvider);
           ref.invalidate(pendingPatrolSessionsCountProvider);
           ref.invalidate(recentPatrolsProvider);
+          ref.invalidate(activeSessionProvider);
+          ref.invalidate(showContinuePatrolButtonProvider);
+          ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
           ref.read(connectivityStatusProvider.notifier).refresh();
         },
         error: (_) {},
@@ -227,6 +307,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final connectionStatus = ref.watch(connectivityStatusProvider);
     final activeSessionAsync = ref.watch(activeSessionProvider);
     final activeSession = activeSessionAsync.asData?.value;
+    final showPatrolContinue = ref.watch(showContinuePatrolButtonProvider).asData?.value ?? false;
     final authState = ref.watch(authStateProvider);
 
     return Scaffold(
@@ -272,14 +353,14 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                     onPressed: () => context.go('/session/new'),
                   ),
                   const SizedBox(height: 12),
-                  if (activeSession != null)
+                  if (showPatrolContinue && activeSession != null)
                     _PatrolMainButton(
                       icon: Icons.refresh,
                       title: 'Продолжить',
                       subtitle: 'НЕЗАВЕРШЕННЫЙ ОБХОД',
                       onPressed: () => context.go('/map'),
                     ),
-                  if (activeSession != null) ...[
+                  if (showPatrolContinue && activeSession != null) ...[
                     const SizedBox(height: 12),
                     _ActiveSessionCard(info: activeSession),
                   ],
@@ -482,8 +563,8 @@ class _SyncedCountCard extends ConsumerWidget {
     final recentAsync = ref.watch(recentPatrolsProvider);
     final list = recentAsync.asData?.value ?? [];
     final syncedCount = list.where((item) => !item.isPendingSync && item.session.isCompleted).length;
-    final total = list.length;
-    final displayText = total > 0 ? '$syncedCount из $total' : '$syncedCount';
+    final completedTotal = list.where((item) => item.session.isCompleted).length;
+    final displayText = completedTotal > 0 ? '$syncedCount из $completedTotal' : '$syncedCount';
     return Row(
       children: [
         Expanded(
@@ -649,14 +730,21 @@ class _RecentPatrolCard extends StatelessWidget {
       }
     }
     final String statusText;
-    final bool usePendingStyle;
+    final Color statusColor;
+    final IconData statusIcon;
     if (item.isPendingSync) {
-      // Статус «ОЖИДАНИЕ СИНХРОНИЗАЦИИ» убран, вместо него показываем просто факт несинхронизированности.
       statusText = 'НЕ СИНХРОНИЗИРОВАН';
-      usePendingStyle = true;
+      statusColor = PatrolColors.statusPending;
+      statusIcon = Icons.cloud_upload;
+    } else if (!session.isCompleted) {
+      // Сессия уже может быть создана на сервере, но ещё не завершена пользователем.
+      statusText = 'НЕ ЗАВЕРШЕН';
+      statusColor = PatrolColors.accent;
+      statusIcon = Icons.hourglass_top;
     } else {
-      statusText = session.isCompleted ? 'СИНХРОНИЗИРОВАН' : 'ОЖИДАЕТ ОТПРАВКИ';
-      usePendingStyle = !session.isCompleted;
+      statusText = 'СИНХРОНИЗИРОВАН';
+      statusColor = PatrolColors.statusSynced;
+      statusIcon = Icons.cloud_done;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -697,17 +785,13 @@ class _RecentPatrolCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: usePendingStyle ? PatrolColors.statusPending : PatrolColors.statusSynced,
+                    color: statusColor,
                   ),
                 ),
               ],
             ),
           ),
-          Icon(
-            usePendingStyle ? Icons.cloud_upload : Icons.cloud_done,
-            color: usePendingStyle ? PatrolColors.statusPending : PatrolColors.statusSynced,
-            size: 24,
-          ),
+          Icon(statusIcon, color: statusColor, size: 24),
         ],
       ),
     );

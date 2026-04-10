@@ -17,6 +17,18 @@ import '../models/sync_state.dart';
 
 export '../models/sync_state.dart';
 
+/// Извлечь id сессии обхода из JSON ответа POST/PATCH (int / num / string).
+int? readPatrolSessionIdFromResponse(Object? raw) {
+  if (raw is! Map) return null;
+  final m = Map<String, dynamic>.from(raw);
+  final id = m['id'];
+  if (id == null) return null;
+  if (id is int) return id;
+  if (id is num) return id.toInt();
+  if (id is String) return int.tryParse(id.trim());
+  return null;
+}
+
 /// Преобразование ключей camelCase в snake_case для API бэкенда
 Map<String, dynamic> _toSnakeCaseMap(Map<String, dynamic> map) {
   final result = <String, dynamic>{};
@@ -65,8 +77,11 @@ class SyncService extends StateNotifier<SyncState> {
       // Фиксируем время до выгрузки для инкрементальной загрузки
       final lastSyncBeforeUpload = await _getLastSyncTime();
 
-      await _uploadPatrolSessions();
+      await _flushPendingServerPatrolEnds();
+      // Сначала отправляем локальные сущности (в т.ч. ЛЭП), чтобы сессии обхода
+      // с локальным line_id могли уйти в ЭТОМ же запуске синхронизации.
       final uploadResult = await _uploadLocalChanges();
+      await _uploadPatrolSessions();
 
       if (needFullDownload) {
         await _downloadServerChanges(useLastSync: _fullSyncSince);
@@ -81,7 +96,38 @@ class SyncService extends StateNotifier<SyncState> {
         _clearPendingDeletePowerLineIds();
       }
       await _setLastSyncTime(DateTime.now());
-      state = const SyncState.completed();
+
+      final pendingPatrols = await _database.getPendingPatrolSessions();
+      final queuedEnds = _prefs?.getStringList(AppConfig.pendingEndPatrolServerIdsKey) ?? [];
+      if (pendingPatrols.isNotEmpty || queuedEnds.isNotEmpty) {
+        final lines = <String>[];
+        for (final r in pendingPatrols.take(4)) {
+          if (r.lineId < 0) {
+            lines.add(
+              '• сессия #${r.id}: ЛЭП только локальная (line_id=${r.lineId}) — сначала синхронизируйте линию на сервер',
+            );
+          } else if (r.syncStatus == AppConfig.patrolSessionSyncStatusPendingEnd) {
+            lines.add(
+              '• сессия #${r.id}: завершение не дошло до сервера (server_id=${r.serverId})',
+            );
+          } else {
+            lines.add(
+              '• сессия #${r.id}: не создана на сервере (line_id=${r.lineId}) — проверьте, что такая ЛЭП есть на сервере',
+            );
+          }
+        }
+        if (pendingPatrols.length > 4) {
+          lines.add('• … и ещё ${pendingPatrols.length - 4} сессий');
+        }
+        if (queuedEnds.isNotEmpty) {
+          lines.add('• в очереди завершений (без локальной строки): ${queuedEnds.length}');
+        }
+        state = SyncState.error(
+          'Данные обновлены, но обходы отправлены не полностью:\n${lines.join('\n')}',
+        );
+      } else {
+        state = const SyncState.completed();
+      }
     } catch (e) {
       final msg = e.toString();
       final short = msg.contains('DioException') && msg.contains('status code')
@@ -124,13 +170,54 @@ class SyncService extends StateNotifier<SyncState> {
     return removed;
   }
 
-  /// Выгрузить сессии обхода со статусом pending: POST на сервер, обновить локально serverId и synced.
+  /// Завершения сессий, для которых нет строки в Drift (восстановление только с сервера в prefs).
+  Future<void> _flushPendingServerPatrolEnds() async {
+    if (_prefs == null) return;
+    final key = AppConfig.pendingEndPatrolServerIdsKey;
+    final raw = _prefs!.getStringList(key) ?? [];
+    if (raw.isEmpty) return;
+    final remaining = <String>[];
+    for (final s in raw) {
+      final id = int.tryParse(s);
+      if (id == null || id <= 0) continue;
+      try {
+        await _apiService.endPatrolSession(id);
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 400 || e.response?.statusCode == 404) {
+          continue;
+        }
+        remaining.add(s);
+      } catch (_) {
+        remaining.add(s);
+      }
+    }
+    await _prefs!.setStringList(key, remaining);
+  }
+
+  /// Выгрузить сессии обхода: pending (создание) и pending_end (только завершение на сервере).
   /// Сессии с line_id < 0 (локальная ЛЭП) пропускаем — линия ещё не на сервере.
   /// При 400/404 (например, ЛЭП не найдена на сервере) пропускаем сессию и не прерываем синхронизацию.
   Future<void> _uploadPatrolSessions() async {
     final pending = await _database.getPendingPatrolSessions();
     for (final row in pending) {
       if (row.lineId < 0) continue; // ЛЭП создана офлайн — отправим после синхронизации линии
+
+      if (row.syncStatus == AppConfig.patrolSessionSyncStatusPendingEnd) {
+        final sid = row.serverId;
+        if (sid == null || sid <= 0) continue;
+        try {
+          await _apiService.endPatrolSession(sid);
+          await _database.setPatrolSessionSynced(row.id, sid);
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 400 || e.response?.statusCode == 404) {
+            await _database.setPatrolSessionSynced(row.id, sid);
+          } else {
+            rethrow;
+          }
+        }
+        continue;
+      }
+
       // Сервер ожидает line_id (int) и опционально note (str)
       final body = <String, dynamic>{
         'line_id': row.lineId,
@@ -138,8 +225,13 @@ class SyncService extends StateNotifier<SyncState> {
       };
       try {
         final response = await _apiService.createPatrolSession(body);
-        final serverId = (response['id'] as num?)?.toInt();
-        if (serverId == null) continue;
+        final serverId = readPatrolSessionIdFromResponse(response);
+        if (serverId == null) {
+          if (kDebugMode) {
+            debugPrint('sync: createPatrolSession: нет id в ответе: $response');
+          }
+          continue;
+        }
 
         await _database.setPatrolSessionSynced(row.id, serverId);
 

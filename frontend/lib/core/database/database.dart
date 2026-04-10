@@ -431,8 +431,10 @@ class AppDatabase extends _$AppDatabase {
       (select(equipment)..where((tbl) => tbl.needsSync.equals(true))).get();
 
   // Сессии обхода (офлайн + синхронизация по кнопке)
-  Future<List<PatrolSession>> getPendingPatrolSessions() =>
-      (select(patrolSessions)..where((tbl) => tbl.syncStatus.equals('pending'))).get();
+  /// Сессии, которые нужно отправить на сервер: новые (pending) или только завершение (pending_end).
+  Future<List<PatrolSession>> getPendingPatrolSessions() => (select(patrolSessions)
+        ..where((tbl) => tbl.syncStatus.isIn(['pending', AppConfig.patrolSessionSyncStatusPendingEnd])))
+      .get();
 
   /// Недавние сессии обхода из локальной БД (для блока «Последние обходы» при офлайне).
   Future<List<PatrolSession>> getRecentPatrolSessionsFromDb(int limit) =>
@@ -463,6 +465,14 @@ class AppDatabase extends _$AppDatabase {
         syncStatus: const Value('synced'),
       ));
 
+  /// Завершение на сервере не удалось (офлайн): дослать через [SyncService._uploadPatrolSessions].
+  Future<int> markPatrolSessionPendingEndSync(int id) =>
+      (update(patrolSessions)..where((tbl) => tbl.id.equals(id))).write(
+        PatrolSessionsCompanion(
+          syncStatus: Value(AppConfig.patrolSessionSyncStatusPendingEnd),
+        ),
+      );
+
   /// Обновить lineId во всех сессиях обхода при маппинге локальной ЛЭП на серверную.
   /// Оставляем старое имя метода для обратной совместимости.
   Future<int> updatePatrolSessionsPowerLineId(int fromPowerLineId, int toPowerLineId) =>
@@ -473,9 +483,10 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deletePatrolSessionsByLineId(int lineId) =>
       (delete(patrolSessions)..where((tbl) => tbl.lineId.equals(lineId))).go();
 
-  /// Удалить все несинхронизированные сессии обхода (pending). После этого синхронизация не будет пытаться их отправить.
-  Future<int> deleteAllPendingPatrolSessions() =>
-      (delete(patrolSessions)..where((tbl) => tbl.syncStatus.equals('pending'))).go();
+  /// Удалить все несинхронизированные сессии обхода (pending / pending_end).
+  Future<int> deleteAllPendingPatrolSessions() => (delete(patrolSessions)
+        ..where((tbl) => tbl.syncStatus.isIn(['pending', AppConfig.patrolSessionSyncStatusPendingEnd])))
+      .go();
 }
 
 LazyDatabase _openConnection() {

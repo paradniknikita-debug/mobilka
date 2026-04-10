@@ -8,6 +8,8 @@ import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
+import '../../../home/presentation/pages/home_page.dart'
+    show activeSessionProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
 
 /// Страница «Продолжить обход»: выбор линии из созданных, сохранение активной сессии и переход на карту.
 class ContinueSessionPage extends ConsumerStatefulWidget {
@@ -94,6 +96,9 @@ class _ContinueSessionPageState extends ConsumerState<ContinueSessionPage> {
 
     ref.invalidate(pendingPatrolSessionsCountProvider);
     ref.invalidate(hasPendingSyncProvider);
+    ref.invalidate(activeSessionProvider);
+    ref.invalidate(showContinuePatrolButtonProvider);
+    ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

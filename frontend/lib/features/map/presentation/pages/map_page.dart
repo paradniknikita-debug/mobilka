@@ -36,7 +36,8 @@ import '../../../../core/models/power_line.dart';
 import '../../../../core/models/substation.dart';
 import '../../../../core/map/voltage_level_colors.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
-import '../../../home/presentation/pages/home_page.dart' show activeSessionProvider, recentPatrolsProvider;
+import '../../../home/presentation/pages/home_page.dart'
+    show activeSessionProvider, recentPatrolsProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
 import '../widgets/object_properties_panel.dart' show ObjectPropertiesPanel, ObjectType;
 
 class MapPage extends ConsumerStatefulWidget {
@@ -573,7 +574,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             final apiService = ref.read(apiServiceProvider);
             await apiService.endPatrolSession(row.serverId!);
           } catch (_) {
-            // Офлайн: сессия помечена завершённой локально, уйдёт на сервер при синхронизации
+            // Офлайн: досылаем завершение через «Синхронизировать сейчас»
+            await db.markPatrolSessionPendingEndSync(localSessionId);
           }
         }
       }
@@ -585,7 +587,14 @@ class _MapPageState extends ConsumerState<MapPage> {
           final apiService = ref.read(apiServiceProvider);
           await apiService.endPatrolSession(serverSessionId);
         } catch (_) {
-          // Офлайн — сервер получит при следующей синхронизации (если сессия была создана с сервера)
+          // Нет строки в Drift — очередь id для sync
+          final key = AppConfig.pendingEndPatrolServerIdsKey;
+          final list = List<String>.from(prefs?.getStringList(key) ?? []);
+          final sid = serverSessionId.toString();
+          if (!list.contains(sid)) {
+            list.add(sid);
+            await prefs?.setStringList(key, list);
+          }
         }
       }
     }
@@ -601,6 +610,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     ref.invalidate(pendingPatrolSessionsCountProvider);
     ref.invalidate(hasPendingSyncProvider);
     ref.invalidate(activeSessionProvider);
+    ref.invalidate(showContinuePatrolButtonProvider);
+    ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
     if (!mounted) return;
     setState(() {
       _currentLineId = null;
@@ -884,8 +895,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         list.sort((a, b) {
           final snA = a['sequence_number'] as int?;
           final snB = b['sequence_number'] as int?;
-          if (snA != null && snB != null) return snA.compareTo(snB);
-          return ((a['pole_number']?.toString()) ?? '').compareTo((b['pole_number']?.toString()) ?? '');
+          if (snA != null && snB != null && snA != snB) return snA.compareTo(snB);
+          final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
+          final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
+          if (oa != ob) return oa.compareTo(ob);
+          return ((a['pole_number']?.toString()) ?? '')
+              .compareTo((b['pole_number']?.toString()) ?? '');
         });
       }
 
@@ -1668,10 +1683,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         for (final t in tapsWithMeta) {
           final tapPoleId = _toInt(t['tap_pole_id']);
           if (tapPoleId == null) continue;
-          final bi = _toInt(t['tap_branch_index']) ?? 1;
+          final bi = _toInt(t['tap_branch_index']);
           final pn = (t['pole_number'] as String?)?.trim() ?? '';
           final root = pn.contains('/') ? pn.split('/').first.trim() : '';
-          final k = root.isNotEmpty ? '$tapPoleId:r:$root' : '$tapPoleId:b:$bi';
+          final k = bi != null ? '$tapPoleId:b:$bi' : (root.isNotEmpty ? '$tapPoleId:r:$root' : '$tapPoleId:b:1');
           byBranch.putIfAbsent(k, () => <Map<String, dynamic>>[]).add(t);
         }
         for (final entryBranch in byBranch.entries) {
@@ -2149,12 +2164,14 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   String _branchKeyServerPole(Map<String, dynamic> p) {
     final tapPoleId = _toInt(p['tap_pole_id']) ?? 0;
-    final tapBranchIndex = _toInt(p['tap_branch_index']) ?? 0;
+    final tapBranchIndex = _toInt(p['tap_branch_index']);
     final poleNumber = (p['pole_number'] as String?)?.trim() ?? '';
     final root = poleNumber.contains('/') ? poleNumber.split('/').first.trim() : '';
-    // Приоритет root (N в N/M) для устойчивого объединения одной ветки.
-    if (root.isNotEmpty) return '$tapPoleId:r:$root';
-    return '$tapPoleId:b:$tapBranchIndex';
+    // Как в Angular: приоритет tap_branch_index, затем fallback на root из N/M.
+    if (tapPoleId > 0 && tapBranchIndex != null) return '$tapPoleId:b:$tapBranchIndex';
+    if (tapPoleId > 0 && root.isNotEmpty) return '$tapPoleId:r:$root';
+    if (tapPoleId > 0) return '$tapPoleId:b:1';
+    return 'main';
   }
 
   /// Оборудование на пролёте p1→p2: у первой опоры линии — только на первом сегменте (как на веб-клиенте).
