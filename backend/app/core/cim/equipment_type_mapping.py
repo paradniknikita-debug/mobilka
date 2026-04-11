@@ -14,6 +14,36 @@ class EquipmentProfile:
     control_area_name: Optional[str] = None
 
 
+def is_cim_exportable_equipment(equipment_type: Optional[str]) -> bool:
+    """
+    В CIM выгружаем только коммутационное/линейное оборудование, которое моделируем как ПСР.
+    Не выгружаем: траверсы, грозозащиту/ОПН/разрядники, фундаменты и прочую конструкцию.
+    """
+    v = (equipment_type or "").strip().lower()
+    if not v:
+        return False
+    excluded = (
+        "траверс",
+        "traverse",
+        "crossarm",
+        "разрядник",
+        "грозозащит",
+        "опн",
+        "arrester",
+        "surge",
+        "lightning",
+        "фундамент",
+        "foundation",
+    )
+    if any(x in v for x in excluded):
+        return False
+    n = normalize_equipment_type(equipment_type)
+    # «Прочее» без распознанного типа — не выгружаем (избегаем траверсов как ConductingEquipment).
+    if n == "conducting_equipment":
+        return False
+    return True
+
+
 def normalize_equipment_type(equipment_type: Optional[str]) -> str:
     value = (equipment_type or "").strip().lower()
     if "земл" in value or "зн" in value or "ground" in value:

@@ -90,6 +90,9 @@ export class CreateObjectDialogComponent implements OnInit {
   /** Для обратной совместимости и подписи: отпаечные опоры по id (pole_number для лейбла) */
   tapPolesInLine: { id: number; pole_number: string }[] = [];
 
+  /** Явный выбор «новая ветка от якоря» при startNewTap; совпадает с Flutter. */
+  readonly branchNewTapSentinel = '__new_tap__';
+
   /** Связь подстанции с линиями: выбранная ЛЭП для установки как начало/конец */
   lineForStartId: number | null = null;
   lineForEndId: number | null = null;
@@ -173,7 +176,7 @@ export class CreateObjectDialogComponent implements OnInit {
       is_tap: [false],
       branch_type: ['main'], // Направление после отпаечной опоры: main | tap
       tap_pole_id: [null as number | null], // для обратной совместимости и startNewTap
-      branch_selection: [null as string | null], // null = магистраль, "poleId:branchIndex" = отпайка
+      branch_selection: [null as string | null], // null = магистраль; branchNewTapSentinel = новая ветка; "id:idx" = ветка
       conductor_type: [''],
       conductor_material: [''],
       conductor_section: [''],
@@ -182,7 +185,9 @@ export class CreateObjectDialogComponent implements OnInit {
       material: [''],
       year_installed: [null, [this.yearValidator.bind(this)]],
       condition: ['good'],
-      notes: ['']
+      notes: [''],
+      structural_defect: [''],
+      structural_defect_criticality: [null as string | null]
     });
 
     // Автогенерация UID при инициализации (только если не передан defaultObjectType для опоры)
@@ -383,7 +388,11 @@ export class CreateObjectDialogComponent implements OnInit {
           if (this.showBranchChoice && this.data?.startNewTap !== true) {
             this.poleForm.patchValue({ branch_type: 'tap', tap_pole_id: tapPoleId, branch_selection: `${tapPoleId}:1` });
           } else if (this.data?.startNewTap === true && tapPoleId != null) {
-            this.poleForm.patchValue({ branch_type: 'tap', tap_pole_id: tapPoleId, branch_selection: null });
+            this.poleForm.patchValue({
+              branch_type: 'tap',
+              tap_pole_id: tapPoleId,
+              branch_selection: this.branchNewTapSentinel
+            });
           }
         } else {
           const withSeq = list
@@ -610,6 +619,8 @@ export class CreateObjectDialogComponent implements OnInit {
           year_installed: pole.installation_date ? new Date(pole.installation_date).getFullYear() : null,
           condition: pole.condition || 'good',
           notes: (pole as any).notes || '',
+          structural_defect: (pole as any).structural_defect || '',
+          structural_defect_criticality: (pole as any).structural_defect_criticality ?? null,
         });
         this.poleCardCommentMessages = parseCardCommentMessages((pole as any).card_comment);
         this.poleAttachments = this.parseCardAttachments((pole as any).card_comment_attachment);
@@ -1072,27 +1083,46 @@ export class CreateObjectDialogComponent implements OnInit {
       return;
     }
 
-    // Ветка: из branch_selection или из data (Начать отпайку)
+    // Ветка: branch_selection → JSON (магистраль / новая ветка / продолжение ветки)
+    const hasBranchUi =
+      this.showBranchChoice &&
+      (this.tapBranchesInLine.length > 0 || this.tapPolesInLine.length > 0);
+
     let tapPoleId: number | null = null;
     let tapBranchIndex: number | undefined;
     let branchType: 'main' | 'tap' | undefined;
-    let startNewTap: boolean | undefined;
-    if (this.data?.startNewTap === true && this.data?.tapPoleId != null) {
+    let startNewTap = false;
+
+    if (hasBranchUi) {
+      const sel = formValue.branch_selection;
+      if (sel == null || sel === '') {
+        branchType = 'main';
+      } else if (sel === this.branchNewTapSentinel) {
+        if (!this.isEditMode && this.data?.tapPoleId != null) {
+          tapPoleId = this.data.tapPoleId as number;
+          startNewTap = true;
+          branchType = 'tap';
+        } else {
+          branchType = 'main';
+        }
+      } else if (typeof sel === 'string' && sel.includes(':')) {
+        const parts = sel.split(':');
+        const pid = parseInt(parts[0], 10);
+        const tbi = parseInt(parts[1], 10);
+        if (!isNaN(pid) && !isNaN(tbi)) {
+          tapPoleId = pid;
+          tapBranchIndex = tbi;
+          branchType = 'tap';
+        }
+      }
+    } else if (!this.isEditMode && this.data?.startNewTap === true && this.data?.tapPoleId != null) {
       tapPoleId = this.data.tapPoleId as number;
       startNewTap = true;
       branchType = 'tap';
-    } else if (this.showBranchChoice) {
-      const sel = formValue.branch_selection;
-      if (sel && typeof sel === 'string' && sel.includes(':')) {
-        const parts = sel.split(':');
-        tapPoleId = parseInt(parts[0], 10);
-        tapBranchIndex = parseInt(parts[1], 10);
-        if (!isNaN(tapPoleId) && !isNaN(tapBranchIndex)) {
-          branchType = 'tap';
-        }
-      } else {
-        branchType = 'main';
-      }
+    }
+
+    if (branchType == null) {
+      branchType = 'main';
     }
 
     // CIM: x_position = долгота, y_position = широта (форма ввода — широта/долгота)
@@ -1108,7 +1138,7 @@ export class CreateObjectDialogComponent implements OnInit {
       branch_type: branchType,
       tap_pole_id: tapPoleId ?? undefined,
       tap_branch_index: tapBranchIndex,
-      start_new_tap: startNewTap,
+      start_new_tap: startNewTap ? true : undefined,
       conductor_type: formValue.conductor_type?.trim() || undefined,
       conductor_material: formValue.conductor_material?.trim() || undefined,
       conductor_section: formValue.conductor_section != null && String(formValue.conductor_section).trim() !== '' ? String(formValue.conductor_section).trim() : undefined,
@@ -1121,6 +1151,11 @@ export class CreateObjectDialogComponent implements OnInit {
       year_installed: formValue.year_installed ? parseInt(String(formValue.year_installed)) : undefined,
       condition: formValue.condition || 'good',
       notes: formValue.notes?.trim() || undefined,
+      structural_defect: formValue.structural_defect?.trim() || undefined,
+      structural_defect_criticality:
+        formValue.structural_defect?.trim() && formValue.structural_defect_criticality
+          ? formValue.structural_defect_criticality
+          : undefined,
       card_comment: serializeCardCommentMessages(this.poleCardCommentMessages),
       card_comment_attachment: this.poleAttachments.length ? JSON.stringify(this.poleAttachments) : undefined
     };
@@ -1326,9 +1361,23 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   /** Подпись поля «ветка»: что выбрано — Магистраль или Отпайка от опоры X — ветка N */
+  get newTapBranchOptionLabel(): string {
+    const id = this.data?.tapPoleId;
+    if (id == null) {
+      return 'Новая ветка';
+    }
+    const p = this.tapPolesInLine.find(x => x.id === id);
+    return `Новая ветка от ${p?.pole_number ?? 'опора ' + id}`;
+  }
+
   get tapBranchLabel(): string {
     const sel = this.poleForm?.get('branch_selection')?.value;
-    if (sel == null || sel === '') return 'Магистраль';
+    if (sel == null || sel === '') {
+      return 'Магистраль';
+    }
+    if (sel === this.branchNewTapSentinel) {
+      return this.newTapBranchOptionLabel;
+    }
     const tb = this.tapBranchesInLine.find(b => b.value === sel);
     return tb ? tb.label : 'Ветка';
   }

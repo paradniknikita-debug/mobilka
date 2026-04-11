@@ -91,13 +91,37 @@
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+}
+
+.export-settings-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(25, 118, 210, 0.06);
+  border: 1px solid rgba(25, 118, 210, 0.2);
+  border-radius: 8px;
+}
+
+.export-settings-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(0, 0, 0, 0.65);
 }
 
 .export-scope {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.export-scope-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.75);
 }
 
 .export-line {
@@ -169,7 +193,7 @@
 }
 
 .summary-card {
-  max-width: min(560px, 100%);
+  max-width: 480px;
   border-radius: 8px;
 
   .mat-mdc-card-header {
@@ -200,35 +224,9 @@
   padding-top: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 
-  button {
-    white-space: normal;
-    text-align: left;
-    line-height: 1.2;
-    min-height: 40px;
-  }
-
   button mat-icon {
     margin-right: 6px;
     vertical-align: middle;
-  }
-}
-
-@media (max-width: 720px) {
-  .cim-page {
-    padding: 12px;
-  }
-
-  .summary-card {
-    width: 100%;
-  }
-
-  .preview-actions {
-    flex-direction: column;
-
-    button {
-      width: 100%;
-      justify-content: flex-start;
-    }
   }
 }
 

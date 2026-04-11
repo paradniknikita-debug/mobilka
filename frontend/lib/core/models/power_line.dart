@@ -227,6 +227,10 @@ class Pole {
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
+  @JsonKey(name: 'structural_defect')
+  final String? structuralDefect;
+  @JsonKey(name: 'structural_defect_criticality')
+  final String? structuralDefectCriticality;
   @JsonKey(name: 'card_comment')
   final String? cardComment;
   @JsonKey(name: 'card_comment_attachment')
@@ -260,6 +264,8 @@ class Pole {
     this.tapBranchIndex,
     required this.condition,
     this.notes,
+    this.structuralDefect,
+    this.structuralDefectCriticality,
     this.cardComment,
     this.cardCommentAttachment,
     required this.createdBy,
@@ -292,6 +298,8 @@ class Pole {
     int? tapBranchIndex,
     String? condition,
     String? notes,
+    String? structuralDefect,
+    String? structuralDefectCriticality,
     String? cardComment,
     String? cardCommentAttachment,
     int? createdBy,
@@ -320,6 +328,9 @@ class Pole {
     tapBranchIndex: tapBranchIndex ?? this.tapBranchIndex,
     condition: condition ?? this.condition,
       notes: notes ?? this.notes,
+      structuralDefect: structuralDefect ?? this.structuralDefect,
+      structuralDefectCriticality:
+          structuralDefectCriticality ?? this.structuralDefectCriticality,
       cardComment: cardComment ?? this.cardComment,
       cardCommentAttachment: cardCommentAttachment ?? this.cardCommentAttachment,
       createdBy: createdBy ?? this.createdBy,
@@ -351,6 +362,10 @@ class PoleCreate {
   final int? yearInstalled;
   final String condition;
   final String? notes;
+  @JsonKey(name: 'structural_defect')
+  final String? structuralDefect;
+  @JsonKey(name: 'structural_defect_criticality')
+  final String? structuralDefectCriticality;
   @JsonKey(name: 'is_tap')
   final bool isTap; // Является ли опора отпаечной (точкой отпайки)
   // Параметры кабеля для автоматического создания пролёта
@@ -387,6 +402,8 @@ class PoleCreate {
     this.yearInstalled,
     this.condition = 'good',
     this.notes,
+    this.structuralDefect,
+    this.structuralDefectCriticality,
     this.isTap = false,
     this.conductorType,
     this.conductorMaterial,
@@ -424,6 +441,8 @@ class Equipment {
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
+  @JsonKey(name: 'catalog_item_id', fromJson: _intFromJsonNullable)
+  final int? catalogItemId;
   @JsonKey(name: 'created_by', fromJson: _intFromJson)
   final int createdBy;
   @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
@@ -443,6 +462,7 @@ class Equipment {
     this.installationDate,
     required this.condition,
     this.notes,
+    this.catalogItemId,
     required this.createdBy,
     required this.createdAt,
     this.updatedAt,
@@ -466,6 +486,7 @@ class Equipment {
     int? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? catalogItemId,
   }) {
     return Equipment(
       id: id ?? this.id,
@@ -479,6 +500,7 @@ class Equipment {
       installationDate: installationDate ?? this.installationDate,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
+      catalogItemId: catalogItemId ?? this.catalogItemId,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -501,6 +523,8 @@ class EquipmentCreate {
   final DateTime? installationDate;
   final String condition;
   final String? notes;
+  @JsonKey(name: 'catalog_item_id')
+  final int? catalogItemId;
   final String? defect;
   final String? criticality;
   @JsonKey(name: 'defect_attachment')
@@ -516,6 +540,7 @@ class EquipmentCreate {
     this.installationDate,
     this.condition = 'good',
     this.notes,
+    this.catalogItemId,
     this.defect,
     this.criticality,
     this.defectAttachment,

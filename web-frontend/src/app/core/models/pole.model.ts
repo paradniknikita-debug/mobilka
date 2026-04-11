@@ -25,6 +25,9 @@ export interface Pole {
   foundation_type?: string | null;
   material?: string;
   condition?: string;
+  /** Дефект конструкции опоры */
+  structural_defect?: string | null;
+  structural_defect_criticality?: string | null;
   installation_date?: string;
   created_at: string;
   updated_at?: string;
@@ -57,6 +60,8 @@ export interface PoleCreate {
   year_installed?: number;
   condition?: string;
   notes?: string;
+  structural_defect?: string;
+  structural_defect_criticality?: string | null;
   is_tap?: boolean;
   /** Направление после отпаечной опоры: 'main' — магистраль, 'tap' — отпайка */
   branch_type?: string | null;

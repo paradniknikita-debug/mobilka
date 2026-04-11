@@ -82,6 +82,8 @@ POLE_SCHEMA = {
         "year_installed": {"type": ["integer", "null"]},
         "condition": {"type": "string"},
         "notes": {"type": ["string", "null"]},
+        "structural_defect": {"type": ["string", "null"]},
+        "structural_defect_criticality": {"type": ["string", "null"]},
         "card_comment": {"type": ["string", "null"]},
         "card_comment_attachment": {"type": ["string", "null"]},
         "created_by": {"type": ["integer", "null"]},
@@ -118,6 +120,24 @@ ENTITY_SCHEMAS = {
     "power_line": POWER_LINE_SCHEMA,
     "pole": POLE_SCHEMA,
     "equipment": EQUIPMENT_SCHEMA,
+    "equipment_catalog": {
+        "type": "object",
+        "properties": {
+            "id": {"type": ["integer", "string"]},
+            "type_code": {"type": "string"},
+            "brand": {"type": "string"},
+            "model": {"type": "string"},
+            "full_name": {"type": ["string", "null"]},
+            "voltage_kv": {"type": ["number", "null"]},
+            "current_a": {"type": ["number", "null"]},
+            "manufacturer": {"type": ["string", "null"]},
+            "country": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "attrs_json": {"type": ["string", "null"]},
+            "is_active": {"type": ["boolean", "null"]},
+        },
+        "required": ["type_code", "brand", "model"]
+    },
     "span": {
         "type": "object",
         "properties": {

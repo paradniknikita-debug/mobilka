@@ -48,6 +48,10 @@ class Poles extends Table {
   IntColumn get yearInstalled => integer().nullable()();
   TextColumn get condition => text().nullable()();
   TextColumn get notes => text().nullable()();
+  /// Дефект конструкции опоры (текст)
+  TextColumn get structuralDefect => text().nullable()();
+  /// Критичность дефекта опоры: low | medium | high
+  TextColumn get structuralDefectCriticality => text().nullable()();
   /// Комментарий в конце карточки опоры (текст)
   TextColumn get cardComment => text().nullable()();
   /// Вложения к комментарию: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
@@ -199,6 +203,10 @@ class AppDatabase extends _$AppDatabase {
                 'ALTER TABLE poles RENAME COLUMN latitude TO y_position',
               );
             } catch (_) {}
+          }
+          if (from < 10) {
+            await migrator.addColumn(poles, poles.structuralDefect);
+            await migrator.addColumn(poles, poles.structuralDefectCriticality);
           }
         },
       );
@@ -367,6 +375,8 @@ class AppDatabase extends _$AppDatabase {
         yearInstalled: Value(p.yearInstalled),
         condition: Value(p.condition),
         notes: Value(p.notes),
+        structuralDefect: Value(p.structuralDefect),
+        structuralDefectCriticality: Value(p.structuralDefectCriticality),
         cardComment: Value(p.cardComment),
         cardCommentAttachment: Value(p.cardCommentAttachment),
         createdBy: p.createdBy,

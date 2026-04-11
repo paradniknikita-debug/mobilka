@@ -1,6 +1,22 @@
-<div class="detail-dialog" appResizableDialog>
-  <h2 mat-dialog-title>Детали изменения</h2>
-  <mat-dialog-content>
+<div class="detail-dialog">
+  <div mat-dialog-title class="detail-dialog__title-row">
+    <span class="detail-dialog__title-text">Детали изменения</span>
+    <span class="detail-dialog__title-actions">
+      <button
+        mat-icon-button
+        type="button"
+        (click)="toggleMaximize()"
+        [matTooltip]="isMaximized ? 'Обычный размер' : 'На весь экран'"
+      >
+        <mat-icon>{{ isMaximized ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+      </button>
+      <button mat-icon-button type="button" mat-dialog-close matTooltip="Закрыть" aria-label="Закрыть">
+        <mat-icon>close</mat-icon>
+      </button>
+    </span>
+  </div>
+
+  <mat-dialog-content class="detail-dialog__body">
     <div class="meta">
       <div class="meta-row"><span class="label">Дата и время:</span> {{ formatDate(entry.created_at) }}</div>
       <div class="meta-row"><span class="label">Действие:</span> {{ actionLabel(entry.action) }}</div>
@@ -11,8 +27,8 @@
     </div>
 
     <div class="payload-section" *ngIf="entry.payload">
-      <div class="meta-row" *ngIf="entry.payload.name"><span class="label">Наименование:</span> {{ entry.payload.name }}</div>
-      <div class="meta-row" *ngIf="entry.payload.mrid || entry.payload['uid']"><span class="label">UID:</span> {{ entry.payload.mrid || entry.payload['uid'] }}</div>
+      <div class="meta-row" *ngIf="pl?.['name']"><span class="label">Наименование:</span> {{ pl?.['name'] }}</div>
+      <div class="meta-row" *ngIf="pl?.['mrid'] || pl?.['uid']"><span class="label">UID:</span> {{ pl?.['mrid'] || pl?.['uid'] }}</div>
     </div>
 
     <div class="data-quality-warning" *ngIf="pl?.['data_quality_warning'] === true">
@@ -35,8 +51,30 @@
       </ul>
     </div>
 
+    <!-- Пересборка топологии: объединённый JSON -->
+    <div class="json-block" *ngIf="topologyMergedJson">
+      <h3>Отчёт пересборки (объединённый JSON)</h3>
+      <pre class="payload-json payload-json--topology">{{ topologyMergedJson }}</pre>
+    </div>
+
+    <!-- Изменение с old/new: git-style построчное сравнение JSON -->
+    <div class="json-git-diff" *ngIf="hasPayload && jsonDiffLines.length">
+      <h3>Сравнение JSON (до / после)</h3>
+      <div class="git-diff-pre" role="log">
+        <div
+          *ngFor="let d of jsonDiffLines"
+          class="git-line"
+          [class.git-line-del]="d.tag === '-'"
+          [class.git-line-add]="d.tag === '+'"
+          [class.git-line-ctx]="d.tag === ' '"
+        >
+          <span class="git-tag">{{ d.tag }}</span><span class="git-text">{{ d.text }}</span>
+        </div>
+      </div>
+    </div>
+
     <div class="before-after" *ngIf="hasPayload">
-      <h3>До / После</h3>
+      <h3>Поля: до / после</h3>
       <mat-checkbox [(ngModel)]="onlyChanges">Отобразить только изменения</mat-checkbox>
       <div class="table-wrap">
         <table class="diff-table">
@@ -59,9 +97,20 @@
       <p *ngIf="onlyChanges && displayedRows.length === 0" class="no-changes">Нет изменённых полей</p>
     </div>
 
-    <div class="full-payload" *ngIf="entry.payload && !hasPayload && pl?.['pole_card'] !== true && pl?.['data_quality_warning'] !== true && !sessionSummary">
+    <!-- Прочие записи без таблицы old/new: полный JSON объекта -->
+    <div class="json-block" *ngIf="singleObjectJson && !topologyMergedJson">
+      <h3>Данные объекта (JSON)</h3>
+      <pre class="payload-json">{{ singleObjectJson }}</pre>
+    </div>
+
+    <div class="full-payload" *ngIf="entry.payload && !hasPayload && pl?.['pole_card'] !== true && pl?.['data_quality_warning'] !== true && !sessionSummary && !topologyMergedJson && !singleObjectJson">
       <h3>Данные (payload)</h3>
       <pre class="payload-json">{{ entry.payload | json }}</pre>
+    </div>
+
+    <div class="json-block">
+      <h3>Полная запись журнала (JSON)</h3>
+      <pre class="payload-json payload-json--full">{{ fullEntryJson }}</pre>
     </div>
 
     <div class="session-summary" *ngIf="sessionSummary">
@@ -100,6 +149,7 @@
       </div>
     </div>
   </mat-dialog-content>
+
   <mat-dialog-actions align="end">
     <button mat-button mat-dialog-close>Закрыть</button>
   </mat-dialog-actions>

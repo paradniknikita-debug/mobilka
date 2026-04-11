@@ -35,6 +35,7 @@ import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/models/substation.dart';
 import '../../../../core/map/voltage_level_colors.dart';
+import '../../../../core/utils/map_load_error_message.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
 import '../../../home/presentation/pages/home_page.dart'
     show activeSessionProvider, recentPatrolsProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
@@ -315,7 +316,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       final poleFeatures = <Map<String, dynamic>>[];
       for (final p in allPoles) {
         final equipment = equipmentByPole[p.id] ?? const <drift_db.EquipmentData>[];
-        final criticality = _maxCriticalityFromEquipment(equipment);
+        final eqCrit = _maxCriticalityFromEquipment(equipment);
+        final criticality = _mergePoleStructuralAndEquipmentCriticality(
+          eqCrit,
+          p.structuralDefectCriticality,
+          p.structuralDefect,
+        );
         poleFeatures.add({
           'type': 'Feature',
           'geometry': {'type': 'Point', 'coordinates': [p.xPosition ?? 0.0, p.yPosition ?? 0.0]},
@@ -418,8 +424,10 @@ class _MapPageState extends ConsumerState<MapPage> {
           final k = _branchKeyLocalPole(p);
           polesByBranch.putIfAbsent(k, () => <drift_db.Pole>[]).add(p);
         }
-        for (final branchPoles in polesByBranch.values) {
-          final ordered = List<drift_db.Pole>.from(branchPoles)
+        for (final branchEntry in polesByBranch.entries) {
+          final branchPoles = List<drift_db.Pole>.from(branchEntry.value);
+          _prependTapAnchorPoleLocal(branchPoles, branchEntry.key, plPoles);
+          final ordered = branchPoles
             ..sort((a, b) {
               final oa = _poleOrderFromNumber(a.poleNumber);
               final ob = _poleOrderFromNumber(b.poleNumber);
@@ -433,7 +441,13 @@ class _MapPageState extends ConsumerState<MapPage> {
             final y1 = (p1.yPosition ?? 0.0);
             final x2 = (p2.xPosition ?? 0.0);
             final y2 = (p2.yPosition ?? 0.0);
-            final angleRad = math.atan2(y2 - y1, x2 - x1);
+            final fromPole = p1.id <= p2.id ? p1 : p2;
+            final toPole = p1.id <= p2.id ? p2 : p1;
+            final fx = (fromPole.xPosition ?? 0.0);
+            final fy = (fromPole.yPosition ?? 0.0);
+            final tx = (toPole.xPosition ?? 0.0);
+            final ty = (toPole.yPosition ?? 0.0);
+            final angleRad = math.atan2(ty - fy, tx - fx);
 
             final combined = _combinedLineEquipmentForSegmentLocal(
               equipmentByPole,
@@ -455,16 +469,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                   'icon': iconPath,
                   'equipment_type': e.equipmentType,
                   'name': e.name,
-                  'from_pole_id': p1.id,
-                  'to_pole_id': p2.id,
+                  'from_pole_id': fromPole.id,
+                  'to_pole_id': toPole.id,
                   'line_id': pl.id,
                   'pole_id': e.poleId,
                   'equipment_id': e.id,
                   'angle_rad': angleRad,
-                  'from_lng': x1,
-                  'from_lat': y1,
-                  'to_lng': x2,
-                  'to_lat': y2,
+                  'from_lng': fx,
+                  'from_lat': fy,
+                  'to_lng': tx,
+                  'to_lat': ty,
                 },
               });
             }
@@ -918,8 +932,10 @@ class _MapPageState extends ConsumerState<MapPage> {
           final k = _branchKeyServerPole(p);
           polesByBranch.putIfAbsent(k, () => <Map<String, dynamic>>[]).add(p);
         }
-        for (final branchPoles in polesByBranch.values) {
-          final ordered = List<Map<String, dynamic>>.from(branchPoles)
+        for (final branchEntry in polesByBranch.entries) {
+          final branchPoles = List<Map<String, dynamic>>.from(branchEntry.value);
+          _prependTapAnchorPoleServer(branchPoles, branchEntry.key, plPoles);
+          final ordered = branchPoles
             ..sort((a, b) {
               final snA = a['sequence_number'] as int?;
               final snB = b['sequence_number'] as int?;
@@ -941,7 +957,14 @@ class _MapPageState extends ConsumerState<MapPage> {
             final y2 = (p2['y_position'] as num?)?.toDouble();
             if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
 
-            final angleRad = math.atan2(y2 - y1, x2 - x1);
+            final fromP = p1Id <= p2Id ? p1 : p2;
+            final toP = p1Id <= p2Id ? p2 : p1;
+            final fx = (fromP['x_position'] as num?)?.toDouble();
+            final fy = (fromP['y_position'] as num?)?.toDouble();
+            final tx = (toP['x_position'] as num?)?.toDouble();
+            final ty = (toP['y_position'] as num?)?.toDouble();
+            if (fx == null || fy == null || tx == null || ty == null) continue;
+            final angleRad = math.atan2(ty - fy, tx - fx);
 
             final combined = _combinedLineEquipmentForSegmentServer(
               equipmentByPoleServer,
@@ -963,16 +986,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                   'icon': iconPath,
                   'equipment_type': e.equipmentType,
                   'name': e.name,
-                  'from_pole_id': p1Id,
-                  'to_pole_id': p2Id,
+                  'from_pole_id': fromP['id'] as int,
+                  'to_pole_id': toP['id'] as int,
                   'line_id': pl.id,
                   'pole_id': e.poleId,
                   'equipment_id': e.id,
                   'angle_rad': angleRad,
-                  'from_lng': x1,
-                  'from_lat': y1,
-                  'to_lng': x2,
-                  'to_lat': y2,
+                  'from_lng': fx,
+                  'from_lat': fy,
+                  'to_lng': tx,
+                  'to_lat': ty,
                 },
               });
             }
@@ -986,7 +1009,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         final serverFeatures = List<dynamic>.from(polesData['features'] ?? []);
         for (final p in localPoles) {
           final equipment = await db.getEquipmentByPole(p.id);
-          final criticality = _maxCriticalityFromEquipment(equipment);
+          final eqCrit = _maxCriticalityFromEquipment(equipment);
+          final criticality = _mergePoleStructuralAndEquipmentCriticality(
+            eqCrit,
+            p.structuralDefectCriticality,
+            p.structuralDefect,
+          );
           final props = <String, dynamic>{
             'id': p.id,
             'line_id': p.lineId,
@@ -1023,13 +1051,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (!skipAutoCenter) {
           _centerOnObjects();
         }
-        // Повторная отрисовка после установки данных — чтобы слои ЛЭП/опор гарантированно появились на карте.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() {});
-        });
       }
     } catch (e) {
-      print('❌ Ошибка загрузки данных карты: $e');
+      if (kDebugMode) {
+        print('❌ Ошибка загрузки данных карты: $e');
+      }
 
       // Ошибка соединения или таймаут — показываем карту из локальной БД (офлайн)
       final isConnectionError = e is DioException &&
@@ -1076,14 +1102,16 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
       
       if (mounted) {
+        final userMsg = userMessageForMapLoadError(e);
         setState(() {
-          _errorMessage = 'Ошибка загрузки данных: ${e.toString()}';
+          _errorMessage = userMsg;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка загрузки данных: ${e.toString()}'),
+            content: Text(userMsg),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 6),
             action: SnackBarAction(
               label: 'Повторить',
               onPressed: _loadMapData,
@@ -1547,16 +1575,33 @@ class _MapPageState extends ConsumerState<MapPage> {
     final polylines = <Polyline>[];
     final features = _powerLinesData?['features'] as List<dynamic>? ?? [];
     final poleFeatures = _polesData?['features'] as List<dynamic>? ?? [];
-    final lineIdsFromPolePoints = <int>{};
+
+    // Сначала индекс опор по ЛЭП (как на Angular): один источник line_id + fallback power_line_id.
+    final polesByPowerLine = <int, List<Map<String, dynamic>>>{};
     for (final feature in poleFeatures) {
       try {
         final props = feature['properties'] as Map<String, dynamic>?;
         final geom = feature['geometry'] as Map<String, dynamic>?;
         if (props == null || geom == null || geom['type'] != 'Point') continue;
-        final plId = _toInt(props['line_id']);
-        if (plId != null) lineIdsFromPolePoints.add(plId);
+        final plId = _lineIdFromPoleProps(props);
+        if (plId == null) continue;
+        final coords = geom['coordinates'] as List<dynamic>?;
+        if (coords == null || coords.length < 2) continue;
+        final pn = props['pole_number']?.toString() ?? '';
+        polesByPowerLine.putIfAbsent(plId, () => []).add({
+          'id': _toInt(props['id']),
+          'lat': _toDouble(coords[1]),
+          'lng': _toDouble(coords[0]),
+          'pole_number': pn,
+          'tap_pole_id': _toInt(props['tap_pole_id']),
+          'tap_branch_index': _toInt(props['tap_branch_index']),
+          'sequence_number': _toInt(props['sequence_number']),
+        });
       } catch (_) {}
     }
+
+    final lineIdsFromPolePoints = polesByPowerLine.keys.toSet();
+
     final lineIdsWithGeometry = <int>{};
 
     for (final feature in features) {
@@ -1564,7 +1609,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         final geometry = feature['geometry'] as Map<String, dynamic>?;
         final props = feature['properties'] as Map<String, dynamic>?;
         if (geometry != null && geometry['type'] == 'LineString') {
-          final id = props != null ? _toInt(props['id']) : null;
+          final id = props != null
+              ? (_toInt(props['id']) ?? _toInt(props['line_id']) ?? _toInt(props['power_line_id']))
+              : null;
           // Если для линии есть опоры-точки, строим сегменты сами (магистраль/отпайки),
           // иначе можно использовать готовую LineString геометрию.
           if (id != null && lineIdsFromPolePoints.contains(id)) continue;
@@ -1595,28 +1642,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
 
-    // Опоры без геометрии с сервера: строим магистраль и отпайки по номерам (N — магистраль, N/1, N/2 — отпайка от N)
-    final polesByPowerLine = <int, List<Map<String, dynamic>>>{};
-    for (final feature in poleFeatures) {
-      try {
-        final props = feature['properties'] as Map<String, dynamic>?;
-        final geom = feature['geometry'] as Map<String, dynamic>?;
-        final plId = props != null ? _toInt(props['line_id']) : null;
-        if (plId == null || geom == null || geom['type'] != 'Point') continue;
-        final coords = geom['coordinates'] as List<dynamic>?;
-        if (coords == null || coords.length < 2) continue;
-        final pn = props!['pole_number']?.toString() ?? '';
-        polesByPowerLine.putIfAbsent(plId, () => []).add({
-          'id': _toInt(props['id']),
-          'lat': _toDouble(coords[1]),
-          'lng': _toDouble(coords[0]),
-          'pole_number': pn,
-          'tap_pole_id': _toInt(props['tap_pole_id']),
-          'tap_branch_index': _toInt(props['tap_branch_index']),
-          'sequence_number': _toInt(props['sequence_number']),
-        });
-      } catch (_) {}
-    }
+    // Магистраль и отпайки по опорам (как map.component.ts на вебе: sequence_number, затем порядок номера).
     for (final entry in polesByPowerLine.entries) {
       final lineId = entry.key;
       if (lineIdsWithGeometry.contains(lineId)) continue;
@@ -1626,12 +1652,17 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Магистраль: только опоры без "/" в номере, линия не включает опоры отпаек
       final mainList = list.where((e) => !(e['pole_number'] as String).contains('/')).toList();
       mainList.sort((a, b) {
-        final na = (a['pole_number'] as String).trim();
-        final nb = (b['pole_number'] as String).trim();
-        final ia = int.tryParse(na);
-        final ib = int.tryParse(nb);
-        if (ia != null && ib != null) return ia.compareTo(ib);
-        return na.compareTo(nb);
+        const absentSeq = 1 << 20;
+        final sa = _toInt(a['sequence_number']);
+        final sb = _toInt(b['sequence_number']);
+        final ra = sa ?? absentSeq;
+        final rb = sb ?? absentSeq;
+        if (ra != rb) return ra.compareTo(rb);
+        final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
+        final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
+        if (oa != ob) return oa.compareTo(ob);
+        return ((a['pole_number']?.toString()) ?? '')
+            .compareTo((b['pole_number']?.toString()) ?? '');
       });
       if (mainList.length >= 2) {
         final points = mainList.map((e) => LatLng(_toDouble(e['lat']), _toDouble(e['lng']))).toList();
@@ -1693,21 +1724,15 @@ class _MapPageState extends ConsumerState<MapPage> {
           final branchNodes = entryBranch.value;
           if (branchNodes.isEmpty) continue;
           branchNodes.sort((a, b) {
+            const absentSeq = 1 << 20;
             final sa = _toInt(a['sequence_number']);
             final sb = _toInt(b['sequence_number']);
-            if (sa != null && sb != null && sa != sb) return sa.compareTo(sb);
-            int suffix(Map<String, dynamic> n) {
-              final pn = (n['pole_number'] as String?)?.trim() ?? '';
-              final parts = pn.split('/');
-              if (parts.length < 2) return 1 << 30;
-              return int.tryParse(parts[1].trim()) ?? (1 << 30);
-            }
-            final sfxA = suffix(a);
-            final sfxB = suffix(b);
-            if (sfxA != sfxB) return sfxA.compareTo(sfxB);
-            final pna = (a['pole_number'] as String?) ?? '';
-            final pnb = (b['pole_number'] as String?) ?? '';
-            return pna.compareTo(pnb);
+            final ra = sa ?? absentSeq;
+            final rb = sb ?? absentSeq;
+            if (ra != rb) return ra.compareTo(rb);
+            final ida = _toInt(a['id']) ?? 0;
+            final idb = _toInt(b['id']) ?? 0;
+            return ida.compareTo(idb);
           });
           final anchorId = _toInt(branchNodes.first['tap_pole_id']);
           final anchor = anchorId != null ? byId[anchorId] : null;
@@ -1785,28 +1810,17 @@ class _MapPageState extends ConsumerState<MapPage> {
     return polylines;
   }
 
+  /// Как в GeoJSON с бэкенда: `line_id` или `power_line_id`.
+  static int? _lineIdFromPoleProps(Map<String, dynamic> props) {
+    return _toInt(props['line_id']) ?? _toInt(props['power_line_id']);
+  }
+
   static int? _toInt(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
     if (v is num) return v.toInt();
     if (v is String) return int.tryParse(v);
     return null;
-  }
-
-  /// ID отпаечной опоры-якоря (магистральная «3»); для опоры 3/1 — из [tap_pole_id], не из id опоры в ветке.
-  static int? _tapAnchorPoleIdFromProperties(Map<String, dynamic>? props) {
-    if (props == null) return null;
-    final tapId = _toInt(props['tap_pole_id']);
-    final selfId = _toInt(props['id']);
-    return tapId ?? selfId;
-  }
-
-  /// Номер якоря для нумерации «3/1»: из «3» или из «3/1» → «3».
-  static String? _tapRootNumberFromPoleNumber(String? poleNumber) {
-    if (poleNumber == null || poleNumber.trim().isEmpty) return null;
-    final t = poleNumber.trim();
-    if (t.contains('/')) return t.split('/').first.trim();
-    return t;
   }
 
   /// Безопасное преобразование в double (null → 0.0), чтобы избежать "Null is not a subtype of num".
@@ -1841,6 +1855,35 @@ class _MapPageState extends ConsumerState<MapPage> {
     return maxC;
   }
 
+  static int _criticalityRank(String? c) {
+    switch (c?.toLowerCase()) {
+      case 'high':
+        return 3;
+      case 'medium':
+        return 2;
+      case 'low':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  /// Объединяет критичность дефектов оборудования и дефекта самой опоры.
+  static String? _mergePoleStructuralAndEquipmentCriticality(
+    String? equipmentCrit,
+    String? poleStructuralCrit,
+    String? poleStructuralText,
+  ) {
+    final hasPoleDefect =
+        poleStructuralText != null && poleStructuralText.trim().isNotEmpty;
+    final pc = hasPoleDefect ? poleStructuralCrit?.toLowerCase() : null;
+    final re = _criticalityRank(equipmentCrit);
+    final rp = _criticalityRank(pc);
+    if (re >= rp && re > 0) return equipmentCrit!.toLowerCase();
+    if (rp > 0) return pc;
+    return equipmentCrit?.toLowerCase();
+  }
+
   static Color _poleColorByCriticality(String? criticality, bool isCurrentPatrolLine) {
     if (isCurrentPatrolLine) return Colors.green;
     switch (criticality?.toLowerCase()) {
@@ -1869,9 +1912,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     },
     'arrester': {
       'viewBox': [0.0, 0.0, 200.0, 200.0],
-      't1': [-45.0, 0.0],
+      // arrester.svg: M -80 0 L -40 0 — полюс на линии в (-80, 0) в системе группы translate(100,100).
+      't1': [-80.0, 0.0],
       't2': null,
-      'anchor': [-45.0, 0.0],
+      'anchor': [-80.0, 0.0],
       'rotationOffsetDeg': 90.0,
       'localOriginToViewBox': [100.0, 100.0],
     },
@@ -2043,32 +2087,36 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
     final iconSize = iconKey == 'zn' ? 80.0 : 64.0;
     final modelAngle = _modelAngleRadForIcon(iconKey, lineAngleRad);
-    var rotOffsetDeg = (spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0;
+    final rotOffsetDeg = (spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0;
     final angle = modelAngle + rotOffsetDeg * math.pi / 180.0;
     final c = Offset(iconSize / 2, iconSize / 2);
     final t1Raw = _pairFromSpec(spec['t1']) ?? <double>[0.0, 0.0];
     final t2Raw = _pairFromSpec(spec['t2']);
-    final t1Px = _viewBoxPointToIconPixels(iconKey, t1Raw, iconSize);
-    final t2Px = t2Raw != null ? _viewBoxPointToIconPixels(iconKey, t2Raw, iconSize) : null;
-    final t1Rot = _rotatePointAround(t1Px, c, angle);
-    final t2Rot = t2Px != null ? _rotatePointAround(t2Px, c, angle) : null;
-    final zoom = _equipmentZoom;
 
-    LatLng markerCenter = baseCenterOnLine;
+    // Однополюс (ЗН, ОПН): как Angular — географическая точка на трассе = полюс; смещение только в маркере (translate + rotate вокруг центра = вокруг полюса).
+    if (t2Raw == null) {
+      return (
+        markerCenter: baseCenterOnLine,
+        terminals: [baseCenterOnLine],
+        iconAngleRad: angle,
+      );
+    }
+
+    // Двухполюс: терминалы после поворота вокруг центра иконки; маркер смещаем по anchor.
+    final zoom = _equipmentZoom;
+    final t1Px = _viewBoxPointToIconPixels(iconKey, t1Raw, iconSize);
+    final t2Px = _viewBoxPointToIconPixels(iconKey, t2Raw, iconSize);
+    final t1Rot = _rotatePointAround(t1Px, c, angle);
+    final t2Rot = _rotatePointAround(t2Px, c, angle);
     final anchorRaw = _pairFromSpec(spec['anchor']) ?? t1Raw;
     final anchorPx = _viewBoxPointToIconPixels(iconKey, anchorRaw, iconSize);
     final anchorRot = _rotatePointAround(anchorPx, c, angle);
-    // Для однотерминального оборудования marker смещаем, чтобы terminal/anchor лег точно на ось линии.
-    if (t2Rot == null) {
-      final dx = c.dx - anchorRot.dx;
-      final dy = c.dy - anchorRot.dy;
-      markerCenter = _offsetByScreenPixels(baseCenterOnLine, dx, dy, zoom);
-    }
+    var markerCenter = baseCenterOnLine;
+    final dx = c.dx - anchorRot.dx;
+    final dy = c.dy - anchorRot.dy;
+    markerCenter = _offsetByScreenPixels(baseCenterOnLine, dx, dy, zoom);
 
     final term1 = _offsetByScreenPixels(markerCenter, t1Rot.dx - c.dx, t1Rot.dy - c.dy, zoom);
-    if (t2Rot == null) {
-      return (markerCenter: markerCenter, terminals: [term1], iconAngleRad: angle);
-    }
     final term2 = _offsetByScreenPixels(markerCenter, t2Rot.dx - c.dx, t2Rot.dy - c.dy, zoom);
     return (markerCenter: markerCenter, terminals: [term1, term2], iconAngleRad: angle);
   }
@@ -2174,6 +2222,49 @@ class _MapPageState extends ConsumerState<MapPage> {
     return 'main';
   }
 
+  /// Как Angular [renderEquipmentBetweenPoles]: в список опор ветки добавляем отпаечную опору-якорь,
+  /// иначе нет сегмента «якорь → первая опора ветки» и линейное оборудование на этом пролёте не попадает в данные.
+  void _prependTapAnchorPoleServer(
+    List<Map<String, dynamic>> branchPoles,
+    String branchKey,
+    List<Map<String, dynamic>> allPolesOnLine,
+  ) {
+    if (branchKey == 'main' || branchPoles.isEmpty) return;
+    final parts = branchKey.split(':');
+    if (parts.isEmpty) return;
+    final anchorId = int.tryParse(parts[0]);
+    if (anchorId == null) return;
+    final firstId = branchPoles.first['id'] as int?;
+    if (firstId == anchorId) return;
+    for (final p in allPolesOnLine) {
+      if ((p['id'] as int) == anchorId) {
+        branchPoles.insert(0, p);
+        return;
+      }
+    }
+  }
+
+  /// Офлайн: ключ ветки `tap:<корень>` — якорь — опора с номером ровно `<корень>` (магистраль без «/»).
+  void _prependTapAnchorPoleLocal(
+    List<drift_db.Pole> branchPoles,
+    String branchKey,
+    List<drift_db.Pole> allPolesOnLine,
+  ) {
+    if (!branchKey.startsWith('tap:') || branchPoles.isEmpty) return;
+    final root = branchKey.substring(4).trim();
+    if (root.isEmpty) return;
+    drift_db.Pole? anchor;
+    for (final p in allPolesOnLine) {
+      if (p.poleNumber.trim() == root) {
+        anchor = p;
+        break;
+      }
+    }
+    if (anchor == null) return;
+    if (branchPoles.first.id == anchor.id) return;
+    branchPoles.insert(0, anchor);
+  }
+
   /// Оборудование на пролёте p1→p2: у первой опоры линии — только на первом сегменте (как на веб-клиенте).
   List<drift_db.EquipmentData> _combinedLineEquipmentForSegmentLocal(
     Map<int, List<drift_db.EquipmentData>> equipmentByPole,
@@ -2225,6 +2316,18 @@ class _MapPageState extends ConsumerState<MapPage> {
     final type = equipmentType.toLowerCase().trim();
     final n = name.toLowerCase();
 
+    // Траверсы и похожие конструкции — только в карточке опоры, не на линии.
+    if (n.contains('траверс') ||
+        n.contains('traverse') ||
+        n.contains('cross_arm') ||
+        n.contains('crossarm') ||
+        n.contains('т-образ') ||
+        type.contains('траверс') ||
+        type.contains('traverse') ||
+        type.contains('cross_arm')) {
+      return null;
+    }
+
     if (type.contains('реклоузер') || n.contains('реклоузер') || type == 'recloser' || n.contains('recloser')) {
       return 'assets/equipment/recloser/recloser.svg';
     }
@@ -2246,10 +2349,13 @@ class _MapPageState extends ConsumerState<MapPage> {
         type.contains('разъедин') || type == 'disconnector' || type.contains('disconnector')) {
       return 'assets/equipment/disconnector/disconnector.svg';
     }
-    // Разрядник / ОПН: проверяем и type, и name.
+    // Разрядник / ОПН: проверяем и type, и name (в т.ч. латиница opn в типе с сервера).
     if (type.contains('разрядник') ||
         n.contains('разряд') ||
         n.contains('опн') ||
+        type.contains('опн') ||
+        type.contains('opn') ||
+        n.contains('opn') ||
         type == 'surge_arrester' ||
         type.contains('arrester') ||
         type.contains('surge') ||
@@ -2287,8 +2393,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             final isCurrentPatrolLine = _currentLineId != null && plId == _currentLineId;
             final criticality = properties?['criticality'] as String?;
             final isTap = properties?['is_tap'] == true ||
-                properties?['is_tap_pole'] == true ||
-                (properties?['pole_number']?.toString() ?? '').contains('/');
+                properties?['is_tap_pole'] == true;
             final color = isTap
                 ? Colors.teal
                 : _poleColorByCriticality(criticality, isCurrentPatrolLine);
@@ -2494,33 +2599,43 @@ class _MapPageState extends ConsumerState<MapPage> {
             final iconKey = _iconKeyFromIconPath(iconPath);
             final spec = iconKey != null ? _equipmentTerminalSpec[iconKey] : null;
             if (iconKey != null && spec != null) {
-              final modelAngleRad = _modelAngleRadForIcon(iconKey, lineAngleRad);
-              var rotOffsetDeg =
-                  (spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0;
               final iconAngleRad = placement.iconAngleRad;
-
+              final t2Raw = _pairFromSpec(spec['t2']);
               final iconCenter = Offset(iconSize / 2, iconSize / 2);
-              Offset anchorRot = iconCenter;
-              final anchorVbRaw = spec['anchor'];
-              if (anchorVbRaw != null) {
-                final anchorVb = _pairFromSpec(anchorVbRaw);
+
+              if (t2Raw == null) {
+                // ЗН, ОПН: как Angular — якорь в пикселях без предварительного «поворота вокруг центра»;
+                // сдвиг якоря в центр виджета, затем rotate вокруг центра (= вокруг полюса на линии).
+                final anchorVbRaw = spec['anchor'];
+                final anchorVb =
+                    anchorVbRaw != null ? _pairFromSpec(anchorVbRaw) : null;
                 if (anchorVb != null) {
-                  final anchorPx = _viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
-                  anchorRot = _rotatePointAround(anchorPx, iconCenter, iconAngleRad);
+                  final anchorPx =
+                      _viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
+                  // Сначала сдвиг полюса в центр виджета, затем поворот вокруг центра (= вокруг полюса на линии).
+                  child = Transform.rotate(
+                    angle: iconAngleRad,
+                    alignment: Alignment.center,
+                    child: Transform.translate(
+                      offset: Offset(
+                        iconCenter.dx - anchorPx.dx,
+                        iconCenter.dy - anchorPx.dy,
+                      ),
+                      child: child,
+                    ),
+                  );
+                } else {
+                  child = Transform.rotate(
+                    angle: iconAngleRad,
+                    alignment: Alignment.center,
+                    child: child,
+                  );
                 }
-              }
-
-              // Подвинем SVG так, чтобы anchorRot совпал с точкой маркера (т.е. с центром Marker bounds).
-              final translate = iconCenter - anchorRot;
-
-              child = Transform.rotate(
-                angle: iconAngleRad,
-                alignment: Alignment.center,
-                child: child,
-              );
-              if (translate.dx.abs() > 0.001 || translate.dy.abs() > 0.001) {
-                child = Transform.translate(
-                  offset: translate,
+              } else {
+                // Выключатель, разъединитель, реклоузер: поворот вокруг центра (смещение marker уже в placement).
+                child = Transform.rotate(
+                  angle: iconAngleRad,
+                  alignment: Alignment.center,
                   child: child,
                 );
               }
@@ -3608,16 +3723,31 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  /// Открыть диалог создания опоры «Начать отпайку» от выбранной опоры на карте.
-  /// Якорь отпайки — отпаечная опора (или [tap_pole_id] у опоры 3/1), как в Angular.
+  /// Открыть диалог «Начать отпайку» от выбранной опоры. Якорь — эта опора ([tap_pole_id] = её id);
+  /// доступно только при [is_tap_pole] в карточке (галочка «Отпаечная опора»).
   Future<void> _showCreatePoleFromTapPoleDialog() async {
     final lineId = _toInt(_selectedObjectProperties?['line_id']);
     final props = _selectedObjectProperties;
-    final tapAnchorId = _tapAnchorPoleIdFromProperties(props);
-    final tapPoleNumber = _tapRootNumberFromPoleNumber(props?['pole_number']?.toString());
-    if (lineId == null || tapAnchorId == null) return;
+    if (lineId == null || props == null) return;
+    final selfId = _toInt(props['id']);
+    if (selfId == null) return;
+
+    if (props['is_tap_pole'] != true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Чтобы вести отпайку от этой опоры, включите «Отпаечная опора» в карточке опоры (создание или редактирование).',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     _closeObjectProperties();
-    await _openCreatePoleFromTapPole(lineId, tapAnchorId, tapPoleNumber);
+    await _openCreatePoleFromTapPole(lineId, selfId, props['pole_number']?.toString());
   }
 
   /// Открыть диалог добавления следующей опоры в отпайку (выбрана опора 3/1, 3/2 и т.д.).
@@ -4083,12 +4213,13 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Удаление одной опоры из дерева (долгое нажатие на строку опоры), без удаления всей ЛЭП.
   Future<void> _deletePoleFromTree(Pole pole, PowerLine powerLine) async {
     final objectName = pole.poleNumber;
+    final poleShort = _poleShortNameForDeletionMessage(objectName);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить опору?'),
         content: Text(
-          'Вы уверены, что хотите удалить опору "$objectName"? Это действие нельзя отменить.',
+          'Вы уверены, что хотите удалить опору «$poleShort»? Это действие нельзя отменить.',
         ),
         actions: [
           TextButton(
@@ -4130,6 +4261,8 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       final apiService = ref.read(apiServiceProvider);
       await apiService.deletePole(pole.id);
+      // Иначе при следующем офлайне карта прочитает Drift — «удалённые» опоры останутся в кэше.
+      await _deletePoleOfflineById(pole.id);
       await _loadMapData(forceFromServer: true);
       await _loadPowerLineDetails(powerLine.id);
 
@@ -4137,7 +4270,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Опора "$objectName" успешно удалена.\n'
+              'Опора «$poleShort» успешно удалена.\n'
               'Пролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.',
             ),
             backgroundColor: Colors.green,
@@ -4172,6 +4305,26 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
         }
+        return;
+      }
+
+      if (e.response?.statusCode == 404) {
+        try {
+          await _deletePoleOfflineById(pole.id);
+          await _loadMapDataFromLocal();
+          await _loadPowerLineDetails(powerLine.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'На сервере опора уже отсутствовала; запись убрана из локального кэша.',
+                ),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } catch (_) {}
         return;
       }
 
@@ -4217,6 +4370,17 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  /// «Опора 4» → «4» в текстах уведомлений, без дубля «Опора „Опора 4"».
+  String _poleShortNameForDeletionMessage(String poleNumber) {
+    var t = poleNumber.trim();
+    const prefix = 'опора ';
+    if (t.length >= prefix.length && t.toLowerCase().startsWith(prefix)) {
+      final r = t.substring(prefix.length).trim();
+      if (r.isNotEmpty) return r;
+    }
+    return t;
+  }
+
   Future<void> _handleDeleteObject() async {
     if (_selectedObjectProperties == null || _selectedObjectType == null) {
       return;
@@ -4235,31 +4399,36 @@ class _MapPageState extends ConsumerState<MapPage> {
       return;
     }
 
-    // Определяем тип объекта и название для диалога
-    String objectTypeLabel;
+    // Винительный падеж — для формулировок «удалить опору / подстанцию / отпайку».
+    String objectTypeAcc;
     String objectName;
-    
+
     switch (_selectedObjectType!) {
       case ObjectType.pole:
-        objectTypeLabel = 'опору';
+        objectTypeAcc = 'опору';
         objectName = _selectedObjectProperties!['pole_number']?.toString() ?? 'N/A';
         break;
       case ObjectType.substation:
-        objectTypeLabel = 'подстанцию';
+        objectTypeAcc = 'подстанцию';
         objectName = _selectedObjectProperties!['name']?.toString() ?? 'N/A';
         break;
       case ObjectType.tap:
-        objectTypeLabel = 'отпайку';
+        objectTypeAcc = 'отпайку';
         objectName = _selectedObjectProperties!['tap_number']?.toString() ?? 'N/A';
         break;
     }
+
+    final poleShort =
+        _selectedObjectType == ObjectType.pole ? _poleShortNameForDeletionMessage(objectName) : objectName;
 
     // Показываем диалог подтверждения
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Удалить $objectTypeLabel?'),
-        content: Text('Вы уверены, что хотите удалить $objectTypeLabel "$objectName"? Это действие нельзя отменить.'),
+        title: Text('Удалить $objectTypeAcc?'),
+        content: Text(
+          'Вы уверены, что хотите удалить $objectTypeAcc «$poleShort»? Это действие нельзя отменить.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -4293,7 +4462,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$objectTypeLabel "$objectName" удалена (офлайн). Изменения синхронизируются при подключении.'),
+              content: Text(
+                _selectedObjectType == ObjectType.pole
+                    ? 'Опора «$poleShort» удалена (офлайн). Изменения синхронизируются при подключении.'
+                    : 'Подстанция «$objectName» удалена (офлайн). Изменения синхронизируются при подключении.',
+              ),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 4),
             ),
@@ -4307,6 +4480,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       switch (_selectedObjectType!) {
         case ObjectType.pole:
           await apiService.deletePole(objectId);
+          await _deletePoleOfflineById(objectId);
           break;
         case ObjectType.substation:
           await apiService.deleteSubstation(objectId);
@@ -4333,11 +4507,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (mounted) {
         String successMessage;
         if (_selectedObjectType == ObjectType.pole) {
-          successMessage = '$objectTypeLabel "$objectName" успешно удалена.\nПролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.';
+          successMessage =
+              'Опора «$poleShort» успешно удалена.\nПролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.';
         } else if (_selectedObjectType == ObjectType.substation) {
-          successMessage = 'Подстанция "$objectName" успешно удалена.';
+          successMessage = 'Подстанция «$objectName» успешно удалена.';
         } else {
-          successMessage = '$objectTypeLabel "$objectName" успешно удалена.';
+          successMessage = 'Отпайка «$objectName» успешно удалена.';
         }
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4379,6 +4554,26 @@ class _MapPageState extends ConsumerState<MapPage> {
         return;
       }
 
+      if (e.response?.statusCode == 404 && _selectedObjectType == ObjectType.pole) {
+        try {
+          await _deletePoleOfflineById(objectId);
+          _closeObjectProperties();
+          await _loadMapDataFromLocal();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'На сервере опора уже отсутствовала; запись убрана из локального кэша.',
+                ),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } catch (_) {}
+        return;
+      }
+
       // Обработка ошибок Dio (онлайн)
       String errorMessage = 'Ошибка удаления объекта';
       
@@ -4392,7 +4587,9 @@ class _MapPageState extends ConsumerState<MapPage> {
           if (responseData is Map && responseData['detail'] != null) {
             errorMessage = responseData['detail'] as String;
           } else {
-            errorMessage = 'Не удалось удалить $objectTypeLabel "$objectName": существуют связанные объекты';
+            errorMessage = _selectedObjectType == ObjectType.pole
+                ? 'Не удалось удалить опору «$poleShort»: существуют связанные объекты'
+                : 'Не удалось удалить подстанцию «$objectName»: существуют связанные объекты';
           }
         } else if (statusCode == 404) {
           errorMessage = 'Объект не найден';
@@ -4704,7 +4901,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           CheckboxListTile(
             dense: true,
             title: const Text('Отпаечная опора', style: TextStyle(fontSize: 12)),
-            subtitle: const Text('Создаст отпайку', style: TextStyle(fontSize: 10)),
+            subtitle: const Text('От неё можно будет вести отпайки на карте', style: TextStyle(fontSize: 10)),
             value: _isTapPole,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
@@ -5390,7 +5587,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               const SizedBox(height: 16),
               if (latitude != null && longitude != null)
                 Text(
-                  'Позиция (X, Y): ${longitude!.toStringAsFixed(6)}, ${latitude!.toStringAsFixed(6)}',
+                  'Координаты (x, y / ш, д): ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
@@ -5456,7 +5653,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               if (latitude == null || longitude == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Не удалось получить позицию (X, Y). Включите GPS.'),
+                    content: Text('Не удалось получить координаты (широта/долгота). Включите GPS.'),
                     backgroundColor: Colors.red,
                   ),
                 );

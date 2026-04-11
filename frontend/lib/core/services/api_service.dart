@@ -9,9 +9,11 @@ import '../models/user.dart';
 import '../models/power_line.dart';
 import '../models/substation.dart';
 import '../models/patrol_session.dart';
+import '../models/equipment_catalog.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
+import 'session_expiry.dart';
 
 part 'api_service.g.dart';
 
@@ -188,6 +190,29 @@ abstract class ApiService {
 
   @GET('/sync/schema/{entity_type}')
   Future<dynamic> getEntitySchema(@Path('entity_type') String entityType);
+
+  // Equipment catalog
+  @GET('/equipment-catalog')
+  Future<List<dynamic>> getEquipmentCatalogRaw(
+    @Query('type_code') String? typeCode,
+    @Query('q') String? query,
+    @Query('is_active') bool? isActive,
+    @Query('skip') int? skip,
+    @Query('limit') int? limit,
+  );
+
+  @POST('/equipment-catalog')
+  Future<dynamic> createEquipmentCatalogItemRaw(@Body() Map<String, dynamic> payload);
+
+  @POST('/equipment-catalog/import')
+  @MultiPart()
+  Future<dynamic> importEquipmentCatalogRaw(
+    @Part(name: 'file') MultipartFile file, {
+    @Query('mode') String mode = 'upsert',
+  });
+
+  @POST('/equipment-catalog/seed-defaults')
+  Future<dynamic> seedEquipmentCatalogDefaultsRaw();
 }
 
 // Расширенный интерфейс с методом exportCimXml и загрузкой вложений опоры
@@ -210,10 +235,45 @@ abstract class ApiServiceWithExport implements ApiService {
     List<int> fileBytes,
     String filename,
   );
+
+  Future<List<EquipmentCatalogItem>> getEquipmentCatalog({
+    String? typeCode,
+    String? query,
+    bool? isActive,
+    int? skip,
+    int? limit,
+  });
+
+  Future<Map<String, dynamic>> createEquipmentCatalogItem(Map<String, dynamic> payload);
+
+  Future<Map<String, dynamic>> importEquipmentCatalog(
+    List<int> fileBytes,
+    String filename, {
+    String mode = 'upsert',
+  });
+
+  Future<Map<String, dynamic>> seedEquipmentCatalogDefaults();
 }
 
 class ApiServiceProvider {
   static SharedPreferences? _prefs;
+
+  static bool _isAuthCredentialPath(String path) {
+    final p = path.toLowerCase();
+    return p.contains('/auth/login') || p.contains('/auth/register');
+  }
+
+  /// 401 с защищённых эндпоинтов: очистить токен и вернуть пользователя на экран входа.
+  static Future<void> handleUnauthorized(DioException error) async {
+    if (error.response?.statusCode != 401) {
+      return;
+    }
+    if (_isAuthCredentialPath(error.requestOptions.path)) {
+      return;
+    }
+    await _clearStoredToken();
+    await notifySessionExpired();
+  }
   
   static ApiServiceWithExport create({SharedPreferences? prefs}) {
     _prefs = prefs; // Сохраняем prefs статически
@@ -294,14 +354,10 @@ class ApiServiceProvider {
           
           // Обработка других ошибок
           if (error.response?.statusCode == 401) {
-            // Токен истёк, нужно перелогиниться
-            await _clearStoredToken();
-            if (kDebugMode) {
-              print('🔓 Токен истёк (401), требуется повторная авторизация');
-              print('   Очищен токен из хранилища');
+            await handleUnauthorized(error);
+            if (kDebugMode && !_isAuthCredentialPath(error.requestOptions.path)) {
+              print('🔓 Токен истёк (401), сессия сброшена, переход на экран входа');
             }
-            // Ошибка 401 будет проброшена дальше, чтобы UI мог обработать её
-            // (например, перенаправить на страницу логина)
           } else if (error.response?.statusCode == 403) {
             final token = await _getStoredToken();
             if (kDebugMode) {
@@ -421,6 +477,10 @@ final dioProvider = Provider<Dio>((ref) {
             urlManager.resetFallback();
           }
         }
+
+        if (error.response?.statusCode == 401) {
+          await ApiServiceProvider.handleUnauthorized(error);
+        }
         
         handler.next(error);
       },
@@ -453,9 +513,11 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
       'include_power_lines': includePowerLines,
       'include_equipment': includeEquipment,
       'include_gps': includeGps,
-      'line_id': lineId,
     };
-    
+    if (lineId != null) {
+      queryParameters['line_id'] = lineId;
+    }
+
     final response = await _dio.get<List<int>>(
       '/cim/export/xml',
       queryParameters: queryParameters,
@@ -631,4 +693,71 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<dynamic> getEntitySchema(String entityType) => _delegate.getEntitySchema(entityType);
+
+  @override
+  Future<List<dynamic>> getEquipmentCatalogRaw(
+    String? typeCode,
+    String? query,
+    bool? isActive,
+    int? skip,
+    int? limit,
+  ) =>
+      _delegate.getEquipmentCatalogRaw(typeCode, query, isActive, skip, limit);
+
+  @override
+  Future<dynamic> createEquipmentCatalogItemRaw(Map<String, dynamic> payload) =>
+      _delegate.createEquipmentCatalogItemRaw(payload);
+
+  @override
+  Future<dynamic> importEquipmentCatalogRaw(
+    MultipartFile file, {
+    String mode = 'upsert',
+  }) =>
+      _delegate.importEquipmentCatalogRaw(file, mode: mode);
+
+  @override
+  Future<dynamic> seedEquipmentCatalogDefaultsRaw() =>
+      _delegate.seedEquipmentCatalogDefaultsRaw();
+
+  @override
+  Future<List<EquipmentCatalogItem>> getEquipmentCatalog({
+    String? typeCode,
+    String? query,
+    bool? isActive,
+    int? skip,
+    int? limit,
+  }) async {
+    final raw = await _delegate.getEquipmentCatalogRaw(typeCode, query, isActive, skip, limit);
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(EquipmentCatalogItem.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> createEquipmentCatalogItem(Map<String, dynamic> payload) async {
+    final raw = await _delegate.createEquipmentCatalogItemRaw(payload);
+    return Map<String, dynamic>.from(raw as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> importEquipmentCatalog(
+    List<int> fileBytes,
+    String filename, {
+    String mode = 'upsert',
+  }) async {
+    final part = MultipartFile.fromBytes(
+      fileBytes,
+      filename: filename,
+      contentType: MediaType.parse('application/octet-stream'),
+    );
+    final raw = await _delegate.importEquipmentCatalogRaw(part, mode: mode);
+    return Map<String, dynamic>.from(raw as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> seedEquipmentCatalogDefaults() async {
+    final raw = await _delegate.seedEquipmentCatalogDefaultsRaw();
+    return Map<String, dynamic>.from(raw as Map);
+  }
 }

@@ -52,6 +52,7 @@
           <mat-form-field *ngIf="showBranchChoice && (tapBranchesInLine.length || tapPolesInLine.length)" appearance="outline" class="full-width field-tap">
             <mat-label>{{ tapBranchLabel }}</mat-label>
             <mat-select formControlName="branch_selection" placeholder="Магистраль или отпайка">
+              <mat-option *ngIf="!isEditMode && data?.startNewTap === true && data?.tapPoleId != null" [value]="branchNewTapSentinel">{{ newTapBranchOptionLabel }}</mat-option>
               <mat-option [value]="null">Магистраль</mat-option>
               <mat-option *ngFor="let tb of tapBranchesInLine" [value]="tb.value">{{ tb.label }}</mat-option>
             </mat-select>
@@ -162,6 +163,19 @@
             <mat-label>Примечания</mat-label>
             <textarea matInput formControlName="notes" rows="2"></textarea>
           </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Дефект конструкции опоры</mat-label>
+            <textarea matInput formControlName="structural_defect" rows="2" placeholder="Трещины, коррозия, отклонение…"></textarea>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Критичность дефекта опоры</mat-label>
+            <mat-select formControlName="structural_defect_criticality">
+              <mat-option [value]="null">Не указана</mat-option>
+              <mat-option value="low">Низкая</mat-option>
+              <mat-option value="medium">Средняя</mat-option>
+              <mat-option value="high">Высокая</mat-option>
+            </mat-select>
+          </mat-form-field>
         </mat-expansion-panel>
 
         <mat-expansion-panel class="expansion-section" *ngIf="selectedObjectType === 'pole'">
@@ -178,7 +192,11 @@
                   <span class="card-comment-author">{{ commentAuthorLabel(m) }}</span>
                   <span class="card-comment-time">{{ formatCardCommentAt(m.at) }}</span>
                 </div>
-                <div class="card-comment-bubble-text">{{ m.text }}</div>
+                <div class="card-comment-bubble-text" *ngIf="m.text">{{ m.text }}</div>
+                <div class="card-comment-bubble-voice" *ngIf="m.voice_url">
+                  <mat-icon>mic</mat-icon>
+                  <a [href]="m.voice_url" target="_blank" rel="noopener">Голосовое сообщение</a>
+                </div>
               </div>
               <div class="card-comment-empty" *ngIf="!poleCardCommentMessages.length">
                 Нет сообщений

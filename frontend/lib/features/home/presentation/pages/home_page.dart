@@ -255,6 +255,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           TextButton(
             onPressed: () {
               messenger.hideCurrentMaterialBanner();
+              if (!mounted) return;
               context.go('/map');
             },
             child: const Text('К карте', style: TextStyle(color: PatrolColors.accent)),

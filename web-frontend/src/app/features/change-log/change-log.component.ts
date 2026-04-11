@@ -5,6 +5,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChangeLogDetailDialogComponent } from './change-log-detail-dialog/change-log-detail-dialog.component';
 
+type SortCol = 'created_at' | 'source' | 'action' | 'entity_type' | 'name' | 'uid' | 'user_name' | '';
+
 @Component({
   selector: 'app-change-log',
   templateUrl: './change-log.component.html',
@@ -16,13 +18,10 @@ export class ChangeLogComponent implements OnInit {
   loading = true;
   error: string | null = null;
 
-  // ========== Change log filters ==========
-  logSource: string | null = null; // web | flutter
-  logAction: string | null = null; // create | update | delete | session_start | session_end
-  logEntityType: string | null = null; // pole, power_line, ...
-  logEntityId: number | null = null;
-  logFromDt: string | null = null;
-  logToDt: string | null = null;
+  /** Клиентские фильтры по столбцам (подстрока, без учёта регистра). */
+  colFilter: Record<string, string> = {};
+  sortColumn: SortCol = 'created_at';
+  sortDir: 'asc' | 'desc' = 'desc';
 
   issues: ModelIssue[] = [];
   issuesColumns: string[] = ['issue_type', 'entity_type', 'entity_uid', 'line_uid', 'message'];
@@ -44,13 +43,7 @@ export class ChangeLogComponent implements OnInit {
     this.loading = true;
     this.error = null;
     this.apiService.getChangeLog({
-      limit: 200,
-      source: this.logSource ?? undefined,
-      action: this.logAction ?? undefined,
-      entity_type: this.logEntityType ?? undefined,
-      entity_id: this.logEntityId ?? undefined,
-      from_dt: this.logFromDt ?? undefined,
-      to_dt: this.logToDt ?? undefined,
+      limit: 500,
     }).subscribe({
       next: (list) => {
         this.entries = list || [];
@@ -61,6 +54,104 @@ export class ChangeLogComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  /** Отображаемые строки: фильтр по столбцам + сортировка. */
+  get displayedEntries(): ChangeLogEntry[] {
+    let rows = [...this.entries];
+    const f = this.colFilter;
+    const has = (key: string, val: string | undefined | null) => {
+      const q = (f[key] || '').trim().toLowerCase();
+      if (!q) return true;
+      return String(val ?? '').toLowerCase().includes(q);
+    };
+    rows = rows.filter(e => {
+      if (!has('created_at', this.formatDate(e.created_at))) return false;
+      if (!has('source', this.sourceLabel(e.source))) return false;
+      if (!has('action', this.actionLabel(e.action))) return false;
+      if (!has('entity_type', this.entityTypeLabel(e.entity_type))) return false;
+      if (!has('name', (e.entity_name || this.getName(e)))) return false;
+      if (!has('uid', this.getUid(e))) return false;
+      if (!has('user_name', e.user_name ?? '')) return false;
+      return true;
+    });
+    const col = this.sortColumn;
+    const dir = this.sortDir === 'asc' ? 1 : -1;
+    if (col) {
+      rows.sort((a, b) => {
+        let va: string | number = '';
+        let vb: string | number = '';
+        switch (col) {
+          case 'created_at':
+            va = new Date(a.created_at).getTime();
+            vb = new Date(b.created_at).getTime();
+            break;
+          case 'source':
+            va = this.sourceLabel(a.source);
+            vb = this.sourceLabel(b.source);
+            break;
+          case 'action':
+            va = this.actionLabel(a.action);
+            vb = this.actionLabel(b.action);
+            break;
+          case 'entity_type':
+            va = this.entityTypeLabel(a.entity_type);
+            vb = this.entityTypeLabel(b.entity_type);
+            break;
+          case 'name':
+            va = a.entity_name || this.getName(a);
+            vb = b.entity_name || this.getName(b);
+            break;
+          case 'uid':
+            va = this.getUid(a);
+            vb = this.getUid(b);
+            break;
+          case 'user_name':
+            va = a.user_name ?? '';
+            vb = b.user_name ?? '';
+            break;
+          default:
+            return 0;
+        }
+        if (typeof va === 'number' && typeof vb === 'number') {
+          return va < vb ? -dir : va > vb ? dir : 0;
+        }
+        return String(va).localeCompare(String(vb), 'ru') * dir;
+      });
+    }
+    return rows;
+  }
+
+  setColFilter(key: string, value: string): void {
+    const next = { ...this.colFilter, [key]: value };
+    if (!String(value).trim()) {
+      delete next[key];
+    }
+    this.colFilter = next;
+  }
+
+  clearColFilter(key: string): void {
+    const next = { ...this.colFilter };
+    delete next[key];
+    this.colFilter = next;
+  }
+
+  toggleSort(column: SortCol): void {
+    if (this.sortColumn === column) {
+      this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = column;
+      this.sortDir = column === 'created_at' ? 'desc' : 'asc';
+    }
+  }
+
+  sortIcon(column: SortCol): string {
+    if (this.sortColumn !== column) return 'unfold_more';
+    return this.sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward';
+  }
+
+  filterIconColor(key: string): string | undefined {
+    return (this.colFilter[key] || '').trim() ? 'primary' : undefined;
   }
 
   loadIssues(): void {
@@ -87,7 +178,6 @@ export class ChangeLogComponent implements OnInit {
   getName(entry: ChangeLogEntry): string {
     const p = entry.payload;
     if (!p) return entry.entity_name ?? '—';
-    // Обходы (сессии): из payload показываем линию и время
     if (entry.entity_type === 'patrol_session') {
       const lineName = (p['line_name'] as string) || 'ЛЭП';
       if (entry.action === 'session_start') {
@@ -122,11 +212,9 @@ export class ChangeLogComponent implements OnInit {
       const msg = typeof p['message'] === 'string' ? p['message'] : 'Автосборка топологии';
       return n != null ? `${msg}: ${n} пролётов` : msg;
     }
-    /** Карточка опоры: вложения и комментарий (сервер формирует summary_ru) */
     if (p['pole_card'] === true && typeof p['summary_ru'] === 'string') {
       return p['summary_ru'] as string;
     }
-    /** Предупреждение по качеству данных (например длина пролёта vs GPS) */
     if (p['data_quality_warning'] === true && typeof p['message_ru'] === 'string') {
       return p['message_ru'] as string;
     }
@@ -206,13 +294,15 @@ export class ChangeLogComponent implements OnInit {
 
   openDetail(entry: ChangeLogEntry): void {
     this.dialog.open(ChangeLogDetailDialogComponent, {
-      width: '700px',
+      width: 'min(96vw, 720px)',
+      maxWidth: '96vw',
       maxHeight: '90vh',
+      panelClass: 'change-log-detail-pane',
+      autoFocus: false,
       data: { entry }
     });
   }
 
-  /** Показать UID сокращённо (начало + «...») для копирования по клику */
   formatUidForDisplay(uid: string | null | undefined): string {
     if (!uid) return '—';
     return uid.length <= 12 ? uid : uid.slice(0, 8) + '…';

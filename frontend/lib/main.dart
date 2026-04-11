@@ -1,15 +1,13 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'core/config/app_config.dart';
 import 'core/database/database.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/api_service.dart';
+import 'core/services/session_expiry.dart';
 import 'core/services/sync_service.dart';
 import 'core/services/sync_scheduler.dart';
 import 'core/services/base_url_manager.dart';
@@ -65,13 +63,32 @@ void main() async {
   );
 }
 
-class LepmApp extends ConsumerWidget {
+class LepmApp extends ConsumerStatefulWidget {
   const LepmApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LepmApp> createState() => _LepmAppState();
+}
+
+class _LepmAppState extends ConsumerState<LepmApp> {
+  @override
+  void initState() {
+    super.initState();
+    registerSessionExpiredHandler(() async {
+      await ref.read(authServiceProvider.notifier).logout();
+    });
+  }
+
+  @override
+  void dispose() {
+    registerSessionExpiredHandler(null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    
+
     return SyncScheduler(
       child: MaterialApp.router(
         title: 'ЛЭП Management',

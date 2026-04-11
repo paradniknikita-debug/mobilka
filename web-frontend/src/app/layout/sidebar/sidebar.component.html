@@ -110,7 +110,7 @@
                     <span class="tree-recloser-badge" *ngIf="getEquipmentIconKey(eq) === 'recloser'"></span>
                   </span>
                   <mat-icon *ngIf="!getEquipmentIconKey(eq)" class="node-icon equipment-icon">electrical_services</mat-icon>
-                  <span class="node-label">{{ eq.name || eq.equipment_type || 'Оборудование' }}</span>
+                  <span class="node-label">{{ equipmentTreeLabel(eq) }}</span>
                 </div>
               </div>
             </div>

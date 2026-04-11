@@ -24,6 +24,7 @@ export interface Equipment {
   /** Координаты оборудования как отдельного объекта (CIM: x_position = longitude, y_position = latitude) */
   x_position?: number;
   y_position?: number;
+  catalog_item_id?: number;
   created_at: string;
   updated_at?: string;
 }
@@ -43,5 +44,6 @@ export interface EquipmentCreate {
   criticality?: string | null;
   x_position?: number;
   y_position?: number;
+  catalog_item_id?: number;
 }
 

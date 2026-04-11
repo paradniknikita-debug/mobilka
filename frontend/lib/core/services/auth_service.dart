@@ -68,6 +68,14 @@ class AuthService extends StateNotifier<AuthState> {
           print('✅ [AuthService] Статус авторизации проверен: ${user.username}');
         }
       } catch (e) {
+        // Явный 401 от сервера — сессия недействительна; выходим на логин (не маскируем офлайном).
+        if (e is DioException && e.response?.statusCode == 401) {
+          if (kDebugMode) {
+            print('❌ [AuthService] 401 при проверке токена — выход из сессии');
+          }
+          await logout();
+          return;
+        }
         // Токен невалидный или нет связи. Если «оставаться в системе» — не выходим, работаем оффлайн.
         final stayLoggedIn = _prefs.getBool(AppConfig.stayLoggedInKey) ?? true;
         if (stayLoggedIn) {

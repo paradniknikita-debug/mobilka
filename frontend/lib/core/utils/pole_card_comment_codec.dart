@@ -150,16 +150,17 @@ class PoleCardCommentCodec {
     ];
   }
 
+  /// Дата/время в московской зоне (UTC+3), независимо от часового пояса устройства.
   static String formatDateTime(String? at) {
     if (at == null || at.trim().isEmpty) return '—';
     final d = DateTime.tryParse(at);
     if (d == null) return at;
-    final local = d.toLocal();
-    final dd = local.day.toString().padLeft(2, '0');
-    final mm = local.month.toString().padLeft(2, '0');
-    final yyyy = local.year;
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '$dd.$mm.$yyyy $hh:$min';
+    final msk = d.toUtc().add(const Duration(hours: 3));
+    final dd = msk.day.toString().padLeft(2, '0');
+    final mm = msk.month.toString().padLeft(2, '0');
+    final yyyy = msk.year;
+    final hh = msk.hour.toString().padLeft(2, '0');
+    final min = msk.minute.toString().padLeft(2, '0');
+    return '$dd.$mm.$yyyy $hh:$min МСК';
   }
 }

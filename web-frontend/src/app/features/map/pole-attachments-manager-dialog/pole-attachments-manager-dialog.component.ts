@@ -66,7 +66,9 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
     const d = Date.parse(s);
     if (Number.isNaN(d)) return s;
     try {
-      return new Date(d).toLocaleString('ru-RU');
+      return (
+        new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) + ' МСК'
+      );
     } catch {
       return s;
     }

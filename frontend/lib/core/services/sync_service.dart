@@ -455,6 +455,8 @@ class SyncService extends StateNotifier<SyncState> {
           yearInstalled: pole.yearInstalled,
           condition: pole.condition ?? 'good',
           notes: pole.notes,
+          structuralDefect: pole.structuralDefect,
+          structuralDefectCriticality: pole.structuralDefectCriticality,
           cardComment: pole.cardComment,
           cardCommentAttachment: resolved.isEmpty ? null : jsonEncode(resolved),
         );
@@ -818,6 +820,10 @@ class SyncService extends StateNotifier<SyncState> {
                 data['year_installed'] != null ? _toInt(data['year_installed']) : null),
             condition: drift.Value(data['condition'] as String? ?? 'good'),
             notes: drift.Value(data['notes'] as String?),
+            structuralDefect:
+                drift.Value(data['structural_defect'] as String?),
+            structuralDefectCriticality: drift.Value(
+                data['structural_defect_criticality'] as String?),
             cardComment: drift.Value(mergedComment),
             cardCommentAttachment: drift.Value(mergedAttach),
             createdBy: _toInt(data['created_by']),

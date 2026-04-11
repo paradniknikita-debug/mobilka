@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { User, UserCreate, AuthResponse } from '../models/user.model';
 import { PowerLine, PowerLineCreate } from '../models/power-line.model';
@@ -17,6 +18,7 @@ import {
   PoleSequenceResponse
 } from '../models/cim.model';
 import { ChangeLogEntry, ChangeLogFilters, ModelIssue } from '../models/change-log.model';
+import { EquipmentCatalogCreate, EquipmentCatalogItem } from '../models/equipment-catalog.model';
 
 @Injectable({
   providedIn: 'root'
@@ -198,6 +200,60 @@ export class ApiService {
     return this.http.delete<{message: string}>(`${this.apiUrl}/equipment/${id}`);
   }
 
+  // ========== Equipment Catalog ==========
+  getEquipmentCatalog(params?: {
+    type_code?: string;
+    q?: string;
+    is_active?: boolean;
+    skip?: number;
+    limit?: number;
+  }): Observable<EquipmentCatalogItem[]> {
+    let httpParams = new HttpParams();
+    if (params?.type_code) httpParams = httpParams.set('type_code', params.type_code);
+    if (params?.q) httpParams = httpParams.set('q', params.q);
+    if (params?.is_active != null) httpParams = httpParams.set('is_active', String(params.is_active));
+    if (params?.skip != null) httpParams = httpParams.set('skip', String(params.skip));
+    if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
+    return this.http.get<EquipmentCatalogItem[]>(`${this.apiUrl}/equipment-catalog`, { params: httpParams });
+  }
+
+  createEquipmentCatalogItem(payload: EquipmentCatalogCreate): Observable<EquipmentCatalogItem> {
+    return this.http.post<EquipmentCatalogItem>(`${this.apiUrl}/equipment-catalog`, payload);
+  }
+
+  updateEquipmentCatalogItem(id: number, payload: Partial<EquipmentCatalogCreate>): Observable<EquipmentCatalogItem> {
+    return this.http.put<EquipmentCatalogItem>(`${this.apiUrl}/equipment-catalog/${id}`, payload);
+  }
+
+  deleteEquipmentCatalogItem(id: number, hard: boolean = false): Observable<{ message: string }> {
+    const params = new HttpParams().set('hard', String(hard));
+    return this.http.delete<{ message: string }>(`${this.apiUrl}/equipment-catalog/${id}`, { params });
+  }
+
+  seedEquipmentCatalogDefaults(): Observable<{ inserted: number }> {
+    return this.http.post<{ inserted: number }>(`${this.apiUrl}/equipment-catalog/seed-defaults`, {});
+  }
+
+  importEquipmentCatalog(file: File, mode: 'upsert' | 'insert_only' = 'upsert'): Observable<{ inserted: number; updated: number; skipped: number; total: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = new HttpParams().set('mode', mode);
+    return this.http.post<{ inserted: number; updated: number; skipped: number; total: number }>(
+      `${this.apiUrl}/equipment-catalog/import`,
+      formData,
+      { params }
+    );
+  }
+
+  downloadEquipmentCatalogTemplate(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/equipment-catalog/template`, { responseType: 'blob' });
+  }
+
+  exportEquipmentCatalog(format: 'xlsx' | 'csv' = 'xlsx'): Observable<Blob> {
+    const params = new HttpParams().set('fmt', format);
+    return this.http.get(`${this.apiUrl}/equipment-catalog/export`, { params, responseType: 'blob' });
+  }
+
   // ========== Substations ==========
   getSubstations(): Observable<Substation[]> {
     return this.http.get<Substation[]>(`${this.apiUrl}/substations`);
@@ -282,23 +338,67 @@ export class ApiService {
     useCimpy: boolean = true,
     includeGps: boolean = true,
     lineId: number | null = null,
-    includeEquipment: boolean = true
+    includeEquipment: boolean = true,
+    includeElectricalModel: boolean = true,
+    includeDefects: boolean = true,
+    includeSubstationVoltageLevels: boolean = true
   ): Observable<Blob> {
-    const params = new HttpParams()
+    let params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
       .set('use_cimpy', String(useCimpy))
       .set('include_gps', String(includeGps))
-      .set('include_equipment', String(includeEquipment));
+      .set('include_equipment', String(includeEquipment))
+      .set('include_electrical_model', String(includeElectricalModel))
+      .set('include_defects', String(includeDefects))
+      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
 
     if (lineId != null) {
-      // Частичный экспорт по ЛЭП
-      params.set('line_id', String(lineId));
+      params = params.set('line_id', String(lineId));
     }
     return this.http.get(`${this.apiUrl}/cim/export/xml`, {
       params,
       responseType: 'blob'
     });
+  }
+
+  /** Экспорт CIM XML с метаданными ответа (например, деградация без оборудования). */
+  exportCIMXmlResponse(
+    includeSubstations: boolean = true,
+    includePowerLines: boolean = true,
+    useCimpy: boolean = true,
+    includeGps: boolean = true,
+    lineId: number | null = null,
+    includeEquipment: boolean = true,
+    includeElectricalModel: boolean = true,
+    includeDefects: boolean = true,
+    includeSubstationVoltageLevels: boolean = true
+  ): Observable<{ body: Blob; degradedEquipmentOmitted: boolean }> {
+    let params = new HttpParams()
+      .set('include_substations', String(includeSubstations))
+      .set('include_power_lines', String(includePowerLines))
+      .set('use_cimpy', String(useCimpy))
+      .set('include_gps', String(includeGps))
+      .set('include_equipment', String(includeEquipment))
+      .set('include_electrical_model', String(includeElectricalModel))
+      .set('include_defects', String(includeDefects))
+      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
+    if (lineId != null) {
+      params = params.set('line_id', String(lineId));
+    }
+    return this.http
+      .get(`${this.apiUrl}/cim/export/xml`, {
+        params,
+        responseType: 'blob',
+        observe: 'response',
+      })
+      .pipe(
+        map((res) => ({
+          body: res.body as Blob,
+          degradedEquipmentOmitted:
+            (res.headers.get('X-CIM-Export-Degraded') || '').includes('equipment'),
+        }))
+      );
   }
 
   importCIMXml(file: File): Observable<{ summary?: Record<string, number>; count?: number; objects?: any[] }> {
@@ -315,22 +415,63 @@ export class ApiService {
     includePowerLines: boolean = true,
     includeGps: boolean = true,
     lineId: number | null = null,
-    includeEquipment: boolean = true
+    includeEquipment: boolean = true,
+    includeElectricalModel: boolean = true,
+    includeDefects: boolean = true,
+    includeSubstationVoltageLevels: boolean = true
   ): Observable<Blob> {
+    return this.exportCIM552DiffResponse(
+      includeSubstations,
+      includePowerLines,
+      includeGps,
+      lineId,
+      includeEquipment,
+      includeElectricalModel,
+      includeDefects,
+      includeSubstationVoltageLevels
+    ).pipe(map((r) => r.body));
+  }
+
+  /**
+   * Тот же запрос, что /cim/export/552-diff → внутри вызывает export_cim_xml.
+   * Заголовок X-CIM-Export-Degraded: сервер мог выгрузить без оборудования (ретрай).
+   */
+  exportCIM552DiffResponse(
+    includeSubstations: boolean = true,
+    includePowerLines: boolean = true,
+    includeGps: boolean = true,
+    lineId: number | null = null,
+    includeEquipment: boolean = true,
+    includeElectricalModel: boolean = true,
+    includeDefects: boolean = true,
+    includeSubstationVoltageLevels: boolean = true
+  ): Observable<{ body: Blob; degradedEquipmentOmitted: boolean }> {
     let params = new HttpParams()
       .set('include_substations', String(includeSubstations))
       .set('include_power_lines', String(includePowerLines))
       .set('include_gps', String(includeGps))
-      .set('include_equipment', String(includeEquipment));
+      .set('include_equipment', String(includeEquipment))
+      .set('include_electrical_model', String(includeElectricalModel))
+      .set('include_defects', String(includeDefects))
+      .set('include_substation_voltage_levels', String(includeSubstationVoltageLevels));
 
     if (lineId != null) {
       params = params.set('line_id', String(lineId));
     }
 
-    return this.http.get(`${this.apiUrl}/cim/export/552-diff`, {
-      params,
-      responseType: 'blob'
-    });
+    return this.http
+      .get(`${this.apiUrl}/cim/export/552-diff`, {
+        params,
+        responseType: 'blob',
+        observe: 'response',
+      })
+      .pipe(
+        map((res) => ({
+          body: res.body as Blob,
+          degradedEquipmentOmitted:
+            (res.headers.get('X-CIM-Export-Degraded') || '').includes('equipment'),
+        }))
+      );
   }
 
   importCIM552Diff(file: File): Observable<{ summary?: Record<string, number>; count?: number; objects?: any[] }> {

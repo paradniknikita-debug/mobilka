@@ -12,6 +12,8 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/attachment_urls.dart';
+import '../../../../core/utils/pole_card_comment_codec.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Блок «Комментарий карточки» и превью вложений (с Bearer для API).
 class PoleCardAttachmentsSection extends ConsumerWidget {
@@ -24,7 +26,10 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final comment = objectProperties['card_comment']?.toString().trim();
+    final rawComment = objectProperties['card_comment']?.toString().trim();
+    final commentThread = (rawComment == null || rawComment.isEmpty)
+        ? <Map<String, dynamic>>[]
+        : PoleCardCommentCodec.parse(rawComment);
     final raw = objectProperties['card_comment_attachment']?.toString();
     final prefs = ref.watch(prefsProvider);
     final token = prefs.getString(AppConfig.authTokenKey);
@@ -42,7 +47,7 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
       }
     }
 
-    if ((comment == null || comment.isEmpty) && (items == null || items.isEmpty)) {
+    if (commentThread.isEmpty && (items == null || items.isEmpty)) {
       return const SizedBox.shrink();
     }
 
@@ -54,7 +59,7 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (comment != null && comment.isNotEmpty) ...[
+        if (commentThread.isNotEmpty) ...[
           Text(
             'Комментарий карточки',
             style: TextStyle(
@@ -62,8 +67,13 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
               color: Colors.grey.shade700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(comment, style: const TextStyle(color: Colors.black87)),
+          const SizedBox(height: 8),
+          ...commentThread.map(
+            (m) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _CardCommentBubble(message: m),
+            ),
+          ),
           const SizedBox(height: 12),
         ],
         if (items != null && items.isNotEmpty) ...[
@@ -95,6 +105,106 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
         ],
       ],
     );
+  }
+}
+
+/// Одно сообщение истории карточки (как пузырьки на Angular `map.component.html`).
+class _CardCommentBubble extends StatelessWidget {
+  final Map<String, dynamic> message;
+
+  const _CardCommentBubble({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final nameRaw = message['user_name']?.toString().trim() ?? '';
+    final name = nameRaw.isEmpty ? 'Пользователь' : nameRaw;
+    final at = message['at']?.toString();
+    final text = (message['text'] as String?)?.trim() ?? '';
+    final voiceUrl = (message['voice_url'] as String?)?.trim() ?? '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              Text(
+                PoleCardCommentCodec.formatDateTime(at),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          if (text.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(text, style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.35)),
+          ],
+          if (voiceUrl.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            TextButton.icon(
+              onPressed: () => _openVoice(context, voiceUrl),
+              icon: const Icon(Icons.mic, size: 18),
+              label: const Text('Голосовое сообщение'),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openVoice(BuildContext context, String rel) async {
+    final abs = resolveAttachmentAbsoluteUrl(rel);
+    final uri = Uri.tryParse(abs);
+    if (uri == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Некорректная ссылка на аудио')),
+        );
+      }
+      return;
+    }
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось открыть аудио')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось открыть аудио')),
+        );
+      }
+    }
   }
 }
 

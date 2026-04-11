@@ -16,9 +16,12 @@ export class ErrorInterceptor implements HttpInterceptor {
     return next.handle(req).pipe(
       catchError((error: HttpErrorResponse) => {
         if (error.status === 401) {
-          // Токен истек или невалидный
+          const url = error.url || '';
+          // Неверный пароль на /auth/login — не сбрасывать сессию и не уводить с экрана входа
+          if (url.includes('/auth/login') || url.includes('/auth/token')) {
+            return throwError(() => error);
+          }
           console.log('🔓 Токен истек, требуется повторная авторизация');
-          // Ленивая инжекция AuthService для избежания циклической зависимости
           const authService = this.injector.get(AuthService);
           authService.logout();
         } else if (error.status === 403) {

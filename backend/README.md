@@ -72,6 +72,8 @@ alembic revision --autogenerate -m "Initial migration"
 alembic upgrade head
 ```
 
+После обновления кода, если API отвечает **500** на карту (`/api/v1/map/...`), `/power-lines`, `/equipment`, а в логах PostgreSQL — **нет колонки** в `pole` (например `structural_defect`), выполните **`alembic upgrade head`** из каталога `backend` с настроенным `DATABASE_URL`.
+
 ### 5. Запуск сервера
 
 ```bash

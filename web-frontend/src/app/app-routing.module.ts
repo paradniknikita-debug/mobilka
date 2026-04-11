@@ -8,6 +8,7 @@ import { MapComponent } from './features/map/map.component';
 import { ChangeLogComponent } from './features/change-log/change-log.component';
 import { ReportsComponent } from './features/reports/reports.component';
 import { CimImportComponent } from './features/cim-import/cim-import.component';
+import { EquipmentCatalogComponent } from './features/equipment-catalog/equipment-catalog.component';
 
 const routes: Routes = [
   {
@@ -39,6 +40,10 @@ const routes: Routes = [
       {
         path: 'cim-import',
         component: CimImportComponent
+      },
+      {
+        path: 'equipment-catalog',
+        component: EquipmentCatalogComponent
       },
       {
         path: 'power-lines',

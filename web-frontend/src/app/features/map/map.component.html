@@ -97,6 +97,14 @@
         <span class="property-label">Заметки:</span>
         <span class="property-value card-comment">{{ selectedPole.notes }}</span>
       </div>
+      <div class="property-item" *ngIf="selectedPole.structural_defect">
+        <span class="property-label">Дефект опоры:</span>
+        <span class="property-value card-comment">{{ selectedPole.structural_defect }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.structural_defect_criticality">
+        <span class="property-label">Критичность дефекта опоры:</span>
+        <span class="property-value">{{ selectedPole.structural_defect_criticality === 'high' ? 'Высокая' : selectedPole.structural_defect_criticality === 'medium' ? 'Средняя' : 'Низкая' }}</span>
+      </div>
       <div class="property-item" *ngIf="selectedPole.conductor_type || selectedPole.conductor_material || selectedPole.conductor_section">
         <span class="property-label">Марка провода:</span>
         <span class="property-value">
@@ -110,7 +118,11 @@
               <span class="pole-cc-author">{{ commentAuthorLabel(m) }}</span>
               <span class="pole-cc-time">{{ formatCardCommentAt(m.at) }}</span>
             </div>
-            <div class="pole-cc-text">{{ m.text }}</div>
+            <div class="pole-cc-text" *ngIf="m.text">{{ m.text }}</div>
+            <div class="pole-cc-voice" *ngIf="m.voice_url">
+              <mat-icon>mic</mat-icon>
+              <a [href]="m.voice_url" target="_blank" rel="noopener">Голосовое сообщение</a>
+            </div>
           </div>
         </div>
       </div>
@@ -131,8 +143,7 @@
           <ng-container *ngFor="let eq of getPoleEquipmentForCard()">
             <div class="equipment-block">
               <span class="equipment-chip">
-                {{ eq.name || eq.equipment_type }}
-                <span class="equipment-type">({{ eq.equipment_type }})</span>
+                {{ equipmentChipLine(eq) }}
               </span>
               <div class="equipment-defect" *ngIf="getEquipmentDefect(eq)">
                 <span class="defect-label">Дефект:</span> {{ getEquipmentDefect(eq) }}

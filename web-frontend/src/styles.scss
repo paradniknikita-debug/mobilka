@@ -179,6 +179,14 @@ body {
   color: #d32f2f;
 }
 
+/* Диалог деталей журнала: кнопки заголовка остаются внутри панели */
+.change-log-detail-pane .mat-mdc-dialog-container,
+.change-log-detail-pane .mat-dialog-container {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
 .app-dialog-resize-handle {
   position: absolute;
   right: 2px;

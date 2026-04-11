@@ -111,6 +111,8 @@ def _pole_orm_to_dict(pole) -> dict:
         "year_installed": _get_attr_safe(pole, "year_installed"),
         "condition": _get_attr_safe(pole, "condition", "good"),
         "notes": _get_attr_safe(pole, "notes"),
+        "structural_defect": _get_attr_safe(pole, "structural_defect"),
+        "structural_defect_criticality": _get_attr_safe(pole, "structural_defect_criticality"),
         "sequence_number": _get_attr_safe(pole, "sequence_number"),
         "conductor_type": _get_attr_safe(pole, "conductor_type"),
         "conductor_material": _get_attr_safe(pole, "conductor_material"),
@@ -868,15 +870,31 @@ async def create_pole(
     pole_dict.pop('id', None)
     if pole_dict.get('pole_number') is not None:
         pole_dict['pole_number'] = normalize_pole_number(pole_dict['pole_number'])
-    # Номер магистрали (без "/") — опора всегда магистральная, даже если передан tap_pole_id
-    pole_number_str = (pole_dict.get('pole_number') or "").strip()
-    if pole_number_str and "/" not in pole_number_str:
+    # Отпайка / магистраль — только по явным branch_type и tap_pole_id (номер опоры может быть любым;
+    # «3/1» — лишь распространённое соглашение для отображения, не условие для БД).
+    bt_raw = getattr(pole_data, "branch_type", None)
+    bt = (bt_raw or "").strip().lower() if isinstance(bt_raw, str) else None
+    tap_id_req = getattr(pole_data, "tap_pole_id", None)
+    if bt == "main":
         pole_dict.pop("tap_pole_id", None)
         pole_dict.pop("tap_branch_index", None)
-    if getattr(pole_data, 'branch_type', None) is not None:
-        pole_dict['branch_type'] = pole_data.branch_type
-    if "/" in (pole_number_str or "") and getattr(pole_data, 'tap_pole_id', None) is not None:
-        pole_dict['tap_pole_id'] = pole_data.tap_pole_id
+        pole_dict["branch_type"] = "main"
+    elif bt == "tap" and tap_id_req is not None:
+        pole_dict["tap_pole_id"] = tap_id_req
+        pole_dict["branch_type"] = "tap"
+    elif bt == "tap" and tap_id_req is None:
+        pole_dict.pop("tap_pole_id", None)
+        pole_dict.pop("tap_branch_index", None)
+        pole_dict["branch_type"] = "main"
+    else:
+        # branch_type не передан: совместимость со старыми клиентами — только по tap_pole_id
+        if tap_id_req is None:
+            pole_dict.pop("tap_pole_id", None)
+            pole_dict.pop("tap_branch_index", None)
+        else:
+            pole_dict["tap_pole_id"] = tap_id_req
+            if not pole_dict.get("branch_type"):
+                pole_dict["branch_type"] = "tap"
     pole_dict.pop('start_new_tap', None)  # не поле БД, только флаг для логики
 
     lon_val = getattr(pole_data, 'x_position', None)
@@ -999,16 +1017,6 @@ async def create_pole(
             import traceback
             print(f"Ошибка автоматического создания пролёта: {e}")
             print(traceback.format_exc())
-
-        # При создании первой опоры отпайки (3/1) помечаем опору 3 как отпаечную (is_tap_pole=True), как в Angular
-        tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
-        if tap_pole_id_val is not None:
-            await db.execute(
-                update(Pole)
-                .where(Pole.id == tap_pole_id_val, Pole.line_id == power_line_id)
-                .values(is_tap_pole=True)
-            )
-            await db.flush()
 
         await db.commit()
     except ProgrammingError as e:
@@ -1914,18 +1922,15 @@ async def delete_span(
     
     return {"message": "Span deleted successfully"}
 
-@router.post("/{power_line_id}/spans/auto-create")
-async def auto_create_spans(
+async def auto_create_spans_service(
+    db: AsyncSession,
     power_line_id: int,
-    mode: str = Query("full", description="full — пересобрать с нуля (удалить существующие); preserve — добавить только недостающие"),
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
+    current_user: User,
+    mode: str = "full",
+) -> dict:
     """
-    Автоматическое создание пролётов на основе последовательности опор.
-    - mode=full (по умолчанию): существующие пролёты и участки линии удаляются, топология строится с нуля.
-    - mode=preserve: существующие пролёты сохраняются, добавляются только недостающие.
-    Создаёт пролёты между соседними опорами, участки линии (AClineSegment) и секции линии (LineSection).
+    Создание пролётов и участков (ACLineSegment) по последовательности опор.
+    Общая реализация для POST .../spans/auto-create и для экспорта CIM.
     """
     from app.models.base import generate_mrid
 
@@ -2234,6 +2239,15 @@ async def auto_create_spans(
 
     # Запись в журнал изменений об автосборке топологии (созданные пролёты/участки)
     if created_spans:
+        spans_preview = [
+            {
+                "id": s.id,
+                "span_number": s.span_number,
+                "from_pole_id": s.from_pole_id,
+                "to_pole_id": s.to_pole_id,
+            }
+            for s in created_spans
+        ]
         log_entry = ChangeLog(
             user_id=current_user.id,
             source="web",
@@ -2245,6 +2259,7 @@ async def auto_create_spans(
                 "message": "Автосборка топологии",
                 "created_spans": len(created_spans),
                 "line_name": line_name,
+                "spans_created": spans_preview,
             },
         )
         db.add(log_entry)
@@ -2265,6 +2280,23 @@ async def auto_create_spans(
         "created_count": len(created_spans),
         "spans": created_spans
     }
+
+
+@router.post("/{power_line_id}/spans/auto-create")
+async def auto_create_spans(
+    power_line_id: int,
+    mode: str = Query("full", description="full — пересобрать с нуля (удалить существующие); preserve — добавить только недостающие"),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Автоматическое создание пролётов на основе последовательности опор.
+    - mode=full (по умолчанию): существующие пролёты и участки линии удаляются, топология строится с нуля.
+    - mode=preserve: существующие пролёты сохраняются, добавляются только недостающие.
+    Создаёт пролёты между соседними опорами, участки линии (AClineSegment) и секции линии (LineSection).
+    """
+    return await auto_create_spans_service(db, power_line_id, current_user, mode)
+
 
 @router.post("/{power_line_id}/taps", response_model=TapResponse)
 async def create_tap(

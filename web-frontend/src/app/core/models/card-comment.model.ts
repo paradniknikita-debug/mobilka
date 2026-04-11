@@ -2,6 +2,8 @@
 export interface CardCommentMessage {
   id?: string;
   text: string;
+  /** Ссылка на аудио (после загрузки на сервер) */
+  voice_url?: string;
   /** ISO 8601 UTC */
   at?: string;
   user_id?: number;

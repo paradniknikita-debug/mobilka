@@ -42,6 +42,10 @@ def _equipment_icon_key(equipment_type: str, name: Optional[str] = None) -> Opti
     """
     t = (equipment_type or "").lower()
     n = (name or "").lower()
+    # Траверсы и «т-образные» конструкции не показываем маркером (только в карточке опоры).
+    traverse_hints = ("траверс", "traverse", "cross_arm", "crossarm", "т-образ")
+    if any(h in n for h in traverse_hints) or any(x in t for x in ("траверс", "traverse", "cross_arm")):
+        return None
     if "реклоузер" in t or "реклоузер" in n or "recloser" in n:
         return "recloser"
     if "выключател" in t or "выключател" in n or "breaker" in n:
@@ -53,9 +57,40 @@ def _equipment_icon_key(equipment_type: str, name: Optional[str] = None) -> Opti
     if "разрядник" in t or "опн" in n:
         return "arrester"
     no_icon = ("фундамент", "изолятор", "траверс", "грозоотвод", "грозотрос")
-    if any(x in t for x in no_icon):
+    if any(x in t for x in no_icon) or any(x in n for x in no_icon):
         return None
     return None
+
+
+def _normalize_criticality(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    v = str(value).strip().lower()
+    if not v:
+        return None
+    if v in {"high", "critical", "высокая", "высокий"}:
+        return "high"
+    if v in {"medium", "med", "средняя", "средний"}:
+        return "medium"
+    if v in {"low", "низкая", "низкий"}:
+        return "low"
+    return None
+
+
+def _has_equipment_defect(eq: Equipment) -> bool:
+    raw = getattr(eq, "defect", None)
+    return raw is not None and str(raw).strip() != ""
+
+
+def _criticality_rank(value: Optional[str]) -> int:
+    c = _normalize_criticality(value)
+    if c == "high":
+        return 3
+    if c == "medium":
+        return 2
+    if c == "low":
+        return 1
+    return 0
 
 @router.get("/tiles/{z}/{x}/{y}")
 async def get_tile(
@@ -281,6 +316,7 @@ async def _get_poles_geojson_impl(db: AsyncSession):
     result = await db.execute(
         select(Pole).options(
             selectinload(Pole.line),
+            selectinload(Pole.equipment),
             selectinload(Pole.connectivity_nodes).selectinload(ConnectivityNode.from_segments),
             selectinload(Pole.connectivity_nodes).selectinload(ConnectivityNode.to_segments),
             selectinload(Pole.position_points),
@@ -376,6 +412,44 @@ async def _get_poles_geojson_impl(db: AsyncSession):
             ca = getattr(pole, "card_comment_attachment", None)
             if ca:
                 properties["card_comment_attachment"] = str(ca)
+
+            # Агрегация дефектов оборудования по опоре (вариант A для фронта)
+            defect_count = 0
+            defect_max_rank = 0
+            defect_max_criticality = None
+            for eq in (getattr(pole, "equipment", None) or []):
+                if not _has_equipment_defect(eq):
+                    continue
+                defect_count += 1
+                crit = _normalize_criticality(getattr(eq, "criticality", None))
+                rank = _criticality_rank(crit)
+                if rank > defect_max_rank:
+                    defect_max_rank = rank
+                    defect_max_criticality = crit
+            if defect_count > 0:
+                properties["has_equipment_defect"] = True
+                properties["equipment_defect_count"] = defect_count
+                if defect_max_criticality is not None:
+                    properties["equipment_defect_max_criticality"] = defect_max_criticality
+            else:
+                properties["has_equipment_defect"] = False
+
+            sd = getattr(pole, "structural_defect", None)
+            sd_crit = _normalize_criticality(getattr(pole, "structural_defect_criticality", None))
+            if sd and str(sd).strip():
+                properties["structural_defect"] = str(sd).strip()
+                if sd_crit:
+                    properties["structural_defect_criticality"] = sd_crit
+            # Итоговая критичность для подсветки маркера опоры (оборудование ∪ дефект опоры)
+            merged_crit = defect_max_criticality
+            merged_rank = _criticality_rank(merged_crit)
+            if sd_crit:
+                r = _criticality_rank(sd_crit)
+                if r > merged_rank:
+                    merged_rank = r
+                    merged_crit = sd_crit
+            if merged_crit:
+                properties["criticality"] = merged_crit
 
             # Убеждаемся, что координаты - это числа, а не None
             feature = {
@@ -695,7 +769,13 @@ async def _get_equipment_geojson_impl(db: AsyncSession):
                 t = 0.8 if len(visible) == 1 else 0.6 + (0.3 * (j / max(1, len(visible) - 1)))
                 lng = x1 + (x2 - x1) * t
                 lat = y1 + (y2 - y1) * t
-                angle_rad = math.atan2(y2 - y1, x2 - x1)
+                if p1.id <= p2.id:
+                    x_lo, y_lo, x_hi, y_hi = x1, y1, x2, y2
+                    from_id, to_id = p1.id, p2.id
+                else:
+                    x_lo, y_lo, x_hi, y_hi = x2, y2, x1, y1
+                    from_id, to_id = p2.id, p1.id
+                angle_rad = math.atan2(y_hi - y_lo, x_hi - x_lo)
                 features.append({
                     "type": "Feature",
                     "geometry": {"type": "Point", "coordinates": [lng, lat]},
@@ -704,9 +784,16 @@ async def _get_equipment_geojson_impl(db: AsyncSession):
                         "angle_rad": angle_rad,
                         "equipment_type": e.equipment_type,
                         "name": e.name or "",
-                        "from_pole_id": p1.id,
-                        "to_pole_id": p2.id,
+                        "from_pole_id": from_id,
+                        "to_pole_id": to_id,
+                        "from_lng": x_lo,
+                        "from_lat": y_lo,
+                        "to_lng": x_hi,
+                        "to_lat": y_hi,
                         "line_id": power_line.id,
+                        "equipment_id": e.id,
+                        "has_defect": _has_equipment_defect(e),
+                        "defect_criticality": _normalize_criticality(getattr(e, "criticality", None)),
                     },
                 })
 
@@ -740,7 +827,13 @@ async def _get_equipment_geojson_impl(db: AsyncSession):
                     t = 0.8 if len(visible) == 1 else 0.6 + (0.3 * (j / max(1, len(visible) - 1)))
                     lng = x1 + (x2 - x1) * t
                     lat = y1 + (y2 - y1) * t
-                    angle_rad = math.atan2(y2 - y1, x2 - x1)
+                    if p1.id <= p2.id:
+                        x_lo, y_lo, x_hi, y_hi = x1, y1, x2, y2
+                        from_id, to_id = p1.id, p2.id
+                    else:
+                        x_lo, y_lo, x_hi, y_hi = x2, y2, x1, y1
+                        from_id, to_id = p2.id, p1.id
+                    angle_rad = math.atan2(y_hi - y_lo, x_hi - x_lo)
                     features.append({
                         "type": "Feature",
                         "geometry": {"type": "Point", "coordinates": [lng, lat]},
@@ -749,9 +842,16 @@ async def _get_equipment_geojson_impl(db: AsyncSession):
                             "angle_rad": angle_rad,
                             "equipment_type": e.equipment_type,
                             "name": e.name or "",
-                            "from_pole_id": p1.id,
-                            "to_pole_id": p2.id,
+                            "from_pole_id": from_id,
+                            "to_pole_id": to_id,
+                            "from_lng": x_lo,
+                            "from_lat": y_lo,
+                            "to_lng": x_hi,
+                            "to_lat": y_hi,
                             "line_id": power_line.id,
+                            "equipment_id": e.id,
+                            "has_defect": _has_equipment_defect(e),
+                            "defect_criticality": _normalize_criticality(getattr(e, "criticality", None)),
                         },
                     })
 

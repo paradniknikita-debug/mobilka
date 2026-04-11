@@ -28,15 +28,18 @@ export function parseCardCommentMessages(raw: string | null | undefined): CardCo
           .map((x) => {
             const text =
               typeof x['text'] === 'string' ? (x['text'] as string).trim() : '';
+            const voiceUrl =
+              typeof x['voice_url'] === 'string' ? (x['voice_url'] as string).trim() : '';
             return {
               id: typeof x['id'] === 'string' ? (x['id'] as string) : randomId(),
               text,
+              voice_url: voiceUrl || undefined,
               at: typeof x['at'] === 'string' ? (x['at'] as string) : '',
               user_id: typeof x['user_id'] === 'number' ? (x['user_id'] as number) : undefined,
               user_name: typeof x['user_name'] === 'string' ? (x['user_name'] as string) : ''
             };
           })
-          .filter((m) => m.text.length > 0);
+          .filter((m) => m.text.length > 0 || !!m.voice_url);
         out.sort((a, b) => (a.at || '').localeCompare(b.at || ''));
         return out;
       }
@@ -61,7 +64,7 @@ export function serializeCardCommentMessages(messages: CardCommentMessage[]): st
   return JSON.stringify(messages);
 }
 
-/** Дата/время для подписи сбоку (локаль ru-RU). */
+/** Дата/время для подписи (Europe/Moscow). */
 export function formatCardCommentDateTime(at?: string): string {
   if (!at?.trim()) {
     return '—';
@@ -72,12 +75,13 @@ export function formatCardCommentDateTime(at?: string): string {
       return at;
     }
     return d.toLocaleString('ru-RU', {
+      timeZone: 'Europe/Moscow',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    });
+    }) + ' МСК';
   } catch {
     return at;
   }

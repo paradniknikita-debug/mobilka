@@ -922,6 +922,28 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _structuralDefectMeta = const VerificationMeta(
+    'structuralDefect',
+  );
+  @override
+  late final GeneratedColumn<String> structuralDefect = GeneratedColumn<String>(
+    'structural_defect',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _structuralDefectCriticalityMeta =
+      const VerificationMeta('structuralDefectCriticality');
+  @override
+  late final GeneratedColumn<String> structuralDefectCriticality =
+      GeneratedColumn<String>(
+        'structural_defect_criticality',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _cardCommentMeta = const VerificationMeta(
     'cardComment',
   );
@@ -1021,6 +1043,8 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     yearInstalled,
     condition,
     notes,
+    structuralDefect,
+    structuralDefectCriticality,
     cardComment,
     cardCommentAttachment,
     createdBy,
@@ -1118,6 +1142,24 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
       context.handle(
         _notesMeta,
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('structural_defect')) {
+      context.handle(
+        _structuralDefectMeta,
+        structuralDefect.isAcceptableOrUnknown(
+          data['structural_defect']!,
+          _structuralDefectMeta,
+        ),
+      );
+    }
+    if (data.containsKey('structural_defect_criticality')) {
+      context.handle(
+        _structuralDefectCriticalityMeta,
+        structuralDefectCriticality.isAcceptableOrUnknown(
+          data['structural_defect_criticality']!,
+          _structuralDefectCriticalityMeta,
+        ),
       );
     }
     if (data.containsKey('card_comment')) {
@@ -1229,6 +1271,14 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      structuralDefect: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}structural_defect'],
+      ),
+      structuralDefectCriticality: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}structural_defect_criticality'],
+      ),
       cardComment: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}card_comment'],
@@ -1286,6 +1336,12 @@ class Pole extends DataClass implements Insertable<Pole> {
   final String? condition;
   final String? notes;
 
+  /// Дефект конструкции опоры (текст)
+  final String? structuralDefect;
+
+  /// Критичность дефекта опоры: low | medium | high
+  final String? structuralDefectCriticality;
+
   /// Комментарий в конце карточки опоры (текст)
   final String? cardComment;
 
@@ -1309,6 +1365,8 @@ class Pole extends DataClass implements Insertable<Pole> {
     this.yearInstalled,
     this.condition,
     this.notes,
+    this.structuralDefect,
+    this.structuralDefectCriticality,
     this.cardComment,
     this.cardCommentAttachment,
     required this.createdBy,
@@ -1349,6 +1407,14 @@ class Pole extends DataClass implements Insertable<Pole> {
     }
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || structuralDefect != null) {
+      map['structural_defect'] = Variable<String>(structuralDefect);
+    }
+    if (!nullToAbsent || structuralDefectCriticality != null) {
+      map['structural_defect_criticality'] = Variable<String>(
+        structuralDefectCriticality,
+      );
     }
     if (!nullToAbsent || cardComment != null) {
       map['card_comment'] = Variable<String>(cardComment);
@@ -1398,6 +1464,13 @@ class Pole extends DataClass implements Insertable<Pole> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      structuralDefect: structuralDefect == null && nullToAbsent
+          ? const Value.absent()
+          : Value(structuralDefect),
+      structuralDefectCriticality:
+          structuralDefectCriticality == null && nullToAbsent
+          ? const Value.absent()
+          : Value(structuralDefectCriticality),
       cardComment: cardComment == null && nullToAbsent
           ? const Value.absent()
           : Value(cardComment),
@@ -1432,6 +1505,10 @@ class Pole extends DataClass implements Insertable<Pole> {
       yearInstalled: serializer.fromJson<int?>(json['yearInstalled']),
       condition: serializer.fromJson<String?>(json['condition']),
       notes: serializer.fromJson<String?>(json['notes']),
+      structuralDefect: serializer.fromJson<String?>(json['structuralDefect']),
+      structuralDefectCriticality: serializer.fromJson<String?>(
+        json['structuralDefectCriticality'],
+      ),
       cardComment: serializer.fromJson<String?>(json['cardComment']),
       cardCommentAttachment: serializer.fromJson<String?>(
         json['cardCommentAttachment'],
@@ -1459,6 +1536,10 @@ class Pole extends DataClass implements Insertable<Pole> {
       'yearInstalled': serializer.toJson<int?>(yearInstalled),
       'condition': serializer.toJson<String?>(condition),
       'notes': serializer.toJson<String?>(notes),
+      'structuralDefect': serializer.toJson<String?>(structuralDefect),
+      'structuralDefectCriticality': serializer.toJson<String?>(
+        structuralDefectCriticality,
+      ),
       'cardComment': serializer.toJson<String?>(cardComment),
       'cardCommentAttachment': serializer.toJson<String?>(
         cardCommentAttachment,
@@ -1484,6 +1565,8 @@ class Pole extends DataClass implements Insertable<Pole> {
     Value<int?> yearInstalled = const Value.absent(),
     Value<String?> condition = const Value.absent(),
     Value<String?> notes = const Value.absent(),
+    Value<String?> structuralDefect = const Value.absent(),
+    Value<String?> structuralDefectCriticality = const Value.absent(),
     Value<String?> cardComment = const Value.absent(),
     Value<String?> cardCommentAttachment = const Value.absent(),
     int? createdBy,
@@ -1508,6 +1591,12 @@ class Pole extends DataClass implements Insertable<Pole> {
         : this.yearInstalled,
     condition: condition.present ? condition.value : this.condition,
     notes: notes.present ? notes.value : this.notes,
+    structuralDefect: structuralDefect.present
+        ? structuralDefect.value
+        : this.structuralDefect,
+    structuralDefectCriticality: structuralDefectCriticality.present
+        ? structuralDefectCriticality.value
+        : this.structuralDefectCriticality,
     cardComment: cardComment.present ? cardComment.value : this.cardComment,
     cardCommentAttachment: cardCommentAttachment.present
         ? cardCommentAttachment.value
@@ -1538,6 +1627,12 @@ class Pole extends DataClass implements Insertable<Pole> {
           : this.yearInstalled,
       condition: data.condition.present ? data.condition.value : this.condition,
       notes: data.notes.present ? data.notes.value : this.notes,
+      structuralDefect: data.structuralDefect.present
+          ? data.structuralDefect.value
+          : this.structuralDefect,
+      structuralDefectCriticality: data.structuralDefectCriticality.present
+          ? data.structuralDefectCriticality.value
+          : this.structuralDefectCriticality,
       cardComment: data.cardComment.present
           ? data.cardComment.value
           : this.cardComment,
@@ -1567,6 +1662,8 @@ class Pole extends DataClass implements Insertable<Pole> {
           ..write('yearInstalled: $yearInstalled, ')
           ..write('condition: $condition, ')
           ..write('notes: $notes, ')
+          ..write('structuralDefect: $structuralDefect, ')
+          ..write('structuralDefectCriticality: $structuralDefectCriticality, ')
           ..write('cardComment: $cardComment, ')
           ..write('cardCommentAttachment: $cardCommentAttachment, ')
           ..write('createdBy: $createdBy, ')
@@ -1579,7 +1676,7 @@ class Pole extends DataClass implements Insertable<Pole> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     lineId,
     poleNumber,
@@ -1592,6 +1689,8 @@ class Pole extends DataClass implements Insertable<Pole> {
     yearInstalled,
     condition,
     notes,
+    structuralDefect,
+    structuralDefectCriticality,
     cardComment,
     cardCommentAttachment,
     createdBy,
@@ -1599,7 +1698,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     updatedAt,
     isLocal,
     needsSync,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1616,6 +1715,9 @@ class Pole extends DataClass implements Insertable<Pole> {
           other.yearInstalled == this.yearInstalled &&
           other.condition == this.condition &&
           other.notes == this.notes &&
+          other.structuralDefect == this.structuralDefect &&
+          other.structuralDefectCriticality ==
+              this.structuralDefectCriticality &&
           other.cardComment == this.cardComment &&
           other.cardCommentAttachment == this.cardCommentAttachment &&
           other.createdBy == this.createdBy &&
@@ -1638,6 +1740,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<int?> yearInstalled;
   final Value<String?> condition;
   final Value<String?> notes;
+  final Value<String?> structuralDefect;
+  final Value<String?> structuralDefectCriticality;
   final Value<String?> cardComment;
   final Value<String?> cardCommentAttachment;
   final Value<int> createdBy;
@@ -1658,6 +1762,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.yearInstalled = const Value.absent(),
     this.condition = const Value.absent(),
     this.notes = const Value.absent(),
+    this.structuralDefect = const Value.absent(),
+    this.structuralDefectCriticality = const Value.absent(),
     this.cardComment = const Value.absent(),
     this.cardCommentAttachment = const Value.absent(),
     this.createdBy = const Value.absent(),
@@ -1679,6 +1785,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.yearInstalled = const Value.absent(),
     this.condition = const Value.absent(),
     this.notes = const Value.absent(),
+    this.structuralDefect = const Value.absent(),
+    this.structuralDefectCriticality = const Value.absent(),
     this.cardComment = const Value.absent(),
     this.cardCommentAttachment = const Value.absent(),
     required int createdBy,
@@ -1703,6 +1811,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Expression<int>? yearInstalled,
     Expression<String>? condition,
     Expression<String>? notes,
+    Expression<String>? structuralDefect,
+    Expression<String>? structuralDefectCriticality,
     Expression<String>? cardComment,
     Expression<String>? cardCommentAttachment,
     Expression<int>? createdBy,
@@ -1724,6 +1834,9 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       if (yearInstalled != null) 'year_installed': yearInstalled,
       if (condition != null) 'condition': condition,
       if (notes != null) 'notes': notes,
+      if (structuralDefect != null) 'structural_defect': structuralDefect,
+      if (structuralDefectCriticality != null)
+        'structural_defect_criticality': structuralDefectCriticality,
       if (cardComment != null) 'card_comment': cardComment,
       if (cardCommentAttachment != null)
         'card_comment_attachment': cardCommentAttachment,
@@ -1748,6 +1861,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Value<int?>? yearInstalled,
     Value<String?>? condition,
     Value<String?>? notes,
+    Value<String?>? structuralDefect,
+    Value<String?>? structuralDefectCriticality,
     Value<String?>? cardComment,
     Value<String?>? cardCommentAttachment,
     Value<int>? createdBy,
@@ -1769,6 +1884,9 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       yearInstalled: yearInstalled ?? this.yearInstalled,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
+      structuralDefect: structuralDefect ?? this.structuralDefect,
+      structuralDefectCriticality:
+          structuralDefectCriticality ?? this.structuralDefectCriticality,
       cardComment: cardComment ?? this.cardComment,
       cardCommentAttachment:
           cardCommentAttachment ?? this.cardCommentAttachment,
@@ -1819,6 +1937,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (structuralDefect.present) {
+      map['structural_defect'] = Variable<String>(structuralDefect.value);
+    }
+    if (structuralDefectCriticality.present) {
+      map['structural_defect_criticality'] = Variable<String>(
+        structuralDefectCriticality.value,
+      );
+    }
     if (cardComment.present) {
       map['card_comment'] = Variable<String>(cardComment.value);
     }
@@ -1860,6 +1986,8 @@ class PolesCompanion extends UpdateCompanion<Pole> {
           ..write('yearInstalled: $yearInstalled, ')
           ..write('condition: $condition, ')
           ..write('notes: $notes, ')
+          ..write('structuralDefect: $structuralDefect, ')
+          ..write('structuralDefectCriticality: $structuralDefectCriticality, ')
           ..write('cardComment: $cardComment, ')
           ..write('cardCommentAttachment: $cardCommentAttachment, ')
           ..write('createdBy: $createdBy, ')
@@ -4453,6 +4581,8 @@ typedef $$PolesTableCreateCompanionBuilder =
       Value<int?> yearInstalled,
       Value<String?> condition,
       Value<String?> notes,
+      Value<String?> structuralDefect,
+      Value<String?> structuralDefectCriticality,
       Value<String?> cardComment,
       Value<String?> cardCommentAttachment,
       required int createdBy,
@@ -4475,6 +4605,8 @@ typedef $$PolesTableUpdateCompanionBuilder =
       Value<int?> yearInstalled,
       Value<String?> condition,
       Value<String?> notes,
+      Value<String?> structuralDefect,
+      Value<String?> structuralDefectCriticality,
       Value<String?> cardComment,
       Value<String?> cardCommentAttachment,
       Value<int> createdBy,
@@ -4549,6 +4681,16 @@ class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get structuralDefect => $composableBuilder(
+    column: $table.structuralDefect,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get structuralDefectCriticality => $composableBuilder(
+    column: $table.structuralDefectCriticality,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4657,6 +4799,16 @@ class $$PolesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get structuralDefect => $composableBuilder(
+    column: $table.structuralDefect,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get structuralDefectCriticality => $composableBuilder(
+    column: $table.structuralDefectCriticality,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get cardComment => $composableBuilder(
     column: $table.cardComment,
     builder: (column) => ColumnOrderings(column),
@@ -4744,6 +4896,16 @@ class $$PolesTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<String> get structuralDefect => $composableBuilder(
+    column: $table.structuralDefect,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get structuralDefectCriticality => $composableBuilder(
+    column: $table.structuralDefectCriticality,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get cardComment => $composableBuilder(
     column: $table.cardComment,
     builder: (column) => column,
@@ -4810,6 +4972,9 @@ class $$PolesTableTableManager
                 Value<int?> yearInstalled = const Value.absent(),
                 Value<String?> condition = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> structuralDefect = const Value.absent(),
+                Value<String?> structuralDefectCriticality =
+                    const Value.absent(),
                 Value<String?> cardComment = const Value.absent(),
                 Value<String?> cardCommentAttachment = const Value.absent(),
                 Value<int> createdBy = const Value.absent(),
@@ -4830,6 +4995,8 @@ class $$PolesTableTableManager
                 yearInstalled: yearInstalled,
                 condition: condition,
                 notes: notes,
+                structuralDefect: structuralDefect,
+                structuralDefectCriticality: structuralDefectCriticality,
                 cardComment: cardComment,
                 cardCommentAttachment: cardCommentAttachment,
                 createdBy: createdBy,
@@ -4852,6 +5019,9 @@ class $$PolesTableTableManager
                 Value<int?> yearInstalled = const Value.absent(),
                 Value<String?> condition = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> structuralDefect = const Value.absent(),
+                Value<String?> structuralDefectCriticality =
+                    const Value.absent(),
                 Value<String?> cardComment = const Value.absent(),
                 Value<String?> cardCommentAttachment = const Value.absent(),
                 required int createdBy,
@@ -4872,6 +5042,8 @@ class $$PolesTableTableManager
                 yearInstalled: yearInstalled,
                 condition: condition,
                 notes: notes,
+                structuralDefect: structuralDefect,
+                structuralDefectCriticality: structuralDefectCriticality,
                 cardComment: cardComment,
                 cardCommentAttachment: cardCommentAttachment,
                 createdBy: createdBy,

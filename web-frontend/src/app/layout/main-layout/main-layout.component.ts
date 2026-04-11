@@ -38,7 +38,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   }
 
   private updateShowSidebarToggle(url: string): void {
-    const hideOn = ['/change-log', '/cim-import'];
+    const hideOn = ['/change-log', '/cim-import', '/equipment-catalog', '/reports'];
     const hide = hideOn.some(path => url.startsWith(path) || url.includes(path));
     this.showSidebarToggle = !hide;
     if (hide) {

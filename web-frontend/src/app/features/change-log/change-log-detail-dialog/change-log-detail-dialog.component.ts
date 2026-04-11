@@ -11,8 +11,13 @@ interface KeyValueRow {
   before: string;
   after: string;
   changed: boolean;
-  added?: boolean;   // только после (новое значение)
-  removed?: boolean; // только до (удалённое значение)
+  added?: boolean;
+  removed?: boolean;
+}
+
+interface JsonDiffLine {
+  tag: ' ' | '-' | '+';
+  text: string;
 }
 
 interface SessionItemPreview {
@@ -38,6 +43,7 @@ export class ChangeLogDetailDialogComponent {
   entry: ChangeLogEntry;
   onlyChanges = false;
   rows: KeyValueRow[] = [];
+  isMaximized = false;
 
   /** Payload как словарь для шаблона (строгий strictTemplates). */
   get pl(): Record<string, unknown> | null {
@@ -59,12 +65,73 @@ export class ChangeLogDetailDialogComponent {
     return raw as { label_ru?: string; kind?: string }[];
   }
 
+  /** Полная запись журнала (JSON). */
+  get fullEntryJson(): string {
+    return JSON.stringify(this.entry, null, 2);
+  }
+
+  /** Пересборка топологии: объединённый отчёт (payload целиком + служебные поля). */
+  get topologyMergedJson(): string | null {
+    const p = this.pl;
+    if (!p || p['topology_rebuild'] !== true) return null;
+    const merged = {
+      ...p,
+      entity_type: this.entry.entity_type,
+      entity_id: this.entry.entity_id,
+      entity_name: this.entry.entity_name,
+      action: this.entry.action,
+      created_at: this.entry.created_at,
+      user_name: this.entry.user_name,
+      source: this.entry.source,
+    };
+    return JSON.stringify(merged, null, 2);
+  }
+
+  /** Создание / удаление: один объект в JSON. */
+  get singleObjectJson(): string | null {
+    if (this.pl?.['topology_rebuild'] === true) return null;
+    if (this.hasPayload || this.pl?.['pole_card'] === true || this.pl?.['data_quality_warning'] === true) {
+      return null;
+    }
+    if (!this.entry.payload) return null;
+    return JSON.stringify(this.entry.payload, null, 2);
+  }
+
+  get jsonDiffLines(): JsonDiffLine[] {
+    const p = this.entry.payload as ChangeLogPayload | Record<string, unknown> | null;
+    if (!p || typeof p !== 'object') return [];
+    const oldVal = (p as any).old_value ?? (p as any).before;
+    const newVal = (p as any).new_value ?? (p as any).after;
+    if (oldVal === undefined && newVal === undefined) return [];
+    return this.buildUnifiedJsonDiff(oldVal, newVal);
+  }
+
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: ChangeLogDetailDialogData,
     private dialogRef: MatDialogRef<ChangeLogDetailDialogComponent>
   ) {
     this.entry = data.entry;
     this.buildRows();
+  }
+
+  private buildUnifiedJsonDiff(oldVal: unknown, newVal: unknown): JsonDiffLine[] {
+    const a = oldVal !== undefined && oldVal !== null ? JSON.stringify(oldVal, null, 2) : '';
+    const b = newVal !== undefined && newVal !== null ? JSON.stringify(newVal, null, 2) : '';
+    const la = a ? a.split('\n') : [];
+    const lb = b ? b.split('\n') : [];
+    const n = Math.max(la.length, lb.length);
+    const out: JsonDiffLine[] = [];
+    for (let i = 0; i < n; i++) {
+      const ka = la[i];
+      const kb = lb[i];
+      if (ka === kb) {
+        out.push({ tag: ' ', text: ka ?? '' });
+      } else {
+        if (ka !== undefined) out.push({ tag: '-', text: ka });
+        if (kb !== undefined) out.push({ tag: '+', text: kb });
+      }
+    }
+    return out;
   }
 
   private buildRows(): void {
@@ -137,6 +204,17 @@ export class ChangeLogDetailDialogComponent {
       equipment: 'Оборудование', acline_segment: 'Участок линии', line_section: 'Секция линии', session: 'Сессия'
     };
     return labels[type] ?? type;
+  }
+
+  toggleMaximize(): void {
+    this.isMaximized = !this.isMaximized;
+    if (this.isMaximized) {
+      this.dialogRef.updateSize('min(96vw, 1200px)', '90vh');
+      this.dialogRef.addPanelClass('change-log-detail--maximized');
+    } else {
+      this.dialogRef.updateSize('min(96vw, 720px)', undefined);
+      this.dialogRef.removePanelClass('change-log-detail--maximized');
+    }
   }
 
   close(): void {

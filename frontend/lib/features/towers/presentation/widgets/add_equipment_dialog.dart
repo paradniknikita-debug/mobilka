@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import '../../../../core/config/pole_reference_data.dart';
+import '../../../../core/utils/equipment_display_label.dart';
 import '../../../../core/theme/app_theme.dart';
 
 /// Один элемент вложения (голос или фото). В JSON: {"t":"voice"|"photo","p":"path"}
@@ -59,6 +60,8 @@ class AddEquipmentDialog extends StatefulWidget {
   this.initialDefect,
   this.initialCriticality,
   this.initialDefectAttachment,
+  /// Марки из серверного справочника (equipment-catalog), подмешиваются к локальному списку.
+  this.catalogExtraBrands,
   });
 
   final String categoryTitle;
@@ -69,6 +72,7 @@ class AddEquipmentDialog extends StatefulWidget {
   final String? initialDefect;
   final String? initialCriticality;
   final String? initialDefectAttachment;
+  final List<String>? catalogExtraBrands;
 
   @override
   State<AddEquipmentDialog> createState() => _AddEquipmentDialogState();
@@ -113,8 +117,19 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     super.dispose();
   }
 
-  List<String> get _brandSuggestions =>
-      EquipmentReferenceData.getBrandsForCategory(widget.categoryTitle);
+  List<String> get _brandSuggestions {
+    final base = EquipmentReferenceData.getBrandsForCategory(widget.categoryTitle);
+    final extra = widget.catalogExtraBrands ?? const <String>[];
+    final seen = <String>{};
+    final out = <String>[];
+    for (final x in [...base, ...extra]) {
+      final k = x.trim();
+      if (k.isEmpty || seen.contains(k)) continue;
+      seen.add(k);
+      out.add(k);
+    }
+    return out;
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -170,7 +185,10 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
 
   String get _previewText {
     final brand = _brandController.text.trim().isEmpty ? '(не указано)' : _brandController.text.trim();
-    return '${widget.categoryTitle}: $brand x $_quantity шт.';
+    final line = brand == '(не указано)'
+        ? brand
+        : equipmentDisplayLabel(widget.equipmentType, brand);
+    return '${widget.categoryTitle}: $line x $_quantity шт.';
   }
 
   void _save() {

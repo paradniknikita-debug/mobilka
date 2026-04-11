@@ -185,6 +185,25 @@
     color: rgba(0, 0, 0, 0.87);
   }
 
+  .card-comment-bubble-voice {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 14px;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: rgba(0, 0, 0, 0.55);
+    }
+
+    a {
+      color: inherit;
+    }
+  }
+
   .card-comment-empty {
     font-size: 13px;
     color: rgba(0, 0, 0, 0.45);

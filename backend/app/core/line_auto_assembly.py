@@ -531,23 +531,32 @@ async def find_or_create_acline_segment(
         await db.flush()
         return tap_segment
     
-    # Продолжение отпайки (после первой опоры): tap_pole_id задан, но to_connectivity_node_id_if_tap=None.
-    # Всегда используем последний сегмент от этой отпаечной опоры и ветки, чтобы вся отпайка была одним участком.
+    # Продолжение отпайки: tap_pole_id задан, но to_connectivity_node_id_if_tap=None.
+    # Раньше здесь переиспользовался один ACLineSegment на всю ветку — получались длинные участки
+    # «оп.3 — оп.3/2» и смешение пролётов разных веток. Переиспользуем сегмент отпайки только
+    # пока начало пролёта — узел отпаечной опоры (корня отпайки). От узла промежуточной опоры
+    # ветки (оп.3/1, …) ConnectivityNode — граница: дальше создаётся новый участок (ниже).
     if tap_pole_id is not None and to_connectivity_node_id_if_tap is None:
-        q = select(AClineSegment).where(
-            AClineSegment.line_id == power_line_id,
-            AClineSegment.is_tap == True,
-            AClineSegment.tap_pole_id == tap_pole_id,
+        from_cn_row = await db.execute(
+            select(ConnectivityNode).where(ConnectivityNode.id == from_connectivity_node_id)
         )
-        if tap_branch_index is not None:
-            right = str(tap_branch_index).strip()
-            if right:
-                q = q.where(AClineSegment.tap_number.like(f"%/{right}"))
-        q = q.order_by(AClineSegment.sequence_number.desc()).limit(1)
-        result = await db.execute(q)
-        existing_tap_segment = result.scalar_one_or_none()
-        if existing_tap_segment:
-            return existing_tap_segment
+        from_cn_tap = from_cn_row.scalar_one_or_none()
+        from_pole_tap = await db.get(Pole, from_cn_tap.pole_id) if from_cn_tap else None
+        if from_pole_tap is not None and from_pole_tap.id == tap_pole_id:
+            q = select(AClineSegment).where(
+                AClineSegment.line_id == power_line_id,
+                AClineSegment.is_tap == True,
+                AClineSegment.tap_pole_id == tap_pole_id,
+            )
+            if tap_branch_index is not None:
+                right = str(tap_branch_index).strip()
+                if right:
+                    q = q.where(AClineSegment.tap_number.like(f"%/{right}"))
+            q = q.order_by(AClineSegment.sequence_number.desc()).limit(1)
+            result = await db.execute(q)
+            existing_tap_segment = result.scalar_one_or_none()
+            if existing_tap_segment:
+                return existing_tap_segment
 
     # Получаем информацию о линии
     power_line = await db.get(PowerLine, power_line_id)
@@ -1260,6 +1269,25 @@ async def add_substation_span_from_last_pole(
     return segment
 
 
+def _effective_to_connectivity_node_id_from_spans(seg: AClineSegment) -> Optional[int]:
+    """
+    Конец участка по пролётам, если to_connectivity_node_id ещё не проставлен
+    (редко, но иначе refresh пишет «… - ...» вместо второй опоры).
+    """
+    if getattr(seg, "to_connectivity_node_id", None):
+        return int(seg.to_connectivity_node_id)
+    all_spans: List[Span] = []
+    for ls in seg.line_sections or []:
+        for sp in ls.spans or []:
+            all_spans.append(sp)
+    if not all_spans:
+        return None
+    all_spans.sort(key=lambda s: (getattr(s, "sequence_number", None) or 0))
+    last = all_spans[-1]
+    tid = getattr(last, "to_connectivity_node_id", None)
+    return int(tid) if tid is not None else None
+
+
 async def refresh_acline_and_line_section_names(db: AsyncSession, power_line_id: int) -> None:
     """
     Пересчитать наименования ACLineSegment и LineSection по фактическим ConnectivityNode
@@ -1279,8 +1307,9 @@ async def refresh_acline_and_line_section_names(db: AsyncSession, power_line_id:
         if not seg.from_connectivity_node_id:
             continue
         fn = await _connectivity_node_display_name(db, seg.from_connectivity_node_id)
-        if seg.to_connectivity_node_id:
-            tn = await _connectivity_node_display_name(db, seg.to_connectivity_node_id)
+        to_cn_id = seg.to_connectivity_node_id or _effective_to_connectivity_node_id_from_spans(seg)
+        if to_cn_id:
+            tn = await _connectivity_node_display_name(db, to_cn_id)
             seg.name = f"{fn} - {tn}"
         else:
             seg.name = f"{fn} - ..."
@@ -1299,10 +1328,8 @@ async def refresh_acline_and_line_section_names(db: AsyncSession, power_line_id:
                     db, spans[-1].to_connectivity_node_id
                 )
                 ls.name = f"{fna} - {tna} ({ct})"
-            elif seg.to_connectivity_node_id:
-                tn_ls = await _connectivity_node_display_name(
-                    db, seg.to_connectivity_node_id
-                )
+            elif to_cn_id:
+                tn_ls = await _connectivity_node_display_name(db, to_cn_id)
                 ls.name = f"{fn} - {tn_ls} ({ct})"
             else:
                 ls.name = f"{fn} - ... ({ct})"

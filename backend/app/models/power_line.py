@@ -94,6 +94,9 @@ class Pole(Base):
     year_installed = Column(Integer, nullable=True)
     condition = Column(String(20), default="good")  # good, satisfactory, poor
     notes = Column(Text, nullable=True)
+    # Дефект конструкции опоры (не путать с дефектами оборудования на опоре)
+    structural_defect = Column(Text, nullable=True)
+    structural_defect_criticality = Column(String(20), nullable=True)  # low | medium | high
     # Комментарий карточки опоры (как во Flutter)
     card_comment = Column(Text, nullable=True)
     # Вложения к комментарию: JSON [{"t":"voice"|"photo"|"schema","url":"/api/v1/attachments/..."}] или base64/data (для синка с Flutter)
@@ -351,12 +354,15 @@ class Equipment(Base):
 
     # Направление от опоры для отрисовки на карте (градусы 0–360; если задано — участок до оборудования в этом направлении)
     direction_angle = Column(Float, nullable=True)
+    # Ссылка на справочник марки оборудования (опционально для обратной совместимости).
+    catalog_item_id = Column(Integer, ForeignKey("equipment_catalog.id"), nullable=True, index=True)
     
     # Связи
     pole = relationship("Pole", back_populates="equipment")
     creator = relationship("User")
     location = relationship("Location", foreign_keys=[location_id])
     connectivity_nodes = relationship("ConnectivityNode", back_populates="equipment")
+    catalog_item = relationship("EquipmentCatalogItem", back_populates="equipment")
 
     def get_latitude(self) -> float:
         """

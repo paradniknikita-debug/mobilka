@@ -1,0 +1,205 @@
+<div class="catalog-page">
+  <mat-card class="catalog-card catalog-card--header">
+    <mat-card-header>
+      <mat-card-title>Справочник марок оборудования</mat-card-title>
+      <mat-card-subtitle>Поиск, импорт и экспорт позиций каталога</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="toolbar-row toolbar-row--filters">
+        <mat-form-field appearance="outline" class="field-grow">
+          <mat-label>Поиск по тексту</mat-label>
+          <input
+            matInput
+            [(ngModel)]="query"
+            (keyup.enter)="loadItems()"
+            placeholder="марка, модель, наименование…"
+            matTooltip="Поиск по полям марка, модель, полное имя и изготовитель (без учёта регистра в зависимости от сервера)"
+            matTooltipShowDelay="250"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="field-type-filter">
+          <mat-label>Тип оборудования</mat-label>
+          <mat-select
+            [(ngModel)]="typeCodeFilter"
+            (selectionChange)="loadItems()"
+            matTooltip="Фильтр по внутреннему коду типа. В таблице и списках тип показывается по-русски."
+            matTooltipShowDelay="250"
+          >
+            <mat-option *ngFor="let opt of typeFilterOptions" [value]="opt.value">
+              {{ opt.label }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+        <div class="toolbar-actions">
+          <button mat-raised-button color="primary" (click)="loadItems()">Найти</button>
+          <button
+            mat-stroked-button
+            (click)="seedDefaults()"
+            matTooltip="Добавляет в справочник типовые позиции (коды типов на английском; в таблице отображаются по-русски)"
+            matTooltipShowDelay="250"
+          >
+            Заполнить типовыми
+          </button>
+        </div>
+      </div>
+
+      <mat-divider class="section-divider"></mat-divider>
+
+      <div class="toolbar-row toolbar-row--files">
+        <button mat-stroked-button (click)="downloadTemplate()">Шаблон XLSX</button>
+        <button mat-stroked-button (click)="exportCatalog('xlsx')">Экспорт XLSX</button>
+        <button mat-stroked-button (click)="exportCatalog('csv')">Экспорт CSV</button>
+        <label class="file-input-label">
+          <span class="file-input-text">Импорт файла</span>
+          <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportFileSelected($event)" />
+        </label>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Сразу после поиска — результаты; форма добавления ниже, без лишней прокрутки -->
+  <mat-card class="catalog-card catalog-card--table">
+    <mat-card-header>
+      <mat-card-title>Позиции ({{ items.length }})</mat-card-title>
+      <mat-card-subtitle>Результат поиска и фильтра по типу</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div *ngIf="isLoading" class="loading-line">Загрузка…</div>
+      <div class="table-wrap" *ngIf="!isLoading">
+        <table class="catalog-table">
+          <thead>
+            <tr>
+              <th>Тип</th>
+              <th>Марка</th>
+              <th>Модель</th>
+              <th class="num">кВ</th>
+              <th class="num">А</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of items">
+              <td>
+                <span
+                  class="type-label"
+                  [matTooltip]="typeCodeTooltip(item.type_code)"
+                  matTooltipShowDelay="200"
+                  >{{ displayTypeLabel(item.type_code) }}</span
+                >
+              </td>
+              <td>{{ item.brand }}</td>
+              <td>{{ item.model }}</td>
+              <td class="num">{{ item.voltage_kv ?? '—' }}</td>
+              <td class="num">{{ item.current_a ?? '—' }}</td>
+              <td class="col-actions">
+                <button mat-stroked-button color="warn" (click)="deactivate(item)">Деактивировать</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="catalog-card">
+    <mat-card-header>
+      <mat-card-title>Штучное добавление</mat-card-title>
+      <mat-card-subtitle>Обязательны тип (латинский код), марка и модель</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="form-grid">
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Внутренний код типа на латинице (например disconnector, breaker, arrester). Так же хранится в БД и передаётся в API. При вводе с сервера можно использовать и русские слова-алиасы — см. документацию импорта."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Тип (код для системы)</mat-label>
+          <input matInput [(ngModel)]="form.type_code" placeholder="например: disconnector" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Марка или торговое/серийное обозначение линейки (как в паспорте или каталоге)."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Марка</mat-label>
+          <input matInput [(ngModel)]="form.brand" placeholder="например: РЛНД" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Конкретная модель или шифр изделия (типоразмер)."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Модель</mat-label>
+          <input matInput [(ngModel)]="form.model" placeholder="например: РЛНД-10/400" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Развёрнутое наименование для отчётов и отображения, если отличается от марки+модель."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Полное наименование</mat-label>
+          <input matInput [(ngModel)]="form.full_name" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Номинальное напряжение в киловольтах (кВ). Для справочника и фильтров."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Напряжение, кВ</mat-label>
+          <input matInput type="number" [(ngModel)]="form.voltage_kv" placeholder="10" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Номинальный (или максимальный рабочий) ток в амперах."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Ток, А</mat-label>
+          <input matInput type="number" [(ngModel)]="form.current_a" placeholder="400" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Завод-изготовитель или бренд производителя (текстом)."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Изготовитель</mat-label>
+          <input matInput [(ngModel)]="form.manufacturer" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field
+          appearance="outline"
+          matTooltip="Страна производства или регистрации бренда."
+          matTooltipShowDelay="250"
+        >
+          <mat-label>Страна</mat-label>
+          <input matInput [(ngModel)]="form.country" autocomplete="off" />
+        </mat-form-field>
+      </div>
+      <mat-form-field
+        class="full-width"
+        appearance="outline"
+        matTooltip="Произвольный текст: назначение, особенности монтажа, ссылка на ТУ и т.д."
+        matTooltipShowDelay="250"
+      >
+        <mat-label>Описание</mat-label>
+        <textarea matInput rows="2" [(ngModel)]="form.description"></textarea>
+      </mat-form-field>
+      <mat-form-field
+        class="full-width"
+        appearance="outline"
+        matTooltip="Необязательно. Дополнительные структурированные поля в формате JSON (для интеграций и расширений). Пример: {&quot;pole_material&quot;:&quot;сталь&quot;}. Оставьте пустым, если не нужно."
+        matTooltipShowDelay="250"
+      >
+        <mat-label>Доп. атрибуты (JSON)</mat-label>
+        <textarea
+          matInput
+          rows="2"
+          [(ngModel)]="form.attrs_json"
+          placeholder='{} или {"ключ":"значение"}'
+          class="font-mono"
+        ></textarea>
+      </mat-form-field>
+      <div class="form-actions">
+        <button mat-raised-button color="primary" (click)="addItem()">Добавить</button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

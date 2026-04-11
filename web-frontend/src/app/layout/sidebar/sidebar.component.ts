@@ -163,13 +163,24 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   getPoleEquipment(poleId: number): Equipment[] {
     const list = this.equipmentByPoleId.get(poleId) ?? [];
-    return list.filter(eq => !this.isFoundationEquipment(eq));
+    return list.filter(
+      eq =>
+        !this.isFoundationEquipment(eq) && this.isCommutationEquipmentForTree(eq)
+    );
   }
 
   /** Фундамент не показываем в дереве объектов — только в карточке опоры. */
   private isFoundationEquipment(eq: Equipment): boolean {
     const t = (eq.equipment_type || '').toLowerCase().trim();
     return t === 'фундамент' || t === 'foundation';
+  }
+
+  /**
+   * В дереве объектов — только коммутационная аппаратура (как на карте: выключатели,
+   * разъединители, ЗН, реклоузеры, разрядники). Без траверсов, изоляторов, грозоотводов и т.п.
+   */
+  private isCommutationEquipmentForTree(eq: Equipment): boolean {
+    return this.getEquipmentIconKey(eq) != null;
   }
 
   getPoleEquipmentByType(poleId: number, type: 'breaker' | 'disconnector' | 'recloser' | 'grounding_switch' | 'surge_arrester'): Equipment[] {
@@ -185,10 +196,37 @@ export class SidebarComponent implements OnInit, OnDestroy {
     if (t.includes('выключател') || n.includes('выключател') || t === 'breaker' || n.includes('breaker')) return 'breaker';
     if (t.includes('зн') || t.includes('заземлен') || t === 'grounding_switch' || t.includes('grounding')) return 'zn';
     if (t.includes('разъединитель') || t.includes('разъеденитель') || t.includes('разъедин') || t === 'disconnector' || t.includes('disconnector')) return 'disconnector';
-    if (t.includes('разрядник') || n.includes('опн') || t === 'surge_arrester' || t.includes('arrester') || t.includes('surge')) return 'arrester';
+    if (
+      t.includes('разрядник') ||
+      n.includes('разряд') ||
+      n.includes('опн') ||
+      t.includes('опн') ||
+      t.includes('opn') ||
+      n.includes('opn') ||
+      t === 'surge_arrester' ||
+      t.includes('arrester') ||
+      t.includes('surge') ||
+      n.includes('arrester') ||
+      n.includes('surge')
+    ) {
+      return 'arrester';
+    }
     const noIcon = ['фундамент', 'foundation', 'изолятор', 'траверс', 'грозоотвод', 'грозотрос'];
     if (noIcon.some(x => t.includes(x))) return null;
     return null;
+  }
+
+  /** Подпись в дереве без дублирования «ОПН» + «ОПН-10». */
+  equipmentTreeLabel(eq: Equipment): string {
+    const t = (eq.equipment_type || '').trim();
+    const n = (eq.name || '').trim();
+    if (!n && !t) return 'Оборудование';
+    if (!n) return t;
+    if (!t) return n;
+    const tl = t.toLowerCase();
+    const nl = n.toLowerCase();
+    if (nl.startsWith(tl) || (tl.length >= 2 && nl.includes(tl))) return n;
+    return `${n} (${t})`;
   }
 
   /** Путь к SVG-ассету оборудования (те же файлы, что на карте). */

@@ -8,6 +8,9 @@ import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/attachment_reader.dart';
@@ -30,6 +33,9 @@ class _EquipmentCategory {
   final String title;
   final IconData icon;
 }
+
+/// Явный выбор «новая ветка от якоря» при «Начать отпайку»; совпадает с Angular `create-object-dialog`.
+const String _kBranchNewTapSentinel = '__new_tap__';
 
 const List<_EquipmentCategory> _equipmentCategories = [
   _EquipmentCategory('Фундамент', Icons.anchor),
@@ -102,6 +108,21 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   int? _yearInstalled;
   String _condition = PoleReferenceData.defaultCondition;
   String? _notes;
+  final _structuralDefectController = TextEditingController();
+  String? _structuralCrit;
+  String? _structuralDefectForApi() {
+    final t = _structuralDefectController.text.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  String? _structuralCritForApi() {
+    if (_structuralDefectForApi() == null) return null;
+    final c = _structuralCrit?.trim().toLowerCase();
+    if (c == null || c.isEmpty) return null;
+    if (c == 'high' || c == 'medium' || c == 'low') return c;
+    return null;
+  }
+
   String? _conductorType = PoleReferenceData.defaultConductorType;
   String? _conductorMaterial = PoleReferenceData.defaultConductorMaterial;
   String? _conductorSection = PoleReferenceData.defaultConductorSection;
@@ -113,7 +134,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   List<MapEntry<String, String>> _tapBranchesInLine = [];
   /// Отпаечные опоры линии (id, pole_number) для подписей.
   List<MapEntry<int, String>> _tapPolesInLine = [];
-  /// Выбранная ветка: null = магистраль, иначе "tapPoleId:tapBranchIndex".
+  /// Выбранная ветка: null = магистраль; [_kBranchNewTapSentinel] = новая ветка от якоря; иначе "tapPoleId:tapBranchIndex".
   String? _branchSelection;
 
   List<Map<String, dynamic>> _cardCommentMessages = [];
@@ -317,6 +338,97 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
   }
 
+  String _absoluteAttachmentUrl(String u) {
+    final t = u.trim();
+    if (t.isEmpty) return t;
+    if (t.startsWith('http://') || t.startsWith('https://')) return t;
+    if (t.startsWith('/')) return '${AppConfig.baseUrl}$t';
+    return '${AppConfig.baseUrl}/$t';
+  }
+
+  /// Веб и общий выбор файла: загрузка сразу на сервер (нужен сохранённый id опоры).
+  Future<void> _pickCardCommentFileAny() async {
+    final pid = widget.poleId;
+    if (pid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Сначала сохраните опору — затем можно добавлять файлы и аудио с диска.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      final r = await FilePicker.platform.pickFiles(
+        withData: true,
+        type: FileType.custom,
+        allowedExtensions: const [
+          'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp',
+          'm4a', 'mp3', 'wav', 'aac', 'ogg',
+          'mp4', 'webm', 'mov',
+          'pdf', 'dwg',
+        ],
+      );
+      if (r == null || r.files.isEmpty || !mounted) return;
+      final f = r.files.first;
+      final bytes = f.bytes;
+      final name = f.name;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Не удалось прочитать файл')),
+          );
+        }
+        return;
+      }
+      final ext =
+          name.contains('.') ? name.split('.').last.toLowerCase() : 'bin';
+      var attType = 'file';
+      if (const {'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'}.contains(ext)) {
+        attType = 'photo';
+      } else if (const {'m4a', 'mp3', 'wav', 'aac', 'ogg'}.contains(ext)) {
+        attType = 'voice';
+      } else if (const {'mp4', 'webm', 'mov'}.contains(ext)) {
+        attType = 'video';
+      } else if (ext == 'pdf' || ext == 'dwg') {
+        attType = 'schema';
+      }
+      final api = ref.read(apiServiceProvider);
+      final res = await api.uploadPoleAttachment(pid, attType, bytes, name);
+      final url = res['url'] as String?;
+      if (url == null || url.isEmpty) return;
+      final uid = ref.read(prefsProvider).getInt(AppConfig.userIdKey) ?? 0;
+      final auth = ref.read(authServiceProvider);
+      String? uname;
+      if (auth is AuthStateAuthenticated) {
+        uname = auth.user.fullName.isNotEmpty
+            ? auth.user.fullName
+            : auth.user.username;
+      }
+      setState(() {
+        _cardCommentAttachments.add({
+          'id': const Uuid().v4(),
+          't': attType,
+          'url': url,
+          'filename': name,
+          'added_by': uid,
+          'added_at': DateTime.now().toUtc().toIso8601String(),
+          if (uname != null && uname.isNotEmpty) 'added_by_name': uname,
+        });
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка файла: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Future<void> _recordCommentVoice() async {
     if (_cardCommentRecording) {
       try {
@@ -433,14 +545,16 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _loadAutofillTemplate();
       });
     }
-    if (!widget.isEditMode && !widget.startNewTap) {
+    if (!widget.isEditMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _loadTapBranchesForLine();
         _loadPoleNumberSuggestion();
       });
     }
-    if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
+    if (widget.startNewTap && widget.tapPoleId != null) {
+      _branchSelection = _kBranchNewTapSentinel;
+    } else if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
       _branchSelection = '${widget.tapPoleId}:${widget.tapBranchIndex}';
     }
   }
@@ -462,6 +576,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       _yearInstalled = pole.yearInstalled;
       _condition = pole.condition;
       _notes = pole.notes;
+      _structuralDefectController.text = pole.structuralDefect ?? '';
+      _structuralCrit = pole.structuralDefectCriticality;
       _conductorType = pole.conductorType;
       _conductorMaterial = pole.conductorMaterial;
       _conductorSection = pole.conductorSection;
@@ -527,10 +643,14 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         _tapPolesInLine = tapPoles.map((p) => MapEntry(p.id, p.poleNumber)).toList();
         _tapBranchesInLine = branches;
         _showBranchChoice = _tapBranchesInLine.isNotEmpty || _tapPolesInLine.isNotEmpty;
-        // Если текущего значения нет среди items, сбрасываем в магистраль,
-        // чтобы DropdownButton не падал с assertion.
-        if (_branchSelection != null && !allowedValues.contains(_branchSelection)) {
-          _branchSelection = null;
+        // Нет в списке веток — сброс (для «Начать отпайку» возвращаем sentinel, не магистраль).
+        if (_branchSelection != null &&
+            _branchSelection != _kBranchNewTapSentinel &&
+            !allowedValues.contains(_branchSelection)) {
+          _branchSelection =
+              !widget.isEditMode && widget.startNewTap && widget.tapPoleId != null
+                  ? _kBranchNewTapSentinel
+                  : null;
         }
       });
     } catch (_) {
@@ -631,12 +751,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           yearInstalled: driftPole.yearInstalled,
           condition: driftPole.condition ?? 'good',
           notes: driftPole.notes,
+          structuralDefect: driftPole.structuralDefect,
+          structuralDefectCriticality: driftPole.structuralDefectCriticality,
           cardComment: driftPole.cardComment,
           cardCommentAttachment: driftPole.cardCommentAttachment,
           createdBy: driftPole.createdBy,
           createdAt: driftPole.createdAt,
           updatedAt: driftPole.updatedAt,
-          isTapPole: (driftPole.poleNumber ?? '').contains('/'),
+          // Локальная БД не хранит is_tap_pole; не выводим из номера — только с сервера при онлайн-загрузке.
+          isTapPole: false,
         );
         _applyLoadedPoleToState(poleApi, equipmentList);
         if (mounted) _loadTapBranchesForLine();
@@ -676,6 +799,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       yearInstalled: drift.Value(_yearInstalled),
       condition: drift.Value(_condition),
       notes: drift.Value(_notes),
+      structuralDefect: drift.Value(_structuralDefectForApi()),
+      structuralDefectCriticality: drift.Value(_structuralCritForApi()),
       cardComment: _cardCommentSerialized() == null
           ? const drift.Value.absent()
           : drift.Value(_cardCommentSerialized()!),
@@ -814,9 +939,79 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   @override
   void dispose() {
     _materialController.dispose();
+    _structuralDefectController.dispose();
     _newCardCommentController.dispose();
     _cardCommentRecorder.dispose();
     super.dispose();
+  }
+
+  String? _equipmentCatalogTypeCode(String categoryTitle) {
+    switch (categoryTitle) {
+      case 'Разрядники':
+        return 'arrester';
+      case 'Выключатели':
+        return 'breaker';
+      case 'ЗН':
+        return 'zn';
+      case 'Реклоузеры':
+        return 'recloser';
+      case 'Разъединители':
+        return 'disconnector';
+      case 'Траверсы':
+        return 'cross_arm';
+      default:
+        return null;
+    }
+  }
+
+  Future<List<String>> _fetchCatalogBrands(String categoryTitle) async {
+    final code = _equipmentCatalogTypeCode(categoryTitle);
+    if (code == null) return [];
+    try {
+      final api = ref.read(apiServiceProvider);
+      final raw = await api.getEquipmentCatalog(typeCode: code, limit: 500);
+      final seen = <String>{};
+      final out = <String>[];
+      for (final e in raw) {
+        final label = (e.fullName != null && e.fullName!.trim().isNotEmpty)
+            ? e.fullName!.trim()
+            : '${e.brand} ${e.model}'.trim();
+        if (label.isEmpty || seen.contains(label)) continue;
+        seen.add(label);
+        out.add(label);
+      }
+      return out;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<EquipmentFormData?> _openEquipmentEditor({
+    required String categoryTitle,
+    required String equipmentType,
+    required bool singleInstance,
+    String? initialBrand,
+    int initialQuantity = 1,
+    String? initialDefect,
+    String? initialCriticality,
+    String? initialDefectAttachment,
+  }) async {
+    final extra = await _fetchCatalogBrands(categoryTitle);
+    if (!mounted) return null;
+    return showDialog<EquipmentFormData>(
+      context: context,
+      builder: (ctx) => AddEquipmentDialog(
+        categoryTitle: categoryTitle,
+        equipmentType: equipmentType,
+        singleInstance: singleInstance,
+        initialBrand: initialBrand,
+        initialQuantity: initialQuantity,
+        initialDefect: initialDefect,
+        initialCriticality: initialCriticality,
+        initialDefectAttachment: initialDefectAttachment,
+        catalogExtraBrands: extra.isEmpty ? null : extra,
+      ),
+    );
   }
 
   Future<bool> _savePoleToLocalDb() async {
@@ -842,6 +1037,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         yearInstalled: drift.Value(_yearInstalled),
         condition: drift.Value(_condition),
         notes: drift.Value(_notes),
+        structuralDefect: drift.Value(_structuralDefectForApi()),
+        structuralDefectCriticality: drift.Value(_structuralCritForApi()),
         cardComment: _cardCommentSerialized() == null
             ? const drift.Value.absent()
             : drift.Value(_cardCommentSerialized()!),
@@ -993,6 +1190,134 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
   }
 
+  String _labelNewTapBranch() {
+    final id = widget.tapPoleId;
+    if (id == null) return 'Новая ветка';
+    for (final e in _tapPolesInLine) {
+      if (e.key == id) return 'Новая ветка от ${e.value}';
+    }
+    return 'Новая ветка от опоры $id';
+  }
+
+  /// Поля ветки для JSON: выбор в списке → `branch_type` / `tap_pole_id` / `tap_branch_index` / `start_new_tap`.
+  ({
+    int? tapPoleId,
+    int? tapBranchIndex,
+    String branchType,
+    bool startNewTap,
+  }) _resolveBranchFieldsForSubmit() {
+    int? tapPoleId;
+    int? tapBranchIndex;
+    var branchType = 'main';
+    var startNewTap = false;
+
+    if (widget.isEditMode) {
+      final sel = _branchSelection;
+      if (sel == null || sel.isEmpty || sel == _kBranchNewTapSentinel) {
+        return (
+          tapPoleId: null,
+          tapBranchIndex: null,
+          branchType: 'main',
+          startNewTap: false,
+        );
+      }
+      if (sel.contains(':')) {
+        final parts = sel.split(':');
+        tapPoleId = int.tryParse(parts[0]);
+        tapBranchIndex = parts.length > 1 ? int.tryParse(parts[1]) : null;
+        if (tapPoleId != null && tapBranchIndex != null) {
+          return (
+            tapPoleId: tapPoleId,
+            tapBranchIndex: tapBranchIndex,
+            branchType: 'tap',
+            startNewTap: false,
+          );
+        }
+      }
+      return (
+        tapPoleId: null,
+        tapBranchIndex: null,
+        branchType: 'main',
+        startNewTap: false,
+      );
+    }
+
+    final hasBranchUi =
+        _showBranchChoice && (_tapBranchesInLine.isNotEmpty || _tapPolesInLine.isNotEmpty);
+
+    if (hasBranchUi) {
+      final sel = _branchSelection;
+      if (sel == null || sel.isEmpty) {
+        return (
+          tapPoleId: null,
+          tapBranchIndex: null,
+          branchType: 'main',
+          startNewTap: false,
+        );
+      }
+      if (sel == _kBranchNewTapSentinel) {
+        final anchor = widget.tapPoleId;
+        if (anchor != null) {
+          return (
+            tapPoleId: anchor,
+            tapBranchIndex: null,
+            branchType: 'tap',
+            startNewTap: true,
+          );
+        }
+        return (
+          tapPoleId: null,
+          tapBranchIndex: null,
+          branchType: 'main',
+          startNewTap: false,
+        );
+      }
+      if (sel.contains(':')) {
+        final parts = sel.split(':');
+        tapPoleId = int.tryParse(parts[0]);
+        tapBranchIndex = parts.length > 1 ? int.tryParse(parts[1]) : 1;
+        if (tapPoleId != null && tapBranchIndex != null) {
+          return (
+            tapPoleId: tapPoleId,
+            tapBranchIndex: tapBranchIndex,
+            branchType: 'tap',
+            startNewTap: false,
+          );
+        }
+      }
+      return (
+        tapPoleId: null,
+        tapBranchIndex: null,
+        branchType: 'main',
+        startNewTap: false,
+      );
+    }
+
+    if (widget.startNewTap && widget.tapPoleId != null) {
+      return (
+        tapPoleId: widget.tapPoleId,
+        tapBranchIndex: null,
+        branchType: 'tap',
+        startNewTap: true,
+      );
+    }
+    if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
+      return (
+        tapPoleId: widget.tapPoleId,
+        tapBranchIndex: widget.tapBranchIndex,
+        branchType: 'tap',
+        startNewTap: false,
+      );
+    }
+
+    return (
+      tapPoleId: null,
+      tapBranchIndex: null,
+      branchType: 'main',
+      startNewTap: false,
+    );
+  }
+
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_poleMask.isValidForSave) {
@@ -1017,26 +1342,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       _material = _materialController.text.trim().isEmpty ? null : _materialController.text.trim();
       final cardCommentJson = _cardCommentSerialized();
 
-      // Логика ветки как в Angular: startNewTap | tapPoleId+tapBranchIndex | branch_selection
-      int? tapPoleId;
-      int? tapBranchIndex;
-      String? branchType;
-      bool startNewTap = false;
-      if (widget.startNewTap && widget.tapPoleId != null) {
-        tapPoleId = widget.tapPoleId;
-        startNewTap = true;
-        branchType = 'tap';
-      } else if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
-        tapPoleId = widget.tapPoleId;
-        tapBranchIndex = widget.tapBranchIndex;
-        branchType = 'tap';
-      } else if (_branchSelection != null && _branchSelection!.contains(':')) {
-        final parts = _branchSelection!.split(':');
-        tapPoleId = int.tryParse(parts[0]);
-        tapBranchIndex = parts.length > 1 ? int.tryParse(parts[1]) : 1;
-        if (tapPoleId != null) branchType = 'tap';
-      }
-      if (branchType == null) branchType = 'main';
+      final branch = _resolveBranchFieldsForSubmit();
+      final tapPoleId = branch.tapPoleId;
+      final tapBranchIndex = branch.tapBranchIndex;
+      final branchType = branch.branchType;
+      final startNewTap = branch.startNewTap;
 
       final poleData = PoleCreate(
         poleNumber: _poleNumber,
@@ -1049,6 +1359,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         yearInstalled: _yearInstalled,
         condition: _condition,
         notes: _notes?.isEmpty ?? true ? null : _notes,
+        structuralDefect: _structuralDefectForApi(),
+        structuralDefectCriticality: _structuralCritForApi(),
         isTap: _isTap,
         conductorType: _conductorType,
         conductorMaterial: _conductorMaterial,
@@ -1076,6 +1388,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           yearInstalled: poleData.yearInstalled,
           condition: poleData.condition,
           notes: poleData.notes,
+          structuralDefect: poleData.structuralDefect,
+          structuralDefectCriticality: poleData.structuralDefectCriticality,
           isTap: poleData.isTap,
           conductorType: poleData.conductorType,
           conductorMaterial: poleData.conductorMaterial,
@@ -1104,6 +1418,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             yearInstalled: drift.Value(updatedPole.yearInstalled),
             condition: drift.Value(updatedPole.condition),
             notes: drift.Value(updatedPole.notes),
+            structuralDefect: drift.Value(updatedPole.structuralDefect),
+            structuralDefectCriticality:
+                drift.Value(updatedPole.structuralDefectCriticality),
             cardComment: cardCommentJson == null
                 ? const drift.Value.absent()
                 : drift.Value(cardCommentJson),
@@ -1188,11 +1505,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         return;
       }
 
-      // При «Начать отпайку» или «Добавить в отпайку» новая опора связывается с опорой tapPoleId.
+      // Query from_pole_id — только для опоры в отпайке (якорь из JSON).
       final createdPole = await apiService.createPole(
         widget.lineId,
         poleData,
-        fromPoleId: widget.tapPoleId,
+        fromPoleId: branchType == 'tap' ? tapPoleId : null,
       );
       // Загружаем вложения на сервер и обновляем опору
       List<Map<String, dynamic>> resolvedAttachmentsCreate = [];
@@ -1213,6 +1530,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               yearInstalled: createdPole.yearInstalled,
               condition: createdPole.condition,
               notes: createdPole.notes,
+              structuralDefect: poleData.structuralDefect,
+              structuralDefectCriticality: poleData.structuralDefectCriticality,
               isTap: poleData.isTap,
               conductorType: poleData.conductorType,
               conductorMaterial: poleData.conductorMaterial,
@@ -1249,6 +1568,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           yearInstalled: drift.Value(createdPole.yearInstalled),
           condition: drift.Value(createdPole.condition),
           notes: drift.Value(createdPole.notes),
+          structuralDefect: drift.Value(createdPole.structuralDefect),
+          structuralDefectCriticality:
+              drift.Value(createdPole.structuralDefectCriticality),
           cardComment: cardCommentJson == null
               ? const drift.Value.absent()
               : drift.Value(cardCommentJson),
@@ -1467,8 +1789,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // Как в Angular: чекбокс задаёт `is_tap` ("Точка отпайки")
+                      // `is_tap` / is_tap_pole: только с этой галочкой с карты можно «Начать отпайку» от опоры.
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Checkbox(
                             value: _isTap,
@@ -1476,7 +1799,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                           ),
                           Expanded(
                             child: Text(
-                              'Точка отпайки',
+                              'Отпаечная опора (от неё можно создавать отпайки на карте)',
                               style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary),
                             ),
                           ),
@@ -1555,27 +1878,45 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Ветка: магистраль или отпайка (как в Angular)
-                      if (_showBranchChoice && !(widget.tapPoleId != null && widget.startNewTap)) ...[
+                      // Ветка: новая от якоря / магистраль / существующие ветки (JSON = выбор).
+                      if (_showBranchChoice) ...[
                         Text('Ветка', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),
                         const SizedBox(height: 6),
                         Builder(
                           builder: (context) {
-                            final seen = <String?>{};
-                            final dropdownItems = <DropdownMenuItem<String?>>[
+                            final dropdownItems = <DropdownMenuItem<String?>>[];
+                            if (!widget.isEditMode &&
+                                widget.startNewTap &&
+                                widget.tapPoleId != null) {
+                              dropdownItems.add(
+                                DropdownMenuItem<String?>(
+                                  value: _kBranchNewTapSentinel,
+                                  child: Text(
+                                    _labelNewTapBranch(),
+                                    style: TextStyle(color: PatrolColors.textPrimary),
+                                  ),
+                                ),
+                              );
+                            }
+                            dropdownItems.add(
                               DropdownMenuItem<String?>(
                                 value: null,
                                 child: Text('Магистраль', style: TextStyle(color: PatrolColors.textPrimary)),
                               ),
-                              ..._tapBranchesInLine.where((e) => seen.add(e.key)).map(
-                                (e) => DropdownMenuItem<String?>(
+                            );
+                            final seen = <String>{};
+                            for (final e in _tapBranchesInLine) {
+                              if (!seen.add(e.key)) continue;
+                              dropdownItems.add(
+                                DropdownMenuItem<String?>(
                                   value: e.key,
                                   child: Text(e.value, style: TextStyle(color: PatrolColors.textPrimary)),
                                 ),
-                              ),
-                            ];
+                              );
+                            }
                             final allowed = dropdownItems.map((e) => e.value).toSet();
-                            final safeValue = allowed.contains(_branchSelection) ? _branchSelection : null;
+                            final safeValue =
+                                allowed.contains(_branchSelection) ? _branchSelection : null;
                             return Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12),
                               decoration: BoxDecoration(
@@ -1588,7 +1929,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                   isExpanded: true,
                                   hint: const Text('Магистраль'),
                                   items: dropdownItems,
-                                  onChanged: (widget.tapPoleId != null && widget.tapBranchIndex != null)
+                                  onChanged: (widget.tapPoleId != null &&
+                                          widget.tapBranchIndex != null &&
+                                          !widget.startNewTap)
                                       ? null
                                       : (v) => setState(() => _branchSelection = v),
                                 ),
@@ -1610,6 +1953,50 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                   const SizedBox(width: 8),
                           _buildPoleTypeChip('угловая', 'УГЛОВАЯ'),
                         ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        'Дефект опоры',
+                        style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _structuralDefectController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Описание дефекта конструкции',
+                          hintText: 'Трещины, коррозия ствола, отклонение…',
+                          filled: true,
+                          fillColor: PatrolColors.surfaceCard,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        style: const TextStyle(color: PatrolColors.textPrimary),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String?>(
+                        value: _structuralCrit,
+                        decoration: InputDecoration(
+                          labelText: 'Критичность дефекта опоры',
+                          filled: true,
+                          fillColor: PatrolColors.surfaceCard,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        items: const [
+                          DropdownMenuItem<String?>(
+                              value: null, child: Text('Не указана')),
+                          DropdownMenuItem<String?>(
+                              value: 'low', child: Text('Низкая')),
+                          DropdownMenuItem<String?>(
+                              value: 'medium', child: Text('Средняя')),
+                          DropdownMenuItem<String?>(
+                              value: 'high', child: Text('Высокая')),
+                        ],
+                        onChanged: (v) => setState(() => _structuralCrit = v),
                       ),
                       const SizedBox(height: 16),
 
@@ -1746,18 +2133,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                           return;
                                         }
                                         if (action == 'edit') {
-                                          final result = await showDialog<EquipmentFormData>(
-                                            context: context,
-                                            builder: (ctx) => AddEquipmentDialog(
-                                              categoryTitle: cat.title,
-                                              equipmentType: eqType,
-                                              singleInstance: singleInstance,
-                                              initialBrand: existing.name,
-                                              initialQuantity: existing.quantity,
-                                              initialDefect: existing.defect,
-                                              initialCriticality: existing.criticality,
-                                              initialDefectAttachment: existing.defectAttachment,
-                                            ),
+                                          final result = await _openEquipmentEditor(
+                                            categoryTitle: cat.title,
+                                            equipmentType: eqType,
+                                            singleInstance: singleInstance,
+                                            initialBrand: existing.name,
+                                            initialQuantity: existing.quantity,
+                                            initialDefect: existing.defect,
+                                            initialCriticality: existing.criticality,
+                                            initialDefectAttachment: existing.defectAttachment,
                                           );
                                           if (result != null && mounted) {
                                             setState(() {
@@ -1778,14 +2162,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                         return;
                                       }
 
-                                      final result = await showDialog<EquipmentFormData>(
-                                        context: context,
-                                        builder: (ctx) => AddEquipmentDialog(
-                                          categoryTitle: cat.title,
-                                          equipmentType: eqType,
-                                          singleInstance: singleInstance,
-                                          initialQuantity: singleInstance ? 1 : 1,
-                                        ),
+                                      final result = await _openEquipmentEditor(
+                                        categoryTitle: cat.title,
+                                        equipmentType: eqType,
+                                        singleInstance: singleInstance,
+                                        initialQuantity: singleInstance ? 1 : 1,
                                       );
                                       if (result != null && mounted) {
                                         setState(() {
@@ -1900,6 +2281,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                   final when = PoleCardCommentCodec.formatDateTime(
                                     m['at'] as String?,
                                   );
+                                  final voiceUrl =
+                                      (m['voice_url'] as String?)?.trim() ?? '';
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Container(
@@ -1936,10 +2319,39 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                             ],
                                           ),
                                           const SizedBox(height: 4),
-                                          Text(
-                                            '${m['text']}',
-                                            style: const TextStyle(fontSize: 14, height: 1.35),
-                                          ),
+                                          if ((m['text'] as String?)?.trim().isNotEmpty ??
+                                              false)
+                                            Text(
+                                              '${m['text']}',
+                                              style: const TextStyle(
+                                                  fontSize: 14, height: 1.35),
+                                            ),
+                                          if (voiceUrl.isNotEmpty) ...[
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                Icon(Icons.mic,
+                                                    size: 18,
+                                                    color: PatrolColors.accentBlue),
+                                                const SizedBox(width: 6),
+                                                TextButton(
+                                                  onPressed: () async {
+                                                    final uri = Uri.parse(
+                                                        _absoluteAttachmentUrl(
+                                                            voiceUrl));
+                                                    if (await canLaunchUrl(
+                                                        uri)) {
+                                                      await launchUrl(uri,
+                                                          mode: LaunchMode
+                                                              .externalApplication);
+                                                    }
+                                                  },
+                                                  child: const Text(
+                                                      'Прослушать голос'),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
@@ -1989,16 +2401,26 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                             label: const Text('Фото'),
                             style: OutlinedButton.styleFrom(foregroundColor: PatrolColors.textPrimary),
                           ),
+                          if (kIsWeb) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: _isLoading ? null : _pickCardCommentFileAny,
+                              icon: const Icon(Icons.attach_file, size: 20),
+                              label: const Text('Файл'),
+                              style: OutlinedButton.styleFrom(
+                                  foregroundColor: PatrolColors.textPrimary),
+                            ),
+                          ],
                           if (!kIsWeb) ...[
                             const SizedBox(width: 12),
-                          OutlinedButton.icon(
-                            onPressed: _recordCommentVoice,
-                            icon: Icon(_cardCommentRecording ? Icons.stop : Icons.mic, size: 20),
-                            label: Text(_cardCommentRecording ? 'Стоп' : 'Голос'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _cardCommentRecording ? Colors.red : PatrolColors.textPrimary,
+                            OutlinedButton.icon(
+                              onPressed: _recordCommentVoice,
+                              icon: Icon(_cardCommentRecording ? Icons.stop : Icons.mic, size: 20),
+                              label: Text(_cardCommentRecording ? 'Стоп' : 'Голос'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _cardCommentRecording ? Colors.red : PatrolColors.textPrimary,
+                              ),
                             ),
-                          ),
                           ],
                           if (_cardCommentAttachments.isNotEmpty) ...[
                             const SizedBox(width: 8),

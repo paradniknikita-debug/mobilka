@@ -14,7 +14,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onShowHistory;
-  /// Открыть диалог создания опоры «Начать отпайку» от этой опоры (отпаечная опора = точка ветвления, напр. опора 3).
+  /// Открыть диалог «Начать отпайку» — только у опоры с флагом «Точка отпайки» в карточке.
   final VoidCallback? onStartTapPole;
   /// Открыть диалог добавления следующей опоры в отпайку (опора уже в отпайке: 3/1, 3/2 и т.д.).
   final VoidCallback? onAddPoleToTap;
@@ -44,18 +44,26 @@ class ObjectPropertiesPanel extends ConsumerWidget {
     return v.toString();
   }
 
-  /// Любая опора с номером: «Начать отпайку» (магистраль → первая ветка; 3/1 → ещё ветка от якоря, см. карту).
-  static bool _isTapPoleForStart(Map<String, dynamic> props) {
-    if (props['is_tap_pole'] == true) return true;
-    final n = props['pole_number'] ?? props['poleNumber'];
-    return n is String && n.isNotEmpty;
+  /// Как на Angular (`map.component.html`): подпись и порядок **широта, долгота**
+  /// (в БД/CIM: `y_position` = широта, `x_position` = долгота).
+  static const String _coordsLabel = 'Координаты (x, y / ш, д):';
+
+  static String _coordsLatLonValue(Map<String, dynamic> props) {
+    final lat = props['y_position'] ?? props['latitude'];
+    final lon = props['x_position'] ?? props['longitude'];
+    return '${_formatCoord(lat)}, ${_formatCoord(lon)}';
   }
 
-  /// Опора в отпайке (3/1, 3/2): первая и последующие опоры ветки, не точка ветвления.
+  /// «Начать отпайку» только если в карточке опоры включено «Точка отпайки» ([is_tap_pole]).
+  static bool _canStartTapBranch(Map<String, dynamic> props) {
+    if (props['id'] == null) return false;
+    return props['is_tap_pole'] == true;
+  }
+
+  /// Опора уже в отпайке (номер N/M, N/M/…).
   static bool _isPoleInTapBranch(Map<String, dynamic> props) {
     final n = props['pole_number'] ?? props['poleNumber'];
-    if (n is String && n.contains('/')) return true;
-    return props['tap_pole_id'] != null;
+    return n is String && n.contains('/');
   }
 
   static int? _toInt(dynamic v) {
@@ -199,7 +207,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
                   if (onStartTapPole != null &&
                       lineId != null &&
                       objectProperties['id'] != null &&
-                      _isTapPoleForStart(objectProperties)) ...[
+                      _canStartTapBranch(objectProperties)) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -355,9 +363,8 @@ class ObjectPropertiesPanel extends ConsumerWidget {
       ),
       _buildPropertyItem(
         context,
-        'Позиция (X, Y):',
-        '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
-        '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
+        _coordsLabel,
+        _coordsLatLonValue(objectProperties),
         isLast: seq == null,
       ),
       if (seq != null)
@@ -393,9 +400,8 @@ class ObjectPropertiesPanel extends ConsumerWidget {
       ),
       _buildPropertyItem(
         context,
-        'Позиция (X, Y):',
-        '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
-        '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
+        _coordsLabel,
+        _coordsLatLonValue(objectProperties),
       ),
     ];
   }
@@ -420,9 +426,8 @@ class ObjectPropertiesPanel extends ConsumerWidget {
         ),
       _buildPropertyItem(
         context,
-        'Позиция (X, Y):',
-        '${_formatCoord(objectProperties['x_position'] ?? objectProperties['longitude'])}, '
-        '${_formatCoord(objectProperties['y_position'] ?? objectProperties['latitude'])}',
+        _coordsLabel,
+        _coordsLatLonValue(objectProperties),
       ),
     ];
   }

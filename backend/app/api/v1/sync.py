@@ -11,6 +11,7 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.branch import Branch
 from app.models.power_line import PowerLine, Pole, Equipment, Span, Tap
+from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.location import Location, PositionPoint
 from app.models.substation import Substation, VoltageLevel, Bay, ConductingEquipment, ProtectionEquipment, Connection
 from app.models.acline_segment import AClineSegment
@@ -30,7 +31,7 @@ router = APIRouter()
 
 def _order_for_sync(records: List[SyncRecord]) -> List[SyncRecord]:
     """Порядок: ЛЭП → опоры → оборудование (опоры ссылаются на ЛЭП, оборудование на опоры)."""
-    order = {"power_line": 0, "pole": 1, "equipment": 2}
+    order = {"power_line": 0, "pole": 1, "equipment_catalog": 2, "equipment": 3}
     return sorted(records, key=lambda r: (order.get(r.entity_type, 99), r.id))
 
 
@@ -398,6 +399,7 @@ async def _download_sync_data_impl(
             "installation_date": eq.installation_date.isoformat() if eq.installation_date else None,
             "condition": eq.condition,
             "notes": eq.notes,
+            "catalog_item_id": eq.catalog_item_id,
             "created_by": eq.created_by,
             "created_at": eq.created_at.isoformat() if eq.created_at else None,
             "updated_at": eq.updated_at.isoformat() if eq.updated_at else None,
@@ -412,13 +414,49 @@ async def _download_sync_data_impl(
             "timestamp": (eq.updated_at or eq.created_at).isoformat() if (eq.updated_at or eq.created_at) else datetime.now(timezone.utc).isoformat(),
         })
 
+    # Изменения справочника марок оборудования
+    catalog_result = await db.execute(
+        select(EquipmentCatalogItem).where(
+            or_(
+                EquipmentCatalogItem.created_at >= last_sync_dt,
+                EquipmentCatalogItem.updated_at >= last_sync_dt,
+            )
+        )
+    )
+    catalog_items = catalog_result.scalars().all()
+    for item in catalog_items:
+        item_created = _ensure_utc(item.created_at)
+        item_data = {
+            "id": item.id,
+            "type_code": item.type_code,
+            "brand": item.brand,
+            "model": item.model,
+            "full_name": item.full_name,
+            "voltage_kv": item.voltage_kv,
+            "current_a": item.current_a,
+            "manufacturer": item.manufacturer,
+            "country": item.country,
+            "description": item.description,
+            "attrs_json": item.attrs_json,
+            "is_active": item.is_active,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        }
+        records.append({
+            "id": str(uuid.uuid4()),
+            "entity_type": "equipment_catalog",
+            "action": "create" if (item_created and item_created >= last_sync_dt) else "update",
+            "data": item_data,
+            "timestamp": (item.updated_at or item.created_at).isoformat() if (item.updated_at or item.created_at) else datetime.now(timezone.utc).isoformat(),
+        })
+
     # Явные удаления (tombstones) из ChangeLog, чтобы клиенты удаляли сущности,
     # исчезнувшие на сервере (например, удалили ЛЭП в веб-клиенте).
     delete_logs_result = await db.execute(
         select(ChangeLog).where(
             and_(
                 ChangeLog.action == "delete",
-                ChangeLog.entity_type.in_(["power_line", "pole", "equipment"]),
+                ChangeLog.entity_type.in_(["power_line", "pole", "equipment", "equipment_catalog"]),
                 ChangeLog.entity_id.isnot(None),
                 ChangeLog.created_at >= last_sync_dt,
             )
@@ -767,6 +805,47 @@ async def process_sync_record(
             eq = result.scalar_one_or_none()
             if eq:
                 await db.execute(delete(Equipment).where(Equipment.id == eq.id))
+
+    elif record.entity_type == "equipment_catalog":
+        if record.action == SyncAction.CREATE:
+            existing = await db.execute(
+                select(EquipmentCatalogItem).where(EquipmentCatalogItem.id == data.get("id"))
+            )
+            row = existing.scalar_one_or_none()
+            if row:
+                for key, value in data.items():
+                    if key in ("id", "created_at", "updated_at"):
+                        continue
+                    if hasattr(row, key):
+                        setattr(row, key, value)
+            else:
+                item = EquipmentCatalogItem(
+                    type_code=data.get("type_code"),
+                    brand=data.get("brand"),
+                    model=data.get("model"),
+                    full_name=data.get("full_name"),
+                    voltage_kv=data.get("voltage_kv"),
+                    current_a=data.get("current_a"),
+                    manufacturer=data.get("manufacturer"),
+                    country=data.get("country"),
+                    description=data.get("description"),
+                    attrs_json=data.get("attrs_json"),
+                    is_active=data.get("is_active", True),
+                    created_by=user.id,
+                )
+                db.add(item)
+        elif record.action == SyncAction.UPDATE:
+            row = (await db.execute(select(EquipmentCatalogItem).where(EquipmentCatalogItem.id == data.get("id")))).scalar_one_or_none()
+            if row:
+                for key, value in data.items():
+                    if key in ("id", "created_at", "updated_at"):
+                        continue
+                    if hasattr(row, key):
+                        setattr(row, key, value)
+        elif record.action == SyncAction.DELETE:
+            row = (await db.execute(select(EquipmentCatalogItem).where(EquipmentCatalogItem.id == data.get("id")))).scalar_one_or_none()
+            if row:
+                row.is_active = False
     
     # Коммит выполняет вызывающий код (upload_sync_batch) — один раз после всех записей
 

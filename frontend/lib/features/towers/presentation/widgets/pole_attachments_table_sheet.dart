@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
+import '../../../../core/utils/pole_card_comment_codec.dart';
 
 /// Таблица вложений карточки опоры: сортировка по дате и по пользователю.
 class PoleAttachmentsTableSheet extends StatefulWidget {
@@ -135,23 +136,47 @@ class _PoleAttachmentsTableSheetState extends State<PoleAttachmentsTableSheet> {
                           final t = (m['t'] as String?) ?? 'photo';
                           final typeLabel = t == 'voice'
                               ? 'Аудио'
-                              : t == 'schema'
-                                  ? 'Схема'
-                                  : 'Фото';
+                              : t == 'video'
+                                  ? 'Видео'
+                                  : t == 'schema'
+                                      ? 'Схема'
+                                      : t == 'file'
+                                          ? 'Файл'
+                                          : 'Фото';
                           final who = m['added_by_name']?.toString() ??
                               (m['added_by'] != null
                                   ? 'id ${m['added_by']}'
                                   : '—');
-                          final when = m['added_at']?.toString() ?? '—';
-                          final ref = m['url'] ?? m['p'] ?? '';
+                          final whenRaw = m['added_at']?.toString();
+                          final when = PoleCardCommentCodec.formatDateTime(whenRaw);
+                          final ref = (m['url'] ?? m['p'] ?? '').toString();
+                          final hideRef = ref.startsWith('blob:') ||
+                              ref.startsWith('data:') ||
+                              ref.isEmpty;
+                          final fn = (m['filename'] as String?)?.trim();
+                          final subLines = <String>[
+                            '$who • $when',
+                            if (!hideRef)
+                              (ref.length > 72 ? '${ref.substring(0, 72)}…' : ref)
+                            else if (fn != null && fn.isNotEmpty)
+                              fn
+                            else if (ref.startsWith('blob:'))
+                              'Локальный файл (будет загружен при сохранении опоры)',
+                          ];
                           return ListTile(
                             leading: Icon(
-                              t == 'voice' ? Icons.mic : Icons.image,
+                              t == 'voice'
+                                  ? Icons.mic
+                                  : t == 'video'
+                                      ? Icons.videocam
+                                      : t == 'schema'
+                                          ? Icons.description
+                                          : Icons.attach_file,
                               color: PatrolColors.textPrimary,
                             ),
                             title: Text(typeLabel),
                             subtitle: Text(
-                              '$who • $when\n${ref.toString().length > 60 ? '${ref.toString().substring(0, 60)}…' : ref}',
+                              subLines.join('\n'),
                               style: const TextStyle(fontSize: 11),
                             ),
                             isThreeLine: true,
@@ -172,7 +197,8 @@ class _PoleAttachmentsTableSheetState extends State<PoleAttachmentsTableSheet> {
     final uid = last['user_id'];
     final un = last['user_name']?.toString();
     final who = un ?? (uid != null ? 'id $uid' : '—');
-    return 'Последнее изменение: $kind • $who • $at';
+    final when = PoleCardCommentCodec.formatDateTime(at);
+    return 'Последнее изменение: $kind • $who • $when';
   }
 }
 
