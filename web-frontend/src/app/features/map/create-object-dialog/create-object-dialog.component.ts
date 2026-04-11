@@ -86,7 +86,7 @@ export class CreateObjectDialogComponent implements OnInit {
   tapPoleIdToUse?: number;
 
   /** Список веток для выбора: магистраль + все отпайки (от одной опоры может быть несколько веток) */
-  tapBranchesInLine: { value: string; label: string }[] = [];
+  tapBranchesInLine: { value: string; label: string; tooltip?: string }[] = [];
   /** Для обратной совместимости и подписи: отпаечные опоры по id (pole_number для лейбла) */
   tapPolesInLine: { id: number; pole_number: string }[] = [];
 
@@ -359,6 +359,48 @@ export class CreateObjectDialogComponent implements OnInit {
     });
   }
 
+  /**
+   * Подпись отпайки в списке: якорь + номер ветки + цепочка опор (первая → последняя),
+   * чтобы отличать ветки с одного узла. Полный путь — в tooltip.
+   */
+  private buildTapBranchOption(
+    tapPoleId: number,
+    branchIndex: number,
+    tapPoleNames: Record<number, string>,
+    allPoles: any[]
+  ): { label: string; tooltip: string } {
+    const anchor = (tapPoleNames[tapPoleId] ?? `Опора ${tapPoleId}`).trim();
+    const onBranch = allPoles
+      .filter(
+        (p: any) =>
+          p.tap_pole_id != null &&
+          Number(p.tap_pole_id) === tapPoleId &&
+          (p.tap_branch_index != null ? Number(p.tap_branch_index) : 1) === branchIndex
+      )
+      .sort((a: any, b: any) => (a.sequence_number ?? 0) - (b.sequence_number ?? 0));
+    const names = onBranch.map((p: any) =>
+      p.pole_number && String(p.pole_number).trim()
+        ? String(p.pole_number).trim()
+        : `оп.${p.id}`
+    );
+    const chain = names.join(' → ');
+    const first = names[0] ?? '—';
+    const last = names.length > 0 ? names[names.length - 1] : '—';
+    const tooltip =
+      `Якорь: ${anchor} (id ${tapPoleId}), индекс ветки ${branchIndex}. ` +
+      (chain ? `Все опоры ветки: ${chain}.` : 'На ветке пока нет учтённых опор.');
+    if (names.length === 0) {
+      return { label: `${anchor} · ветка ${branchIndex} — (пока без опор)`, tooltip };
+    }
+    if (names.length === 1) {
+      return { label: `${anchor} · ветка ${branchIndex} — к ${first}`, tooltip };
+    }
+    return {
+      label: `${anchor} · ветка ${branchIndex}: ${first} → ${last} (${names.length} оп.)`,
+      tooltip
+    };
+  }
+
   updateLastPoleInLine(lineId: number, tapPoleId?: number): void {
     this.apiService.getPolesByPowerLine(lineId).subscribe({
       next: (poles) => {
@@ -377,7 +419,8 @@ export class CreateObjectDialogComponent implements OnInit {
         this.tapBranchesInLine = Array.from(branchSet)
           .map(s => {
             const [pid, bi] = s.split(':').map(Number);
-            return { value: s, label: `Отпайка от ${tapPoleNames[pid] ?? 'опора ' + pid} — ветка ${bi}` };
+            const opt = this.buildTapBranchOption(pid, bi, tapPoleNames, list);
+            return { value: s, label: opt.label, tooltip: opt.tooltip };
           })
           .sort((a, b) => a.value.localeCompare(b.value));
         this.showBranchChoice = this.tapBranchesInLine.length > 0 || this.tapPolesInLine.length > 0;
@@ -434,7 +477,8 @@ export class CreateObjectDialogComponent implements OnInit {
         this.tapBranchesInLine = Array.from(branchSet)
           .map(s => {
             const [pid, bi] = s.split(':').map(Number);
-            return { value: s, label: `Отпайка от ${tapPoleNames[pid] ?? 'опора ' + pid} — ветка ${bi}` };
+            const opt = this.buildTapBranchOption(pid, bi, tapPoleNames, list);
+            return { value: s, label: opt.label, tooltip: opt.tooltip };
           })
           .sort((a, b) => a.value.localeCompare(b.value));
         this.cdr.detectChanges();

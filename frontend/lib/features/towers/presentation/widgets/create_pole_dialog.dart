@@ -37,6 +37,18 @@ class _EquipmentCategory {
 /// Явный выбор «новая ветка от якоря» при «Начать отпайку»; совпадает с Angular `create-object-dialog`.
 const String _kBranchNewTapSentinel = '__new_tap__';
 
+/// Пункт списка «Ветка»: подпись + tooltip (цепочка опор), как в веб `buildTapBranchOption`.
+class _TapBranchOption {
+  const _TapBranchOption({
+    required this.value,
+    required this.label,
+    required this.tooltip,
+  });
+  final String value;
+  final String label;
+  final String tooltip;
+}
+
 const List<_EquipmentCategory> _equipmentCategories = [
   _EquipmentCategory('Фундамент', Icons.anchor),
   _EquipmentCategory('Изоляторы', Icons.bolt),
@@ -130,8 +142,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
 
   /// Показывать выбор «Магистраль» / «Отпайка от X — ветка N» (как в Angular).
   bool _showBranchChoice = false;
-  /// Список веток для выбора: value = "tapPoleId:tapBranchIndex", label = "Отпайка от X — ветка N".
-  List<MapEntry<String, String>> _tapBranchesInLine = [];
+  /// Список веток для выбора: value = "tapPoleId:tapBranchIndex".
+  List<_TapBranchOption> _tapBranchesInLine = [];
   /// Отпаечные опоры линии (id, pole_number) для подписей.
   List<MapEntry<int, String>> _tapPolesInLine = [];
   /// Выбранная ветка: null = магистраль; [_kBranchNewTapSentinel] = новая ветка от якоря; иначе "tapPoleId:tapBranchIndex".
@@ -510,6 +522,77 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     }
   }
 
+  /// Три уровня критичности дефекта опоры с цветовой подсветкой (low / medium / high).
+  Widget _buildStructuralCriticalityRow() {
+    Widget chip(String level, String title) {
+      final selected = _structuralCrit == level;
+      final accent = _criticalityColor(level);
+      return Expanded(
+        child: Material(
+          color: selected ? accent.withValues(alpha: 0.42) : accent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            onTap: () => setState(() => _structuralCrit = level),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected ? accent : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12,
+                  color: PatrolColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Критичность дефекта опоры',
+          style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            chip('low', DefectReferenceData.criticalityLabels['low'] ?? 'Низкая'),
+            const SizedBox(width: 8),
+            chip('medium', DefectReferenceData.criticalityLabels['medium'] ?? 'Средняя'),
+            const SizedBox(width: 8),
+            chip('high', DefectReferenceData.criticalityLabels['high'] ?? 'Высокая'),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => setState(() => _structuralCrit = null),
+            style: TextButton.styleFrom(
+              foregroundColor: PatrolColors.textSecondary,
+              padding: const EdgeInsets.only(top: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Не указана'),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -609,6 +692,56 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     });
   }
 
+  /// Подпись отпайки в списке: якорь + номер ветки + цепочка опор (как веб `buildTapBranchOption`).
+  _TapBranchOption _tapBranchOptionFromLine(
+    String valueKey,
+    int tapPoleId,
+    int branchIndex,
+    Map<int, String> tapPoleNames,
+    List<Pole> allPoles,
+  ) {
+    final rawName = tapPoleNames[tapPoleId];
+    final anchor = (rawName != null && rawName.trim().isNotEmpty)
+        ? rawName.trim()
+        : 'Опора $tapPoleId';
+    final onBranch = allPoles
+        .where((p) =>
+            p.tapPoleId != null &&
+            p.tapPoleId == tapPoleId &&
+            (p.tapBranchIndex ?? 1) == branchIndex)
+        .toList()
+      ..sort((a, b) => (a.sequenceNumber ?? 0).compareTo(b.sequenceNumber ?? 0));
+    final names = onBranch.map((p) {
+      final pn = p.poleNumber.trim();
+      return pn.isNotEmpty ? pn : 'оп.${p.id}';
+    }).toList();
+    final chain = names.join(' → ');
+    final first = names.isNotEmpty ? names.first : '—';
+    final last = names.isNotEmpty ? names.last : '—';
+    final tooltip =
+        'Якорь: $anchor (id $tapPoleId), индекс ветки $branchIndex. '
+        '${chain.isNotEmpty ? 'Все опоры ветки: $chain.' : 'На ветке пока нет учтённых опор.'}';
+    if (names.isEmpty) {
+      return _TapBranchOption(
+        value: valueKey,
+        label: '$anchor · ветка $branchIndex — (пока без опор)',
+        tooltip: tooltip,
+      );
+    }
+    if (names.length == 1) {
+      return _TapBranchOption(
+        value: valueKey,
+        label: '$anchor · ветка $branchIndex — к $first',
+        tooltip: tooltip,
+      );
+    }
+    return _TapBranchOption(
+      value: valueKey,
+      label: '$anchor · ветка $branchIndex: $first → $last (${names.length} оп.)',
+      tooltip: tooltip,
+    );
+  }
+
   /// Загружает список отпаечных опор и веток линии для выбора «Магистраль / Отпайка» (как в Angular).
   Future<void> _loadTapBranchesForLine() async {
     try {
@@ -618,7 +751,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final tapPoles = poles.where((p) => p.isTapPole).toList();
       final tapPoleNames = <int, String>{};
       for (final p in tapPoles) {
-        tapPoleNames[p.id] = p.poleNumber;
+        final n = p.poleNumber.trim();
+        tapPoleNames[p.id] = n.isNotEmpty ? n : 'Опора ${p.id}';
       }
       final branchSet = <String>{};
       for (final p in poles) {
@@ -627,18 +761,14 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           branchSet.add('${p.tapPoleId}:$bi');
         }
       }
-      // Защита от дублей/рассинхрона: формируем уникальный список веток.
-      final byKey = <String, String>{};
-      for (final s in branchSet) {
+      final branches = branchSet.map((s) {
         final parts = s.split(':');
         final pid = int.tryParse(parts[0]) ?? 0;
         final bi = int.tryParse(parts[1]) ?? 1;
-        final label = 'Отпайка от ${tapPoleNames[pid] ?? 'опора $pid'} — ветка $bi';
-        byKey[s] = label;
-      }
-      final branches = byKey.entries.map((e) => MapEntry(e.key, e.value)).toList()
-        ..sort((a, b) => a.key.compareTo(b.key));
-      final allowedValues = branches.map((e) => e.key).toSet();
+        return _tapBranchOptionFromLine(s, pid, bi, tapPoleNames, poles);
+      }).toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      final allowedValues = branches.map((e) => e.value).toSet();
       setState(() {
         _tapPolesInLine = tapPoles.map((p) => MapEntry(p.id, p.poleNumber)).toList();
         _tapBranchesInLine = branches;
@@ -1905,12 +2035,21 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                               ),
                             );
                             final seen = <String>{};
-                            for (final e in _tapBranchesInLine) {
-                              if (!seen.add(e.key)) continue;
+                            for (final tb in _tapBranchesInLine) {
+                              if (!seen.add(tb.value)) continue;
                               dropdownItems.add(
                                 DropdownMenuItem<String?>(
-                                  value: e.key,
-                                  child: Text(e.value, style: TextStyle(color: PatrolColors.textPrimary)),
+                                  value: tb.value,
+                                  child: Tooltip(
+                                    message: tb.tooltip,
+                                    waitDuration: const Duration(milliseconds: 400),
+                                    child: Text(
+                                      tb.label,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: PatrolColors.textPrimary),
+                                    ),
+                                  ),
                                 ),
                               );
                             }
@@ -1976,29 +2115,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                         style: const TextStyle(color: PatrolColors.textPrimary),
                       ),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String?>(
-                        value: _structuralCrit,
-                        decoration: InputDecoration(
-                          labelText: 'Критичность дефекта опоры',
-                          filled: true,
-                          fillColor: PatrolColors.surfaceCard,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        items: const [
-                          DropdownMenuItem<String?>(
-                              value: null, child: Text('Не указана')),
-                          DropdownMenuItem<String?>(
-                              value: 'low', child: Text('Низкая')),
-                          DropdownMenuItem<String?>(
-                              value: 'medium', child: Text('Средняя')),
-                          DropdownMenuItem<String?>(
-                              value: 'high', child: Text('Высокая')),
-                        ],
-                        onChanged: (v) => setState(() => _structuralCrit = v),
-                      ),
-                      const SizedBox(height: 16),
+                      _buildStructuralCriticalityRow(),
+                      const SizedBox(height: 8),
 
                       // Марка опоры
                       TextFormField(

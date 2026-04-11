@@ -121,9 +121,52 @@
             <div class="pole-cc-text" *ngIf="m.text">{{ m.text }}</div>
             <div class="pole-cc-voice" *ngIf="m.voice_url">
               <mat-icon>mic</mat-icon>
-              <a [href]="m.voice_url" target="_blank" rel="noopener">Голосовое сообщение</a>
+              <app-attachment-media-view class="pole-cc-voice-player" [url]="m.voice_url" type="voice"></app-attachment-media-view>
             </div>
           </div>
+        </div>
+      </div>
+      <div class="property-item property-item--attachments-table" *ngIf="poleCardAttachments.length">
+        <span class="property-label">Вложения (таблица):</span>
+        <div class="property-value attachments-table-value">
+          <table class="pole-attachments-table">
+            <thead>
+              <tr>
+                <th class="col-n">№</th>
+                <th class="col-type">Тип</th>
+                <th class="col-preview">Файл</th>
+                <th class="col-act"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let att of poleCardAttachments; let i = index">
+                <td>{{ i + 1 }}</td>
+                <td>{{ attachmentTypeLabel(att.t) }}</td>
+                <td class="attachments-table-preview">
+                  <app-attachment-image-view
+                    *ngIf="att.t === 'photo' || att.t === 'schema'"
+                    [url]="att.url"
+                    [thumbnailUrl]="att.thumbnail"
+                    cssClass="pole-att-thumb"
+                    (openPreview)="openImagePreview($event)"
+                  ></app-attachment-image-view>
+                  <app-attachment-media-view
+                    *ngIf="att.t === 'voice' || att.t === 'video'"
+                    [url]="att.url"
+                    [type]="att.t === 'video' ? 'video' : 'voice'"
+                  ></app-attachment-media-view>
+                  <span *ngIf="att.t !== 'photo' && att.t !== 'schema' && att.t !== 'voice' && att.t !== 'video'" class="attachment-filename">
+                    {{ getAttachmentFilename(att.url) }}
+                  </span>
+                </td>
+                <td>
+                  <button mat-icon-button type="button" (click)="downloadAttachment(att)" matTooltip="Скачать">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
       <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">

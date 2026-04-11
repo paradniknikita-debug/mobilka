@@ -15,6 +15,23 @@ import '../../../../core/utils/attachment_urls.dart';
 import '../../../../core/utils/pole_card_comment_codec.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+String _attachmentTypeRu(String? raw) {
+  switch ((raw ?? '').toLowerCase().trim()) {
+    case 'photo':
+      return 'Фото';
+    case 'schema':
+      return 'Схема';
+    case 'voice':
+      return 'Голос';
+    case 'video':
+      return 'Видео';
+    case 'file':
+      return 'Файл';
+    default:
+      return raw == null || raw.isEmpty ? 'Вложение' : raw;
+  }
+}
+
 /// Блок «Комментарий карточки» и превью вложений (с Bearer для API).
 class PoleCardAttachmentsSection extends ConsumerWidget {
   final Map<String, dynamic> objectProperties;
@@ -56,12 +73,60 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
       headers['Authorization'] = 'Bearer $token';
     }
 
+    final rows = <DataRow>[];
+    if (items != null) {
+      for (var i = 0; i < items.length; i++) {
+        final m = items[i];
+        final t = m['t']?.toString() ?? '';
+        final url = m['url']?.toString();
+        if (url == null || url.isEmpty) continue;
+        final thumb = m['thumbnail_url']?.toString();
+        rows.add(
+          DataRow(
+            cells: [
+              DataCell(Text('${i + 1}', style: const TextStyle(fontSize: 13))),
+              DataCell(
+                Text(
+                  _attachmentTypeRu(t),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              DataCell(
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 140, maxWidth: 280),
+                    child: _AttachmentRow(
+                      type: t,
+                      relativeUrl: url,
+                      thumbnailUrl: thumb,
+                      authHeaders: headers,
+                      dio: dio,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          'Комментарии и вложения к объекту',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: Colors.grey.shade800,
+          ),
+        ),
+        const SizedBox(height: 10),
         if (commentThread.isNotEmpty) ...[
           Text(
-            'Комментарий карточки',
+            'Сообщения (текст и голос)',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade700,
@@ -76,32 +141,30 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
         ],
-        if (items != null && items.isNotEmpty) ...[
+        if (rows.isNotEmpty) ...[
           Text(
-            'Вложения',
+            'Вложения (общая таблица, MinIO)',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade700,
             ),
           ),
           const SizedBox(height: 8),
-          ...items.asMap().entries.map((e) {
-            final m = e.value;
-            final t = m['t']?.toString() ?? '';
-            final url = m['url']?.toString();
-            if (url == null || url.isEmpty) return const SizedBox.shrink();
-            final thumb = m['thumbnail_url']?.toString();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _AttachmentRow(
-                type: t,
-                relativeUrl: url,
-                thumbnailUrl: thumb,
-                authHeaders: headers,
-                dio: dio,
-              ),
-            );
-          }),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 36,
+              dataRowMinHeight: 52,
+              dataRowMaxHeight: 140,
+              columnSpacing: 12,
+              columns: const [
+                DataColumn(label: Text('№')),
+                DataColumn(label: Text('Тип')),
+                DataColumn(label: Text('Содержимое')),
+              ],
+              rows: rows,
+            ),
+          ),
         ],
       ],
     );

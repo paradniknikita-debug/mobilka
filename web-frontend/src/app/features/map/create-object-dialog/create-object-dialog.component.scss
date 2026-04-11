@@ -188,6 +188,7 @@
   .card-comment-bubble-voice {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     margin-top: 4px;
     font-size: 14px;
@@ -197,10 +198,12 @@
       width: 18px;
       height: 18px;
       color: rgba(0, 0, 0, 0.55);
+      flex-shrink: 0;
     }
 
-    a {
-      color: inherit;
+    .card-comment-voice-player {
+      flex: 1;
+      min-width: 0;
     }
   }
 

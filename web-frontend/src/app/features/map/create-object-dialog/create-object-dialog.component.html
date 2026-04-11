@@ -54,7 +54,12 @@
             <mat-select formControlName="branch_selection" placeholder="Магистраль или отпайка">
               <mat-option *ngIf="!isEditMode && data?.startNewTap === true && data?.tapPoleId != null" [value]="branchNewTapSentinel">{{ newTapBranchOptionLabel }}</mat-option>
               <mat-option [value]="null">Магистраль</mat-option>
-              <mat-option *ngFor="let tb of tapBranchesInLine" [value]="tb.value">{{ tb.label }}</mat-option>
+              <mat-option
+                *ngFor="let tb of tapBranchesInLine"
+                [value]="tb.value"
+                [matTooltip]="tb.tooltip || tb.label"
+                matTooltipShowDelay="250"
+                >{{ tb.label }}</mat-option>
             </mat-select>
           </mat-form-field>
 
@@ -195,7 +200,7 @@
                 <div class="card-comment-bubble-text" *ngIf="m.text">{{ m.text }}</div>
                 <div class="card-comment-bubble-voice" *ngIf="m.voice_url">
                   <mat-icon>mic</mat-icon>
-                  <a [href]="m.voice_url" target="_blank" rel="noopener">Голосовое сообщение</a>
+                  <app-attachment-media-view class="card-comment-voice-player" [url]="m.voice_url" type="voice"></app-attachment-media-view>
                 </div>
               </div>
               <div class="card-comment-empty" *ngIf="!poleCardCommentMessages.length">
