@@ -124,12 +124,12 @@ export class MapComponent implements OnInit, OnDestroy {
     iconScale?: number;
   }> = {
     zn: {
-      viewBox: [0, 0, 200, 80],
-      t1: [-30, 40],
+      viewBox: [0, 0, 240, 200],
+      t1: [-80, 0],
       t2: null,
-      anchor: [-30, 40],
+      anchor: [-80, 0],
       rotationOffsetDeg: 90,
-      iconScale: 0.58,
+      localOriginToViewBox: [100, 100],
     },
     arrester: {
       viewBox: [0, 0, 200, 200],
@@ -890,9 +890,8 @@ export class MapComponent implements OnInit, OnDestroy {
     const outlineHtml = useOutline
       ? `<img src="${this.getLineEquipmentAssetPath(iconKey, true)}" class="equipment-on-line-outline" width="${iconSize}" height="${iconSize}" alt="">`
       : '';
-    const znClass = iconKey === 'zn' ? ' equipment-icon-zn' : '';
     const escapedPath = path.replace(/'/g, "\\'");
-    const mainHtml = `<div class="equipment-on-line-img equipment-on-line-fill${znClass}" style="width:${iconSize}px;height:${iconSize}px;-webkit-mask-image:url('${escapedPath}');mask-image:url('${escapedPath}');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;background-color:${lineColor};"></div>`;
+    const mainHtml = `<div class="equipment-on-line-img equipment-on-line-fill" style="width:${iconSize}px;height:${iconSize}px;-webkit-mask-image:url('${escapedPath}');mask-image:url('${escapedPath}');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;background-color:${lineColor};"></div>`;
     const recloserBadge = iconKey === 'recloser' ? '<div class="equipment-recloser-badge"></div>' : '';
     return outlineHtml + mainHtml + recloserBadge;
   }
@@ -2151,11 +2150,28 @@ export class MapComponent implements OnInit, OnDestroy {
       const arr = JSON.parse(json) as any[];
       if (!Array.isArray(arr)) return [];
       return arr
-        .filter((item) => item && (item.url || item.url === ''))
+        .filter((item) => item && typeof item.url === 'string' && item.url.trim().length > 0)
         .map((item) => ({ t: item.t || 'photo', url: item.url, thumbnail: item.thumbnail }));
     } catch {
       return [];
     }
+  }
+
+  /** Вложения из MinIO (поле card_comment_attachment) — одна таблица для фото, видео, голоса и файлов. */
+  get poleCardAttachments(): { t: string; url: string; thumbnail?: string }[] {
+    return this.parseCardAttachments((this.selectedPole as any)?.card_comment_attachment);
+  }
+
+  attachmentTypeLabel(t: string): string {
+    const m: Record<string, string> = {
+      photo: 'Фото',
+      schema: 'Схема',
+      voice: 'Голос',
+      video: 'Видео',
+      file: 'Файл'
+    };
+    const k = (t || '').toLowerCase().trim();
+    return m[k] || (t ? t : 'Вложение');
   }
 
   /** Открыть предпросмотр изображения в модальном окне на странице (с загрузкой через API и авторизацией). */

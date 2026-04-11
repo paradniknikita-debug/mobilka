@@ -1902,13 +1902,14 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Спецификация терминалов SVG (как в Angular): координаты в системе viewBox.
   static const Map<String, Map<String, dynamic>> _equipmentTerminalSpec = {
+    // zn.svg: как arrester — translate(100,100), стык с трассой в локальных (-80,0); +90° к углу пролёта.
     'zn': {
-      'viewBox': [0.0, 0.0, 200.0, 80.0],
-      't1': [10.0, 35.0],
+      'viewBox': [0.0, 0.0, 240.0, 200.0],
+      't1': [-80.0, 0.0],
       't2': null,
-      'anchor': [10.0, 35.0],
+      'anchor': [-80.0, 0.0],
       'rotationOffsetDeg': 90.0,
-      'iconScale': 0.58,
+      'localOriginToViewBox': [100.0, 100.0],
     },
     'arrester': {
       'viewBox': [0.0, 0.0, 200.0, 200.0],
@@ -2085,7 +2086,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         iconAngleRad: lineAngleRad,
       );
     }
-    final iconSize = iconKey == 'zn' ? 80.0 : 64.0;
+    // Линейное оборудование: квадрат иконки 64×64 (ОПН viewBox 200×200; ЗН 240×200 — шире, без обрезки).
+    final iconSize = 64.0;
     final modelAngle = _modelAngleRadForIcon(iconKey, lineAngleRad);
     final rotOffsetDeg = (spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0;
     final angle = modelAngle + rotOffsetDeg * math.pi / 180.0;
@@ -2521,8 +2523,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           final color = VoltageLevelColors.colorForVoltageKv(plForLine?.voltageLevel);
 
           // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
-          final isZn = iconPath.contains('/zn/');
-          final iconSize = isZn ? 80.0 : 64.0;
+          final iconSize = 64.0;
           final isDisconnector = iconPath.contains('/disconnector/');
 
           // Иконка с заливкой (цвет по линии)
@@ -2604,15 +2605,13 @@ class _MapPageState extends ConsumerState<MapPage> {
               final iconCenter = Offset(iconSize / 2, iconSize / 2);
 
               if (t2Raw == null) {
-                // ЗН, ОПН: как Angular — якорь в пикселях без предварительного «поворота вокруг центра»;
-                // сдвиг якоря в центр виджета, затем rotate вокруг центра (= вокруг полюса на линии).
+                // ЗН, ОПН: якорь на трассе → translate в центр 64×64, rotate вокруг центра.
                 final anchorVbRaw = spec['anchor'];
                 final anchorVb =
                     anchorVbRaw != null ? _pairFromSpec(anchorVbRaw) : null;
                 if (anchorVb != null) {
                   final anchorPx =
                       _viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
-                  // Сначала сдвиг полюса в центр виджета, затем поворот вокруг центра (= вокруг полюса на линии).
                   child = Transform.rotate(
                     angle: iconAngleRad,
                     alignment: Alignment.center,
