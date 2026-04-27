@@ -107,7 +107,7 @@ body {
 .mat-mdc-dialog-title,
 .mat-dialog-title {
   flex: 0 0 auto;
-  padding: 16px 24px 8px !important;
+  padding: 16px 72px 8px 24px !important;
   margin: 0 !important;
   min-height: 40px;
 }
@@ -174,11 +174,6 @@ body {
   background: rgba(0, 0, 0, 0.08);
   color: rgba(0, 0, 0, 0.87);
 }
-.app-dialog-toolbar .app-dialog-btn-close:hover {
-  background: rgba(244, 67, 54, 0.12);
-  color: #d32f2f;
-}
-
 /* Диалог деталей журнала: кнопки заголовка остаются внутри панели */
 .change-log-detail-pane .mat-mdc-dialog-container,
 .change-log-detail-pane .mat-dialog-container {

@@ -48,6 +48,7 @@ export class CreateObjectDialogComponent implements OnInit {
   substationId?: number;
   lineId?: number;
   isLoading = false;
+  equipmentUid: string | null = null;
 
   // Типы опор для выпадающего списка
   poleTypes = [
@@ -240,7 +241,13 @@ export class CreateObjectDialogComponent implements OnInit {
       year_manufactured: [null],
       installation_date: [''],
       condition: ['good'],
-      notes: ['']
+      notes: [''],
+      rated_current: [null],
+      i_th: [null],
+      ip_max: [null],
+      t_th: [null],
+      normal_open: [null as boolean | null],
+      retained: [null as boolean | null]
     });
     // Если пришёл poleId из контекстного меню, фиксируем его и не даём менять
     if (data?.poleId) {
@@ -331,6 +338,7 @@ export class CreateObjectDialogComponent implements OnInit {
     this.isLoading = true;
     this.apiService.getEquipment(equipmentId).subscribe({
       next: (eq) => {
+        this.equipmentUid = (eq as any).mrid || null;
         // pole_id редактировать не даём
         this.equipmentForm.patchValue({
           name: eq.name || '',
@@ -345,7 +353,13 @@ export class CreateObjectDialogComponent implements OnInit {
           year_manufactured: eq.year_manufactured ?? null,
           installation_date: eq.installation_date ? (eq.installation_date as any).toString().slice(0, 10) : '',
           condition: eq.condition || 'good',
-          notes: eq.notes || ''
+          notes: eq.notes || '',
+          rated_current: (eq as any).rated_current ?? null,
+          i_th: (eq as any).i_th ?? null,
+          ip_max: (eq as any).ip_max ?? null,
+          t_th: (eq as any).t_th ?? null,
+          normal_open: (eq as any).normal_open ?? null,
+          retained: (eq as any).retained ?? null
         });
         this.equipmentForm.get('pole_id')?.disable({ emitEvent: false });
         this.isLoading = false;
@@ -357,6 +371,18 @@ export class CreateObjectDialogComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  copyEquipmentUid(): void {
+    const uid = this.equipmentUid?.trim();
+    if (!uid) {
+      this.snackBar.open('UID отсутствует', 'Закрыть', { duration: 2500 });
+      return;
+    }
+    navigator.clipboard?.writeText(uid).then(
+      () => this.snackBar.open('UID скопирован', 'Закрыть', { duration: 2000 }),
+      () => this.snackBar.open('Не удалось скопировать UID', 'Закрыть', { duration: 2500 })
+    );
   }
 
   /**
@@ -859,21 +885,7 @@ export class CreateObjectDialogComponent implements OnInit {
     // В getRawValue() попадают значения и отключённых контролов (pole_id фиксируем из контекстного меню)
     const formValue = this.equipmentForm.getRawValue();
 
-    let notes: string = (formValue.notes || '').trim();
-    const techParts: string[] = [];
-    if (formValue.nominal_current) {
-      techParts.push(`Iном=${String(formValue.nominal_current).trim()}`);
-    }
-    if (formValue.nominal_voltage) {
-      techParts.push(`Uном=${String(formValue.nominal_voltage).trim()}`);
-    }
-    if (formValue.mark) {
-      techParts.push(`Марка=${String(formValue.mark).trim()}`);
-    }
-    if (techParts.length) {
-      const techLine = `Характеристики: ${techParts.join(', ')}`;
-      notes = notes ? `${techLine}\n${notes}` : techLine;
-    }
+    const notes: string = (formValue.notes || '').trim();
 
     const resolvedPoleId = this.data?.poleId != null ? this.data.poleId : formValue.pole_id;
 
@@ -887,7 +899,13 @@ export class CreateObjectDialogComponent implements OnInit {
       year_manufactured: formValue.year_manufactured != null && formValue.year_manufactured !== '' ? Number(formValue.year_manufactured) : undefined,
       installation_date: formValue.installation_date || undefined,
       condition: formValue.condition || undefined,
-      notes: notes || undefined
+      notes: notes || undefined,
+      rated_current: formValue.rated_current != null && formValue.rated_current !== '' ? Number(formValue.rated_current) : undefined,
+      i_th: formValue.i_th != null && formValue.i_th !== '' ? Number(formValue.i_th) : undefined,
+      ip_max: formValue.ip_max != null && formValue.ip_max !== '' ? Number(formValue.ip_max) : undefined,
+      t_th: formValue.t_th != null && formValue.t_th !== '' ? Number(formValue.t_th) : undefined,
+      normal_open: formValue.normal_open,
+      retained: formValue.retained
     };
 
     if (!body.name) {
@@ -1022,24 +1040,11 @@ export class CreateObjectDialogComponent implements OnInit {
     this.isSubmitting = true;
     const formValue = this.equipmentForm.getRawValue();
 
-    let notes: string = (formValue.notes || '').trim();
-    const techParts: string[] = [];
-    if (formValue.nominal_current) {
-      techParts.push(`Iном=${String(formValue.nominal_current).trim()}`);
-    }
-    if (formValue.nominal_voltage) {
-      techParts.push(`Uном=${String(formValue.nominal_voltage).trim()}`);
-    }
-    if (formValue.mark) {
-      techParts.push(`Марка=${String(formValue.mark).trim()}`);
-    }
-    if (techParts.length) {
-      const techLine = `Характеристики: ${techParts.join(', ')}`;
-      notes = notes ? `${techLine}\n${notes}` : techLine;
-    }
+    const notes: string = (formValue.notes || '').trim();
 
+    const poleIdValue = formValue.pole_id != null && formValue.pole_id !== '' ? Number(formValue.pole_id) : undefined;
     const body = {
-      pole_id: formValue.pole_id,
+      ...(poleIdValue != null ? { pole_id: poleIdValue } : {}),
       name: String(formValue.name || '').trim(),
       equipment_type: String(formValue.equipment_type || '').trim(),
       manufacturer: formValue.manufacturer?.trim() || undefined,
@@ -1048,7 +1053,13 @@ export class CreateObjectDialogComponent implements OnInit {
       year_manufactured: formValue.year_manufactured != null && formValue.year_manufactured !== '' ? Number(formValue.year_manufactured) : undefined,
       installation_date: formValue.installation_date || undefined,
       condition: formValue.condition || undefined,
-      notes: notes || undefined
+      notes: notes || undefined,
+      rated_current: formValue.rated_current != null && formValue.rated_current !== '' ? Number(formValue.rated_current) : undefined,
+      i_th: formValue.i_th != null && formValue.i_th !== '' ? Number(formValue.i_th) : undefined,
+      ip_max: formValue.ip_max != null && formValue.ip_max !== '' ? Number(formValue.ip_max) : undefined,
+      t_th: formValue.t_th != null && formValue.t_th !== '' ? Number(formValue.t_th) : undefined,
+      normal_open: formValue.normal_open,
+      retained: formValue.retained
     };
 
     this.apiService.updateEquipment(equipmentId, body as any).subscribe({

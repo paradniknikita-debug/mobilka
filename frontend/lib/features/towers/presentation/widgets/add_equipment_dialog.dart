@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -35,6 +36,12 @@ class EquipmentFormData {
     this.criticality,
     this.categoryTitle,
     this.defectAttachment,
+    this.ratedCurrent,
+    this.iTh,
+    this.ipMax,
+    this.tTh,
+    this.normalOpen,
+    this.retained,
   });
   final String equipmentType;
   final String name;
@@ -45,6 +52,12 @@ class EquipmentFormData {
   final String? categoryTitle;
   /// Вложения к описанию иного дефекта: JSON [{"t":"voice"|"photo","p":"path"}]
   final String? defectAttachment;
+  final double? ratedCurrent;
+  final double? iTh;
+  final double? ipMax;
+  final double? tTh;
+  final bool? normalOpen;
+  final bool? retained;
 }
 
 /// Диалог добавления оборудования по макету: марка, количество, дефект, критичность.
@@ -60,6 +73,13 @@ class AddEquipmentDialog extends StatefulWidget {
   this.initialDefect,
   this.initialCriticality,
   this.initialDefectAttachment,
+  this.initialUid,
+  this.initialRatedCurrent,
+  this.initialITh,
+  this.initialIpMax,
+  this.initialTTh,
+  this.initialNormalOpen,
+  this.initialRetained,
   /// Марки из серверного справочника (equipment-catalog), подмешиваются к локальному списку.
   this.catalogExtraBrands,
   });
@@ -72,6 +92,13 @@ class AddEquipmentDialog extends StatefulWidget {
   final String? initialDefect;
   final String? initialCriticality;
   final String? initialDefectAttachment;
+  final String? initialUid;
+  final double? initialRatedCurrent;
+  final double? initialITh;
+  final double? initialIpMax;
+  final double? initialTTh;
+  final bool? initialNormalOpen;
+  final bool? initialRetained;
   final List<String>? catalogExtraBrands;
 
   @override
@@ -85,6 +112,12 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
   String? _selectedDefect;
   String? _selectedCriticality;
   bool _isOtherDefect = false;
+  final _ratedCurrentController = TextEditingController();
+  final _iThController = TextEditingController();
+  final _ipMaxController = TextEditingController();
+  final _tThController = TextEditingController();
+  bool? _normalOpen;
+  bool? _retained;
   final List<Map<String, String>> _defectAttachments = [];
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
@@ -107,6 +140,12 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     }
     final decoded = decodeDefectAttachmentList(widget.initialDefectAttachment);
     _defectAttachments.addAll(decoded);
+    _ratedCurrentController.text = widget.initialRatedCurrent?.toString() ?? '';
+    _iThController.text = widget.initialITh?.toString() ?? '';
+    _ipMaxController.text = widget.initialIpMax?.toString() ?? '';
+    _tThController.text = widget.initialTTh?.toString() ?? '';
+    _normalOpen = widget.initialNormalOpen;
+    _retained = widget.initialRetained;
   }
 
   @override
@@ -114,6 +153,10 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     _audioRecorder.dispose();
     _brandController.dispose();
     _otherDefectController.dispose();
+    _ratedCurrentController.dispose();
+    _iThController.dispose();
+    _ipMaxController.dispose();
+    _tThController.dispose();
     super.dispose();
   }
 
@@ -214,6 +257,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         if (list.isNotEmpty) criticality = list.first.criticality;
       }
     }
+    double? parseNullableDouble(String text) => double.tryParse(text.trim().replaceAll(',', '.'));
     Navigator.of(context).pop(EquipmentFormData(
       equipmentType: widget.equipmentType,
       name: brand,
@@ -222,6 +266,12 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
       criticality: criticality,
       categoryTitle: widget.categoryTitle,
       defectAttachment: encodeDefectAttachmentList(_defectAttachments),
+      ratedCurrent: parseNullableDouble(_ratedCurrentController.text),
+      iTh: parseNullableDouble(_iThController.text),
+      ipMax: parseNullableDouble(_ipMaxController.text),
+      tTh: parseNullableDouble(_tThController.text),
+      normalOpen: _normalOpen,
+      retained: _retained,
     ));
   }
 
@@ -270,6 +320,45 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                 ],
               ),
               const SizedBox(height: 20),
+              if ((widget.initialUid ?? '').trim().isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: PatrolColors.surfaceCard,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.black26),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('UID', style: TextStyle(fontSize: 11, color: PatrolColors.textSecondary)),
+                            const SizedBox(height: 4),
+                            SelectableText(
+                              widget.initialUid!.trim(),
+                              style: const TextStyle(color: PatrolColors.textPrimary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Скопировать UID',
+                        icon: const Icon(Icons.copy),
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: widget.initialUid!.trim()));
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('UID скопирован')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               TextField(
                 controller: _brandController,
                 decoration: InputDecoration(
@@ -301,6 +390,73 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                 }).toList(),
               ),
               const SizedBox(height: 16),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                collapsedIconColor: PatrolColors.textSecondary,
+                iconColor: PatrolColors.accentBlue,
+                title: const Text(
+                  'Электрические характеристики',
+                  style: TextStyle(color: PatrolColors.textPrimary, fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Switch/ConductingEquipment поля'),
+                children: [
+                  TextField(
+                    controller: _ratedCurrentController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'ratedCurrent, A'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _iThController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'iTh, A'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _ipMaxController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'ipMax, A'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _tThController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'tTh, °C'),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<bool?>(
+                          value: _normalOpen,
+                          decoration: const InputDecoration(labelText: 'normalOpen'),
+                          items: const [
+                            DropdownMenuItem(value: null, child: Text('Не задано')),
+                            DropdownMenuItem(value: true, child: Text('true')),
+                            DropdownMenuItem(value: false, child: Text('false')),
+                          ],
+                          onChanged: (v) => setState(() => _normalOpen = v),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<bool?>(
+                          value: _retained,
+                          decoration: const InputDecoration(labelText: 'retained'),
+                          items: const [
+                            DropdownMenuItem(value: null, child: Text('Не задано')),
+                            DropdownMenuItem(value: true, child: Text('true')),
+                            DropdownMenuItem(value: false, child: Text('false')),
+                          ],
+                          onChanged: (v) => setState(() => _retained = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Text('Количество *', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),

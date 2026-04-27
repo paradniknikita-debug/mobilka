@@ -93,11 +93,9 @@ export class SegmentCardDialogComponent {
     return name.replace(/Опора\s+/gi, 'оп.').replace(/\s*-\s*/g, '-').trim() || name;
   }
 
-  /** Строка вида «оп.X-оп.Y АС-70» для секции */
+  /** Строка диапазона опор секции без дублирования марки провода */
   sectionLabel(sec: LineSection): string {
-    const range = this.sectionPoleRange(sec);
-    const wire = sec.conductor_type || '—';
-    return range !== '—' ? `${range} ${wire}` : wire;
+    return this.sectionPoleRange(sec);
   }
 
   onClose(): void {

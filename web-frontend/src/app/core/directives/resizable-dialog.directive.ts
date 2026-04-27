@@ -42,25 +42,19 @@ export class ResizableDialogDirective implements AfterViewInit, OnDestroy {
       pane.style.maxHeight = '90vh';
     }
 
-    this.toolbar = document.createElement('div');
-    this.toolbar.className = 'app-dialog-toolbar';
-    const maxBtn = document.createElement('button');
-    maxBtn.type = 'button';
-    maxBtn.className = 'app-dialog-btn app-dialog-btn-maximize';
-    maxBtn.title = 'На весь экран';
-    maxBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
-    maxBtn.setAttribute('aria-label', 'На весь экран');
-    maxBtn.addEventListener('click', () => this.maximize());
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'app-dialog-btn app-dialog-btn-close';
-    closeBtn.title = 'Закрыть';
-    closeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    closeBtn.setAttribute('aria-label', 'Закрыть');
-    closeBtn.addEventListener('click', () => this.dialogRef?.close());
-    this.toolbar.appendChild(maxBtn);
-    this.toolbar.appendChild(closeBtn);
-    container.appendChild(this.toolbar);
+    if (!this.hasCustomHeaderControls(container)) {
+      this.toolbar = document.createElement('div');
+      this.toolbar.className = 'app-dialog-toolbar';
+      const maxBtn = document.createElement('button');
+      maxBtn.type = 'button';
+      maxBtn.className = 'app-dialog-btn app-dialog-btn-maximize';
+      maxBtn.title = 'На весь экран';
+      maxBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+      maxBtn.setAttribute('aria-label', 'На весь экран');
+      maxBtn.addEventListener('click', () => this.maximize());
+      this.toolbar.appendChild(maxBtn);
+      container.appendChild(this.toolbar);
+    }
 
     this.handle = document.createElement('div');
     this.handle.className = 'app-dialog-resize-handle';
@@ -85,6 +79,20 @@ export class ResizableDialogDirective implements AfterViewInit, OnDestroy {
     let p: HTMLElement | null = container.parentElement;
     while (p && !p.classList.contains('cdk-overlay-pane')) p = p.parentElement;
     return p;
+  }
+
+  private hasCustomHeaderControls(container: HTMLElement): boolean {
+    const titleSelectors = '.mat-mdc-dialog-title, .mat-dialog-title';
+    const title = container.querySelector(titleSelectors);
+    if (!title) return false;
+
+    const hasCloseInTitle = !!title.querySelector('button[mat-dialog-close], [mat-dialog-close]');
+    const iconNodes = Array.from(title.querySelectorAll('mat-icon'));
+    const hasFullscreenInTitle = iconNodes.some((i) => {
+      const t = (i.textContent || '').trim();
+      return t === 'fullscreen' || t === 'fullscreen_exit';
+    });
+    return hasCloseInTitle || hasFullscreenInTitle;
   }
 
   private maximize(): void {

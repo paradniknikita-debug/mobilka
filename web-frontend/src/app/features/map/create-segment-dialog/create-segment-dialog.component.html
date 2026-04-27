@@ -70,6 +70,58 @@
         <mat-label>Описание</mat-label>
         <textarea matInput formControlName="description" rows="3"></textarea>
       </mat-form-field>
+
+      <h3 class="section-title">Провод и электрические параметры</h3>
+      <p class="hint">Если заполнить только марку/тип провода, недостающие поля подставятся из справочника на сервере.</p>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Марка провода</mat-label>
+          <input matInput formControlName="conductor_type" placeholder="AC-70">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Материал</mat-label>
+          <input matInput formControlName="conductor_material" placeholder="алюминий">
+        </mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Сечение, мм²</mat-label>
+          <input matInput formControlName="conductor_section">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Секций</mat-label>
+          <input matInput type="number" min="1" formControlName="sections">
+        </mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>r</mat-label><input matInput type="number" formControlName="r"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>x</mat-label><input matInput type="number" formControlName="x"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>r0</mat-label><input matInput type="number" formControlName="r0"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>x0</mat-label><input matInput type="number" formControlName="x0"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>bch</mat-label><input matInput type="number" formControlName="bch"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>gch</mat-label><input matInput type="number" formControlName="gch"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>b0ch</mat-label><input matInput type="number" formControlName="b0ch"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>g0ch</mat-label><input matInput type="number" formControlName="g0ch"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>i_th, A</mat-label><input matInput type="number" formControlName="i_th"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>t_th, °C</mat-label><input matInput type="number" formControlName="t_th"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Темп. КЗ конца, °C</mat-label>
+          <input matInput type="number" formControlName="short_circuit_end_temperature">
+        </mat-form-field>
+        <div class="half-width checkbox-wrap">
+          <mat-checkbox formControlName="is_jumper">Перемычка (is_jumper)</mat-checkbox>
+        </div>
+      </div>
     </form>
   </mat-dialog-content>
 

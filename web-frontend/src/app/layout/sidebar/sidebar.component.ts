@@ -97,6 +97,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       .subscribe(({ substationId }) => {
         this.selectedSubstationIdFromMap = substationId;
         this.cdr.detectChanges();
+        this.scrollToSubstationInTree(substationId);
       });
 
     this.searchInput$
@@ -140,6 +141,16 @@ export class SidebarComponent implements OnInit, OnDestroy {
   allEquipment: Equipment[] = [];
   private equipmentByPoleId = new Map<number, Equipment[]>();
   contextMenuEquipment: Equipment | null = null;
+
+  private scrollToSubstationInTree(substationId: number): void {
+    setTimeout(() => {
+      const node = document.querySelector(
+        `.sidebar-content .substation-node[data-substation-id="${substationId}"]`
+      ) as HTMLElement | null;
+      if (!node) return;
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }
 
   private loadAllEquipmentForTree(): void {
     this.apiService.getAllEquipment().pipe(takeUntil(this.destroy$)).subscribe({
@@ -272,11 +283,19 @@ export class SidebarComponent implements OnInit, OnDestroy {
     return this.mapData?.spans?.features || [];
   }
 
+  private lineIdFromProps(props: Record<string, any> | undefined): number | null {
+    if (!props) return null;
+    const v = props['line_id'] ?? props['power_line_id'];
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
   // Группировка опор по ЛЭП (line_id в GeoJSON; fallback на power_line_id для совместимости)
   getPolesByPowerLine(lineId: number): GeoJSONFeature[] {
     const pid = Number(lineId);
     const poles = this.polesFeatures.filter(feature => {
-      const plId = feature.properties['line_id'] ?? feature.properties['power_line_id'];
+      const plId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
       if (plId == null) return false;
       return Number(plId) === pid;
     });
@@ -321,7 +340,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const powerLine = this.powerLineToTreeFeature(pl);
       const linePoles = this.getPolesByPowerLine(lineId);
       const allSpans = this.spansFeatures.filter(f => {
-        const plId = f.properties['line_id'] ?? f.properties['power_line_id'];
+        const plId = this.lineIdFromProps(f.properties as Record<string, any> | undefined);
         return plId != null && Number(plId) === Number(lineId);
       });
 
@@ -838,6 +857,23 @@ export class SidebarComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     const poleId = pole.properties?.['id'];
     const equipmentId = eq?.id;
+    const poleGeometry = pole.geometry?.type === 'Point' ? pole.geometry : undefined;
+    const equipmentLng = (eq as any).x_position;
+    const equipmentLat = (eq as any).y_position;
+    const geometry: GeoJSONFeature['geometry'] = equipmentLng != null && equipmentLat != null
+      ? { type: 'Point', coordinates: [Number(equipmentLng), Number(equipmentLat)] }
+      : (poleGeometry ?? pole.geometry);
+
+    this.mapService.requestShowEquipmentProperties({
+      type: 'Feature',
+      properties: {
+        ...pole.properties,
+        ...eq,
+        line_id: this.lineIdFromProps(pole.properties as Record<string, any> | undefined)
+      },
+      geometry
+    });
+
     if (poleId != null && equipmentId != null) {
       this.mapService.requestCenterOnEquipment(Number(poleId), Number(equipmentId));
     }
@@ -920,12 +956,12 @@ export class SidebarComponent implements OnInit, OnDestroy {
     } else if (feature.properties['span_number']) {
       // Пролёт
       this.contextMenuType = 'span';
-      this.contextMenuLineId = feature.properties['line_id'] ?? feature.properties['power_line_id'];
+      this.contextMenuLineId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
       this.contextMenuSegmentId = feature.properties['acline_segment_id'] || feature.properties['segment_id'];
     } else if (feature.properties['pole_number']) {
       // Опора
       this.contextMenuType = 'pole';
-      this.contextMenuLineId = feature.properties['line_id'] ?? feature.properties['power_line_id'];
+      this.contextMenuLineId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
     } else if (feature.properties['name'] && feature.properties['dispatcher_name'] && !feature.properties['code']) {
       // Подстанция (по свойствам)
       this.contextMenuType = 'substation';
@@ -1207,7 +1243,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
     } else if (this.contextMenuType === 'pole' && this.contextMenuFeature) {
       // Редактирование опоры
       const poleId = this.contextMenuFeature.properties['id'];
-      const lineId = this.contextMenuFeature.properties['line_id'] ?? this.contextMenuFeature.properties['power_line_id'] ?? this.contextMenuLineId;
+      const lineId = this.lineIdFromProps(this.contextMenuFeature.properties as Record<string, any> | undefined) ?? this.contextMenuLineId;
       
       if (poleId && lineId) {
         const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
@@ -1230,7 +1266,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
     } else if (this.contextMenuType === 'span' && this.contextMenuFeature) {
       // Редактирование пролёта
       const spanId = this.contextMenuFeature.properties['id'];
-      const lineId = this.contextMenuFeature.properties['line_id'] ?? this.contextMenuFeature.properties['power_line_id'];
+      const lineId = this.lineIdFromProps(this.contextMenuFeature.properties as Record<string, any> | undefined);
       const segmentId = this.contextMenuFeature.properties['acline_segment_id'] || this.contextMenuFeature.properties['segment_id'];
       
       if (spanId && lineId) {
@@ -1250,6 +1286,21 @@ export class SidebarComponent implements OnInit, OnDestroy {
           }
         });
       }
+    } else if (this.contextMenuType === 'segment' && this.contextMenuLineId && this.contextMenuSegmentId) {
+      // Редактирование участка (AClineSegment)
+      const dialogRef = this.dialog.open(CreateSegmentDialogComponent, {
+        width: '600px',
+        data: {
+          lineId: this.contextMenuLineId,
+          segmentId: this.contextMenuSegmentId,
+          isEdit: true
+        }
+      });
+      dialogRef.afterClosed().subscribe(result => {
+        if (result && result.success) {
+          this.mapService.refreshData();
+        }
+      });
     } else if (this.contextMenuType === 'substation' && this.contextMenuFeature) {
       const substationId = this.contextMenuFeature.properties['id'];
       if (substationId) {
@@ -1279,7 +1330,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   onStartTapFromPole(): void {
     if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return;
-    const lineId = this.contextMenuFeature.properties['line_id'] ?? this.contextMenuFeature.properties['power_line_id'];
+    const lineId = this.lineIdFromProps(this.contextMenuFeature.properties as Record<string, any> | undefined);
     const tapPoleId = this.contextMenuFeature.properties['id'];
     if (lineId == null || tapPoleId == null) return;
     const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
@@ -1303,7 +1354,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   onCreateEquipmentFromPole(): void {
     if (this.contextMenuType !== 'pole' || !this.contextMenuFeature) return;
     const poleId = this.contextMenuFeature.properties['id'];
-    const lineId = this.contextMenuFeature.properties['line_id'] ?? this.contextMenuFeature.properties['power_line_id'] ?? this.contextMenuLineId;
+    const lineId = this.lineIdFromProps(this.contextMenuFeature.properties as Record<string, any> | undefined) ?? this.contextMenuLineId;
     if (poleId == null || lineId == null) {
       return;
     }

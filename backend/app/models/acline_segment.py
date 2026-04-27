@@ -83,6 +83,19 @@ class AClineSegment(Base, ConductingEquipment):
     x = Column(Float, nullable=True)  # реактивное сопротивление, Ом/км
     b = Column(Float, nullable=True)  # проводимость, См/км
     g = Column(Float, nullable=True)  # активная проводимость, См/км
+    # Дополнительные электрические параметры (поддержка richer CIM-профилей)
+    r0 = Column(Float, nullable=True)
+    x0 = Column(Float, nullable=True)
+    bch = Column(Float, nullable=True)
+    b0ch = Column(Float, nullable=True)
+    gch = Column(Float, nullable=True)
+    g0ch = Column(Float, nullable=True)
+    i_th = Column(Float, nullable=True)
+    t_th = Column(Float, nullable=True)
+    # Технологические атрибуты сегмента
+    sections = Column(Integer, nullable=True)
+    short_circuit_end_temperature = Column(Float, nullable=True)
+    is_jumper = Column(Boolean, nullable=True, default=False)
     
     # Порядок сегмента в линии
     sequence_number = Column(Integer, nullable=False, default=1)

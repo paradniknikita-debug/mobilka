@@ -1171,10 +1171,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _mapReady) {
           try {
-            // Как на вебе: при обходе не уводить зум ниже порога оборудования — иначе «пустая» карта.
+            // Как на вебе: при обходе не уводить зум в диапазон, где оборудование скрыто.
             var zoom = _mapController.camera.zoom;
-            if (zoom <= AppConfig.minZoomToShowEquipment) {
-              zoom = AppConfig.defaultZoom;
+            if (zoom < AppConfig.minZoomToShowEquipment) {
+              zoom = AppConfig.minZoomToShowEquipment;
             }
             _mapController.move(center!, zoom);
           } catch (e) {
@@ -1533,7 +1533,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                       objectProperties: _selectedObjectProperties!,
                       objectType: _selectedObjectType!,
                       onClose: _closeObjectProperties,
-                      onEdit: _selectedObjectType == ObjectType.pole ? _showEditPoleDialog : null,
+                      onEdit: _selectedObjectType == ObjectType.pole
+                          ? _showEditPoleDialog
+                          : (_selectedObjectType == ObjectType.equipment ? _showEditEquipmentFromPanel : null),
                       onStartLineFormation: _selectedObjectType == ObjectType.pole
                           ? () {
                               final poleId = _selectedObjectProperties!['id'] as int?;
@@ -1810,7 +1812,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     return polylines;
   }
 
-  /// Как в GeoJSON с бэкенда: `line_id` или `power_line_id`.
+  /// Канонический id линии: `line_id`.
+  /// `power_line_id` читаем только для legacy-совместимости.
   static int? _lineIdFromPoleProps(Map<String, dynamic> props) {
     return _toInt(props['line_id']) ?? _toInt(props['power_line_id']);
   }
@@ -2124,7 +2127,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   List<Polyline> _buildLineEquipmentConnectionPolylines() {
-    if (_equipmentZoom <= AppConfig.minZoomToShowEquipment) {
+    if (_equipmentZoom < AppConfig.minZoomToShowEquipment) {
       return <Polyline>[];
     }
     final polylines = <Polyline>[];
@@ -2473,7 +2476,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Маркеры линейного оборудования (SVG-иконки на линии между опорами).
   List<Marker> _buildLineEquipmentMarkers() {
-    if (_equipmentZoom <= AppConfig.minZoomToShowEquipment) {
+    if (_equipmentZoom < AppConfig.minZoomToShowEquipment) {
       return <Marker>[];
     }
     final markers = <Marker>[];
@@ -2647,14 +2650,9 @@ class _MapPageState extends ConsumerState<MapPage> {
           if (equipmentPoleId != null) {
             child = GestureDetector(
               onTap: () {
-                final poleFeature = _findPoleInGeoJSON(equipmentPoleId);
-                if (poleFeature == null) return;
-                final poleProps = poleFeature['properties'] as Map<String, dynamic>?;
-                final poleGeom = poleFeature['geometry'] as Map<String, dynamic>?;
-                if (poleProps == null) return;
-                _showPoleInfo(
-                  Map<String, dynamic>.from(poleProps),
-                  geometry: poleGeom,
+                _showEquipmentInfo(
+                  Map<String, dynamic>.from(props ?? const {}),
+                  geometry: feature['geometry'] as Map<String, dynamic>?,
                 );
               },
               child: child,
@@ -2943,9 +2941,11 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Widget _buildPowerLineTreeItem(PowerLine powerLine) {
-    // Загружаем детали линии при разворачивании (lazy loading)
     final geoFeature = _findPowerLineInGeoJSON(powerLine.id);
     final initiallyExpanded = _expandedPowerLineIds.contains(powerLine.id);
+    final linePoles = _getPoleFeaturesByLineId(powerLine.id);
+    final lineSpans = _getSpanFeaturesByLineId(powerLine.id);
+    final grouped = _groupLineObjectsBySegment(linePoles, lineSpans);
 
     void onLongPressDeleteLine() => _showPowerLineContextMenu(powerLine);
 
@@ -2978,58 +2978,269 @@ class _MapPageState extends ConsumerState<MapPage> {
         ),
       ),
       children: [
-        // Список AClineSegments напрямую (без обобщения)
-        ..._buildAClineSegmentsTree(powerLine.aclineSegments ?? []),
-        // Опоры напрямую (без папки обобщения)
-        ...(powerLine.poles ?? []).map<Widget>((pole) {
-          final geoPole = _findPoleInGeoJSON(pole.id);
-          return GestureDetector(
-            onLongPress: () => _deletePoleFromTree(pole, powerLine),
-            behavior: HitTestBehavior.opaque,
-            child: ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.only(left: 32, right: 8),
-              tileColor: (_selectedPoleIdFromMap != null && pole.id == _selectedPoleIdFromMap)
-                  ? Colors.blue.withOpacity(0.12)
-                  : null,
-              leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
-              title: Text(
-                pole.poleNumber,
-                style: const TextStyle(fontSize: 12),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                '${pole.poleType ?? ''}',
-                style: const TextStyle(fontSize: 10),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () {
-                Navigator.of(context).pop();
-                if (geoPole != null) {
-                  _centerOnFeature(geoPole);
-                  _showPoleInfo(
-                    Map<String, dynamic>.from(geoPole['properties'] as Map? ?? {}),
-                    geometry: geoPole['geometry'] as Map<String, dynamic>?,
-                  );
-                }
-              },
+        ...grouped['segments']!.map<Widget>((seg) {
+          final segMap = seg as Map<String, dynamic>;
+          final segId = segMap['segment_id'] as int?;
+          final segName = (segMap['segment_name'] as String?) ?? (segId != null ? 'Участок $segId' : 'Участок без ID');
+          final segPoles = (segMap['poles'] as List<dynamic>).cast<Map<String, dynamic>>();
+          final segSpans = (segMap['spans'] as List<dynamic>).cast<Map<String, dynamic>>();
+          final branchType = (segMap['branch_type'] as String?)?.toLowerCase();
+          final isTap = branchType == 'tap';
+
+          return ExpansionTile(
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            leading: Icon(isTap ? Icons.call_split : Icons.polyline, size: 12, color: isTap ? Colors.orange : Colors.green),
+            title: Text(
+              segName,
+              style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
+            subtitle: Text(
+              '${segPoles.length} опор • ${segSpans.length} пролётов',
+              style: const TextStyle(fontSize: 10),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: segId != null
+                ? IconButton(
+                    icon: const Icon(Icons.info_outline, size: 18),
+                    tooltip: 'Карточка участка',
+                    onPressed: () => _showSegmentCard(segId),
+                  )
+                : null,
+            children: [
+              ...segPoles.map((poleFeature) => _buildGeoPoleTreeTile(poleFeature, powerLine)),
+            ],
           );
         }),
+        ...((grouped['poles_without_segment'] as List<dynamic>).cast<Map<String, dynamic>>())
+            .map((poleFeature) => _buildGeoPoleTreeTile(poleFeature, powerLine)),
+        if ((grouped['segments'] as List).isEmpty && (grouped['poles_without_segment'] as List).isEmpty)
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(left: 32, right: 8),
+            title: Text(
+              'Объекты линии не найдены',
+              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+            ),
+          ),
       ],
       onExpansionChanged: (expanded) async {
-        if (expanded && (powerLine.poles == null || powerLine.aclineSegments == null)) {
-          // Lazy loading: загружаем детали только при разворачивании
-          await _loadPowerLineDetails(powerLine.id);
-        }
         if (expanded && geoFeature != null) {
           // Центрируем карту на линии при разворачивании
           _centerOnFeature(geoFeature);
         }
       },
     );
+  }
+
+  Widget _buildGeoPoleTreeTile(Map<String, dynamic> geoPole, PowerLine powerLine) {
+    final props = Map<String, dynamic>.from(geoPole['properties'] as Map? ?? {});
+    final poleId = _toInt(props['id']);
+    final poleNumber = (props['pole_number']?.toString() ?? '').trim();
+    final poleType = (props['pole_type']?.toString() ?? '').trim();
+    final poleEquipment = poleId != null ? _getEquipmentFeaturesByPoleId(poleId) : const <Map<String, dynamic>>[];
+    return GestureDetector(
+      onLongPress: () {
+        if (poleId == null) return;
+        Pole? pole;
+        for (final p in (powerLine.poles ?? const <Pole>[])) {
+          if (p.id == poleId) {
+            pole = p;
+            break;
+          }
+        }
+        if (pole != null) _deletePoleFromTree(pole, powerLine);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(left: 44, right: 8),
+            tileColor: (_selectedPoleIdFromMap != null && poleId == _selectedPoleIdFromMap)
+                ? Colors.blue.withOpacity(0.12)
+                : null,
+            leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
+            title: Text(
+              poleNumber.isEmpty ? 'Опора' : poleNumber,
+              style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              poleType,
+              style: const TextStyle(fontSize: 10),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () {
+              Navigator.of(context).pop();
+              _centerOnFeature(geoPole);
+              _showPoleInfo(
+                props,
+                geometry: geoPole['geometry'] as Map<String, dynamic>?,
+              );
+            },
+          ),
+          ...poleEquipment.map((eqFeature) {
+            final eqProps = Map<String, dynamic>.from(eqFeature['properties'] as Map? ?? const {});
+            final eqLabel = (eqProps['name']?.toString().trim().isNotEmpty ?? false)
+                ? eqProps['name'].toString()
+                : (eqProps['equipment_type']?.toString() ?? 'Оборудование');
+            return ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.only(left: 76, right: 8),
+              leading: Icon(Icons.electrical_services, size: 12, color: Colors.deepOrange.shade400),
+              title: Text(
+                eqLabel,
+                style: const TextStyle(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                eqProps['mrid']?.toString() ?? 'UID: ${eqProps['equipment_id'] ?? eqProps['id'] ?? 'N/A'}',
+                style: const TextStyle(fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showEquipmentInfo(
+                  eqProps,
+                  geometry: eqFeature['geometry'] as Map<String, dynamic>?,
+                );
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _getPoleFeaturesByLineId(int lineId) {
+    final features = _polesData?['features'] as List<dynamic>? ?? [];
+    final poles = <Map<String, dynamic>>[];
+    for (final f in features) {
+      final feature = f as Map<String, dynamic>;
+      final props = feature['properties'] as Map<String, dynamic>?;
+      if (props == null) continue;
+      if (_lineIdFromPoleProps(props) != lineId) continue;
+      poles.add(feature);
+    }
+    poles.sort((a, b) {
+      final pa = a['properties'] as Map<String, dynamic>? ?? const {};
+      final pb = b['properties'] as Map<String, dynamic>? ?? const {};
+      final sa = _toInt(pa['sequence_number']);
+      final sb = _toInt(pb['sequence_number']);
+      if (sa != null && sb != null && sa != sb) return sa.compareTo(sb);
+      final oa = _poleOrderFromNumber((pa['pole_number']?.toString()) ?? '');
+      final ob = _poleOrderFromNumber((pb['pole_number']?.toString()) ?? '');
+      if (oa != ob) return oa.compareTo(ob);
+      return ((pa['pole_number']?.toString()) ?? '')
+          .compareTo((pb['pole_number']?.toString()) ?? '');
+    });
+    return poles;
+  }
+
+  List<Map<String, dynamic>> _getSpanFeaturesByLineId(int lineId) {
+    final features = _spansData?['features'] as List<dynamic>? ?? [];
+    final spans = <Map<String, dynamic>>[];
+    for (final f in features) {
+      final feature = f as Map<String, dynamic>;
+      final props = feature['properties'] as Map<String, dynamic>?;
+      if (props == null) continue;
+      if (_toInt(props['line_id']) != lineId) continue;
+      spans.add(feature);
+    }
+    return spans;
+  }
+
+  List<Map<String, dynamic>> _getEquipmentFeaturesByPoleId(int poleId) {
+    final features = _lineEquipmentData?['features'] as List<dynamic>? ?? [];
+    final out = <Map<String, dynamic>>[];
+    final seen = <int>{};
+    for (final f in features) {
+      final feature = f as Map<String, dynamic>;
+      final props = feature['properties'] as Map<String, dynamic>?;
+      if (props == null) continue;
+      if (_toInt(props['pole_id']) != poleId) continue;
+      final eqId = _toInt(props['equipment_id']) ?? _toInt(props['id']);
+      if (eqId != null && seen.contains(eqId)) continue;
+      if (eqId != null) seen.add(eqId);
+      out.add(feature);
+    }
+    return out;
+  }
+
+  Map<String, List<dynamic>> _groupLineObjectsBySegment(
+    List<Map<String, dynamic>> linePoles,
+    List<Map<String, dynamic>> lineSpans,
+  ) {
+    final segments = <dynamic>[];
+    final polesWithoutSegment = <dynamic>[];
+    final spansWithoutSegment = <dynamic>[];
+    final segmentsMap = <String, Map<String, dynamic>>{};
+
+    for (final pole in linePoles) {
+      final props = pole['properties'] as Map<String, dynamic>? ?? const {};
+      final segId = props['segment_id'];
+      final segKey = segId?.toString();
+      if (segKey == null) {
+        polesWithoutSegment.add(pole);
+        continue;
+      }
+      final data = segmentsMap.putIfAbsent(
+        segKey,
+        () => {
+          'segment_id': _toInt(segId),
+          'segment_name': props['segment_name']?.toString(),
+          'branch_type': props['branch_type']?.toString(),
+          'poles': <dynamic>[],
+          'spans': <dynamic>[],
+        },
+      );
+      (data['poles'] as List).add(pole);
+    }
+
+    for (final span in lineSpans) {
+      final props = span['properties'] as Map<String, dynamic>? ?? const {};
+      final segId = props['segment_id'] ?? props['acline_segment_id'];
+      final segKey = segId?.toString();
+      if (segKey == null) {
+        spansWithoutSegment.add(span);
+        continue;
+      }
+      final data = segmentsMap.putIfAbsent(
+        segKey,
+        () => {
+          'segment_id': _toInt(segId),
+          'segment_name': props['segment_name']?.toString(),
+          'branch_type': props['branch_type']?.toString(),
+          'poles': <dynamic>[],
+          'spans': <dynamic>[],
+        },
+      );
+      (data['spans'] as List).add(span);
+    }
+
+    segments.addAll(segmentsMap.values);
+    segments.sort((a, b) {
+      final ia = _toInt((a as Map<String, dynamic>)['segment_id']);
+      final ib = _toInt((b as Map<String, dynamic>)['segment_id']);
+      if (ia == null && ib == null) return 0;
+      if (ia == null) return 1;
+      if (ib == null) return -1;
+      return ia.compareTo(ib);
+    });
+
+    return {
+      'segments': segments,
+      'poles_without_segment': polesWithoutSegment,
+      'spans_without_segment': spansWithoutSegment,
+    };
   }
 
   Map<String, dynamic>? _findPowerLineInGeoJSON(int lineId) {
@@ -3090,6 +3301,29 @@ class _MapPageState extends ConsumerState<MapPage> {
       final apiService = ref.read(apiServiceProvider);
       final segment = await apiService.getAclineSegment(segmentId);
       if (!mounted) return;
+      Widget paramTile(String label, dynamic value) => ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+            subtitle: Text('$value', style: const TextStyle(fontSize: 14)),
+          );
+      final electricalParams = <MapEntry<String, dynamic>>[
+        MapEntry('r', segment['r']),
+        MapEntry('x', segment['x']),
+        MapEntry('b', segment['b']),
+        MapEntry('g', segment['g']),
+        MapEntry('r0', segment['r0']),
+        MapEntry('x0', segment['x0']),
+        MapEntry('bch', segment['bch']),
+        MapEntry('b0ch', segment['b0ch']),
+        MapEntry('gch', segment['gch']),
+        MapEntry('g0ch', segment['g0ch']),
+        MapEntry('i_th', segment['i_th']),
+        MapEntry('t_th', segment['t_th']),
+        MapEntry('sections', segment['sections']),
+        MapEntry('short_circuit_end_temperature', segment['short_circuit_end_temperature']),
+        MapEntry('is_jumper', segment['is_jumper']),
+      ].where((e) => e.value != null).toList();
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -3100,19 +3334,14 @@ class _MapPageState extends ConsumerState<MapPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (segment['voltage_level'] != null)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Напряжение', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    subtitle: Text('${segment['voltage_level']} кВ', style: const TextStyle(fontSize: 14)),
-                  ),
+                  paramTile('Напряжение', '${segment['voltage_level']} кВ'),
                 if (segment['length'] != null)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Протяжённость', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    subtitle: Text('${segment['length']} км', style: const TextStyle(fontSize: 14)),
-                  ),
+                  paramTile('Протяжённость', '${segment['length']} км'),
+                if (electricalParams.isNotEmpty) ...[
+                  const Divider(),
+                  const Text('Электрические параметры', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ...electricalParams.map((e) => paramTile(e.key, e.value)),
+                ],
                 const Divider(),
                 const Text('Секции линии', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 ...((segment['line_sections'] as List<dynamic>?) ?? []).map<Widget>((s) {
@@ -3590,6 +3819,35 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  Future<void> _showEditEquipmentFromPanel() async {
+    final props = _selectedObjectProperties;
+    final poleId = _toInt(props?['pole_id']);
+    final lineId = _toInt(props?['line_id']);
+    if (poleId == null || lineId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось определить опору оборудования'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    await showDialog(
+      context: context,
+      builder: (context) => CreatePoleDialog(
+        lineId: lineId,
+        poleId: poleId,
+        isEditMode: true,
+      ),
+    );
+    if (mounted) {
+      _showTopRightToast('Открыта карточка опоры с разделом оборудования');
+    }
+    await _loadMapData(forceFromServer: true, skipAutoCenter: true);
+  }
+
   /// Открыть диалог создания опоры «Начать отпайку» по явным lineId и tapPoleId.
   /// Нумерация отпайки независима от номера опоры-якоря:
   /// первая новая отпайка в линии — "1/1", вторая — "2/1", третья — "3/1", ...
@@ -3984,6 +4242,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         // Иконка “отпайка” на карте соответствует якорной опоре (у неё `tap_pole_id`).
         _selectedPoleIdFromMap = _toInt(properties['tap_pole_id']) ?? objectId;
         _selectedSubstationIdFromMap = null;
+      } else if (objectType == ObjectType.equipment) {
+        _selectedPoleIdFromMap = _toInt(properties['pole_id']);
+        _selectedSubstationIdFromMap = null;
       }
 
       // При клике на опору — раскрываем её ЛЭП в дереве объектов
@@ -4000,7 +4261,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       try {
         final targetLocation = LatLng(lat, lng);
         // Для опор используем зум 18, для других объектов - 16
-        final zoom = objectType == ObjectType.pole ? 18.0 : 16.0;
+        final zoom = (objectType == ObjectType.pole || objectType == ObjectType.equipment) ? 18.0 : 16.0;
         _mapController.move(targetLocation, zoom);
       } catch (e) {
         if (kDebugMode) {
@@ -4128,6 +4389,23 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
     _showObjectInfo(merged, ObjectType.pole);
+  }
+
+  void _showEquipmentInfo(
+    Map<String, dynamic> properties, {
+    Map<String, dynamic>? geometry,
+  }) {
+    final merged = Map<String, dynamic>.from(properties);
+    final geom = geometry ?? properties['geometry'] as Map<String, dynamic>?;
+    if (geom != null && geom['type'] == 'Point') {
+      final coordinates = geom['coordinates'] as List<dynamic>?;
+      if (coordinates != null && coordinates.length >= 2) {
+        merged['x_position'] = _toDouble(coordinates[0]);
+        merged['y_position'] = _toDouble(coordinates[1]);
+      }
+    }
+    merged['equipment_id'] = merged['equipment_id'] ?? merged['id'];
+    _showObjectInfo(merged, ObjectType.equipment);
   }
   
   void _handlePoleSequence() {

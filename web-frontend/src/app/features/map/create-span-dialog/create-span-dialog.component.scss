@@ -46,6 +46,14 @@
   margin-bottom: 8px;
 }
 
+.field-hint {
+  margin: -2px 0 0;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .info-box {
   display: flex;
   align-items: center;

@@ -193,6 +193,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
             defect: null,
             criticality: null,
             categoryTitle: map['categoryTitle'] as String?,
+            ratedCurrent: (map['ratedCurrent'] as num?)?.toDouble(),
+            iTh: (map['iTh'] as num?)?.toDouble(),
+            ipMax: (map['ipMax'] as num?)?.toDouble(),
+            tTh: (map['tTh'] as num?)?.toDouble(),
+            normalOpen: map['normalOpen'] as bool?,
+            retained: map['retained'] as bool?,
           );
           if (eq.name.isEmpty) continue;
           _pendingEquipment.add(eq);
@@ -221,6 +227,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               'defect': e.defect,
               'criticality': e.criticality,
               'categoryTitle': e.categoryTitle,
+              'ratedCurrent': e.ratedCurrent,
+              'iTh': e.iTh,
+              'ipMax': e.ipMax,
+              'tTh': e.tTh,
+              'normalOpen': e.normalOpen,
+              'retained': e.retained,
             })
         .toList();
     prefs.setString(AppConfig.autofillEquipmentTemplateKey, jsonEncode(toSave));
@@ -508,6 +520,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           criticality: null,
           categoryTitle: eq.categoryTitle,
           defectAttachment: null,
+          ratedCurrent: eq.ratedCurrent,
+          iTh: eq.iTh,
+          ipMax: eq.ipMax,
+          tTh: eq.tTh,
+          normalOpen: eq.normalOpen,
+          retained: eq.retained,
         );
       }
     });
@@ -1125,6 +1143,13 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     String? initialDefect,
     String? initialCriticality,
     String? initialDefectAttachment,
+    String? initialUid,
+    double? initialRatedCurrent,
+    double? initialITh,
+    double? initialIpMax,
+    double? initialTTh,
+    bool? initialNormalOpen,
+    bool? initialRetained,
   }) async {
     final extra = await _fetchCatalogBrands(categoryTitle);
     if (!mounted) return null;
@@ -1139,6 +1164,13 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         initialDefect: initialDefect,
         initialCriticality: initialCriticality,
         initialDefectAttachment: initialDefectAttachment,
+        initialUid: initialUid,
+        initialRatedCurrent: initialRatedCurrent,
+        initialITh: initialITh,
+        initialIpMax: initialIpMax,
+        initialTTh: initialTTh,
+        initialNormalOpen: initialNormalOpen,
+        initialRetained: initialRetained,
         catalogExtraBrands: extra.isEmpty ? null : extra,
       ),
     );
@@ -1587,6 +1619,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                     updatedPole.id,
                     eq.defectAttachment,
                   ),
+                  ratedCurrent: eq.ratedCurrent,
+                  iTh: eq.iTh,
+                  ipMax: eq.ipMax,
+                  tTh: eq.tTh,
+                  normalOpen: eq.normalOpen,
+                  retained: eq.retained,
                 ),
               );
               final db2 = ref.read(databaseProvider);
@@ -1736,6 +1774,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                   createdPole.id,
                   eq.defectAttachment,
                 ),
+                ratedCurrent: eq.ratedCurrent,
+                iTh: eq.iTh,
+                ipMax: eq.ipMax,
+                tTh: eq.tTh,
+                normalOpen: eq.normalOpen,
+                retained: eq.retained,
               ),
             );
             await db.insertEquipmentOrReplace(EquipmentCompanion.insert(
@@ -2183,6 +2227,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                         final catType = EquipmentReferenceData.categoryToEquipmentType[cat.title]?.trim().toLowerCase();
                                         return catType != null && (t == catType || t.contains(catType) || catType.contains(t));
                                       }).toList();
+                                      final loadedUid = loadedForCategory.isNotEmpty ? 'ID-${loadedForCategory.first.id}' : null;
                                       final existing = existingList.isNotEmpty
                                           ? existingList.first
                                           : (loadedForCategory.isNotEmpty
@@ -2191,6 +2236,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                                   name: loadedForCategory.first.name,
                                                   quantity: 1,
                                                   categoryTitle: cat.title,
+                                                  ratedCurrent: loadedForCategory.first.ratedCurrent,
+                                                  iTh: loadedForCategory.first.iTh,
+                                                  ipMax: loadedForCategory.first.ipMax,
+                                                  tTh: loadedForCategory.first.tTh,
+                                                  normalOpen: loadedForCategory.first.normalOpen,
+                                                  retained: loadedForCategory.first.retained,
                                                 )
                                               : null);
 
@@ -2260,6 +2311,13 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                             initialDefect: existing.defect,
                                             initialCriticality: existing.criticality,
                                             initialDefectAttachment: existing.defectAttachment,
+                                            initialRatedCurrent: existing.ratedCurrent,
+                                            initialITh: existing.iTh,
+                                            initialIpMax: existing.ipMax,
+                                            initialTTh: existing.tTh,
+                                            initialNormalOpen: existing.normalOpen,
+                                            initialRetained: existing.retained,
+                                            initialUid: loadedUid,
                                           );
                                           if (result != null && mounted) {
                                             setState(() {

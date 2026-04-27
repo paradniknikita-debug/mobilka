@@ -260,6 +260,7 @@ def _substation_to_cim_objects_for_xml(
         pp_refs = [{"mRID": pp.mrid} for pp in (getattr(loc, "position_points", None) or [])]
         location_obj = LocationCIMObject(
             mrid=loc.mrid,
+            name=(substation.name or "").strip() or f"Location {substation.mrid}",
             position_points=pp_refs,
             parent_object={"mRID": substation.mrid},
         )
@@ -268,9 +269,11 @@ def _substation_to_cim_objects_for_xml(
             objects.append(
                 PositionPointCIMObject(
                     mrid=pp.mrid,
+                    name=(substation.name or "").strip() or f"PositionPoint {pp.mrid}",
                     x_position=pp.x_position,
                     y_position=pp.y_position,
                     z_position=pp.z_position,
+                    location={"mRID": loc.mrid},
                     parent_object={"mRID": loc.mrid},
                 )
             )
@@ -324,12 +327,17 @@ def _power_line_to_cim_geometry_only(
         key=lambda p: (getattr(p, "sequence_number", 0) or 0, getattr(p, "id", 0)),
     )
     for pole in poles:
+        pole_name = (getattr(pole, "pole_number", None) or f"Опора {pole.id}").strip()
+        if not pole_name.lower().startswith(("опора", "оп.")):
+            pole_name = f"Опора {pole_name}"
+
         location_ref = None
         if include_gps and getattr(pole, "location", None) is not None:
             loc = pole.location
             pp_refs = [{"mRID": pp.mrid} for pp in (getattr(loc, "position_points", None) or [])]
             location_obj = LocationCIMObject(
                 mrid=loc.mrid,
+                name=pole_name,
                 position_points=pp_refs,
                 parent_object={"mRID": pole.mrid},
             )
@@ -338,17 +346,15 @@ def _power_line_to_cim_geometry_only(
                 cim_objects.append(
                     PositionPointCIMObject(
                         mrid=pp.mrid,
+                        name=pole_name,
                         x_position=pp.x_position,
                         y_position=pp.y_position,
                         z_position=pp.z_position,
+                        location={"mRID": loc.mrid},
                         parent_object={"mRID": loc.mrid},
                     )
                 )
             location_ref = cim_ref(location_obj.mrid)
-
-        pole_name = (getattr(pole, "pole_number", None) or f"Опора {pole.id}").strip()
-        if not pole_name.lower().startswith(("опора", "оп.")):
-            pole_name = f"Опора {pole_name}"
 
         pole_obj = PoleCIMObject(
             mrid=pole.mrid,
@@ -645,10 +651,20 @@ def _power_line_to_cim(
         seg_child_refs.extend(term_refs)
         for sp in segment_span_objs:
             seg_child_refs.append(cim_ref(sp.mrid))
-        if from_node_ref:
-            seg_child_refs.append(from_node_ref)
-        if to_node_ref:
-            seg_child_refs.append(to_node_ref)
+
+        # Если точные электрические параметры сегмента не заданы вручную,
+        # берём усреднённые значения из секций и рассчитываем по длине.
+        seg_r_per_km = segment.r
+        seg_x_per_km = segment.x
+        seg_b_per_km = segment.b
+        seg_g_per_km = segment.g
+        if line_sections_list:
+            sec_len_sum = sum(float(getattr(ls, "total_length", 0.0) or 0.0) for ls in segment.line_sections)
+            if sec_len_sum > 0:
+                seg_r_per_km = sum((float(getattr(ls, "r", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
+                seg_x_per_km = sum((float(getattr(ls, "x", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
+                seg_b_per_km = sum((float(getattr(ls, "b", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
+                seg_g_per_km = sum((float(getattr(ls, "g", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
 
         segment_obj = AClineSegmentCIMObject(
             mrid=segment.mrid,
@@ -656,23 +672,26 @@ def _power_line_to_cim(
             from_node=from_node_ref,
             to_node=to_node_ref,
             length=segment.length,
-            r=segment.r,
-            x=segment.x,
-            b=segment.b,
-            g=segment.g,
+            r=seg_r_per_km,
+            x=seg_x_per_km,
+            b=seg_b_per_km,
+            g=seg_g_per_km,
             parent_object=cim_ref(power_line.mrid),
             description=getattr(segment, "description", None),
             child_object_refs=seg_child_refs,
             series_section_refs=series_refs,
             terminal_refs=term_refs,
-            r0=segment.r,
-            x0=segment.x,
-            bch=segment.b,
-            b0ch=0.0,
-            gch=segment.g,
-            g0ch=0.0,
+            r0=getattr(segment, "r0", None) if getattr(segment, "r0", None) is not None else seg_r_per_km,
+            x0=getattr(segment, "x0", None) if getattr(segment, "x0", None) is not None else seg_x_per_km,
+            bch=getattr(segment, "bch", None) if getattr(segment, "bch", None) is not None else seg_b_per_km,
+            b0ch=getattr(segment, "b0ch", None) if getattr(segment, "b0ch", None) is not None else 0.0,
+            gch=getattr(segment, "gch", None) if getattr(segment, "gch", None) is not None else seg_g_per_km,
+            g0ch=getattr(segment, "g0ch", None) if getattr(segment, "g0ch", None) is not None else 0.0,
             model_detail="2",
             sections_blob=None,
+            i_max_summer=str(getattr(segment, "i_th", None)) if getattr(segment, "i_th", None) is not None else None,
+            i_max_winter=str(getattr(segment, "i_th", None)) if getattr(segment, "i_th", None) is not None else None,
+            short_circuit_end_temperature=str(getattr(segment, "short_circuit_end_temperature", None)) if getattr(segment, "short_circuit_end_temperature", None) is not None else None,
             normally_in_service=getattr(segment, "normally_in_service", True),
             equipment_container=cim_ref(power_line.mrid),
             base_voltage=base_voltage_ref,
@@ -778,6 +797,12 @@ def _power_line_to_cim(
                     cim_class=profile.cim_class,
                     defect_note=(getattr(eq, "defect", None) or None) if include_defects else None,
                     criticality=(getattr(eq, "criticality", None) or None) if include_defects else None,
+                    rated_current=getattr(eq, "rated_current", None),
+                    i_th=getattr(eq, "i_th", None),
+                    ip_max=getattr(eq, "ip_max", None),
+                    t_th=getattr(eq, "t_th", None),
+                    normal_open=getattr(eq, "normal_open", None),
+                    retained=getattr(eq, "retained", None),
                 )
                 cim_objects.append(conducting_eq)
                 equipment_objects_by_id[eq_id] = conducting_eq
@@ -911,7 +936,28 @@ def _power_line_to_cim(
 
         location_ref = None
         if include_gps and getattr(pole, "location", None) is not None:
-            location_ref = cim_ref(pole.location.mrid)
+            loc = pole.location
+            pp_refs = [{"mRID": pp.mrid} for pp in (getattr(loc, "position_points", None) or [])]
+            location_obj = LocationCIMObject(
+                mrid=loc.mrid,
+                name=pole_name,
+                position_points=pp_refs,
+                parent_object={"mRID": pole.mrid},
+            )
+            cim_objects.append(location_obj)
+            for pp in getattr(loc, "position_points", None) or []:
+                cim_objects.append(
+                    PositionPointCIMObject(
+                        mrid=pp.mrid,
+                        name=pole_name,
+                        x_position=pp.x_position,
+                        y_position=pp.y_position,
+                        z_position=pp.z_position,
+                        location={"mRID": loc.mrid},
+                        parent_object={"mRID": loc.mrid},
+                    )
+                )
+            location_ref = cim_ref(location_obj.mrid)
 
         pole_obj = PoleCIMObject(
             mrid=pole.mrid,
@@ -1412,11 +1458,16 @@ async def apply_cim_552_diff(
         cls_name = o.get("_class") or o.get("type") or "Unknown"
         class_counts[str(cls_name)] += 1
 
+    # Безопасное применение 552 diff:
+    # в БД применяем только forwardDifferences, reverse используем только для диагностики.
+    apply_objects = [o for o in objects if o.get("_diff_section") != "reverse"]
+    reverse_only_count = sum(1 for o in objects if o.get("_diff_section") == "reverse")
+
     created_locations = 0
     created_position_points = 0
     created_substations = 0
 
-    for obj in objects:
+    for obj in apply_objects:
         cls = obj.get("_class") or obj.get("type") or ""
         if cls == "Location":
             mrid = (obj.get("mRID") or obj.get("mrid") or "").strip() or generate_mrid()
@@ -1427,7 +1478,7 @@ async def apply_cim_552_diff(
                 await db.flush()
                 created_locations += 1
 
-    for obj in objects:
+    for obj in apply_objects:
         cls = obj.get("_class") or obj.get("type") or ""
         if cls == "PositionPoint":
             x = obj.get("xPosition") or obj.get("XPosition")
@@ -1456,7 +1507,7 @@ async def apply_cim_552_diff(
                     await db.flush()
                     created_position_points += 1
 
-    for obj in objects:
+    for obj in apply_objects:
         cls = obj.get("_class") or obj.get("type") or ""
         if cls == "Substation":
             mrid = (obj.get("mRID") or obj.get("mrid") or "").strip() or generate_mrid()
@@ -1500,6 +1551,12 @@ async def apply_cim_552_diff(
             "В XML не найдено ни одного ресурса с rdf:about (ожидаются элементы внутри "
             "dm:forwardDifferences или прямые дочерние rdf:RDF)."
         )
+    elif len(apply_objects) == 0 and reverse_only_count > 0:
+        hint = (
+            "В файле найдены только dm:reverseDifferences. "
+            "По соображениям безопасности apply/552-diff применяет только dm:forwardDifferences, "
+            "чтобы исключить непреднамеренное удаление/откат структуры."
+        )
     elif total_created == 0:
         hint = (
             "Эндпоинт apply/552-diff пока записывает в БД только объекты классов "
@@ -1513,6 +1570,8 @@ async def apply_cim_552_diff(
         "created_locations": created_locations,
         "created_position_points": created_position_points,
         "parsed_total": len(objects),
+        "applied_total": len(apply_objects),
+        "reverse_total": reverse_only_count,
         "parsed_by_class": dict(class_counts),
         "hint": hint,
     }

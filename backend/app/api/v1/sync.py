@@ -54,6 +54,31 @@ def _to_int(v: Any) -> Optional[int]:
     return None
 
 
+def _normalize_legacy_line_id_keys(
+    data: Dict[str, Any],
+    *,
+    entity_type: Optional[str] = None,
+    record_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Нормализует legacy ключ power_line_id -> line_id.
+    line_id считается каноническим и имеет приоритет.
+    """
+    if not isinstance(data, dict):
+        return data
+    if data.get("line_id") is not None:
+        return data
+    legacy = data.get("power_line_id")
+    if legacy is None:
+        return data
+    logger.warning(
+        "sync/upload: deprecated key power_line_id used; normalized to line_id (entity_type=%s, record_id=%s)",
+        entity_type or "-",
+        record_id or "-",
+    )
+    return {**data, "line_id": legacy}
+
+
 async def _delete_power_line_cascade(db: AsyncSession, power_line_id: int) -> None:
     """Каскадное удаление ЛЭП и всех связанных сущностей (как в REST delete_power_line)."""
     result = await db.execute(select(PowerLine).where(PowerLine.id == power_line_id))
@@ -167,7 +192,11 @@ async def upload_sync_batch(
             data_preview += f" line_id={record.data.get('line_id')} pole_number={record.data.get('pole_number', '')!r} lat={record.data.get('latitude')} lon={record.data.get('longitude')}"
         logger.info("sync/upload: обработка %s %s %s", record.entity_type, record.action, data_preview)
         try:
-            data = record.data
+            data = _normalize_legacy_line_id_keys(
+                record.data,
+                entity_type=record.entity_type,
+                record_id=record.id,
+            )
             # Подстановка серверных id для опор и оборудования (локальные id отрицательные)
             if record.entity_type == "pole" and record.action == SyncAction.CREATE:
                 pl_id = _to_int(data.get("line_id"))

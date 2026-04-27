@@ -8,6 +8,7 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import Equipment
+from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.change_log import ChangeLog
 from app.schemas.power_line import EquipmentResponse, EquipmentCreate
 
@@ -92,6 +93,19 @@ async def update_equipment(
     old_defect_attachment = getattr(equipment, "defect_attachment", None)
 
     data = equipment_data.model_dump() if hasattr(equipment_data, "model_dump") else equipment_data.dict()
+
+    # Если выбрана справочная позиция и ток не задан вручную,
+    # подставляем номинальный ток из каталога.
+    catalog_item_id = data.get("catalog_item_id")
+    if catalog_item_id is not None:
+        try:
+            catalog_item_id = int(catalog_item_id)
+        except (TypeError, ValueError):
+            catalog_item_id = None
+    if data.get("rated_current") is None and catalog_item_id is not None:
+        catalog_item = await db.get(EquipmentCatalogItem, catalog_item_id)
+        if catalog_item is not None and getattr(catalog_item, "current_a", None) is not None:
+            data["rated_current"] = float(catalog_item.current_a)
 
     # Переносим все обновляемые поля; координаты (x_position, y_position) и pole_id
     # при необходимости можно менять, при этом координаты считаются независимыми от опоры.

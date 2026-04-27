@@ -24,7 +24,7 @@
   gap: 8px;
   font-size: 18px;
   margin: 0 0 8px 0;
-  padding: 0 20px 0 0;
+  padding: 0;
   box-sizing: border-box;
 
   .title-icon {
@@ -36,11 +36,6 @@
 
   .title-text {
     flex: 1;
-  }
-
-  .close-btn {
-    margin-right: -8px;
-    margin-left: auto;
   }
 }
 
@@ -112,11 +107,11 @@ mat-dialog-content {
     color: rgba(0, 0, 0, 0.7);
   }
 
-  .col-range { width: 26%; }
-  .col-wire { width: 22%; }
+  .col-range { width: 34%; }
+  .col-wire { width: 18%; }
   .col-material { width: 18%; }
   .col-section { width: 14%; }
-  .col-length { width: 20%; }
+  .col-length { width: 16%; }
 
   tr:last-child td {
     border-bottom: none;
@@ -128,6 +123,22 @@ mat-dialog-content {
   .col-section,
   .col-length {
     text-align: left !important;
+  }
+
+  .col-range {
+    white-space: nowrap;
+  }
+
+  td.col-section,
+  td.col-length {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  th.col-section,
+  th.col-length {
+    text-align: right !important;
   }
 }
 
@@ -172,7 +183,10 @@ mat-dialog-content {
   font-size: 11px;
   color: rgba(0, 0, 0, 0.7);
   margin-right: 6px;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
 }
 
 .terminal-desc {
@@ -191,9 +205,3 @@ mat-dialog-actions {
   }
 }
 
-// Выравнивание и отступы панели диалога
-::ng-deep .segment-card-dialog-panel.mat-mdc-dialog-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}

@@ -490,6 +490,21 @@
           </mat-error>
         </mat-form-field>
 
+        <mat-form-field appearance="outline" class="full-width" *ngIf="isEditMode">
+          <mat-label>UID (MRID)</mat-label>
+          <input matInput [value]="equipmentUid || '—'" readonly>
+          <button
+            mat-icon-button
+            matSuffix
+            type="button"
+            matTooltip="Скопировать UID"
+            [disabled]="!equipmentUid"
+            (click)="copyEquipmentUid()"
+          >
+            <mat-icon>content_copy</mat-icon>
+          </button>
+        </mat-form-field>
+
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Тип оборудования</mat-label>
           <mat-select formControlName="equipment_type">
@@ -525,6 +540,49 @@
           <mat-label>Марка / серия</mat-label>
           <input matInput formControlName="mark" placeholder="Марка аппарата (по желанию)">
         </mat-form-field>
+
+        <h4 class="subsection-title">Электрические характеристики</h4>
+        <p class="equipment-hint">
+          Если выбран элемент каталога, номинальный ток может подставляться автоматически. Любое введённое вручную значение имеет приоритет.
+        </p>
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Switch.ratedCurrent, A</mat-label>
+            <input matInput type="number" formControlName="rated_current">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>ConductingEquipment.iTh, A</mat-label>
+            <input matInput type="number" formControlName="i_th">
+          </mat-form-field>
+        </div>
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>ConductingEquipment.ipMax, A</mat-label>
+            <input matInput type="number" formControlName="ip_max">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>ConductingEquipment.tTh, °C</mat-label>
+            <input matInput type="number" formControlName="t_th">
+          </mat-form-field>
+        </div>
+        <div class="row-2">
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Switch.normalOpen</mat-label>
+            <mat-select formControlName="normal_open">
+              <mat-option [value]="null">Не задано</mat-option>
+              <mat-option [value]="true">true (нормально открыт)</mat-option>
+              <mat-option [value]="false">false (нормально закрыт)</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Switch.retained</mat-label>
+            <mat-select formControlName="retained">
+              <mat-option [value]="null">Не задано</mat-option>
+              <mat-option [value]="true">true</mat-option>
+              <mat-option [value]="false">false</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
 
         <div class="row-2">
           <mat-form-field appearance="outline" class="half-width">
@@ -567,9 +625,6 @@
           <mat-label>Описание / примечания</mat-label>
           <textarea matInput formControlName="notes" rows="2" placeholder="Доп. информация по оборудованию"></textarea>
         </mat-form-field>
-        <p class="equipment-hint">
-          Ном. ток, напряжение и марка сохраняются в описании оборудования. Для логики соединений терминалы будут создаваться автоматически как T1/T2.
-        </p>
       </form>
     </div>
   </mat-dialog-content>

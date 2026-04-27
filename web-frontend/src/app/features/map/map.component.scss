@@ -11,6 +11,11 @@
   height: 100%;
 }
 
+// Убираем "клетку" (швы между тайлами) на некоторых масштабах/дисплеях.
+::ng-deep .leaflet-container .leaflet-tile {
+  outline: 1px solid transparent;
+}
+
 .map-controls {
   position: absolute;
   top: 56px;
@@ -674,6 +679,25 @@
       0 0 3px #fff,
       0 0 2px #fff;
   }
+}
+
+// Подписи подстанций на карте
+::ng-deep .substation-name-label {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  color: #7b1fa2;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: center;
+  transform: translateY(2px);
+  text-shadow:
+    0 0 3px #fff,
+    0 0 3px #fff,
+    0 0 2px #fff;
 }
 
 // Оборудование как элементы линии (рядом с опорой)

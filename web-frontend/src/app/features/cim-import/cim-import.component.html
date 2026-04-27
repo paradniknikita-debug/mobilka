@@ -165,8 +165,8 @@
           mat-raised-button
           color="primary"
           (click)="apply552ToDb()"
-          [disabled]="lastImportSource !== '552' || !selectedDiffFile || isApplying"
-          matTooltip="Доступно только для импорта 552 diff"
+          [disabled]="!lastImportedFile || isApplying"
+          matTooltip="Доступно после последнего предпросмотра импортированного XML/552 файла"
         >
           <mat-icon *ngIf="isApplying" class="spinning">refresh</mat-icon>
           <mat-icon *ngIf="!isApplying">save</mat-icon>

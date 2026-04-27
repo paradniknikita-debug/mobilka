@@ -127,6 +127,17 @@ export class MapService {
     return this.showPolePropertiesSubject$.asObservable();
   }
 
+  /** Запрос показа панели свойств оборудования при клике по дереву/карте. */
+  private showEquipmentPropertiesSubject$ = new Subject<GeoJSONFeature>();
+
+  requestShowEquipmentProperties(feature: GeoJSONFeature): void {
+    this.showEquipmentPropertiesSubject$.next(feature);
+  }
+
+  get showEquipmentProperties$(): Observable<GeoJSONFeature> {
+    return this.showEquipmentPropertiesSubject$.asObservable();
+  }
+
   /** Запрос пересборки топологии линии (пролёты/сегменты по порядку опор) */
   private requestRebuildTopologySubject$ = new Subject<number>();
 

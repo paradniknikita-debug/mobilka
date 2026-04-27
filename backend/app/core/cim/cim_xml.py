@@ -307,6 +307,7 @@ class CIMXMLImporter(CIMImporter):
                         for obj_el in child:
                             obj_dict = self._xml_to_dict(obj_el)
                             if obj_dict:
+                                obj_dict["_diff_section"] = "forward"
                                 m = obj_dict.get("mRID")
                                 if m and m in seen_mrids:
                                     continue
@@ -317,6 +318,7 @@ class CIMXMLImporter(CIMImporter):
                         for obj_el in child:
                             obj_dict = self._xml_to_dict(obj_el)
                             if obj_dict:
+                                obj_dict["_diff_section"] = "reverse"
                                 m = obj_dict.get("mRID")
                                 if m and m in seen_mrids:
                                     continue

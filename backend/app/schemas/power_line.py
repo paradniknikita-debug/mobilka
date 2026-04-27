@@ -200,6 +200,12 @@ class EquipmentBase(BaseModel):
     defect: Optional[str] = None
     criticality: Optional[str] = None  # low | medium | high
     defect_attachment: Optional[str] = None
+    rated_current: Optional[float] = None
+    i_th: Optional[float] = None
+    ip_max: Optional[float] = None
+    t_th: Optional[float] = None
+    normal_open: Optional[bool] = None
+    retained: Optional[bool] = None
 
 class EquipmentCreate(EquipmentBase):
     # pole_id оставляем опциональным:
@@ -209,6 +215,7 @@ class EquipmentCreate(EquipmentBase):
 
 class EquipmentResponse(EquipmentBase):
     id: int
+    mrid: str
     pole_id: int
     created_by: int
     created_at: datetime

@@ -1,9 +1,10 @@
 """API сессий обхода ЛЭП. Администратор видит все обходы, инженер — только свои. События обходов пишутся в журнал изменений."""
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+import logging
 
 from app.database import get_db
 from app.models.patrol_session import PatrolSession
@@ -18,6 +19,7 @@ from app.schemas.patrol_session import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _session_to_response_with_names(
@@ -83,10 +85,23 @@ async def list_patrol_sessions(
 @router.post("", response_model=PatrolSessionResponse)
 async def create_patrol_session(
     body: PatrolSessionCreate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Создать сессию обхода (начало обхода)."""
+    # Мягкое предупреждение для миграции: legacy alias power_line_id всё ещё принимаем,
+    # но логируем для контроля и последующего удаления.
+    try:
+        raw = await request.json()
+        if isinstance(raw, dict) and raw.get("line_id") is None and raw.get("power_line_id") is not None:
+            logger.warning(
+                "patrol_sessions/create: deprecated key power_line_id used by user_id=%s; normalized to line_id",
+                current_user.id,
+            )
+    except Exception:
+        pass
+
     # Проверяем, что ЛЭП существует (избегаем ForeignKeyViolation)
     pl_result = await db.execute(select(PowerLine).where(PowerLine.id == body.line_id))
     if pl_result.scalar_one_or_none() is None:

@@ -10,6 +10,7 @@ from app.core.security import get_current_active_user
 from app.models.change_log import ChangeLog
 from app.models.user import User
 from app.models.power_line import Pole, Equipment
+from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.location import Location
 from app.schemas.power_line import EquipmentCreate, EquipmentResponse, PoleResponse
 
@@ -123,6 +124,26 @@ async def create_equipment(
         raw_lat = lat_from_pole
 
     direction_angle = data.get("direction_angle") or data.get("directionAngle")
+    rated_current = data.get("rated_current") or data.get("ratedCurrent")
+    i_th = data.get("i_th") or data.get("iTh")
+    ip_max = data.get("ip_max") or data.get("ipMax")
+    t_th = data.get("t_th") or data.get("tTh")
+    normal_open = data.get("normal_open")
+    if normal_open is None:
+        normal_open = data.get("normalOpen")
+    retained = data.get("retained")
+    catalog_item_id = data.get("catalog_item_id") or data.get("catalogItemId")
+    if catalog_item_id is not None:
+        try:
+            catalog_item_id = int(catalog_item_id)
+        except (TypeError, ValueError):
+            catalog_item_id = None
+    catalog_item = None
+    if catalog_item_id is not None:
+        catalog_item = await db.get(EquipmentCatalogItem, catalog_item_id)
+        # Автоподстановка номинального тока из справочника, если не задан вручную.
+        if rated_current is None and catalog_item is not None and getattr(catalog_item, "current_a", None) is not None:
+            rated_current = float(catalog_item.current_a)
 
     defect = data.get("defect")
     criticality = data.get("criticality")
@@ -144,6 +165,13 @@ async def create_equipment(
         x_position=float(raw_lon) if raw_lon is not None else None,
         y_position=float(raw_lat) if raw_lat is not None else None,
         direction_angle=direction_angle,
+        catalog_item_id=catalog_item_id,
+        rated_current=rated_current,
+        i_th=i_th,
+        ip_max=ip_max,
+        t_th=t_th,
+        normal_open=normal_open,
+        retained=retained,
         created_by=current_user.id,
     )
 

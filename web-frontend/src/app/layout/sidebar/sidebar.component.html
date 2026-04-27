@@ -122,6 +122,7 @@
     <!-- Подстанции -->
     <div *ngFor="let substation of substationsFeatures" class="tree-item">
       <div class="tree-node substation-node" 
+           [attr.data-substation-id]="substation.properties['id']"
            (click)="onFeatureClick(substation, $event)"
            (contextmenu)="onFeatureRightClick(substation, $event, 'substation')"
            [class.selected-substation]="selectedSubstationIdFromMap === substation.properties['id']">

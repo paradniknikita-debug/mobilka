@@ -339,6 +339,13 @@ class Equipment(Base):
     criticality = Column(String(20), nullable=True)
     # Мультимедиа дефекта: JSON-список [{t, url|p, thumbnail_url?}]
     defect_attachment = Column(Text, nullable=True)
+    # Электрические характеристики коммутационного оборудования
+    rated_current = Column(Float, nullable=True)
+    i_th = Column(Float, nullable=True)
+    ip_max = Column(Float, nullable=True)
+    t_th = Column(Float, nullable=True)
+    normal_open = Column(Boolean, nullable=True)
+    retained = Column(Boolean, nullable=True)
 
     # CIM Location - связь с Location для координат оборудования (как отдельного объекта на карте)
     location_id = Column(Integer, ForeignKey("location.id"), nullable=True)

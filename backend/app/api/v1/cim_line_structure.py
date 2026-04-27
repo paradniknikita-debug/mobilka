@@ -4,7 +4,7 @@ API endpoints для CIM-совместимой структуры линий э
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.cim_line_structure import ConnectivityNode, Terminal, LineSection
 from app.models.acline_segment import AClineSegment
 from app.models.power_line import Pole, Span, PowerLine
+from app.models.wire_info import WireInfo
 from app.schemas.cim_line_structure import (
     ConnectivityNodeCreate, ConnectivityNodeResponse,
     TerminalCreate, TerminalResponse,
@@ -22,6 +23,61 @@ from app.schemas.cim_line_structure import (
 )
 
 router = APIRouter()
+
+
+async def _find_wire_info(db: AsyncSession, marker: Optional[str]) -> Optional[WireInfo]:
+    marker_norm = (marker or "").strip()
+    if not marker_norm:
+        return None
+    result = await db.execute(
+        select(WireInfo).where(
+            func.lower(WireInfo.name) == marker_norm.lower()
+        )
+    )
+    wi = result.scalar_one_or_none()
+    if wi is not None:
+        return wi
+    result = await db.execute(
+        select(WireInfo).where(
+            func.lower(WireInfo.code) == marker_norm.lower()
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _fill_segment_defaults_from_wire_info(data: dict, wire_info: Optional[WireInfo]) -> dict:
+    if wire_info is None:
+        return data
+    # User-entered values have priority. Fill only missing fields.
+    if not data.get("conductor_material") and getattr(wire_info, "material", None):
+        data["conductor_material"] = wire_info.material
+    if not data.get("conductor_section") and getattr(wire_info, "section", None) is not None:
+        data["conductor_section"] = str(wire_info.section)
+    if data.get("r") is None and getattr(wire_info, "r", None) is not None:
+        data["r"] = wire_info.r
+    if data.get("x") is None and getattr(wire_info, "x", None) is not None:
+        data["x"] = wire_info.x
+    if data.get("b") is None and getattr(wire_info, "b", None) is not None:
+        data["b"] = wire_info.b
+    if data.get("g") is None and getattr(wire_info, "g", None) is not None:
+        data["g"] = wire_info.g
+    if data.get("r0") is None and data.get("r") is not None:
+        data["r0"] = data["r"]
+    if data.get("x0") is None and data.get("x") is not None:
+        data["x0"] = data["x"]
+    if data.get("bch") is None and data.get("b") is not None:
+        data["bch"] = data["b"]
+    if data.get("gch") is None and data.get("g") is not None:
+        data["gch"] = data["g"]
+    if data.get("b0ch") is None and data.get("bch") is not None:
+        data["b0ch"] = 0.0
+    if data.get("g0ch") is None and data.get("gch") is not None:
+        data["g0ch"] = 0.0
+    if data.get("i_th") is None and getattr(wire_info, "nominal_current", None) is not None:
+        data["i_th"] = wire_info.nominal_current
+    if data.get("t_th") is None and getattr(wire_info, "max_operating_temperature", None) is not None:
+        data["t_th"] = wire_info.max_operating_temperature
+    return data
 
 
 # ==================== ConnectivityNode ====================
@@ -311,29 +367,44 @@ async def create_acline_segment(
     # Единый UID: code = mrid (без SEG-xxx и т.п.)
     code = segment_data.code or mrid
     
+    payload = segment_data.model_dump() if hasattr(segment_data, "model_dump") else segment_data.dict()
+    wire_info = await _find_wire_info(db, payload.get("conductor_type"))
+    payload = _fill_segment_defaults_from_wire_info(payload, wire_info)
+
     db_segment = AClineSegment(
         mrid=mrid,
-        name=segment_data.name,
+        name=payload["name"],
         code=code,
-        line_id=segment_data.line_id,
-        voltage_level=segment_data.voltage_level,
-        length=segment_data.length,
-        is_tap=segment_data.is_tap,
-        tap_number=segment_data.tap_number,
-        branch_type=getattr(segment_data, 'branch_type', None),
-        tap_pole_id=getattr(segment_data, 'tap_pole_id', None),
-        from_connectivity_node_id=segment_data.from_connectivity_node_id,
-        to_connectivity_node_id=segment_data.to_connectivity_node_id,
-        to_terminal_id=segment_data.to_terminal_id,
-        sequence_number=segment_data.sequence_number,
-        conductor_type=segment_data.conductor_type,
-        conductor_material=segment_data.conductor_material,
-        conductor_section=segment_data.conductor_section,
-        r=segment_data.r,
-        x=segment_data.x,
-        b=segment_data.b,
-        g=segment_data.g,
-        description=segment_data.description,
+        line_id=payload["line_id"],
+        voltage_level=payload["voltage_level"],
+        length=payload["length"],
+        is_tap=payload.get("is_tap", False),
+        tap_number=payload.get("tap_number"),
+        branch_type=payload.get("branch_type"),
+        tap_pole_id=payload.get("tap_pole_id"),
+        from_connectivity_node_id=payload["from_connectivity_node_id"],
+        to_connectivity_node_id=payload.get("to_connectivity_node_id"),
+        to_terminal_id=payload.get("to_terminal_id"),
+        sequence_number=payload.get("sequence_number", 1),
+        conductor_type=payload.get("conductor_type"),
+        conductor_material=payload.get("conductor_material"),
+        conductor_section=payload.get("conductor_section"),
+        r=payload.get("r"),
+        x=payload.get("x"),
+        b=payload.get("b"),
+        g=payload.get("g"),
+        r0=payload.get("r0"),
+        x0=payload.get("x0"),
+        bch=payload.get("bch"),
+        b0ch=payload.get("b0ch"),
+        gch=payload.get("gch"),
+        g0ch=payload.get("g0ch"),
+        i_th=payload.get("i_th"),
+        t_th=payload.get("t_th"),
+        sections=payload.get("sections"),
+        short_circuit_end_temperature=payload.get("short_circuit_end_temperature"),
+        is_jumper=payload.get("is_jumper"),
+        description=payload.get("description"),
         created_by=current_user.id
     )
     
@@ -430,6 +501,11 @@ async def update_acline_segment(
     
     # Обновляем поля сегмента (исключаем mrid, line_id, created_by)
     segment_dict = segment_data.dict(exclude_unset=True, exclude={'mrid', 'line_id'})
+    should_autofill = "conductor_type" in segment_dict
+    if should_autofill:
+        marker = segment_dict.get("conductor_type", getattr(segment, "conductor_type", None))
+        wire_info = await _find_wire_info(db, marker)
+        segment_dict = _fill_segment_defaults_from_wire_info(segment_dict, wire_info)
     
     for key, value in segment_dict.items():
         if hasattr(segment, key):

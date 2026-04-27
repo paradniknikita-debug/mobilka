@@ -4,11 +4,13 @@
   Предпросмотр на карте
 </h2>
 <mat-dialog-content>
-  <p class="hint" *ngIf="points.length === 0">
-    В импортированных данных нет объектов с координатами (PositionPoint с xPosition, yPosition).
+  <p class="hint" *ngIf="points.length === 0 && polylines.length === 0">
+    В импортированных данных не найдена геометрия для предпросмотра.
   </p>
-  <div id="cim-preview-map" class="preview-map" *ngIf="points.length > 0"></div>
-  <p class="count" *ngIf="points.length > 0">Точек: {{ points.length }}</p>
+  <div id="cim-preview-map" class="preview-map" *ngIf="points.length > 0 || polylines.length > 0"></div>
+  <p class="count" *ngIf="points.length > 0 || polylines.length > 0">
+    Точек: {{ points.length }}, связей: {{ polylines.length }}
+  </p>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button mat-dialog-close>Закрыть</button>

@@ -443,6 +443,17 @@ class Equipment {
   final String? notes;
   @JsonKey(name: 'catalog_item_id', fromJson: _intFromJsonNullable)
   final int? catalogItemId;
+  @JsonKey(name: 'rated_current', fromJson: _doubleFromJsonNullable)
+  final double? ratedCurrent;
+  @JsonKey(name: 'i_th', fromJson: _doubleFromJsonNullable)
+  final double? iTh;
+  @JsonKey(name: 'ip_max', fromJson: _doubleFromJsonNullable)
+  final double? ipMax;
+  @JsonKey(name: 't_th', fromJson: _doubleFromJsonNullable)
+  final double? tTh;
+  @JsonKey(name: 'normal_open')
+  final bool? normalOpen;
+  final bool? retained;
   @JsonKey(name: 'created_by', fromJson: _intFromJson)
   final int createdBy;
   @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
@@ -463,6 +474,12 @@ class Equipment {
     required this.condition,
     this.notes,
     this.catalogItemId,
+    this.ratedCurrent,
+    this.iTh,
+    this.ipMax,
+    this.tTh,
+    this.normalOpen,
+    this.retained,
     required this.createdBy,
     required this.createdAt,
     this.updatedAt,
@@ -487,6 +504,12 @@ class Equipment {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? catalogItemId,
+    double? ratedCurrent,
+    double? iTh,
+    double? ipMax,
+    double? tTh,
+    bool? normalOpen,
+    bool? retained,
   }) {
     return Equipment(
       id: id ?? this.id,
@@ -501,6 +524,12 @@ class Equipment {
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
       catalogItemId: catalogItemId ?? this.catalogItemId,
+      ratedCurrent: ratedCurrent ?? this.ratedCurrent,
+      iTh: iTh ?? this.iTh,
+      ipMax: ipMax ?? this.ipMax,
+      tTh: tTh ?? this.tTh,
+      normalOpen: normalOpen ?? this.normalOpen,
+      retained: retained ?? this.retained,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -529,6 +558,17 @@ class EquipmentCreate {
   final String? criticality;
   @JsonKey(name: 'defect_attachment')
   final String? defectAttachment;
+  @JsonKey(name: 'rated_current')
+  final double? ratedCurrent;
+  @JsonKey(name: 'i_th')
+  final double? iTh;
+  @JsonKey(name: 'ip_max')
+  final double? ipMax;
+  @JsonKey(name: 't_th')
+  final double? tTh;
+  @JsonKey(name: 'normal_open')
+  final bool? normalOpen;
+  final bool? retained;
 
   const EquipmentCreate({
     required this.equipmentType,
@@ -544,6 +584,12 @@ class EquipmentCreate {
     this.defect,
     this.criticality,
     this.defectAttachment,
+    this.ratedCurrent,
+    this.iTh,
+    this.ipMax,
+    this.tTh,
+    this.normalOpen,
+    this.retained,
   });
 
   factory EquipmentCreate.fromJson(Map<String, dynamic> json) => _$EquipmentCreateFromJson(json);

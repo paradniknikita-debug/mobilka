@@ -36,6 +36,9 @@ export class MapComponent implements OnInit, OnDestroy {
   // Окно свойств опоры
   selectedPole: any = null;
   showPoleProperties = false;
+  // Окно свойств оборудования
+  selectedEquipment: any = null;
+  showEquipmentProperties = false;
   
   // Текущий зум карты
   currentZoom: number = 10;
@@ -258,6 +261,11 @@ export class MapComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((feature: GeoJSONFeature) => {
         if (feature?.geometry?.type === 'Point' && feature.geometry.coordinates?.length >= 2) {
+          // Панели свойств должны быть взаимоисключающими:
+          // при выборе опоры закрываем карточку оборудования.
+          this.showEquipmentProperties = false;
+          this.selectedEquipment = null;
+
           const coords = feature.geometry.coordinates as number[];
           const lng = coords[0];
           const lat = coords[1];
@@ -269,7 +277,7 @@ export class MapComponent implements OnInit, OnDestroy {
             longitude: lng,
             segment_name: feature.properties['segment_name'] ||
               feature.properties['power_line_name'] ||
-              `ЛЭП ID: ${feature.properties['line_id'] ?? feature.properties['power_line_id'] ?? 'N/A'}`
+              `ЛЭП ID: ${this.lineIdFromProps(feature.properties as Record<string, any> | undefined) ?? 'N/A'}`
           };
           const poleId = feature.properties['id'];
           if (poleId != null) {
@@ -290,6 +298,12 @@ export class MapComponent implements OnInit, OnDestroy {
             });
           }
         }
+      });
+
+    this.mapService.showEquipmentProperties$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((feature: GeoJSONFeature) => {
+        this.openEquipmentProperties(feature);
       });
 
     // Обновление данных карты при refreshData() (после создания/удаления опор, отпаек и т.д.)
@@ -442,7 +456,7 @@ export class MapComponent implements OnInit, OnDestroy {
 
     // Рисуем соединения отпаек с подстанциями по пролётам (Span: from_pole_id → substation CN)
     if (data.spans?.features) {
-      this.renderTapSubstationConnections(data.spans);
+      this.renderTapSubstationConnections(data.spans, data.substations);
     }
  
     // Рендерим оборудование как отдельные точки с собственными координатами (если заданы)
@@ -493,7 +507,7 @@ export class MapComponent implements OnInit, OnDestroy {
       const geom = feature.geometry as any;
       if (!geom || geom.type !== 'LineString' || !Array.isArray(geom.coordinates)) return;
 
-      const lineId = Number(feature.properties?.['id'] ?? feature.properties?.['line_id'] ?? feature.properties?.['power_line_id']);
+      const lineId = Number(feature.properties?.['id'] ?? this.lineIdFromProps(feature.properties as Record<string, any> | undefined));
       if (Number.isFinite(lineId) && lineIdsFromPoles.has(lineId)) {
         return;
       }
@@ -529,7 +543,19 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   private poleLineId(f: GeoJSONFeature): number | null {
-    const v = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
+    const v = this.lineIdFromProps(f.properties as Record<string, any> | undefined);
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /**
+   * Канонический id ЛЭП в GeoJSON: используем line_id.
+   * legacy power_line_id читаем только для обратной совместимости.
+   */
+  private lineIdFromProps(props: Record<string, any> | undefined): number | null {
+    if (!props) return null;
+    const v = props['line_id'] ?? props['power_line_id'];
     if (v == null) return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
@@ -814,6 +840,9 @@ export class MapComponent implements OnInit, OnDestroy {
         // Попап при клике убран — информация только в панели свойств справа внизу
 
         marker.on('click', () => {
+          // Взаимоисключение панелей: при открытии опоры закрываем оборудование.
+          this.showEquipmentProperties = false;
+          this.selectedEquipment = null;
           this.showPoleProperties = true;
           this.selectedPole = {
             ...feature.properties,
@@ -821,10 +850,10 @@ export class MapComponent implements OnInit, OnDestroy {
             longitude: lng,
             segment_name: feature.properties['segment_name'] || 
                          feature.properties['power_line_name'] || 
-                         `ЛЭП ID: ${feature.properties['line_id'] ?? feature.properties['power_line_id'] ?? 'N/A'}`
+                         `ЛЭП ID: ${this.lineIdFromProps(feature.properties as Record<string, any> | undefined) ?? 'N/A'}`
           };
           this.centerOnPole(lat, lng, 18);
-          const lineId = feature.properties['line_id'] ?? feature.properties['power_line_id'];
+          const lineId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
           const poleId = feature.properties['id'];
           if (lineId != null && poleId != null) {
             this.mapService.requestSelectPoleInTree(
@@ -870,7 +899,8 @@ export class MapComponent implements OnInit, OnDestroy {
    * Путь к SVG-ассету для линейного оборудования (те же файлы, что во Flutter).
    */
   private getLineEquipmentAssetPath(iconKey: string, outline = false): string {
-    if (iconKey === 'breaker' && outline) return 'assets/equipment/breaker/breaker_outline.svg';
+    const assetBase = '/assets/equipment';
+    if (iconKey === 'breaker' && outline) return `${assetBase}/breaker/breaker_outline.svg`;
     const sub: Record<string, string> = {
       recloser: 'recloser/recloser.svg',
       breaker: 'breaker/breaker.svg',
@@ -878,7 +908,7 @@ export class MapComponent implements OnInit, OnDestroy {
       disconnector: 'disconnector/disconnector.svg',
       arrester: 'arrester/arrester.svg'
     };
-    return sub[iconKey] ? `assets/equipment/${sub[iconKey]}` : '';
+    return sub[iconKey] ? `${assetBase}/${sub[iconKey]}` : '';
   }
 
   /** Иконка на линии в цвете напряжения (mask + background), контур выключателя — отдельным слоем. */
@@ -1187,10 +1217,10 @@ export class MapComponent implements OnInit, OnDestroy {
       (f: GeoJSONFeature) => f.properties?.['id'] != null && Number(f.properties['id']) === poleId
     );
     if (!poleFeature?.geometry || poleFeature.geometry.type !== 'Point') return null;
-    const lineId = poleFeature.properties?.['line_id'] ?? poleFeature.properties?.['power_line_id'];
+    const lineId = this.lineIdFromProps(poleFeature.properties as Record<string, any> | undefined);
     if (lineId == null) return null;
     const polesForLine = data.poles.features.filter(
-      (f: GeoJSONFeature) => (f.properties?.['line_id'] ?? f.properties?.['power_line_id']) == lineId
+      (f: GeoJSONFeature) => this.lineIdFromProps(f.properties as Record<string, any> | undefined) == lineId
     );
     const byId = new Map<number, GeoJSONFeature>();
     polesForLine.forEach((f: GeoJSONFeature) => {
@@ -1319,7 +1349,7 @@ export class MapComponent implements OnInit, OnDestroy {
     const polesByBranchKey = new Map<string, GeoJSONFeature[]>();
     polesFeatures.forEach((f: GeoJSONFeature) => {
       if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
-      const lineId = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
+      const lineId = this.lineIdFromProps(f.properties as Record<string, any> | undefined);
       if (lineId == null) return;
       const tapPoleIdRaw = f.properties?.['tap_pole_id'];
       const tapBranchIndexRaw = f.properties?.['tap_branch_index'];
@@ -1434,12 +1464,16 @@ export class MapComponent implements OnInit, OnDestroy {
           (marker as any).poleFeature = poleFeature;
           (marker as any).lineId = lineId;
           marker.on('click', () => {
-            const feat = (marker as any).poleFeature as GeoJSONFeature;
-            const plId = (marker as any).lineId as number;
-            if (feat?.properties) {
-              this.mapService.requestSelectPoleInTree(plId, feat.properties['id'], feat.properties['segment_id'] ?? undefined);
-              this.mapService.requestShowPoleProperties(feat);
-            }
+            const feat = (marker as any).poleFeature as GeoJSONFeature | undefined;
+            this.openEquipmentProperties({
+              type: 'Feature',
+              properties: {
+                ...(feat?.properties ?? {}),
+                ...eq,
+                line_id: lineId
+              },
+              geometry: feat?.geometry
+            } as GeoJSONFeature);
           });
           marker.addTo(this.map!);
           this.equipmentGeoJsonMarkers.push(marker);
@@ -1507,6 +1541,13 @@ export class MapComponent implements OnInit, OnDestroy {
         }),
         interactive: true
       });
+      marker.on('click', () => {
+        this.openEquipmentProperties({
+          type: 'Feature',
+          properties: { ...eq, equipment_id: (eq as any).id },
+          geometry: { type: 'Point', coordinates: [Number(lng), Number(lat)] }
+        } as GeoJSONFeature);
+      });
 
       marker.addTo(this.map!);
       this.equipmentPointMarkers.push(marker);
@@ -1561,19 +1602,12 @@ export class MapComponent implements OnInit, OnDestroy {
       const eqType = props['equipment_type'] || '';
       const name = props['name'] || '';
       marker.bindTooltip(`${eqType}${name ? ': ' + name : ''}`, { permanent: false, direction: 'top' });
-      const poleId = props['pole_id'] != null ? Number(props['pole_id']) : null;
-      (marker as any).poleId = poleId;
       marker.on('click', () => {
-        const pid = (marker as any).poleId;
-        if (pid == null || !this.mapData?.poles?.features) return;
-        const poleFeature = this.mapData.poles.features.find((f: GeoJSONFeature) => Number(f.properties?.['id']) === pid) as GeoJSONFeature | undefined;
-        if (poleFeature?.properties) {
-          const plId = poleFeature.properties['line_id'] ?? poleFeature.properties['power_line_id'];
-          if (plId != null) {
-            this.mapService.requestSelectPoleInTree(Number(plId), pid, poleFeature.properties['segment_id'] ?? undefined);
-            this.mapService.requestShowPoleProperties(poleFeature);
-          }
-        }
+        this.openEquipmentProperties({
+          type: 'Feature',
+          properties: { ...props },
+          geometry: feature.geometry
+        } as GeoJSONFeature);
       });
       marker.addTo(this.map!);
       this.equipmentGeoJsonMarkers.push(marker);
@@ -1694,7 +1728,7 @@ export class MapComponent implements OnInit, OnDestroy {
 
   /** Открыть диалог создания опоры «от отпаечной» (следующая опора будет по отпайке) */
   openCreatePoleFromTapPole(feature: GeoJSONFeature): void {
-    const lineId = feature.properties['line_id'] ?? feature.properties['power_line_id'];
+    const lineId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
     const tapPoleId = feature.properties['id'];
     if (lineId == null || tapPoleId == null) return;
     const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
@@ -1722,10 +1756,68 @@ export class MapComponent implements OnInit, OnDestroy {
     this.openCreatePoleFromTapPole(feature);
   }
 
-  private renderTapSubstationConnections(spansGeoJson: GeoJSONCollection): void {
+  private renderTapSubstationConnections(
+    spansGeoJson: GeoJSONCollection,
+    substationsGeoJson?: GeoJSONCollection
+  ): void {
     if (!this.map || !spansGeoJson.features) return;
 
+    // Кандидаты соединений «отпайка -> подстанция».
+    // Рисуем строго одну связь на подстанцию (самый новый span), чтобы не показывать residual-дубли.
+    const chosenBySubstationId = new Map<number, GeoJSONFeature>();
+    const substationPoints: Array<{ id: number; lat: number; lng: number }> = [];
+    (substationsGeoJson?.features || []).forEach((f: GeoJSONFeature) => {
+      if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
+      const id = Number(f.properties?.['id']);
+      if (!Number.isFinite(id)) return;
+      const c = f.geometry.coordinates as number[];
+      substationPoints.push({ id, lat: Number(c[1]), lng: Number(c[0]) });
+    });
+
+    const nearestSubstationId = (lat: number, lng: number): number | null => {
+      let bestId: number | null = null;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (const s of substationPoints) {
+        const dLat = s.lat - lat;
+        const dLng = s.lng - lng;
+        const d2 = dLat * dLat + dLng * dLng;
+        if (d2 < bestDist) {
+          bestDist = d2;
+          bestId = s.id;
+        }
+      }
+      // Порог ~1-1.5 км в градусах, чтобы не притягивать далёкие ПС.
+      return bestDist <= 0.0002 ? bestId : null;
+    };
+
     (spansGeoJson.features as GeoJSONFeature[]).forEach((feature: GeoJSONFeature) => {
+      const props = feature.properties || {};
+      const fromPoleId = props['from_pole_id'];
+      const toPoleId = props['to_pole_id'];
+      const isTapSeg = props['segment_is_tap'] === true
+        || props['branch_type'] === 'tap'
+        || props['tap_pole_id'] != null;
+      if (fromPoleId == null || toPoleId != null || !isTapSeg) return;
+
+      let sid = props['to_substation_id'] != null ? Number(props['to_substation_id']) : null;
+      if (sid == null && feature.geometry?.type === 'LineString') {
+        const coords = feature.geometry.coordinates as number[][];
+        if (Array.isArray(coords) && coords.length) {
+          const end = coords[coords.length - 1];
+          sid = nearestSubstationId(Number(end[1]), Number(end[0]));
+        }
+      }
+      if (sid == null || !Number.isFinite(sid)) return;
+
+      const current = chosenBySubstationId.get(sid);
+      const curId = Number(current?.properties?.['id'] ?? 0);
+      const newId = Number(props['id'] ?? 0);
+      if (!current || newId > curId) {
+        chosenBySubstationId.set(sid, feature);
+      }
+    });
+
+    Array.from(chosenBySubstationId.values()).forEach((feature: GeoJSONFeature) => {
       if (feature.geometry?.type !== 'LineString') return;
       const props = feature.properties || {};
       const fromPoleId = props['from_pole_id'];
@@ -1736,10 +1828,9 @@ export class MapComponent implements OnInit, OnDestroy {
       if (!Array.isArray(coords) || coords.length < 2) return;
       const latlngs = coords.map(c => [c[1], c[0]] as L.LatLngExpression);
       const vlRaw = Number(props['voltage_level']);
-      const isTapSeg = props['segment_is_tap'] === true;
       const line = L.polyline(latlngs, {
         color: colorForVoltageKv(Number.isFinite(vlRaw) ? vlRaw : null),
-        weight: lineWeightForBranch(!!isTapSeg),
+        weight: lineWeightForBranch(true),
         opacity: 0.85,
         dashArray: '6, 6'
       });
@@ -1795,6 +1886,13 @@ export class MapComponent implements OnInit, OnDestroy {
             iconAnchor: [10, 10]
           })
         });
+        const subName = feature.properties?.['name'] || feature.properties?.['dispatcher_name'] || 'Подстанция';
+        marker.bindTooltip(String(subName), {
+          permanent: true,
+          direction: 'bottom',
+          offset: [0, 12],
+          className: 'substation-name-label'
+        });
 
         marker.on('click', () => {
           // Центрируем карту на подстанции и сообщаем sidebar выбрать её в дереве
@@ -1814,6 +1912,20 @@ export class MapComponent implements OnInit, OnDestroy {
   /** Рисует линии от подстанции до первой/последней опоры ЛЭП, если подстанция привязана как начало или конец линии. */
   renderSubstationConnections(data: MapData): void {
     if (!this.map || !data.powerLinesList || !data.substations?.features?.length || !data.poles?.features?.length) return;
+    // Если ПС уже выступает концом отпайки (tap), не рисуем для неё магистральные
+    // связи start/end, чтобы избежать визуальных дублей "ПС связана сразу с несколькими линиями".
+    const tapEndSubstationIds = new Set<number>();
+    (data.spans?.features || []).forEach((f: GeoJSONFeature) => {
+      const p = f.properties || {};
+      const isTapSpanToSubstation =
+        p['segment_is_tap'] === true &&
+        p['from_pole_id'] != null &&
+        p['to_pole_id'] == null &&
+        p['to_substation_id'] != null;
+      if (isTapSpanToSubstation) {
+        tapEndSubstationIds.add(Number(p['to_substation_id']));
+      }
+    });
 
     const substationById = new Map<number, GeoJSONFeature>();
     data.substations.features.forEach((f: GeoJSONFeature) => {
@@ -1823,7 +1935,7 @@ export class MapComponent implements OnInit, OnDestroy {
 
     const polesByLine = new Map<number, GeoJSONFeature[]>();
     data.poles.features.forEach((f: GeoJSONFeature) => {
-      const lineId = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
+      const lineId = this.lineIdFromProps(f.properties as Record<string, any> | undefined);
       const tapId = f.properties?.['tap_pole_id'] ?? null;
       if (lineId == null || tapId != null) return; // только магистраль (без отпаек)
       if (f.geometry?.type !== 'Point' || !f.geometry.coordinates?.length) return;
@@ -1848,6 +1960,10 @@ export class MapComponent implements OnInit, OnDestroy {
       };
 
       if (pl.substation_start_id != null) {
+        if (tapEndSubstationIds.has(Number(pl.substation_start_id))) {
+          // Эта ПС уже привязана как конец отпайки — не дублируем магистральной связью.
+          return;
+        }
         const sub = substationById.get(pl.substation_start_id);
         if (sub?.geometry?.type === 'Point' && sub.geometry.coordinates?.length >= 2) {
           const subCoords = sub.geometry.coordinates as number[];
@@ -1867,6 +1983,9 @@ export class MapComponent implements OnInit, OnDestroy {
         }
       }
       if (pl.substation_end_id != null && pl.substation_end_id !== pl.substation_start_id) {
+        if (tapEndSubstationIds.has(Number(pl.substation_end_id))) {
+          return;
+        }
         const sub = substationById.get(pl.substation_end_id);
         if (sub?.geometry?.type === 'Point' && sub.geometry.coordinates?.length >= 2) {
           const subCoords = sub.geometry.coordinates as number[];
@@ -1922,12 +2041,12 @@ export class MapComponent implements OnInit, OnDestroy {
     const { lineId, segmentId } = this.selectedSegment;
 
     const poles = (this.mapData.poles?.features || []).filter((f: GeoJSONFeature) => {
-      const pl = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
+      const pl = this.lineIdFromProps(f.properties as Record<string, any> | undefined);
       const seg = f.properties?.['segment_id'] ?? f.properties?.['acline_segment_id'];
       return pl === lineId && (segmentId === null ? seg == null : seg === segmentId);
     });
     const spans = (this.mapData.spans?.features || []).filter((f: GeoJSONFeature) => {
-      const pl = f.properties?.['line_id'] ?? f.properties?.['power_line_id'];
+      const pl = this.lineIdFromProps(f.properties as Record<string, any> | undefined);
       const seg = f.properties?.['segment_id'] ?? f.properties?.['acline_segment_id'];
       return pl === lineId && (segmentId === null ? seg == null : seg === segmentId);
     });
@@ -1992,11 +2111,11 @@ export class MapComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Скрывать оборудование при зуме ≤ minZoomToShowEquipment; показывать при зуме выше (порог задаётся в environment.map.minZoomToShowEquipment). */
+  /** Показывать оборудование при зуме >= minZoomToShowEquipment; скрывать при отдалении ниже порога. */
   private updateEquipmentVisibility(): void {
     if (!this.map) return;
     const threshold = (environment.map as any).minZoomToShowEquipment ?? 14;
-    const show = this.currentZoom > threshold;
+    const show = this.currentZoom >= threshold;
     this.equipmentGeoJsonMarkers.forEach(m => {
       if (show) { if (!this.map!.hasLayer(m)) m.addTo(this.map!); }
       else { this.map!.removeLayer(m); }
@@ -2261,6 +2380,69 @@ export class MapComponent implements OnInit, OnDestroy {
   closePoleProperties(): void {
     this.showPoleProperties = false;
     this.selectedPole = null;
+    this.showEquipmentProperties = false;
+    this.selectedEquipment = null;
+  }
+
+  openEditEquipmentDialog(): void {
+    const equipmentId = this.selectedEquipment?.equipment_id ?? this.selectedEquipment?.id;
+    if (equipmentId == null) {
+      this.snackBar.open('Оборудование не выбрано', 'Закрыть', { duration: 2500 });
+      return;
+    }
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      disableClose: false,
+      autoFocus: false,
+      restoreFocus: false,
+      panelClass: 'create-object-dialog-panel',
+      data: {
+        isEdit: true,
+        objectType: 'equipment',
+        equipmentId: Number(equipmentId)
+      }
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        this.loadMapData();
+      }
+    });
+  }
+
+  private openEquipmentProperties(feature: GeoJSONFeature): void {
+    const props = feature?.properties || {};
+    const eqId = props['equipment_id'] ?? props['id'];
+    const poleId = props['pole_id'];
+    const lineId = this.lineIdFromProps(props as Record<string, any> | undefined);
+    const coords = feature?.geometry?.type === 'Point' ? (feature.geometry.coordinates as number[]) : null;
+    const lngRaw = coords && coords.length >= 2 ? coords[0] : props['x_position'];
+    const latRaw = coords && coords.length >= 2 ? coords[1] : props['y_position'];
+    const lng = Number(lngRaw);
+    const lat = Number(latRaw);
+
+    this.showPoleProperties = false;
+    this.selectedPole = null;
+    this.showEquipmentProperties = true;
+    this.selectedEquipment = {
+      ...props,
+      id: eqId ?? props['id'],
+      equipment_id: eqId ?? props['equipment_id'],
+      pole_id: poleId,
+      line_id: lineId,
+      x_position: Number.isFinite(lng) ? lng : null,
+      y_position: Number.isFinite(lat) ? lat : null
+    };
+
+    if (lineId != null && poleId != null) {
+      this.mapService.requestSelectPoleInTree(Number(lineId), Number(poleId), props['segment_id'] ?? undefined);
+    }
+    if (eqId != null) {
+      this.apiService.getEquipment(Number(eqId)).subscribe({
+        next: (eq) => Object.assign(this.selectedEquipment as any, eq)
+      });
+    }
   }
 
   openConnectivityNodeDialog(): void {

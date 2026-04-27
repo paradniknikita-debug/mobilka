@@ -25,6 +25,12 @@ export interface Equipment {
   x_position?: number;
   y_position?: number;
   catalog_item_id?: number;
+  rated_current?: number;
+  i_th?: number;
+  ip_max?: number;
+  t_th?: number;
+  normal_open?: boolean;
+  retained?: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -45,5 +51,11 @@ export interface EquipmentCreate {
   x_position?: number;
   y_position?: number;
   catalog_item_id?: number;
+  rated_current?: number;
+  i_th?: number;
+  ip_max?: number;
+  t_th?: number;
+  normal_open?: boolean;
+  retained?: boolean;
 }
 

@@ -1217,6 +1217,25 @@ async def set_segment_end_substation(
     db: AsyncSession = Depends(get_db),
 ):
     """Назначить или снять подстанцию (ТП) в конце участка линии (отпайки)."""
+    async def _clear_substation_tail_from_segment(seg: AClineSegment) -> None:
+        """
+        Удалить из сегмента хвостовые пролёты до подстанции (to_pole_id is NULL)
+        и сбросить ссылку конца сегмента на подстанционный узел.
+        Это нужно, чтобы у одной ПС не оставались "старые хвосты" при перепривязке.
+        """
+        section_ids = [ls.id for ls in (getattr(seg, "line_sections", []) or []) if getattr(ls, "id", None) is not None]
+        if section_ids:
+            await db.execute(
+                delete(Span).where(
+                    Span.line_section_id.in_(section_ids),
+                    Span.to_pole_id.is_(None),
+                )
+            )
+        # Если конец сегмента указывал на подстанционный ConnectivityNode — сбрасываем.
+        to_node = getattr(seg, "to_node", None)
+        if to_node is not None and getattr(to_node, "substation_id", None) is not None:
+            seg.to_connectivity_node_id = None
+
     power_line = await db.get(PowerLine, power_line_id)
     if not power_line:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Power line not found")
@@ -1235,6 +1254,44 @@ async def set_segment_end_substation(
     segment = result.scalar_one_or_none()
     if not segment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+
+    # 1) Всегда чистим старый "подстанционный хвост" у текущего сегмента перед новой привязкой/снятием.
+    await _clear_substation_tail_from_segment(segment)
+
+    # 2) Если назначаем ПС в конец отпайки, снимаем эту ПС со всех других "хвостов" сегментов
+    # (не только tap), чтобы в графе и на карте не оставались остаточные связи.
+    if body.to_substation_id is not None:
+        other_segments_result = await db.execute(
+            select(AClineSegment)
+            .where(
+                AClineSegment.id != segment_id,
+                AClineSegment.to_substation_id == body.to_substation_id,
+            )
+            .options(
+                selectinload(AClineSegment.to_node),
+                selectinload(AClineSegment.line_sections).selectinload(LineSection.spans),
+            )
+        )
+        other_segments = other_segments_result.scalars().all()
+        for other in other_segments:
+            await _clear_substation_tail_from_segment(other)
+            other.to_substation_id = None
+
+        # 3) Также снимаем эту ПС с магистральных привязок start/end у всех ЛЭП:
+        # иначе останутся дополнительные связи "первая/последняя опора -> ПС".
+        power_lines_result = await db.execute(
+            select(PowerLine).where(
+                (PowerLine.substation_start_id == body.to_substation_id)
+                | (PowerLine.substation_end_id == body.to_substation_id)
+            )
+        )
+        linked_lines = power_lines_result.scalars().all()
+        for pl in linked_lines:
+            if getattr(pl, "substation_start_id", None) == body.to_substation_id:
+                pl.substation_start_id = None
+            if getattr(pl, "substation_end_id", None) == body.to_substation_id:
+                pl.substation_end_id = None
+
     segment.to_substation_id = body.to_substation_id
     if body.to_substation_id is not None:
         from app.core.line_auto_assembly import add_substation_span_from_last_pole, extend_tap_segment_to_substation
@@ -1723,7 +1780,7 @@ async def update_span(
         .options(
             selectinload(Span.from_connectivity_node).selectinload(ConnectivityNode.pole),
             selectinload(Span.to_connectivity_node).selectinload(ConnectivityNode.pole),
-            selectinload(Span.line_section)
+            selectinload(Span.line_section).selectinload(LineSection.acline_segment)
         )
         .where(Span.id == span_id)
     )

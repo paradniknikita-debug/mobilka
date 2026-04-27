@@ -251,10 +251,11 @@ class LocationCIMObject(CIMObject):
     def __init__(
         self,
         mrid: str,
+        name: Optional[str] = None,
         position_points: List[Dict] = None,
         parent_object: Optional[Dict[str, str]] = None,
     ):
-        super().__init__(mrid)
+        super().__init__(mrid, name)
         self.position_points = position_points or []
         self.parent_object = parent_object
     
@@ -265,9 +266,13 @@ class LocationCIMObject(CIMObject):
         result = {
             "mRID": self.mrid
         }
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
         
         if self.position_points:
-            result["PositionPoint"] = self.position_points
+            result["Location.PositionPoints"] = self.position_points
+            # Preserve UI hierarchy links in addition to CIM semantic links.
+            result["me:IdentifiedObject.ChildObjects"] = self.position_points
         if self.parent_object:
             result["me:IdentifiedObject.ParentObject"] = self.parent_object
         
@@ -282,13 +287,16 @@ class PositionPointCIMObject(CIMObject):
         mrid: str,
         x_position: float,
         y_position: float,
+        name: Optional[str] = None,
         z_position: Optional[float] = None,
+        location: Optional[Dict[str, str]] = None,
         parent_object: Optional[Dict[str, str]] = None,
     ):
-        super().__init__(mrid)
+        super().__init__(mrid, name)
         self.x_position = x_position
         self.y_position = y_position
         self.z_position = z_position
+        self.location = location
         self.parent_object = parent_object
     
     def get_cim_class(self) -> str:
@@ -300,9 +308,13 @@ class PositionPointCIMObject(CIMObject):
             "xPosition": self.x_position,
             "yPosition": self.y_position
         }
+        if self.name:
+            result["IdentifiedObject.name"] = self.name
         
         if self.z_position is not None:
             result["zPosition"] = self.z_position
+        if self.location:
+            result["PositionPoint.Location"] = self.location
         if self.parent_object:
             result["me:IdentifiedObject.ParentObject"] = self.parent_object
         
@@ -665,12 +677,8 @@ class LineSectionCIMObject(CIMObject):
             result["WireInfo"] = self.wire_info
         if self.parent_object:
             result["me:IdentifiedObject.ParentObject"] = self.parent_object
-        if self.spans:
-            result["me:IdentifiedObject.ChildObjects"] = [
-                {"mRID": (s["mRID"] if isinstance(s, dict) else getattr(s, "mrid", None))}
-                for s in self.spans
-                if (isinstance(s, dict) and s.get("mRID")) or hasattr(s, "mrid")
-            ]
+        # Пролёты (LineSpan) не публикуем как ChildObjects у ACLineSeriesSection:
+        # они должны быть только в ChildObjects у ACLineSegment.
         
         return result
 
@@ -940,6 +948,12 @@ class ConductingEquipmentCIMObject(CIMObject):
         cim_class: str = "ConductingEquipment",
         defect_note: Optional[str] = None,
         criticality: Optional[str] = None,
+        rated_current: Optional[float] = None,
+        i_th: Optional[float] = None,
+        ip_max: Optional[float] = None,
+        t_th: Optional[float] = None,
+        normal_open: Optional[bool] = None,
+        retained: Optional[bool] = None,
     ):
         super().__init__(mrid, name)
         self.equipment_type = equipment_type
@@ -955,6 +969,12 @@ class ConductingEquipmentCIMObject(CIMObject):
         self.cim_class = cim_class
         self.defect_note = defect_note
         self.criticality = criticality
+        self.rated_current = rated_current
+        self.i_th = i_th
+        self.ip_max = ip_max
+        self.t_th = t_th
+        self.normal_open = normal_open
+        self.retained = retained
 
     def get_cim_class(self) -> str:
         return self.cim_class
@@ -992,6 +1012,18 @@ class ConductingEquipmentCIMObject(CIMObject):
             result["me:ConductingEquipment.defectNote"] = self.defect_note
         if self.criticality:
             result["me:ConductingEquipment.criticality"] = self.criticality
+        if self.rated_current is not None:
+            result["Switch.ratedCurrent"] = self.rated_current
+        if self.i_th is not None:
+            result["ConductingEquipment.iTh"] = self.i_th
+        if self.ip_max is not None:
+            result["ConductingEquipment.ipMax"] = self.ip_max
+        if self.t_th is not None:
+            result["ConductingEquipment.tTh"] = self.t_th
+        if self.normal_open is not None:
+            result["Switch.normalOpen"] = self.normal_open
+        if self.retained is not None:
+            result["Switch.retained"] = self.retained
         return result
 
 

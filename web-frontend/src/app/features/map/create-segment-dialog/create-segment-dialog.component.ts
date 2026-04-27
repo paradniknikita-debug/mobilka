@@ -53,7 +53,25 @@ export class CreateSegmentDialogComponent implements OnInit {
       is_tap: [false],
       tap_number: [''],
       description: [''],
-      branch_type: ['main']
+      branch_type: ['main'],
+      conductor_type: [''],
+      conductor_material: [''],
+      conductor_section: [''],
+      r: [null],
+      x: [null],
+      b: [null],
+      g: [null],
+      r0: [null],
+      x0: [null],
+      bch: [null],
+      b0ch: [null],
+      gch: [null],
+      g0ch: [null],
+      i_th: [null],
+      t_th: [null],
+      sections: [null],
+      short_circuit_end_temperature: [null],
+      is_jumper: [false]
     });
   }
 
@@ -90,7 +108,25 @@ export class CreateSegmentDialogComponent implements OnInit {
           is_tap: segment.is_tap || false,
           tap_number: segment.tap_number || '',
           description: segment.description || '',
-          branch_type: (segment as any).branch_type === 'tap' ? 'tap' : 'main'
+          branch_type: (segment as any).branch_type === 'tap' ? 'tap' : 'main',
+          conductor_type: (segment as any).conductor_type || '',
+          conductor_material: (segment as any).conductor_material || '',
+          conductor_section: (segment as any).conductor_section || '',
+          r: (segment as any).r ?? null,
+          x: (segment as any).x ?? null,
+          b: (segment as any).b ?? null,
+          g: (segment as any).g ?? null,
+          r0: (segment as any).r0 ?? null,
+          x0: (segment as any).x0 ?? null,
+          bch: (segment as any).bch ?? null,
+          b0ch: (segment as any).b0ch ?? null,
+          gch: (segment as any).gch ?? null,
+          g0ch: (segment as any).g0ch ?? null,
+          i_th: (segment as any).i_th ?? null,
+          t_th: (segment as any).t_th ?? null,
+          sections: (segment as any).sections ?? null,
+          short_circuit_end_temperature: (segment as any).short_circuit_end_temperature ?? null,
+          is_jumper: !!(segment as any).is_jumper
         });
         if (fromPole && (fromPole as any).is_tap_pole) {
           this.fromPoleForBranch = fromPole;
@@ -174,7 +210,25 @@ export class CreateSegmentDialogComponent implements OnInit {
       branch_type: this.showBranchChoice && formValue.branch_type ? formValue.branch_type : undefined,
       tap_pole_id: this.showBranchChoice && formValue.branch_type === 'tap' && this.fromPoleForBranch
         ? this.fromPoleForBranch.id
-        : undefined
+        : undefined,
+      conductor_type: formValue.conductor_type || undefined,
+      conductor_material: formValue.conductor_material || undefined,
+      conductor_section: formValue.conductor_section || undefined,
+      r: formValue.r != null ? Number(formValue.r) : undefined,
+      x: formValue.x != null ? Number(formValue.x) : undefined,
+      b: formValue.b != null ? Number(formValue.b) : undefined,
+      g: formValue.g != null ? Number(formValue.g) : undefined,
+      r0: formValue.r0 != null ? Number(formValue.r0) : undefined,
+      x0: formValue.x0 != null ? Number(formValue.x0) : undefined,
+      bch: formValue.bch != null ? Number(formValue.bch) : undefined,
+      b0ch: formValue.b0ch != null ? Number(formValue.b0ch) : undefined,
+      gch: formValue.gch != null ? Number(formValue.gch) : undefined,
+      g0ch: formValue.g0ch != null ? Number(formValue.g0ch) : undefined,
+      i_th: formValue.i_th != null ? Number(formValue.i_th) : undefined,
+      t_th: formValue.t_th != null ? Number(formValue.t_th) : undefined,
+      sections: formValue.sections != null ? Number(formValue.sections) : undefined,
+      short_circuit_end_temperature: formValue.short_circuit_end_temperature != null ? Number(formValue.short_circuit_end_temperature) : undefined,
+      is_jumper: !!formValue.is_jumper
     };
 
     // Используем API для создания или обновления участка

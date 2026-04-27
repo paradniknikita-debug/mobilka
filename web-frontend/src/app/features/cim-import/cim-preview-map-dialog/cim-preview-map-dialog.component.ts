@@ -4,6 +4,7 @@ import * as L from 'leaflet';
 
 export interface CimPreviewMapDialogData {
   points: { lat: number; lng: number; label?: string }[];
+  polylines?: { from: [number, number]; to: [number, number]; label?: string }[];
 }
 
 @Component({
@@ -14,12 +15,14 @@ export interface CimPreviewMapDialogData {
 export class CimPreviewMapDialogComponent implements AfterViewInit, OnDestroy {
   private map: L.Map | null = null;
   points: { lat: number; lng: number; label?: string }[] = [];
+  polylines: { from: [number, number]; to: [number, number]; label?: string }[] = [];
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: CimPreviewMapDialogData,
     private dialogRef: MatDialogRef<CimPreviewMapDialogComponent>
   ) {
     this.points = data?.points ?? [];
+    this.polylines = data?.polylines ?? [];
   }
 
   ngAfterViewInit(): void {
@@ -35,12 +38,14 @@ export class CimPreviewMapDialogComponent implements AfterViewInit, OnDestroy {
 
   private initMap(): void {
     const container = document.getElementById('cim-preview-map');
-    if (!container || this.points.length === 0) {
+    if (!container || (this.points.length === 0 && this.polylines.length === 0)) {
       return;
     }
-    const center: L.LatLngExpression = this.points.length
-      ? [this.points[0].lat, this.points[0].lng]
-      : [55.75, 37.62];
+    const allCoords: [number, number][] = [
+      ...this.points.map((p) => [p.lat, p.lng] as [number, number]),
+      ...this.polylines.flatMap((l) => [l.from, l.to]),
+    ];
+    const center: L.LatLngExpression = allCoords.length ? allCoords[0] : [55.75, 37.62];
     const map = L.map('cim-preview-map', {
       center,
       zoom: 12,
@@ -50,9 +55,9 @@ export class CimPreviewMapDialogComponent implements AfterViewInit, OnDestroy {
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    const bounds: L.LatLngBoundsLiteral = this.points.length
-      ? [[Math.min(...this.points.map(p => p.lat)), Math.min(...this.points.map(p => p.lng))],
-         [Math.max(...this.points.map(p => p.lat)), Math.max(...this.points.map(p => p.lng))]]
+    const bounds: L.LatLngBoundsLiteral = allCoords.length
+      ? [[Math.min(...allCoords.map(p => p[0])), Math.min(...allCoords.map(p => p[1]))],
+         [Math.max(...allCoords.map(p => p[0])), Math.max(...allCoords.map(p => p[1]))]]
       : [center as [number, number], center as [number, number]];
     map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
 
@@ -62,6 +67,17 @@ export class CimPreviewMapDialogComponent implements AfterViewInit, OnDestroy {
       shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       iconSize: [25, 41],
       iconAnchor: [12, 41]
+    });
+
+    this.polylines.forEach((line) => {
+      const poly = L.polyline([line.from, line.to], {
+        color: '#1976d2',
+        weight: 3,
+        opacity: 0.75,
+      }).addTo(map);
+      if (line.label) {
+        poly.bindTooltip(line.label, { permanent: false });
+      }
     });
 
     this.points.forEach(p => {

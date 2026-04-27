@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'pole_card_attachments_section.dart';
 
-enum ObjectType { pole, substation, tap }
+enum ObjectType { pole, substation, tap, equipment }
 
 class ObjectPropertiesPanel extends ConsumerWidget {
   final Map<String, dynamic> objectProperties;
@@ -93,6 +93,8 @@ class ObjectPropertiesPanel extends ConsumerWidget {
         return 'Подстанция ${objectProperties['name']?.toString() ?? 'N/A'}';
       case ObjectType.tap:
         return 'Отпайка ${objectProperties['tap_number']?.toString() ?? 'N/A'}';
+      case ObjectType.equipment:
+        return 'Оборудование ${objectProperties['name']?.toString() ?? 'N/A'}';
     }
   }
 
@@ -299,6 +301,21 @@ class ObjectPropertiesPanel extends ConsumerWidget {
               ),
               child: Column(
                 children: [
+                  if (onEdit != null) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Редактировать'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   if (onShowHistory != null) ...[
                     SizedBox(
                       width: double.infinity,
@@ -338,6 +355,8 @@ class ObjectPropertiesPanel extends ConsumerWidget {
         return _buildSubstationProperties(context);
       case ObjectType.tap:
         return _buildTapProperties(context);
+      case ObjectType.equipment:
+        return _buildEquipmentProperties(context);
     }
   }
 
@@ -428,6 +447,45 @@ class ObjectPropertiesPanel extends ConsumerWidget {
         context,
         _coordsLabel,
         _coordsLatLonValue(objectProperties),
+      ),
+    ];
+  }
+
+  List<Widget> _buildEquipmentProperties(BuildContext context) {
+    final uid = objectProperties['mrid']?.toString();
+    final fallbackUid = objectProperties['equipment_id']?.toString() ??
+        objectProperties['id']?.toString() ??
+        'N/A';
+    return [
+      _buildPropertyItem(
+        context,
+        'UID (MRID):',
+        (uid != null && uid.trim().isNotEmpty) ? uid : fallbackUid,
+      ),
+      _buildPropertyItem(
+        context,
+        'Тип:',
+        objectProperties['equipment_type']?.toString() ?? 'N/A',
+      ),
+      _buildPropertyItem(
+        context,
+        'Опора ID:',
+        objectProperties['pole_id']?.toString() ?? 'N/A',
+      ),
+      _buildPropertyItem(
+        context,
+        _coordsLabel,
+        _coordsLatLonValue(objectProperties),
+      ),
+      _buildPropertyItem(
+        context,
+        'Состояние:',
+        objectProperties['condition']?.toString() ?? 'N/A',
+      ),
+      _buildPropertyItem(
+        context,
+        'Примечания:',
+        objectProperties['notes']?.toString() ?? 'N/A',
       ),
     ];
   }

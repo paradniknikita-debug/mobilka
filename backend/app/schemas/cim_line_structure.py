@@ -117,6 +117,17 @@ class AClineSegmentBase(BaseModel):
     x: Optional[float] = None
     b: Optional[float] = None
     g: Optional[float] = None
+    r0: Optional[float] = None
+    x0: Optional[float] = None
+    bch: Optional[float] = None
+    b0ch: Optional[float] = None
+    gch: Optional[float] = None
+    g0ch: Optional[float] = None
+    i_th: Optional[float] = None
+    t_th: Optional[float] = None
+    sections: Optional[int] = None
+    short_circuit_end_temperature: Optional[float] = None
+    is_jumper: Optional[bool] = False
     description: Optional[str] = None
 
 

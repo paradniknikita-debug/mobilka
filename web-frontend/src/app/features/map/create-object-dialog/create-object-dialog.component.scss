@@ -318,6 +318,15 @@
     gap: 16px;
   }
 
+  .equipment-form {
+    margin-top: 8px;
+
+    h3 {
+      margin: 0 0 14px 0;
+      line-height: 1.25;
+    }
+  }
+
   .form-section {
     display: flex;
     flex-direction: column;

@@ -216,5 +216,71 @@
       </button>
     </div>
   </div>
+
+  <div *ngIf="showEquipmentProperties && selectedEquipment" class="pole-properties-panel">
+    <div class="pole-properties-header">
+      <span class="pole-properties-title">Свойства оборудования</span>
+      <button mat-icon-button (click)="closePoleProperties()" class="close-button" aria-label="Закрыть">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    <div class="pole-properties-content">
+      <div class="property-item">
+        <span class="property-label">Наименование:</span>
+        <span class="property-value">{{ selectedEquipment.name ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">UID:</span>
+        <span class="property-value uid-value">{{ selectedEquipment.mrid ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Тип:</span>
+        <span class="property-value">{{ selectedEquipment.equipment_type ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Опора ID:</span>
+        <span class="property-value">{{ selectedEquipment.pole_id ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Координаты (x, y / ш, д):</span>
+        <span class="property-value coord">
+          {{ selectedEquipment.y_position != null ? (selectedEquipment.y_position | number:'1.6-6') : '—' }},
+          {{ selectedEquipment.x_position != null ? (selectedEquipment.x_position | number:'1.6-6') : '—' }}
+        </span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.manufacturer">
+        <span class="property-label">Производитель:</span>
+        <span class="property-value">{{ selectedEquipment.manufacturer }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.model">
+        <span class="property-label">Модель:</span>
+        <span class="property-value">{{ selectedEquipment.model }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.serial_number">
+        <span class="property-label">Серийный номер:</span>
+        <span class="property-value">{{ selectedEquipment.serial_number }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.notes">
+        <span class="property-label">Примечания:</span>
+        <span class="property-value card-comment">{{ selectedEquipment.notes }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.defect">
+        <span class="property-label">Дефект:</span>
+        <span class="property-value card-comment">{{ selectedEquipment.defect }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.criticality">
+        <span class="property-label">Критичность:</span>
+        <span class="property-value">
+          {{ selectedEquipment.criticality === 'high' ? 'Высокая' : selectedEquipment.criticality === 'medium' ? 'Средняя' : 'Низкая' }}
+        </span>
+      </div>
+    </div>
+    <div class="pole-properties-actions">
+      <button mat-stroked-button (click)="openEditEquipmentDialog()" class="action-button">
+        <mat-icon>edit</mat-icon>
+        Редактировать оборудование
+      </button>
+    </div>
+  </div>
 </div>
 

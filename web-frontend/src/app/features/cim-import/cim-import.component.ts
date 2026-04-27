@@ -26,6 +26,7 @@ export class CimImportComponent implements OnInit {
   /** Объекты последнего импорта для предпросмотра на карте и записи в БД */
   lastImportObjects: any[] = [];
   lastImportSource: 'xml' | '552' | null = null;
+  lastImportedFile: File | null = null;
 
   // Параметры экспорта CIM XML (чекбоксы → query API)
   exportScope: 'full' | 'partial' = 'full';
@@ -94,6 +95,7 @@ export class CimImportComponent implements OnInit {
         this.totalCount = res?.count ?? 0;
         this.lastImportObjects = res?.objects ?? [];
         this.lastImportSource = 'xml';
+        this.lastImportedFile = this.selectedFile;
         this.isUploading = false;
       },
       error: (err) => {
@@ -219,6 +221,7 @@ export class CimImportComponent implements OnInit {
         this.totalCount = res?.count ?? 0;
         this.lastImportObjects = res?.objects ?? [];
         this.lastImportSource = '552';
+        this.lastImportedFile = this.selectedDiffFile;
         this.isUploading = false;
       },
       error: (err) => {
@@ -266,61 +269,116 @@ export class CimImportComponent implements OnInit {
     });
   }
 
-  /** Извлечь точки с координатами из разобранных CIM-объектов для отображения на карте */
-  private extractPointsFromObjects(objects: any[]): { lat: number; lng: number; label?: string }[] {
+  private toMrid(ref: any): string | null {
+    if (!ref) return null;
+    if (typeof ref === 'string') return ref;
+    if (typeof ref === 'object') return (ref.mRID || ref.mrid || null) as string | null;
+    return null;
+  }
+
+  /** Извлечь геометрию (точки и линии) из разобранных CIM-объектов для предпросмотра. */
+  private extractPreviewGeometryFromObjects(objects: any[]): {
+    points: { lat: number; lng: number; label?: string }[];
+    polylines: { from: [number, number]; to: [number, number]; label?: string }[];
+  } {
     const byMrid: Record<string, any> = {};
     objects.forEach(o => { if (o?.mRID) byMrid[o.mRID] = o; });
     const points: { lat: number; lng: number; label?: string }[] = [];
+    const polylines: { from: [number, number]; to: [number, number]; label?: string }[] = [];
+    const locationCoords: Record<string, [number, number]> = {};
+    const poleCoords: Record<string, [number, number]> = {};
+
+    const addPoint = (latRaw: any, lngRaw: any, label?: string) => {
+      const lat = Number(latRaw);
+      const lng = Number(lngRaw);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+      points.push({ lat, lng, label });
+    };
+
+    // 1) Собираем PositionPoint и индексируем в Location.
     objects.forEach(obj => {
       const cls = obj?._class || obj?.type;
       if (cls === 'PositionPoint') {
         const x = obj.xPosition ?? obj.XPosition;
         const y = obj.yPosition ?? obj.YPosition;
-        if (x != null && y != null) {
-          const lat = Number(y);
-          const lng = Number(x);
-          if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-            points.push({ lat, lng, label: (obj.name || obj.mRID || '') as string });
-          }
-        }
-        return;
-      }
-      if (cls === 'Location') {
-        const ppRef = obj.PositionPoints ?? obj.PositionPoint;
-        const refs = Array.isArray(ppRef) ? ppRef : (ppRef ? [ppRef] : []);
-        refs.forEach((ref: any) => {
-          const mrid = ref?.mRID;
-          const pp = mrid ? byMrid[mrid] : null;
-          if (pp && (pp._class === 'PositionPoint' || pp.type === 'PositionPoint')) {
-            const x = pp.xPosition ?? pp.XPosition;
-            const y = pp.yPosition ?? pp.YPosition;
-            if (x != null && y != null) {
-              const lat = Number(y);
-              const lng = Number(x);
-              if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-                points.push({ lat, lng, label: (pp.name || pp.mRID || obj.name || '') as string });
-              }
-            }
-          }
-        });
+        addPoint(y, x, (obj.name || obj.mRID || '') as string);
       }
     });
-    return points;
+
+    objects.forEach(obj => {
+      const cls = obj?._class || obj?.type;
+      if (cls !== 'Location') return;
+      const refsRaw =
+        obj.PositionPoints ??
+        obj['Location.PositionPoints'] ??
+        obj.PositionPoint ??
+        obj['me:IdentifiedObject.ChildObjects'];
+      const refs = Array.isArray(refsRaw) ? refsRaw : (refsRaw ? [refsRaw] : []);
+      for (const ref of refs) {
+        const mrid = this.toMrid(ref);
+        const pp = mrid ? byMrid[mrid] : null;
+        if (!pp || ((pp._class !== 'PositionPoint') && (pp.type !== 'PositionPoint'))) continue;
+        const x = pp.xPosition ?? pp.XPosition;
+        const y = pp.yPosition ?? pp.YPosition;
+        const lat = Number(y);
+        const lng = Number(x);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+        const locMrid = obj.mRID || obj.mrid;
+        if (locMrid) locationCoords[locMrid] = [lat, lng];
+        addPoint(lat, lng, (obj.name || pp.name || obj.mRID || '') as string);
+        break;
+      }
+    });
+
+    // 2) Опоры и подстанции по Location.
+    objects.forEach(obj => {
+      const cls = obj?._class || obj?.type;
+      if (cls !== 'Pole' && cls !== 'Substation') return;
+      const locMrid = this.toMrid(obj.Location ?? obj.location ?? obj['PowerSystemResource.Location']);
+      if (!locMrid) return;
+      const coord = locationCoords[locMrid];
+      if (!coord) return;
+      const [lat, lng] = coord;
+      const label = (obj.name || obj.poleNumber || obj.pole_number || obj.mRID || '') as string;
+      addPoint(lat, lng, label);
+      if (cls === 'Pole' && obj.mRID) {
+        poleCoords[obj.mRID] = [lat, lng];
+      }
+    });
+
+    // 3) Связи LineSpan по опорам.
+    objects.forEach(obj => {
+      const cls = obj?._class || obj?.type;
+      if (cls !== 'LineSpan') return;
+      const fromPoleMrid = this.toMrid(obj.StartTower ?? obj['LineSpan.StartTower']);
+      const toPoleMrid = this.toMrid(obj.EndTower ?? obj['LineSpan.EndTower']);
+      if (!fromPoleMrid || !toPoleMrid) return;
+      const from = poleCoords[fromPoleMrid];
+      const to = poleCoords[toPoleMrid];
+      if (!from || !to) return;
+      polylines.push({
+        from,
+        to,
+        label: (obj.name || obj.mRID || '') as string,
+      });
+    });
+
+    return { points, polylines };
   }
 
   openPreviewMapDialog(): void {
-    const points = this.extractPointsFromObjects(this.lastImportObjects);
+    const preview = this.extractPreviewGeometryFromObjects(this.lastImportObjects);
     this.dialog.open(CimPreviewMapDialogComponent, {
       width: '560px',
-      data: { points } as CimPreviewMapDialogData,
+      data: { points: preview.points, polylines: preview.polylines } as CimPreviewMapDialogData,
     });
   }
 
   apply552ToDb(): void {
-    if (!this.selectedDiffFile || this.isApplying) return;
+    if (!this.lastImportedFile || this.isApplying) return;
     this.isApplying = true;
     this.error = null;
-    this.apiService.applyCIM552Diff(this.selectedDiffFile).subscribe({
+    this.apiService.applyCIM552Diff(this.lastImportedFile).subscribe({
       next: (res) => {
         this.isApplying = false;
         const created = res?.created_substations ?? 0;
