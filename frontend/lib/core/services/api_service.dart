@@ -137,6 +137,9 @@ abstract class ApiService {
   @GET('/map/substations/geojson')
   Future<dynamic> getSubstationsGeoJSON();
 
+  @GET('/map/spans/geojson')
+  Future<dynamic> getSpansGeoJSON();
+
   // Substations
   @POST('/substations')
   Future<Substation> createSubstation(@Body() SubstationCreate substationData);
@@ -640,6 +643,9 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<dynamic> getSubstationsGeoJSON() => _delegate.getSubstationsGeoJSON();
+
+  @override
+  Future<dynamic> getSpansGeoJSON() => _delegate.getSpansGeoJSON();
 
   @override
   Future<Map<String, dynamic>> getAclineSegment(int segmentId) async {

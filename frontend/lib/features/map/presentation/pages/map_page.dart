@@ -57,6 +57,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   Map<String, dynamic>? _tapsData;
   Map<String, dynamic>? _substationsData;
   Map<String, dynamic>? _lineEquipmentData;
+  Map<String, dynamic>? _spansData;
   List<PowerLine>? _powerLinesList; // Полный список ЛЭП для дерева
   String? _errorMessage;
   
@@ -491,6 +492,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           _polesData = {'type': 'FeatureCollection', 'features': poleFeatures};
           _powerLinesData = {'type': 'FeatureCollection', 'features': powerLineFeatures};
           _lineEquipmentData = {'type': 'FeatureCollection', 'features': lineEquipmentFeatures};
+          _spansData = {'type': 'FeatureCollection', 'features': <dynamic>[]};
           _tapsData = {'type': 'FeatureCollection', 'features': <dynamic>[]};
           _substationsData = {'type': 'FeatureCollection', 'features': <dynamic>[]};
           _powerLinesList = allPowerLines.map((pl) => PowerLine(
@@ -746,6 +748,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         apiService.getSubstationsGeoJSON(),
         apiService.getPowerLines(),      // Полные данные ЛЭП для дерева
         apiService.getAllEquipment(),    // Оборудование с сервера
+        apiService.getSpansGeoJSON(),
       ]);
       if (!mounted) return;
 
@@ -755,6 +758,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       final substationsData = futures[3] as Map<String, dynamic>;
       var powerLinesList = List<PowerLine>.from(futures[4] as List<PowerLine>);
       final serverEquipment = List<Equipment>.from(futures[5] as List<Equipment>);
+      final spansData = futures[6] is Map<String, dynamic>
+          ? futures[6] as Map<String, dynamic>
+          : <String, dynamic>{'type': 'FeatureCollection', 'features': <dynamic>[]};
 
       // Дерево объектов должно показывать те же ЛЭП, что и выпадающий список (например, при создании сессии).
       // Выпадающий список берёт данные из локальной БД; дополняем список с сервера локальными ЛЭП.
@@ -1042,6 +1048,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           _powerLinesData = powerLinesData;
           _polesData = polesData;
           _lineEquipmentData = {'type': 'FeatureCollection', 'features': lineEquipmentFeatures};
+          _spansData = spansData;
           _tapsData = tapsData;
           _substationsData = substationsData;
           _powerLinesList = powerLinesList;
@@ -3839,7 +3846,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       builder: (context) => CreatePoleDialog(
         lineId: lineId,
         poleId: poleId,
-        isEditMode: true,
       ),
     );
     if (mounted) {
@@ -4304,6 +4310,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         return 'substation';
       case ObjectType.tap:
         return 'tap';
+      case ObjectType.equipment:
+        return 'equipment';
       case null:
         return null;
     }
@@ -4693,6 +4701,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         objectTypeAcc = 'отпайку';
         objectName = _selectedObjectProperties!['tap_number']?.toString() ?? 'N/A';
         break;
+      case ObjectType.equipment:
+        objectTypeAcc = 'оборудование';
+        objectName = _selectedObjectProperties!['name']?.toString() ?? 'N/A';
+        break;
     }
 
     final poleShort =
@@ -4727,25 +4739,34 @@ class _MapPageState extends ConsumerState<MapPage> {
       return;
     }
 
+    final deletedType = _selectedObjectType!;
+
     // Выполняем удаление
     try {
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult == ConnectivityResult.none;
 
-      if (isOffline && _selectedObjectType == ObjectType.pole) {
-        await _deletePoleOfflineById(objectId);
-        _closeObjectProperties();
-        await _loadMapDataFromLocal();
+      if (isOffline) {
+        if (deletedType == ObjectType.pole) {
+          await _deletePoleOfflineById(objectId);
+          _closeObjectProperties();
+          await _loadMapDataFromLocal();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Опора «$poleShort» удалена (офлайн). Изменения синхронизируются при подключении.'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                _selectedObjectType == ObjectType.pole
-                    ? 'Опора «$poleShort» удалена (офлайн). Изменения синхронизируются при подключении.'
-                    : 'Подстанция «$objectName» удалена (офлайн). Изменения синхронизируются при подключении.',
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 4),
+            const SnackBar(
+              content: Text('Удаление этого типа объектов в офлайне недоступно. Подключитесь к сети.'),
+              backgroundColor: Colors.orange,
             ),
           );
         }
@@ -4754,7 +4775,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       final apiService = ref.read(apiServiceProvider);
       
-      switch (_selectedObjectType!) {
+      switch (deletedType) {
         case ObjectType.pole:
           await apiService.deletePole(objectId);
           await _deletePoleOfflineById(objectId);
@@ -4773,6 +4794,23 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
           return;
+        case ObjectType.equipment:
+          final poleIdForEq = _toInt(_selectedObjectProperties!['pole_id']);
+          final eqId =
+              _toInt(_selectedObjectProperties!['equipment_id']) ?? _toInt(_selectedObjectProperties!['id']);
+          if (poleIdForEq == null || eqId == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Не удалось определить опору или оборудование для удаления'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+            return;
+          }
+          await apiService.deletePoleEquipment(poleIdForEq, eqId);
+          break;
       }
 
       // Закрываем панель свойств
@@ -4783,11 +4821,13 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       if (mounted) {
         String successMessage;
-        if (_selectedObjectType == ObjectType.pole) {
+        if (deletedType == ObjectType.pole) {
           successMessage =
               'Опора «$poleShort» успешно удалена.\nПролёты, напрямую связанные с этой опорой, также удалены. Остальная структура линии сохранена.';
-        } else if (_selectedObjectType == ObjectType.substation) {
+        } else if (deletedType == ObjectType.substation) {
           successMessage = 'Подстанция «$objectName» успешно удалена.';
+        } else if (deletedType == ObjectType.equipment) {
+          successMessage = 'Оборудование «$objectName» успешно удалено.';
         } else {
           successMessage = 'Отпайка «$objectName» успешно удалена.';
         }
@@ -4804,7 +4844,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Офлайн: удаляем опору локально
       final isConnectionError = e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout;
-      if (isConnectionError && _selectedObjectType == ObjectType.pole && mounted) {
+      if (isConnectionError && deletedType == ObjectType.pole && mounted) {
         try {
           await _deletePoleOfflineById(objectId);
           _closeObjectProperties();
@@ -4831,7 +4871,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         return;
       }
 
-      if (e.response?.statusCode == 404 && _selectedObjectType == ObjectType.pole) {
+      if (e.response?.statusCode == 404 && deletedType == ObjectType.pole) {
         try {
           await _deletePoleOfflineById(objectId);
           _closeObjectProperties();
@@ -4864,9 +4904,19 @@ class _MapPageState extends ConsumerState<MapPage> {
           if (responseData is Map && responseData['detail'] != null) {
             errorMessage = responseData['detail'] as String;
           } else {
-            errorMessage = _selectedObjectType == ObjectType.pole
-                ? 'Не удалось удалить опору «$poleShort»: существуют связанные объекты'
-                : 'Не удалось удалить подстанцию «$objectName»: существуют связанные объекты';
+            if (deletedType == ObjectType.pole) {
+              errorMessage =
+                  'Не удалось удалить опору «$poleShort»: существуют связанные объекты';
+            } else if (deletedType == ObjectType.substation) {
+              errorMessage =
+                  'Не удалось удалить подстанцию «$objectName»: существуют связанные объекты';
+            } else if (deletedType == ObjectType.equipment) {
+              errorMessage =
+                  'Не удалось удалить оборудование «$objectName»: существуют связанные объекты';
+            } else {
+              errorMessage =
+                  'Не удалось удалить объект «$objectName»: существуют связанные объекты';
+            }
           }
         } else if (statusCode == 404) {
           errorMessage = 'Объект не найден';
