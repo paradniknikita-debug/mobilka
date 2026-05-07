@@ -1506,48 +1506,6 @@ export class MapComponent implements OnInit, OnDestroy {
               return this.matchesPoleRef(directionRef, other);
             });
             if (matched) selected = matched;
-          } else {
-            const ex = Number((eq as any).x_position);
-            const ey = Number((eq as any).y_position);
-            if (Number.isFinite(ex) && Number.isFinite(ey)) {
-              // Если у оборудования есть сохранённые координаты, выбираем сегмент,
-              // к которому эта точка ближе всего.
-              let best = selected;
-              let bestD2 = Number.POSITIVE_INFINITY;
-              for (const s of candidates) {
-                const sc1 = s.p1.geometry?.coordinates as number[] | undefined;
-                const sc2 = s.p2.geometry?.coordinates as number[] | undefined;
-                if (!sc1?.length || !sc2?.length) continue;
-                const x1 = Number(sc1[0]);
-                const y1 = Number(sc1[1]);
-                const x2 = Number(sc2[0]);
-                const y2 = Number(sc2[1]);
-                const vx = x2 - x1;
-                const vy = y2 - y1;
-                const wx = ex - x1;
-                const wy = ey - y1;
-                const vv = vx * vx + vy * vy;
-                const t = vv > 1e-12 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / vv)) : 0;
-                const px = x1 + vx * t;
-                const py = y1 + vy * t;
-                const d2 = (ex - px) * (ex - px) + (ey - py) * (ey - py);
-                if (d2 < bestD2) {
-                  bestD2 = d2;
-                  best = s;
-                }
-              }
-              selected = best;
-            } else {
-              // Если направления нет и координат нет, на узле ветвления по умолчанию
-              // предпочитаем магистральный сегмент (не в отпайку).
-              const preferredMain = candidates.find((s) => {
-                const id1 = Number(s.p1.properties?.['id']);
-                const other = id1 === poleId ? s.p2 : s.p1;
-                const otherTapPoleId = other.properties?.['tap_pole_id'];
-                return otherTapPoleId == null;
-              });
-              if (preferredMain) selected = preferredMain;
-            }
           }
           if (!selected) return;
 
