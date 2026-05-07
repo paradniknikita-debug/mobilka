@@ -1,0 +1,55 @@
+.pam-body {
+  min-width: 640px;
+  max-width: 920px;
+}
+
+.hint {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+  margin: 0 0 12px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+
+  button mat-icon {
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+}
+
+.hidden-file {
+  display: none;
+}
+
+.table-wrap {
+  overflow: auto;
+  max-height: 50vh;
+}
+
+.pam-table {
+  width: 100%;
+}
+
+.data-row {
+  cursor: pointer;
+}
+
+.data-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.empty {
+  color: rgba(0, 0, 0, 0.54);
+  margin: 16px 0;
+}
+
+@media (max-width: 700px) {
+  .pam-body {
+    min-width: 0;
+  }
+}

@@ -1,0 +1,286 @@
+<div class="map-container">
+  <div id="map" class="map"></div>
+  
+  <div class="map-controls">
+    <button mat-icon-button color="primary" (click)="openCreateDialog()" matTooltip="Создать объект" class="map-control-btn">
+      <mat-icon>add</mat-icon>
+    </button>
+    <button mat-icon-button color="accent" (click)="refreshData()" matTooltip="Обновить данные" class="map-control-btn">
+      <mat-icon>refresh</mat-icon>
+    </button>
+    <div class="defect-filter-control">
+      <mat-checkbox
+        color="warn"
+        [ngModel]="showOnlyDefective"
+        (ngModelChange)="onToggleDefectFilter($event)"
+        matTooltip="Показывать на карте только дефектные опоры и оборудование"
+      >
+        Только дефектные
+      </mat-checkbox>
+    </div>
+  </div>
+
+  <!-- Индикатор уровня зума (левый нижний угол), компактный -->
+  <div class="zoom-indicator" [class.sidebar-open]="isSidebarOpen" [style.left.px]="isSidebarOpen ? sidebarWidth + 16 : 16">
+    <button mat-icon-button (click)="zoomIn()" class="zoom-button" matTooltip="Увеличить зум">
+      <mat-icon>add</mat-icon>
+    </button>
+    <span class="zoom-value">{{ invertedZoom }}</span>
+    <span class="zoom-distance">{{ zoomDistance }}</span>
+    <button mat-icon-button (click)="zoomOut()" class="zoom-button" matTooltip="Уменьшить зум">
+      <mat-icon>remove</mat-icon>
+    </button>
+  </div>
+
+  <div *ngIf="isLoading" class="loading-overlay">
+    <mat-spinner></mat-spinner>
+    <p>Загрузка данных карты...</p>
+  </div>
+
+  <!-- Панель свойств опоры (правый нижний угол), компактная, в стиле дерева объектов -->
+  <div *ngIf="showPoleProperties && selectedPole" class="pole-properties-panel">
+    <div class="pole-properties-header">
+      <span class="pole-properties-title">Свойства опоры</span>
+      <button mat-icon-button (click)="closePoleProperties()" class="close-button" aria-label="Закрыть">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    <div class="pole-properties-content">
+      <!-- Как во Flutter: Название, UID, Участок линии, Позиция, Порядок, затем остальное -->
+      <div class="property-item">
+        <span class="property-label">Название:</span>
+        <span class="property-value">{{ selectedPole.pole_number ?? selectedPole.poleNumber ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">UID:</span>
+        <span class="property-value uid-value">{{ selectedPole.mrid ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Участок линии:</span>
+        <span class="property-value">{{ selectedPole.segment_name ?? selectedPole.power_line_name ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Координаты (x, y / ш, д):</span>
+        <span class="property-value coord">
+          {{ getPoleLat() != null ? (getPoleLat() | number:'1.6-6') : '—' }}, {{ getPoleLon() != null ? (getPoleLon() | number:'1.6-6') : '—' }}
+        </span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.sequence_number != null">
+        <span class="property-label">Порядок в линии:</span>
+        <span class="property-value">{{ selectedPole.sequence_number }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Тип:</span>
+        <span class="property-value">{{ selectedPole.pole_type ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Высота:</span>
+        <span class="property-value">{{ selectedPole.height != null ? selectedPole.height + ' м' : '—' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.foundation_type">
+        <span class="property-label">Фундамент:</span>
+        <span class="property-value">{{ selectedPole.foundation_type }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.material">
+        <span class="property-label">Материал:</span>
+        <span class="property-value">{{ selectedPole.material }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.year_installed != null">
+        <span class="property-label">Год установки:</span>
+        <span class="property-value">{{ selectedPole.year_installed }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Состояние:</span>
+        <span class="property-value">{{ selectedPole.condition ?? '—' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.notes">
+        <span class="property-label">Заметки:</span>
+        <span class="property-value card-comment">{{ selectedPole.notes }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.structural_defect">
+        <span class="property-label">Дефект опоры:</span>
+        <span class="property-value card-comment">{{ selectedPole.structural_defect }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.structural_defect_criticality">
+        <span class="property-label">Критичность дефекта опоры:</span>
+        <span class="property-value">{{ selectedPole.structural_defect_criticality === 'high' ? 'Высокая' : selectedPole.structural_defect_criticality === 'medium' ? 'Средняя' : 'Низкая' }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.conductor_type || selectedPole.conductor_material || selectedPole.conductor_section">
+        <span class="property-label">Марка провода:</span>
+        <span class="property-value">
+          {{ (selectedPole.conductor_type || '') + (selectedPole.conductor_material ? ' · ' + selectedPole.conductor_material : '') + (selectedPole.conductor_section ? ' · ' + selectedPole.conductor_section + ' мм²' : '') || '—' }}
+        </span>
+      </div>
+      <div class="property-item pole-card-comments" *ngIf="poleCardCommentThread.length">
+        <div class="pole-cc-thread">
+          <div class="pole-cc-bubble" *ngFor="let m of poleCardCommentThread; trackBy: trackCc">
+            <div class="pole-cc-meta">
+              <span class="pole-cc-author">{{ commentAuthorLabel(m) }}</span>
+              <span class="pole-cc-time">{{ formatCardCommentAt(m.at) }}</span>
+            </div>
+            <div class="pole-cc-text" *ngIf="m.text">{{ m.text }}</div>
+            <div class="pole-cc-voice" *ngIf="m.voice_url">
+              <mat-icon>mic</mat-icon>
+              <app-attachment-media-view class="pole-cc-voice-player" [url]="m.voice_url" type="voice"></app-attachment-media-view>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="property-item property-item--attachments-table" *ngIf="poleCardAttachments.length">
+        <span class="property-label">Вложения (таблица):</span>
+        <div class="property-value attachments-table-value">
+          <table class="pole-attachments-table">
+            <thead>
+              <tr>
+                <th class="col-n">№</th>
+                <th class="col-type">Тип</th>
+                <th class="col-preview">Файл</th>
+                <th class="col-act"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let att of poleCardAttachments; let i = index">
+                <td>{{ i + 1 }}</td>
+                <td>{{ attachmentTypeLabel(att.t) }}</td>
+                <td class="attachments-table-preview">
+                  <app-attachment-image-view
+                    *ngIf="att.t === 'photo' || att.t === 'schema'"
+                    [url]="att.url"
+                    [thumbnailUrl]="att.thumbnail"
+                    cssClass="pole-att-thumb"
+                    (openPreview)="openImagePreview($event)"
+                  ></app-attachment-image-view>
+                  <app-attachment-media-view
+                    *ngIf="att.t === 'voice' || att.t === 'video'"
+                    [url]="att.url"
+                    [type]="att.t === 'video' ? 'video' : 'voice'"
+                  ></app-attachment-media-view>
+                  <span *ngIf="att.t !== 'photo' && att.t !== 'schema' && att.t !== 'voice' && att.t !== 'video'" class="attachment-filename">
+                    {{ getAttachmentFilename(att.url) }}
+                  </span>
+                </td>
+                <td>
+                  <button mat-icon-button type="button" (click)="downloadAttachment(att)" matTooltip="Скачать">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">
+        <span class="property-label">Терминалы:</span>
+        <span class="property-value">
+          <ng-container *ngFor="let t of selectedPole.terminals; let i = index">
+            <span class="terminal-chip">
+              {{ t.name || ('T' + t.sequence_number) }}
+              <span class="terminal-dir">({{ t.connection_direction }})</span>
+            </span><span *ngIf="i < selectedPole.terminals.length - 1">, </span>
+          </ng-container>
+        </span>
+      </div>
+      <div class="property-item property-item--equipment-list" *ngIf="getPoleEquipmentForCard().length">
+        <span class="property-label">Оборудование:</span>
+        <span class="property-value equipment-list">
+          <ng-container *ngFor="let eq of getPoleEquipmentForCard()">
+            <div class="equipment-block">
+              <span class="equipment-chip">
+                {{ equipmentChipLine(eq) }}
+              </span>
+              <div class="equipment-defect" *ngIf="getEquipmentDefect(eq)">
+                <span class="defect-label">Дефект:</span> {{ getEquipmentDefect(eq) }}
+              </div>
+              <span
+                class="criticality-badge"
+                *ngIf="getEquipmentCriticality(eq) as crit"
+                [class]="'criticality-badge--' + crit"
+              >
+                {{ crit === 'high' ? 'Высокая' : crit === 'medium' ? 'Средняя' : 'Низкая' }}
+              </span>
+            </div>
+          </ng-container>
+        </span>
+      </div>
+    </div>
+    <div class="pole-properties-actions">
+      <button 
+        mat-stroked-button 
+        (click)="openCreatePoleFromTapPolePanel()" 
+        class="action-button action-button--tap"
+        *ngIf="selectedPole.is_tap_pole"
+        matTooltip="Создать отпайку от этой опоры (новая ветка)"
+      >
+        <mat-icon>call_split</mat-icon>
+        Начать отпайку
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="showEquipmentProperties && selectedEquipment" class="pole-properties-panel">
+    <div class="pole-properties-header">
+      <span class="pole-properties-title">Свойства оборудования</span>
+      <button mat-icon-button (click)="closePoleProperties()" class="close-button" aria-label="Закрыть">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    <div class="pole-properties-content">
+      <div class="property-item">
+        <span class="property-label">Наименование:</span>
+        <span class="property-value">{{ selectedEquipment.name ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">UID:</span>
+        <span class="property-value uid-value">{{ selectedEquipment.mrid ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Тип:</span>
+        <span class="property-value">{{ selectedEquipment.equipment_type ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Опора ID:</span>
+        <span class="property-value">{{ selectedEquipment.pole_id ?? '—' }}</span>
+      </div>
+      <div class="property-item">
+        <span class="property-label">Координаты (x, y / ш, д):</span>
+        <span class="property-value coord">
+          {{ selectedEquipment.y_position != null ? (selectedEquipment.y_position | number:'1.6-6') : '—' }},
+          {{ selectedEquipment.x_position != null ? (selectedEquipment.x_position | number:'1.6-6') : '—' }}
+        </span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.manufacturer">
+        <span class="property-label">Производитель:</span>
+        <span class="property-value">{{ selectedEquipment.manufacturer }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.model">
+        <span class="property-label">Модель:</span>
+        <span class="property-value">{{ selectedEquipment.model }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.serial_number">
+        <span class="property-label">Серийный номер:</span>
+        <span class="property-value">{{ selectedEquipment.serial_number }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.notes">
+        <span class="property-label">Примечания:</span>
+        <span class="property-value card-comment">{{ selectedEquipment.notes }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.defect">
+        <span class="property-label">Дефект:</span>
+        <span class="property-value card-comment">{{ selectedEquipment.defect }}</span>
+      </div>
+      <div class="property-item" *ngIf="selectedEquipment.criticality">
+        <span class="property-label">Критичность:</span>
+        <span class="property-value">
+          {{ selectedEquipment.criticality === 'high' ? 'Высокая' : selectedEquipment.criticality === 'medium' ? 'Средняя' : 'Низкая' }}
+        </span>
+      </div>
+    </div>
+    <div class="pole-properties-actions">
+      <button mat-stroked-button (click)="openEditEquipmentDialog()" class="action-button">
+        <mat-icon>edit</mat-icon>
+        Редактировать оборудование
+      </button>
+    </div>
+  </div>
+</div>
+

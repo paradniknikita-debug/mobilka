@@ -1,0 +1,482 @@
+/* Хост должен занять высоту родителя (.sidebar-overlay), иначе .sidebar-content не ограничен и прокрутка не работает */
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-container {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar-header {
+  background: #f5f5f5;
+  color: rgba(0, 0, 0, 0.87);
+  padding: 8px 16px;
+  text-align: left;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-header-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.02em;
+}
+
+.sidebar-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+  flex-wrap: wrap;
+  position: relative;
+
+  .tree-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .tree-search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 280px;
+    overflow-y: auto;
+    margin-top: 2px;
+
+    .suggestion-item {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      text-align: left;
+      font-size: 12px;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
+
+      .suggestion-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+        margin-right: 8px;
+        color: rgba(0, 0, 0, 0.54);
+      }
+    }
+  }
+
+  button.mat-mdc-icon-button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    line-height: 28px;
+
+    .mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  .tree-search-field {
+    flex: 1;
+    min-width: 120px;
+    font-size: 11px;
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      display: none;
+    }
+    ::ng-deep .mat-mdc-form-field-flex {
+      align-items: center;
+      height: 24px;
+      min-height: 24px;
+    }
+    ::ng-deep .mat-mdc-form-field-infix {
+      padding-top: 0;
+      padding-bottom: 0;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+    }
+    ::ng-deep input.mat-mdc-input-element {
+      font-size: 11px;
+      line-height: 1.2;
+      padding: 0;
+      height: 18px;
+      margin: 0;
+    }
+    button.mat-mdc-icon-button .mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+  }
+}
+
+.header-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 8px;
+}
+
+.sidebar-header h2 {
+  margin: 8px 0 4px 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.sidebar-header p {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.sidebar-content {
+  flex: 1;
+  min-height: 0; /* нужно для flex-ребёнка, чтобы overflow-y сработал */
+  overflow-y: scroll; /* всегда показываем ползунок */
+  overflow-x: hidden;
+  padding: 0;
+  background: white;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.35) rgba(0, 0, 0, 0.08);
+
+  &::-webkit-scrollbar {
+    width: 12px;
+  }
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.08);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
+    border: 3px solid rgba(0, 0, 0, 0.08);
+    background-clip: padding-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.5);
+    border: 3px solid rgba(0, 0, 0, 0.08);
+    background-clip: padding-box;
+  }
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+// Иерархичное дерево — компактный вид
+.tree-item {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+  font-size: 12px;
+  min-height: 28px;
+
+  .node-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+  }
+
+  .node-label {
+    font-size: 12px;
+  }
+
+  .node-description {
+    font-size: 10px;
+    color: rgba(0, 0, 0, 0.5);
+    margin-left: auto;
+  }
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+  
+  &.expanded {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+  font-size: 12px;
+  min-height: 28px;
+
+  .expand-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .node-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+  }
+
+  .node-label {
+    font-size: 12px;
+  }
+
+  .node-description {
+    font-size: 10px;
+    color: rgba(0, 0, 0, 0.5);
+    margin-left: auto;
+  }
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+  
+  &.expanded {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+}
+
+.tree-children {
+  background-color: transparent;
+  display: block;
+  width: 100%;
+}
+
+.tree-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+
+  &:focus-visible {
+    outline: 2px solid rgba(25, 118, 210, 0.5);
+    outline-offset: 1px;
+  }
+}
+
+.expand-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  margin-right: 0;
+  color: rgba(0, 0, 0, 0.54);
+  transition: transform 0.2s ease;
+}
+
+.node-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  margin-right: 6px;
+}
+
+.tree-equipment-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  margin-right: 6px;
+}
+
+.tree-equipment-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: grayscale(100%) brightness(0.5);
+}
+
+.tree-recloser-badge {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  border: 1px solid #fff;
+}
+
+.node-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+.node-description {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-left: auto;
+}
+
+// Специфичные стили для разных типов узлов
+.power-line-node {
+  font-weight: 500;
+  border-bottom: none;
+}
+
+.segment-node {
+  padding-left: 24px;
+  background-color: transparent;
+  display: block;
+  width: 100%;
+  
+  .tree-node-header {
+    padding-left: 0;
+  }
+}
+
+.poles-folder-wrapper {
+  padding-left: 24px;
+  background-color: transparent;
+  display: block;
+  width: 100%;
+}
+
+.poles-folder-header {
+  padding-left: 0 !important;
+  
+  .node-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+}
+
+.poles-list {
+  padding-left: 0;
+  display: block;
+  width: 100%;
+}
+
+.pole-node {
+  padding-left: 24px;
+  font-weight: 400;
+  display: flex;
+  width: 100%;
+  
+  .node-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+
+  &.selected-pole {
+    background-color: rgba(25, 118, 210, 0.12);
+    border-left: 3px solid #1976d2;
+  }
+}
+
+.substation-node {
+  padding-left: 24px;
+  font-weight: 400;
+  display: flex;
+  width: 100%;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+
+  &.selected-substation {
+    background-color: rgba(156, 39, 176, 0.12);
+    border-left: 3px solid rgba(156, 39, 176, 0.87);
+  }
+}
+
+.tap-pole-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  flex-shrink: 0;
+  &.tap-pole-dot--empty {
+    background-color: #FF9800;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  &.tap-pole-dot--filled {
+    background-color: #4CAF50;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+}
+
+.context-menu {
+  // Компактное контекстное меню в стиле дерева
+}
+
+// Компактный вид контекстного меню (как элементы дерева)
+::ng-deep .mat-mdc-menu-panel.context-menu {
+  z-index: 10000 !important;
+  min-width: 180px;
+
+  .mat-mdc-menu-item {
+    font-size: 12px;
+    min-height: 32px;
+    line-height: 32px;
+    padding: 0 10px;
+
+    .mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+    }
+  }
+}
+
+::ng-deep .cdk-overlay-container {
+  z-index: 10000 !important;
+}
+
+::ng-deep .cdk-overlay-pane {
+  z-index: 10000 !important;
+}
+

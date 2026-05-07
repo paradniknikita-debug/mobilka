@@ -1,0 +1,135 @@
+<div class="create-segment-dialog" appResizableDialog>
+  <h2 mat-dialog-title>{{ isEditMode ? 'Редактирование участка линии' : 'Создание участка линии' }}</h2>
+
+  <mat-dialog-content>
+    <form [formGroup]="segmentForm">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Наименование участка *</mat-label>
+        <input matInput formControlName="name" required>
+        <mat-error *ngIf="segmentForm.get('name')?.hasError('required')">Наименование обязательно</mat-error>
+      </mat-form-field>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Начальная опора *</mat-label>
+          <mat-select formControlName="from_pole_id" required>
+            <mat-option *ngFor="let pole of poles" [value]="pole.id">
+              {{ displayPole(pole) }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="segmentForm.get('from_pole_id')?.hasError('required')">Выберите начальную опору</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Конечная опора *</mat-label>
+          <mat-select formControlName="to_pole_id" required>
+            <mat-option *ngFor="let pole of poles" [value]="pole.id">
+              {{ displayPole(pole) }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="segmentForm.get('to_pole_id')?.hasError('required')">Выберите конечную опору</mat-error>
+        </mat-form-field>
+      </div>
+
+      <div *ngIf="showBranchChoice" class="branch-choice-block">
+        <p class="branch-choice-label">Направление от отпаечной опоры</p>
+        <mat-radio-group formControlName="branch_type" class="branch-radio-group">
+          <mat-radio-button value="main">По магистрали</mat-radio-button>
+          <mat-radio-button value="tap">По отпайке</mat-radio-button>
+        </mat-radio-group>
+      </div>
+
+      <div *ngIf="isLoading" class="loading-spinner">
+        <mat-spinner diameter="24"></mat-spinner>
+        <span>Загрузка опор...</span>
+      </div>
+
+      <div *ngIf="!isLoading && poles.length === 0" class="info-box warning">
+        <mat-icon>warning</mat-icon>
+        <span>Нет доступных опор для создания участка в этой линии.</span>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Уровень напряжения, кВ</mat-label>
+        <input matInput type="number" formControlName="voltage_level" min="0">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Длина, м</mat-label>
+        <input matInput type="number" formControlName="length" min="0">
+      </mat-form-field>
+
+      <mat-checkbox formControlName="is_tap">Отпайка</mat-checkbox>
+
+      <mat-form-field appearance="outline" class="full-width" *ngIf="segmentForm.get('is_tap')?.value">
+        <mat-label>Номер отпайки</mat-label>
+        <input matInput formControlName="tap_number">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Описание</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+      </mat-form-field>
+
+      <h3 class="section-title">Провод и электрические параметры</h3>
+      <p class="hint">Если заполнить только марку/тип провода, недостающие поля подставятся из справочника на сервере.</p>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Марка провода</mat-label>
+          <input matInput formControlName="conductor_type" placeholder="Например: АС-70">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Материал</mat-label>
+          <input matInput formControlName="conductor_material" placeholder="алюминий">
+        </mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Сечение, мм²</mat-label>
+          <input matInput formControlName="conductor_section">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Секций</mat-label>
+          <input matInput type="number" min="1" formControlName="sections">
+        </mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Активное сопротивление r</mat-label><input matInput type="number" formControlName="r"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Реактивное сопротивление x</mat-label><input matInput type="number" formControlName="x"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Нулевое активное сопротивление r0</mat-label><input matInput type="number" formControlName="r0"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Нулевое реактивное сопротивление x0</mat-label><input matInput type="number" formControlName="x0"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Проводимость bch</mat-label><input matInput type="number" formControlName="bch"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Активная проводимость gch</mat-label><input matInput type="number" formControlName="gch"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Нулевая проводимость b0ch</mat-label><input matInput type="number" formControlName="b0ch"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Нулевая активная проводимость g0ch</mat-label><input matInput type="number" formControlName="g0ch"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Ток термической стойкости, А</mat-label><input matInput type="number" formControlName="i_th"></mat-form-field>
+        <mat-form-field appearance="outline" class="half-width"><mat-label>Время термической стойкости, с</mat-label><input matInput type="number" formControlName="t_th"></mat-form-field>
+      </div>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Температура КЗ на конце, °C</mat-label>
+          <input matInput type="number" formControlName="short_circuit_end_temperature">
+        </mat-form-field>
+        <div class="half-width checkbox-wrap">
+          <mat-checkbox formControlName="is_jumper">Перемычка</mat-checkbox>
+        </div>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()">Отмена</button>
+    <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="isSubmitting || segmentForm.invalid || isLoading || poles.length === 0">
+      {{ isSubmitting ? (isEditMode ? 'Сохранение...' : 'Создание...') : (isEditMode ? 'Сохранить изменения' : 'Создать') }}
+    </button>
+  </mat-dialog-actions>
+</div>
+

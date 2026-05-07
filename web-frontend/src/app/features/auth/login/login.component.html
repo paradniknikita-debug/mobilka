@@ -1,0 +1,83 @@
+<div class="auth-shell">
+  <button mat-icon-button class="theme-toggle" (click)="toggleTheme()" [matTooltip]="themeService.isDark ? 'Светлая тема' : 'Тёмная тема'">
+    <mat-icon>{{ themeService.isDark ? 'light_mode' : 'dark_mode' }}</mat-icon>
+  </button>
+  <div class="auth-bg" aria-hidden="true">
+    <div class="auth-bg__glow auth-bg__glow--1"></div>
+    <div class="auth-bg__glow auth-bg__glow--2"></div>
+    <div class="auth-bg__grid"></div>
+  </div>
+
+  <div class="auth-layout">
+    <section class="auth-brand" aria-labelledby="auth-brand-title">
+      <div class="brand-mark">
+        <mat-icon class="brand-mark__icon">bolt</mat-icon>
+      </div>
+      <h1 id="auth-brand-title" class="brand-title">LEPM</h1>
+      <p class="brand-subtitle">Линии электропередачи · карта · CIM · обходы</p>
+      <ul class="brand-list">
+        <li class="brand-list__item">
+          <mat-icon class="brand-list__icon">map</mat-icon>
+          <span>Интерактивная карта и дерево объектов</span>
+        </li>
+        <li class="brand-list__item">
+          <mat-icon class="brand-list__icon">schema</mat-icon>
+          <span>Обмен CIM и профиль IEC&nbsp;61970‑552</span>
+        </li>
+        <li class="brand-list__item">
+          <mat-icon class="brand-list__icon">electrical_services</mat-icon>
+          <span>Учёт опор, участков и оборудования</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="auth-panel">
+      <mat-card class="login-card">
+        <mat-card-header class="login-card__header">
+          <div mat-card-avatar class="login-card__avatar">
+            <mat-icon>login</mat-icon>
+          </div>
+          <mat-card-title>Вход в систему</mat-card-title>
+          <mat-card-subtitle>Система управления ЛЭП</mat-card-subtitle>
+        </mat-card-header>
+
+        <mat-card-content>
+          <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
+            <mat-form-field appearance="outline" class="full-width interactive-field">
+              <mat-label>Логин</mat-label>
+              <input matInput formControlName="username" autocomplete="username" required />
+              <mat-icon matPrefix>person</mat-icon>
+              <mat-error *ngIf="loginForm.get('username')?.hasError('required')">Логин обязателен</mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width interactive-field">
+              <mat-label>Пароль</mat-label>
+              <input
+                matInput
+                type="password"
+                formControlName="password"
+                autocomplete="current-password"
+                required
+              />
+              <mat-icon matPrefix>lock</mat-icon>
+              <mat-error *ngIf="loginForm.get('password')?.hasError('required')">Пароль обязателен</mat-error>
+            </mat-form-field>
+
+            <button
+              mat-flat-button
+              color="primary"
+              type="submit"
+              class="full-width login-button"
+              [disabled]="loginForm.invalid || isLoading"
+            >
+              <mat-spinner *ngIf="isLoading" diameter="20" class="spinner"></mat-spinner>
+              <span *ngIf="!isLoading">Войти</span>
+            </button>
+          </form>
+        </mat-card-content>
+      </mat-card>
+
+      <p class="auth-footnote">Используйте учётные данные, выданные администратором.</p>
+    </section>
+  </div>
+</div>

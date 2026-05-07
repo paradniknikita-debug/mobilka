@@ -1,0 +1,364 @@
+.change-log-page {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--app-text);
+  background: var(--app-bg);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--app-text);
+  }
+}
+
+.loading,
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--surface-1);
+}
+
+.log-table {
+  width: 100%;
+  font-size: 13px;
+  min-width: 980px;
+  table-layout: auto;
+
+  th {
+    font-weight: 500;
+    color: var(--app-text-muted);
+    background: color-mix(in srgb, var(--app-text) 6%, var(--surface-1));
+    vertical-align: top;
+  }
+
+  td, th {
+    padding: 8px 12px;
+  }
+}
+
+.col-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.col-head__sort {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 500;
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+  padding: 4px 4px 4px 0;
+  white-space: normal;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.col-head__sort-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.col-head__filter {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  padding: 4px;
+  margin-top: 0;
+}
+
+.col-head > button[mat-icon-button] {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  padding: 4px;
+}
+
+.col-filter-menu {
+  padding: 12px 16px 8px;
+  min-width: 240px;
+  box-sizing: border-box;
+}
+
+.col-filter-field {
+  width: 100%;
+}
+
+.col-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.journal-filters {
+  margin: 8px 0 12px;
+}
+
+.journal-filters__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--toolbar-bg) 10%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--toolbar-bg) 30%, var(--border-color));
+  border-radius: 8px;
+}
+
+.journal-filters__bar--collapsed {
+  .journal-filters__menu-label {
+    display: none;
+  }
+
+  .journal-filters__apply-text {
+    display: none;
+  }
+
+  .journal-filters__reset {
+    display: none;
+  }
+
+  .journal-filters__hint {
+    display: none;
+  }
+}
+
+.journal-filters__toggle {
+  margin: -4px 0;
+}
+
+.journal-filters__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.journal-filters__menu-label {
+  font-weight: 500;
+}
+
+.journal-filters__apply .mat-icon,
+.journal-filters__menu-btn .mat-icon {
+  margin-right: 0;
+}
+
+.journal-filters__apply mat-icon + .journal-filters__apply-text {
+  margin-left: 4px;
+}
+
+.journal-filters__hint {
+  margin: 8px 0 0;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--app-text-muted);
+}
+
+/* Панель mat-menu с формой фильтров (класс задаётся через panelClass) */
+:host ::ng-deep .journal-filter-menu-panel {
+  max-width: min(420px, 96vw) !important;
+  min-width: 300px !important;
+
+  .mat-mdc-menu-content {
+    padding: 0;
+  }
+}
+
+.journal-filter-menu {
+  padding: 16px 16px 12px;
+  box-sizing: border-box;
+}
+
+.journal-filter-menu__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--app-text);
+}
+
+.journal-filter-menu__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.journal-filter-menu__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.journal-filter-menu__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--app-text-muted);
+}
+
+.journal-filter-menu__range {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+
+  @media (min-width: 400px) {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mat-mdc-form-field {
+    width: 100%;
+  }
+}
+
+.journal-filter-menu__grid .mat-mdc-form-field {
+  width: 100%;
+}
+
+.journal-filter-menu__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.mat-row:hover {
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.journal-tabs {
+  margin-top: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  ::ng-deep .mat-mdc-tab-body-wrapper {
+    flex: 1;
+    overflow: auto;
+  }
+}
+
+.tab-description {
+  margin: 0 0 12px 0;
+  color: var(--app-text-muted);
+  font-size: 14px;
+}
+
+.refresh-issues {
+  margin-bottom: 16px;
+}
+
+.issues-table {
+  margin-top: 8px;
+}
+
+.uid-cell {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  &:hover {
+    color: var(--mat-primary-color, #1976d2);
+  }
+  &.uid-cell--empty {
+    cursor: default;
+    text-decoration: none;
+  }
+}
+
+:host ::ng-deep {
+  .mat-mdc-tab-group,
+  .mat-mdc-tab-header,
+  .mat-mdc-tab-body-content {
+    color: var(--app-text);
+    background: transparent;
+  }
+
+  .mat-mdc-tab .mdc-tab__text-label {
+    color: var(--app-text) !important;
+  }
+
+  .mdc-data-table__header-cell,
+  .mdc-data-table__cell {
+    color: var(--app-text) !important;
+    border-bottom-color: var(--border-color) !important;
+  }
+
+  .mat-mdc-icon-button {
+    color: var(--app-text-muted);
+  }
+
+  .mat-mdc-menu-panel,
+  .mat-mdc-menu-content {
+    background: var(--surface-1) !important;
+    color: var(--app-text) !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .log-table {
+    min-width: 900px;
+  }
+
+  .log-table td,
+  .log-table th {
+    padding: 8px 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .change-log-page {
+    padding: 12px;
+  }
+
+  .toolbar {
+    margin-bottom: 12px;
+  }
+
+  .toolbar h1 {
+    font-size: 18px;
+  }
+
+  .log-table {
+    min-width: 820px;
+    font-size: 12px;
+  }
+
+  .col-head__sort-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+  }
+}

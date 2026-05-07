@@ -1,0 +1,21 @@
+# Не отправлять в контекст сборки — меньше объём, стабильнее кэш слоя COPY
+.git
+.gitignore
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+.venv
+venv
+.env
+.env.*
+.pytest_cache
+htmlcov
+.coverage
+*.log
+# Документация и примеры не нужны в образе
+*.md
+docs/
+examples/
+# Локальные скрипты разработки
+setup_venv.ps1
+run_alembic.ps1

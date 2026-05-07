@@ -1,0 +1,14 @@
+<div class="attachment-image-wrap">
+  <div *ngIf="loading" class="attachment-image-loading">
+    <mat-spinner diameter="24"></mat-spinner>
+  </div>
+  <img
+    *ngIf="blobUrl && !loading"
+    [src]="blobUrl"
+    [alt]="alt"
+    [class]="cssClass"
+    [class.clickable]="clickable"
+    (click)="onClick()"
+  />
+  <span *ngIf="error && !loading" class="attachment-image-error">Не удалось загрузить</span>
+</div>

@@ -1,0 +1,12 @@
+﻿# Снижает нагрузку на индексацию Cursor (большие каталоги)
+flutter/
+frontend/build/
+frontend/.dart_tool/
+web-frontend/dist/
+web-frontend/.angular/
+backend/static/
+**/__pycache__/
+**/.pytest_cache/
+web-frontend/node_modules/
+frontend/android/.gradle/
+frontend/android/app/build/

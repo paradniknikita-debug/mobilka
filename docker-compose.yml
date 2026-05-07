@@ -1,0 +1,123 @@
+# Локальная разработка и тесты.
+# Переменные: из .env в корне или --env-file .env.local (см. .env.local.example).
+# Backend: ENVIRONMENT=development (CORS для localhost:4200, :53380, :8000).
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    container_name: lepm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lepm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dragon167}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Пробрасываем порт для подключения извне (DBeaver, pgAdmin и т.д.)
+    # Используем 5433 чтобы избежать конфликта с локальной PostgreSQL
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-lepm_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lepm_network
+
+  # Redis для кэширования
+  redis:
+    image: redis:7-alpine
+    container_name: lepm_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lepm_network
+
+  # MinIO — S3-совместимое хранилище для медиа (фото, аудио, видео)
+  minio:
+    image: minio/minio:latest
+    container_name: lepm_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Web Console
+    networks:
+      - lepm_network
+
+  # Backend API сервер
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lepm_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    # env_file опционально - раскомментируй если есть .env
+    # env_file:
+    #   - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dragon167}@postgres:5432/${POSTGRES_DB:-lepm_db}
+      REDIS_URL: redis://redis:6379
+      ENVIRONMENT: development
+      RELOAD: "true"
+      TZ: Europe/Minsk
+      # MinIO (если заданы — медиа сохраняются в MinIO, иначе на диск backend)
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA:-lepm-media}
+    # Для разработки: монтируем код как volume (чтобы не пересобирать образ при каждом изменении)
+    # Убрали :ro (read-only) чтобы hot reload мог работать
+    volumes:
+      - ./backend/app:/app/app
+    # Тогда при изменении кода достаточно перезапустить контейнер: docker compose restart backend
+    # Пробрасываем порт для прямого доступа (опционально, для отладки)
+    # Для продакшена можно убрать и использовать только через nginx
+    ports:
+      - "8000:8000"
+    expose:
+      - "8000"
+    # Используем команду из Dockerfile (python run.py)
+    # или можно: command: python run.py
+    restart: unless-stopped
+    networks:
+      - lepm_network
+
+  # Nginx: для локальных тестов — только прокси API (фронты запускаются отдельно)
+  nginx:
+    image: nginx:alpine
+    container_name: lepm_nginx
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "4201:4201"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    networks:
+      - lepm_network
+
+volumes:
+  pgdata:
+  minio_data:
+
+networks:
+  lepm_network:
+    driver: bridge

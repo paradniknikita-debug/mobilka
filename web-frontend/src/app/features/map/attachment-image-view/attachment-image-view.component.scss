@@ -1,0 +1,24 @@
+.attachment-image-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+
+  .attachment-image-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    min-height: 48px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+  }
+
+  img.clickable {
+    cursor: pointer;
+  }
+
+  .attachment-image-error {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.5);
+  }
+}

@@ -1,0 +1,77 @@
+<h2 mat-dialog-title class="dialog-title">
+  <mat-icon>tune</mat-icon>
+  {{ dialogTitle }}
+</h2>
+
+<mat-dialog-content class="dialog-body">
+  <div class="export-attrs-toolbar">
+    <button mat-button type="button" (click)="selectAll()">Включить всё</button>
+    <button mat-button type="button" (click)="selectNone()">Отключить всё</button>
+  </div>
+
+  <h4 class="export-attrs-section-title">Объёмы данных</h4>
+  <mat-checkbox [(ngModel)]="draft.includeSubstations" (ngModelChange)="onSubstationsChange($event)">
+    Подстанции
+  </mat-checkbox>
+  <p class="export-attrs-hint">Объекты Substation и связанное дерево в регионе.</p>
+  <mat-checkbox [(ngModel)]="draft.includePowerLines" (ngModelChange)="onPowerLinesChange($event)">
+    Линии электропередачи
+  </mat-checkbox>
+  <p class="export-attrs-hint">ЛЭП, сегменты, опоры — по настройкам ниже.</p>
+
+  <h4 class="export-attrs-section-title">Геоданные</h4>
+  <mat-checkbox
+    [(ngModel)]="draft.includeGps"
+    [disabled]="!draft.includeSubstations && !draft.includePowerLines"
+  >
+    Координаты GPS (Location / PositionPoint)
+  </mat-checkbox>
+  <p class="export-attrs-hint">Точки для подстанций и опор.</p>
+
+  <h4 class="export-attrs-section-title">Подстанции</h4>
+  <mat-checkbox
+    [(ngModel)]="draft.includeSubstationVoltageLevels"
+    [disabled]="!draft.includeSubstations"
+  >
+    Уровни напряжения (VoltageLevel)
+  </mat-checkbox>
+  <p class="export-attrs-hint">При включённых подстанциях.</p>
+
+  <h4 class="export-attrs-section-title">ЛЭП — модель и оборудование</h4>
+  <mat-checkbox
+    [(ngModel)]="draft.includeElectricalModel"
+    (ngModelChange)="onElectricalModelChange($event)"
+    [disabled]="!draft.includePowerLines"
+  >
+    Электрическая модель (сегменты, узлы, пролёты, терминалы)
+  </mat-checkbox>
+  <p class="export-attrs-hint">Если выключено — для линий только геометрия опор без ACLineSegment.</p>
+  <mat-checkbox
+    [(ngModel)]="draft.includeEquipment"
+    (ngModelChange)="onEquipmentChange($event)"
+    [disabled]="!draft.includePowerLines || !draft.includeElectricalModel"
+  >
+    Оборудование на опорах (ConductingEquipment)
+  </mat-checkbox>
+  <p class="export-attrs-hint">Разъединители и прочее оборудование из карточек опор.</p>
+  <mat-checkbox
+    [(ngModel)]="draft.includeDefects"
+    [disabled]="!draft.includePowerLines || !draft.includeElectricalModel || !draft.includeEquipment"
+  >
+    Поля дефектов оборудования в CIM
+  </mat-checkbox>
+  <p class="export-attrs-hint">Описание дефекта и критичность.</p>
+
+  <ng-container *ngIf="data.mode === 'xml'">
+    <h4 class="export-attrs-section-title">Формат XML</h4>
+    <mat-checkbox [(ngModel)]="draft.useCimpy">
+      Использовать библиотеку CIMpy (если возможно)
+    </mat-checkbox>
+    <p class="export-attrs-hint">Сервер может переключиться на ручную сборку при несовместимых опциях.</p>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Отмена</button>
+  <button mat-flat-button color="primary" type="button" (click)="save()">Сохранить</button>
+</mat-dialog-actions>

@@ -1,0 +1,88 @@
+.reports-page {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+  }
+}
+
+.reports-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.reports-block {
+  padding: 12px 0;
+}
+
+.reports-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.reports-actions {
+  display: flex;
+  gap: 12px;
+  margin: 10px 0 16px;
+}
+
+.loading,
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+}
+
+.log-table {
+  width: 100%;
+  font-size: 13px;
+  table-layout: fixed;
+
+  th {
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  td, th {
+    padding: 8px 12px;
+  }
+}
+
+.tab-description {
+  margin: 0 0 12px 0;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+.reports-summary {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
