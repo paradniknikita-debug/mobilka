@@ -289,7 +289,32 @@ class CIMXMLImporter(CIMImporter):
         RF_EXTENSION_NS,
         ITS_EXTENSION_NS,
         "http://iec.ch/TC57/CIM100#",
+        # Частые профильные расширения (зарегистрированы в экспортёре как префиксы rh:/so:)
+        "http://rushydro.ru/2015/schema-cim16#",
+        "http://so-ups.ru/2015/schema-cim16#",
     )
+
+    @staticmethod
+    def _local_class_from_resource_uri(uri: str) -> str:
+        """Имя класса из rdf:resource в rdf:type (#Local или последний сегмент пути)."""
+        u = (uri or "").strip()
+        if not u:
+            return ""
+        if "#" in u:
+            return u.rsplit("#", 1)[-1]
+        return u.rsplit("/", 1)[-1]
+
+    def _class_from_rdf_type(self, elem: ET.Element) -> Optional[str]:
+        rdf_ns = CIMObject.RDF_NAMESPACE
+        t_tag = f"{{{rdf_ns}}}type"
+        for child in elem:
+            if child.tag != t_tag:
+                continue
+            resource = child.get(f"{{{rdf_ns}}}resource")
+            if resource:
+                name = self._local_class_from_resource_uri(resource)
+                return name or None
+        return None
     
     def import_from_file(self, file_path: str) -> List[Dict[str, Any]]:
         """Импорт объектов из XML файла"""
@@ -344,8 +369,10 @@ class CIMXMLImporter(CIMImporter):
             return False
         if "FullModel" in elem.tag or "DifferenceModel" in elem.tag:
             return False
-        about = elem.get(f"{{{CIMObject.RDF_NAMESPACE}}}about")
-        return bool(about)
+        rdf_ns = CIMObject.RDF_NAMESPACE
+        about = elem.get(f"{{{rdf_ns}}}about")
+        rid = elem.get(f"{{{rdf_ns}}}ID")
+        return bool(about or rid)
 
     def _tag_namespace(self, tag: str) -> Optional[str]:
         if tag.startswith("{") and "}" in tag:
@@ -378,25 +405,39 @@ class CIMXMLImporter(CIMImporter):
         Поддерживает формат 
         """
         obj_dict = {}
-        
-        # Получаем mRID из атрибута about
-        about = elem.get(f"{{{CIMObject.RDF_NAMESPACE}}}about", "")
+
+        rdf_ns = CIMObject.RDF_NAMESPACE
+        # Идентификатор ресурса: rdf:about или rdf:ID (типовой RDF/XML без about)
+        about = elem.get(f"{{{rdf_ns}}}about", "")
+        rid = elem.get(f"{{{rdf_ns}}}ID")
+        if not about and rid:
+            about = f"#_{rid.lstrip('_')}"
+
         if about:
             # Извлекаем mRID из urn:uuid:... или #_...
             if about.startswith("urn:uuid:"):
                 obj_dict["mRID"] = about.replace("urn:uuid:", "")
             elif about.startswith("#_"):
                 obj_dict["mRID"] = about.replace("#_", "")
+            elif about.startswith("#"):
+                obj_dict["mRID"] = about[1:]
             else:
                 obj_dict["mRID"] = about
         else:
-            return {}  # Нет mRID - пропускаем
-        
-        # Имя класса (cim:, me:, rf:, its:, cim17:)
+            return {}  # Нет идентификатора ресурса — пропускаем
+
+        # Имя класса: явный тег в профильном NS, либо rdf:Description + rdf:type
         tag = elem.tag
         ns = self._tag_namespace(tag)
-        if ns and ns in self._RESOURCE_NS:
-            local = tag.split("}", 1)[-1] if "}" in tag else tag
+        local = tag.split("}", 1)[-1] if ns and "}" in tag else tag
+
+        if ns == rdf_ns and local == "Description":
+            typed = self._class_from_rdf_type(elem)
+            obj_dict["_class"] = typed if typed else "Description"
+        elif ns and ns in self._RESOURCE_NS:
+            obj_dict["_class"] = local
+        elif ns and ns not in (DM_NAMESPACE, MD_NAMESPACE, rdf_ns):
+            # Любые другие именованные ресурсы (в т.ч. не заранее перечисленные профили)
             obj_dict["_class"] = local
         
         # Парсим свойства (cim:, me:, rf:, its:, cim17:)

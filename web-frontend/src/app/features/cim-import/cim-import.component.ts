@@ -381,12 +381,22 @@ export class CimImportComponent implements OnInit {
     this.apiService.applyCIM552Diff(this.lastImportedFile).subscribe({
       next: (res) => {
         this.isApplying = false;
-        const created = res?.created_substations ?? 0;
-        this.snackBar.open(
-          `Записано в БД: подстанций ${created}, локаций ${res?.created_locations ?? 0}, точек ${res?.created_position_points ?? 0}.`,
-          'Закрыть',
-          { duration: 5000 }
-        );
+        const parts = [
+          `подстанций ${res?.created_substations ?? 0}`,
+          `ЛЭП ${res?.created_lines ?? 0}`,
+          `опор ${res?.created_poles ?? 0}`,
+          `локаций ${res?.created_locations ?? 0}`,
+          `точек ${res?.created_position_points ?? 0}`,
+        ];
+        let msg = `Записано в БД: ${parts.join(', ')}.`;
+        if (res?.hint) {
+          msg += ` ${res.hint}`;
+        }
+        const skipped = res?.skipped_lepm_scaffolding ?? 0;
+        if (skipped > 0) {
+          msg += ` Пропущено служебных узлов LEPM: ${skipped}.`;
+        }
+        this.snackBar.open(msg, 'Закрыть', { duration: res?.hint || skipped ? 12000 : 6000 });
       },
       error: (err) => {
         this.isApplying = false;

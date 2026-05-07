@@ -20,6 +20,27 @@ import {
 import { ChangeLogEntry, ChangeLogFilters, ModelIssue } from '../models/change-log.model';
 import { EquipmentCatalogCreate, EquipmentCatalogItem } from '../models/equipment-catalog.model';
 
+/** Ответ POST /cim/apply/552-diff */
+export interface CimApply552DiffResponse {
+  created_substations?: number;
+  created_locations?: number;
+  created_position_points?: number;
+  created_lines?: number;
+  created_poles?: number;
+  created_connectivity_nodes?: number;
+  created_segments?: number;
+  created_line_sections?: number;
+  created_spans?: number;
+  created_equipment?: number;
+  parsed_total?: number;
+  applied_total?: number;
+  forward_total?: number;
+  skipped_lepm_scaffolding?: number;
+  reverse_total?: number;
+  parsed_by_class?: Record<string, number>;
+  hint?: string | null;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -479,10 +500,10 @@ export class ApiService {
     );
   }
 
-  applyCIM552Diff(file: File): Observable<{ created_substations?: number; created_locations?: number; created_position_points?: number }> {
+  applyCIM552Diff(file: File): Observable<CimApply552DiffResponse> {
     const formData = new FormData();
     formData.append('file', file, file.name);
-    return this.http.post<{ created_substations?: number; created_locations?: number; created_position_points?: number }>(
+    return this.http.post<CimApply552DiffResponse>(
       `${this.apiUrl}/cim/apply/552-diff`,
       formData
     );

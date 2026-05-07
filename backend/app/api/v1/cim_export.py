@@ -26,6 +26,10 @@ from app.models.cim_line_structure import ConnectivityNode, LineSection, Termina
 from app.models.base_voltage import BaseVoltage
 from app.models.wire_info import WireInfo
 from app.core.cim.cim_xml import CIMXMLExporter, CIMXMLImporter
+from app.core.cim.cim_import_scaffolding import (
+    filter_lepm_import_folder_scaffolding,
+    is_lepm_import_folder_scaffolding,
+)
 from app.core.cim.cim_json import CIMJSONExporter
 from app.core.cim.cim_552_protocol import CIM552Service, MessagePurpose
 from app.core.cim.cim_base import CIMObject
@@ -1373,6 +1377,9 @@ async def import_cim_xml(
 ):
     """
     Импорт CIM XML (md:FullModel или dm:DifferenceModel). Парсит файл и возвращает сводку по объектам для предпросмотра.
+
+    Служебные rdf:Description дерева импорта LEPM (фиксированные MRID из профиля экспорта) исключаются из ответа:
+    в сводке и в массиве objects остаётся только применимая к нашей БД модель.
     """
     if not file.filename or not file.filename.lower().endswith(".xml"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Требуется файл .xml")
@@ -1391,6 +1398,7 @@ async def import_cim_xml(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Ошибка разбора CIM XML: {str(e)}",
         )
+    objects = filter_lepm_import_folder_scaffolding(objects)
     summary: dict = {}
     for obj in objects:
         cls = obj.get("_class") or obj.get("type") or "Unknown"
@@ -1457,6 +1465,9 @@ async def apply_cim_552_diff(
     Применить 552-диф к БД.
     Поддерживает импорт основных объектов топологии (Line / Pole / ConnectivityNode /
     ACLineSegment / ACLineSeriesSection / LineSpan / ConductingEquipment + Substation/Location/PositionPoint).
+
+    Узлы служебного дерева импорта LEPM (rdf:Description с известными MRID профиля) не записываются и учитываются
+    отдельно в поле skipped_lepm_scaffolding ответа.
     """
     if not file.filename or not file.filename.lower().endswith(".xml"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Требуется файл .xml")
@@ -1475,17 +1486,6 @@ async def apply_cim_552_diff(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Ошибка разбора XML: {str(e)}",
         )
-    by_mrid: dict = {}
-    for o in objects:
-        m = o.get("mRID") or o.get("mrid")
-        if m:
-            by_mrid[str(m)] = o
-
-    class_counts = Counter()
-    for o in objects:
-        cls_name = o.get("_class") or o.get("type") or "Unknown"
-        class_counts[str(cls_name)] += 1
-
     objects_by_mrid: Dict[str, dict] = {}
     for o in objects:
         m = (o.get("mRID") or o.get("mrid") or "").strip()
@@ -1494,8 +1494,16 @@ async def apply_cim_552_diff(
 
     # Безопасное применение 552 diff:
     # в БД применяем только forwardDifferences, reverse используем только для диагностики.
-    apply_objects = [o for o in objects if o.get("_diff_section") != "reverse"]
+    # Служебные rdf:Description с фиксированными MRID (дерево папок LEPM) пропускаем — их мы сами генерируем при экспорте.
+    forward_objects = [o for o in objects if o.get("_diff_section") != "reverse"]
     reverse_only_count = sum(1 for o in objects if o.get("_diff_section") == "reverse")
+    apply_objects = [o for o in forward_objects if not is_lepm_import_folder_scaffolding(o)]
+    scaffolding_skipped = len(forward_objects) - len(apply_objects)
+
+    class_counts = Counter()
+    for o in apply_objects:
+        cls_name = o.get("_class") or o.get("type") or "Unknown"
+        class_counts[str(cls_name)] += 1
 
     created_locations = 0
     created_position_points = 0
@@ -2023,7 +2031,8 @@ async def apply_cim_552_diff(
         )
     elif total_created == 0:
         hint = (
-            "В файле не найдено объектов, которые можно применить к текущей модели БД."
+            "В файле не найдено объектов, которые можно применить к текущей модели БД "
+            "(подстанции, ЛЭП, опоры, узлы сегментов и т.п.)."
         )
 
     return {
@@ -2039,6 +2048,8 @@ async def apply_cim_552_diff(
         "created_equipment": created_equipment,
         "parsed_total": len(objects),
         "applied_total": len(apply_objects),
+        "forward_total": len(forward_objects),
+        "skipped_lepm_scaffolding": scaffolding_skipped,
         "reverse_total": reverse_only_count,
         "parsed_by_class": dict(class_counts),
         "hint": hint,
