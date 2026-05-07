@@ -16,6 +16,7 @@ import getpass
 import os
 import re
 import sys
+from typing import Optional
 
 from sqlalchemy import or_, select
 
@@ -30,7 +31,7 @@ from app.models.user import User
 ALLOWED_ROLES = ("engineer", "dispatcher", "admin")
 
 
-def _non_empty(value: str | None) -> str | None:
+def _non_empty(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
     text = value.strip()
@@ -41,7 +42,7 @@ def _is_valid_email(email: str) -> bool:
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
 
 
-def _prompt_required(prompt: str, default: str | None = None) -> str:
+def _prompt_required(prompt: str, default: Optional[str] = None) -> str:
     while True:
         suffix = f" [{default}]" if default else ""
         value = input(f"{prompt}{suffix}: ").strip()
