@@ -83,6 +83,34 @@ class Equipment extends Table {
   DateTimeColumn get installationDate => dateTime().nullable()();
   TextColumn get condition => text()();
   TextColumn get notes => text().nullable()();
+  /// Поля карты / карточки оборудования (как на сервере Equipment), для офлайна и выбора сегмента ЛЭП.
+  TextColumn get mrid => text().nullable()();
+  IntColumn get catalogItemId => integer().nullable()();
+  RealColumn get ratedCurrent => real().nullable()();
+  RealColumn get iTh => real().nullable()();
+  RealColumn get ipMax => real().nullable()();
+  RealColumn get tTh => real().nullable()();
+  BoolColumn get normalOpen => boolean().nullable()();
+  BoolColumn get retained => boolean().nullable()();
+  TextColumn get identifiedObjectDescription => text().nullable()();
+  TextColumn get nameplate => text().nullable()();
+  TextColumn get psrSubtype => text().nullable()();
+  TextColumn get installationDisplayName => text().nullable()();
+  TextColumn get tmCode => text().nullable()();
+  TextColumn get objectSubtype => text().nullable()();
+  IntColumn get poleCount => integer().nullable()();
+  TextColumn get parentObjectRef => text().nullable()();
+  TextColumn get parentMainEquipmentPoleRef => text().nullable()();
+  RealColumn get nominalVoltageKv => real().nullable()();
+  RealColumn get nominalBreakingCurrentKa => real().nullable()();
+  RealColumn get ownTripTimeSec => real().nullable()();
+  RealColumn get emergencyCurrentA => real().nullable()();
+  RealColumn get continuousCurrentA => real().nullable()();
+  TextColumn get arresterType => text().nullable()();
+  /// Долгота / широта объекта оборудования (CIM x/y), если заданы — помогают привязать к нужному пролёту.
+  RealColumn get xPosition => real().nullable()();
+  RealColumn get yPosition => real().nullable()();
+  RealColumn get directionAngle => real().nullable()();
   IntColumn get createdBy => integer()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().nullable()();
@@ -207,6 +235,34 @@ class AppDatabase extends _$AppDatabase {
           if (from < 10) {
             await migrator.addColumn(poles, poles.structuralDefect);
             await migrator.addColumn(poles, poles.structuralDefectCriticality);
+          }
+          if (from < 11) {
+            await migrator.addColumn(equipment, equipment.mrid);
+            await migrator.addColumn(equipment, equipment.catalogItemId);
+            await migrator.addColumn(equipment, equipment.ratedCurrent);
+            await migrator.addColumn(equipment, equipment.iTh);
+            await migrator.addColumn(equipment, equipment.ipMax);
+            await migrator.addColumn(equipment, equipment.tTh);
+            await migrator.addColumn(equipment, equipment.normalOpen);
+            await migrator.addColumn(equipment, equipment.retained);
+            await migrator.addColumn(equipment, equipment.identifiedObjectDescription);
+            await migrator.addColumn(equipment, equipment.nameplate);
+            await migrator.addColumn(equipment, equipment.psrSubtype);
+            await migrator.addColumn(equipment, equipment.installationDisplayName);
+            await migrator.addColumn(equipment, equipment.tmCode);
+            await migrator.addColumn(equipment, equipment.objectSubtype);
+            await migrator.addColumn(equipment, equipment.poleCount);
+            await migrator.addColumn(equipment, equipment.parentObjectRef);
+            await migrator.addColumn(equipment, equipment.parentMainEquipmentPoleRef);
+            await migrator.addColumn(equipment, equipment.nominalVoltageKv);
+            await migrator.addColumn(equipment, equipment.nominalBreakingCurrentKa);
+            await migrator.addColumn(equipment, equipment.ownTripTimeSec);
+            await migrator.addColumn(equipment, equipment.emergencyCurrentA);
+            await migrator.addColumn(equipment, equipment.continuousCurrentA);
+            await migrator.addColumn(equipment, equipment.arresterType);
+            await migrator.addColumn(equipment, equipment.xPosition);
+            await migrator.addColumn(equipment, equipment.yPosition);
+            await migrator.addColumn(equipment, equipment.directionAngle);
           }
         },
       );

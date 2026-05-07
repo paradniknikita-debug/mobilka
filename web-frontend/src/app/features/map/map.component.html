@@ -169,17 +169,6 @@
           </table>
         </div>
       </div>
-      <div class="property-item" *ngIf="selectedPole.terminals && selectedPole.terminals.length">
-        <span class="property-label">Терминалы:</span>
-        <span class="property-value">
-          <ng-container *ngFor="let t of selectedPole.terminals; let i = index">
-            <span class="terminal-chip">
-              {{ t.name || ('T' + t.sequence_number) }}
-              <span class="terminal-dir">({{ t.connection_direction }})</span>
-            </span><span *ngIf="i < selectedPole.terminals.length - 1">, </span>
-          </ng-container>
-        </span>
-      </div>
       <div class="property-item property-item--equipment-list" *ngIf="getPoleEquipmentForCard().length">
         <span class="property-label">Оборудование:</span>
         <span class="property-value equipment-list">
@@ -240,13 +229,6 @@
       <div class="property-item">
         <span class="property-label">Опора ID:</span>
         <span class="property-value">{{ selectedEquipment.pole_id ?? '—' }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">Координаты (x, y / ш, д):</span>
-        <span class="property-value coord">
-          {{ selectedEquipment.y_position != null ? (selectedEquipment.y_position | number:'1.6-6') : '—' }},
-          {{ selectedEquipment.x_position != null ? (selectedEquipment.x_position | number:'1.6-6') : '—' }}
-        </span>
       </div>
       <div class="property-item" *ngIf="selectedEquipment.manufacturer">
         <span class="property-label">Производитель:</span>

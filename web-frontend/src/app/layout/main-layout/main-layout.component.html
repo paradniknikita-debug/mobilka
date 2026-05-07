@@ -8,9 +8,6 @@
     <a mat-button routerLink="/cim-import" routerLinkActive="active-tab" class="nav-tab">CIM / 552</a>
     <a mat-button routerLink="/equipment-catalog" routerLinkActive="active-tab" class="nav-tab">Справочник</a>
     <span class="spacer"></span>
-    <button mat-icon-button (click)="toggleTheme()" [matTooltip]="themeService.isDark ? 'Светлая тема' : 'Тёмная тема'">
-      <mat-icon>{{ themeService.isDark ? 'light_mode' : 'dark_mode' }}</mat-icon>
-    </button>
     <button mat-icon-button [matMenuTriggerFor]="userMenu">
       <mat-icon>account_circle</mat-icon>
     </button>

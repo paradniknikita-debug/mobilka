@@ -4,7 +4,6 @@ import { filter, takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { Router, NavigationEnd } from '@angular/router';
 import { SidebarService } from '../../core/services/sidebar.service';
-import { ThemeService } from '../../core/services/theme.service';
 
 @Component({
   selector: 'app-main-layout',
@@ -24,8 +23,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private router: Router,
-    private sidebarService: SidebarService,
-    public themeService: ThemeService
+    private sidebarService: SidebarService
   ) {
     this.sidebarService.setSidebarVisible(this.sidebarVisible);
     this.sidebarService.setSidebarWidth(this.sidebarWidth);
@@ -92,8 +90,5 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     this.router.navigate(['/login']);
   }
 
-  toggleTheme(): void {
-    this.themeService.toggleTheme();
-  }
 }
 

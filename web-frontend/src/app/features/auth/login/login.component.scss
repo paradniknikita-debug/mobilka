@@ -12,16 +12,6 @@
   color: #e2e8f0;
 }
 
-.theme-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 3;
-  color: rgba(226, 232, 240, 0.92);
-  background: rgba(15, 23, 42, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
 .auth-bg {
   position: absolute;
   inset: 0;
@@ -349,31 +339,3 @@
   }
 }
 
-:host-context(body.app-theme-light) .auth-shell {
-  color: #0f172a;
-}
-
-:host-context(body.app-theme-light) .theme-toggle {
-  color: #0f172a;
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(15, 23, 42, 0.12);
-}
-
-:host-context(body.app-theme-light) .auth-bg {
-  background: linear-gradient(160deg, #eaf2ff 0%, #f8fbff 42%, #eef4ff 100%);
-}
-
-:host-context(body.app-theme-light) .brand-title {
-  color: #0f172a;
-  text-shadow: none;
-}
-
-:host-context(body.app-theme-light) .brand-subtitle {
-  color: rgba(15, 23, 42, 0.75);
-}
-
-:host-context(body.app-theme-light) .brand-list li {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: rgba(15, 23, 42, 0.08);
-  color: rgba(15, 23, 42, 0.88);
-}

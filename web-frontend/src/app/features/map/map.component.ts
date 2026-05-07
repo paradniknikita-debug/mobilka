@@ -27,6 +27,9 @@ import { colorForVoltageKv, lineWeightForBranch } from '../../core/map/voltage-l
 })
 export class MapComponent implements OnInit, OnDestroy {
   readonly formatCardCommentAt = formatCardCommentDateTime;
+  private readonly equipmentBaseTNearPole = 0.2;
+  private readonly equipmentBaseTFarPole = 0.8;
+  private readonly equipmentSpreadStep = 0.05;
 
   map: L.Map | null = null;
   mapData: MapData | null = null;
@@ -290,11 +293,6 @@ export class MapComponent implements OnInit, OnDestroy {
                   latitude: (this.selectedPole as any).latitude ?? (pole as any).y_position,
                   longitude: (this.selectedPole as any).longitude ?? (pole as any).x_position
                 });
-              }
-            });
-            this.apiService.getPoleTerminals(poleId).subscribe({
-              next: (terms) => {
-                (this.selectedPole as any).terminals = terms || [];
               }
             });
           }
@@ -876,11 +874,6 @@ export class MapComponent implements OnInit, OnDestroy {
                 });
               }
             });
-            this.apiService.getPoleTerminals(poleId).subscribe({
-              next: (terms) => {
-                (this.selectedPole as any).terminals = terms || [];
-              }
-            });
           }
         });
 
@@ -1138,6 +1131,29 @@ export class MapComponent implements OnInit, OnDestroy {
     return lineAngleRad;
   }
 
+  /** Точка на отрезке в Web Mercator — как у Flutter; Leaflet рисует линию в EPSG:3857. */
+  private interpolateAlongWebMercator(lat1: number, lng1: number, lat2: number, lng2: number, t: number): L.LatLng {
+    const R = 6378137;
+    const x1 = (R * lng1 * Math.PI) / 180;
+    const y1 = R * Math.log(Math.tan(Math.PI / 4 + (lat1 * Math.PI) / 360));
+    const x2 = (R * lng2 * Math.PI) / 180;
+    const y2 = R * Math.log(Math.tan(Math.PI / 4 + (lat2 * Math.PI) / 360));
+    const x = x1 + (x2 - x1) * t;
+    const y = y1 + (y2 - y1) * t;
+    const lng = (x / R) * 180 / Math.PI;
+    const lat = ((2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180) / Math.PI;
+    return L.latLng(lat, lng);
+  }
+
+  private segmentOtherPoleIdForEquipment(
+    seg: { p1: GeoJSONFeature; p2: GeoJSONFeature },
+    poleId: number
+  ): number {
+    const id1 = Number(seg.p1.properties?.['id']);
+    const id2 = Number(seg.p2.properties?.['id']);
+    return id1 === poleId ? id2 : id1;
+  }
+
   /**
    * Угол пролёта в экранных координатах: всегда от опоры с меньшим id к большему
    * (совпадает с Flutter — одна «сторона» символа относительно трассы).
@@ -1175,26 +1191,29 @@ export class MapComponent implements OnInit, OnDestroy {
     base: L.LatLng,
     slot: number
   ): L.LatLng {
-    const dx = to.lng - from.lng;
-    const dy = to.lat - from.lat;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len <= 1e-12) return base;
-    const ux = dx / len;
-    const uy = dy / len;
+    if (!this.map) return base;
+    const basePx = this.map.latLngToContainerPoint(base);
+    const toPx = this.map.latLngToContainerPoint(to);
+    const vx = toPx.x - basePx.x;
+    const vy = toPx.y - basePx.y;
+    const len = Math.sqrt(vx * vx + vy * vy);
+    if (len <= 1e-6) return base;
+
+    const ux = vx / len;
+    const uy = vy / len;
     const nx = -uy;
     const ny = ux;
 
-    const alongMeters = 16;
+    // Pixel-based spacing keeps equipment visually separated at any zoom.
+    const alongPx = 26;
     const ring = Math.floor((slot + 1) / 2);
     const side = slot % 2 === 0 ? 1 : -1;
-    const crossMeters = slot === 0 ? 0 : side * (14 * ring);
+    const crossPx = slot === 0 ? 0 : side * (20 * ring);
 
-    const latRad = base.lat * Math.PI / 180;
-    const metersPerDegLat = 111320;
-    const metersPerDegLng = Math.max(111320 * Math.abs(Math.cos(latRad)), 1);
-    const dLat = (alongMeters * uy + crossMeters * ny) / metersPerDegLat;
-    const dLng = (alongMeters * ux + crossMeters * nx) / metersPerDegLng;
-    return L.latLng(base.lat + dLat, base.lng + dLng);
+    const dxPx = alongPx * ux + crossPx * nx;
+    const dyPx = alongPx * uy + crossPx * ny;
+    const moved = L.point(basePx.x + dxPx, basePx.y + dyPx);
+    return this.map.containerPointToLatLng(moved);
   }
 
   /**
@@ -1427,12 +1446,25 @@ export class MapComponent implements OnInit, OnDestroy {
           if (id != null && !byId.has(Number(id))) byId.set(Number(id), f);
         });
         poles = Array.from(byId.values()).sort((a, b) => {
-          const sa = Number(a.properties?.['sequence_number']);
-          const sb = Number(b.properties?.['sequence_number']);
-          if (Number.isFinite(sa) && Number.isFinite(sb) && sa !== sb) return sa - sb;
+          const rawA = a.properties?.['sequence_number'];
+          const rawB = b.properties?.['sequence_number'];
+          const hasA = rawA != null && rawA !== '' && Number.isFinite(Number(rawA));
+          const hasB = rawB != null && rawB !== '' && Number.isFinite(Number(rawB));
+          if (hasA !== hasB) {
+            return hasA ? -1 : 1;
+          }
+          if (hasA && hasB) {
+            const sa = Number(rawA);
+            const sb = Number(rawB);
+            if (sa !== sb) {
+              return sa - sb;
+            }
+          }
           const oa = this.poleOrderFromNumber(a.properties?.['pole_number']);
           const ob = this.poleOrderFromNumber(b.properties?.['pole_number']);
-          if (oa !== ob) return oa - ob;
+          if (oa !== ob) {
+            return oa - ob;
+          }
           return String(a.properties?.['pole_number'] ?? '').localeCompare(String(b.properties?.['pole_number'] ?? ''));
         });
         const keyParts = branchKey.split(':');
@@ -1470,7 +1502,6 @@ export class MapComponent implements OnInit, OnDestroy {
       const iconSize = 64;
       const iconAnchorCenter = iconSize / 2;
       const getIconAnchor = (_iconKey: string): [number, number] => [iconAnchorCenter, iconAnchorCenter];
-      const segmentPoleSlots = new Map<string, number>();
       const allPolesForLine = Array.from(
         new Map(
           polesFeatures
@@ -1489,11 +1520,16 @@ export class MapComponent implements OnInit, OnDestroy {
           .filter((x) => x.iconKey != null)
           .map((x) => x.eq)
           .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-        eqList.forEach((eq) => {
+        eqList.forEach((eq, idx) => {
           const eqId = Number((eq as any).id);
           if (Number.isFinite(eqId) && rendered.has(eqId)) return;
 
-          let selected = candidates[0];
+          const sortedCandidates = [...candidates].sort(
+            (s1, s2) =>
+              this.segmentOtherPoleIdForEquipment(s1, poleId) -
+              this.segmentOtherPoleIdForEquipment(s2, poleId)
+          );
+          let selected = sortedCandidates[0];
           const directionRef = (eq as any).parent_main_equipment_pole_ref;
           if (
             this.usesDirectionalPoleRef((eq as any).equipment_type) &&
@@ -1518,28 +1554,16 @@ export class MapComponent implements OnInit, OnDestroy {
           const lat1 = Number(c1[1]);
           const lng2 = Number(c2[0]);
           const lat2 = Number(c2[1]);
-          const dx = lng2 - lng1;
-          const dy = lat2 - lat1;
           const iconKey = this.getLineEquipmentIconKey(eq);
           if (!iconKey) return;
           const hasDefect = this.hasEquipmentDefect(eq);
           if (this.showOnlyDefective && !hasDefect) return;
-          const isAtP1 = Number(p1.properties?.['id']) === poleId;
-          const id1 = Number(p1.properties?.['id']);
-          const id2 = Number(p2.properties?.['id']);
-          const segKey = id1 < id2 ? `${id1}|${id2}` : `${id2}|${id1}`;
-          const slotKey = `${segKey}|${poleId}`;
-          const slot = segmentPoleSlots.get(slotKey) ?? 0;
-          segmentPoleSlots.set(slotKey, slot + 1);
-          const poleBase = isAtP1 ? L.latLng(lat1, lng1) : L.latLng(lat2, lng2);
-          const lineFrom = isAtP1 ? L.latLng(lat1, lng1) : L.latLng(lat2, lng2);
-          const lineTo = isAtP1 ? L.latLng(lat2, lng2) : L.latLng(lat1, lng1);
-          const centerLatLng = this.offsetAlongAndPerpendicular(
-            lineFrom,
-            lineTo,
-            poleBase,
-            slot
-          );
+          const baseT = Number(p1.properties?.['id']) === poleId
+            ? this.equipmentBaseTNearPole
+            : this.equipmentBaseTFarPole;
+          const spread = (idx - (eqList.length - 1) / 2) * this.equipmentSpreadStep;
+          const t = Math.max(0.1, Math.min(0.9, baseT + spread));
+          const centerLatLng = this.interpolateAlongWebMercator(lat1, lng1, lat2, lng2, t);
           const lineAngleBaseRad = this.screenLineAngleRadCanonical(p1, p2, mapRef);
           const modelAngleRad = this.modelAngleRadForIcon(iconKey, lineAngleBaseRad);
           const modelAngleDeg = modelAngleRad * 180 / Math.PI;

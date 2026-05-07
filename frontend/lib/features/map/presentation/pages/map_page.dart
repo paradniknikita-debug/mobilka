@@ -50,6 +50,9 @@ class MapPage extends ConsumerStatefulWidget {
 }
 
 class _MapPageState extends ConsumerState<MapPage> {
+  static const double _equipmentBaseTNearPole = 0.2;
+  static const double _equipmentBaseTFarPole = 0.8;
+  static const double _equipmentSpreadStep = 0.05;
   late MapController _mapController;
   LatLng? _currentLocation;
   bool _isLoading = true;
@@ -464,69 +467,39 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         }
         final renderedEquipment = <int>{};
-        final segmentPoleSlots = <String, int>{};
         for (final p in plPoles) {
           final eqList = (equipmentByPole[p.id] ?? const <drift_db.EquipmentData>[])
               .where((e) => _lineEquipmentIconForEquipment(e) != null)
               .toList()
             ..sort((a, b) => a.id.compareTo(b.id));
-          for (final e in eqList) {
+          for (var idx = 0; idx < eqList.length; idx++) {
+            final e = eqList[idx];
             if (renderedEquipment.contains(e.id)) continue;
             final candidates = adjacency[p.id] ?? const <Map<String, dynamic>>[];
             if (candidates.isEmpty) continue;
-            Map<String, dynamic>? selected;
-            final ref = _localDirectionRefFromNotes(e);
-            if (_usesDirectionalPoleRef(e.equipmentType) &&
-                ref != null &&
-                ref.isNotEmpty) {
-              for (final s in candidates) {
-                final p1 = s['p1'] as drift_db.Pole;
-                final p2 = s['p2'] as drift_db.Pole;
-                final other = p1.id == p.id ? p2 : p1;
-                if (_matchesPoleRef(ref, other.id, other.poleNumber)) {
-                  selected = s;
-                  break;
-                }
-              }
-            }
-            selected ??= candidates.first;
+            final selected =
+                _pickLineEquipmentSegmentLocal(candidates: candidates, poleId: p.id, equipment: e);
+            if (selected == null) continue;
             final selectedSeg = selected;
-            if (selectedSeg == null) continue;
             final p1 = selectedSeg['p1'] as drift_db.Pole;
             final p2 = selectedSeg['p2'] as drift_db.Pole;
             final x1 = selectedSeg['x1'] as double;
             final y1 = selectedSeg['y1'] as double;
             final x2 = selectedSeg['x2'] as double;
             final y2 = selectedSeg['y2'] as double;
-            final fromPole = p1.id <= p2.id ? p1 : p2;
-            final toPole = p1.id <= p2.id ? p2 : p1;
-            final fx = (fromPole.xPosition ?? 0.0);
-            final fy = (fromPole.yPosition ?? 0.0);
-            final tx = (toPole.xPosition ?? 0.0);
-            final ty = (toPole.yPosition ?? 0.0);
-            final angleRad = math.atan2(ty - fy, tx - fx);
-            final isAtP1 = p.id == p1.id;
-            final segKey = p1.id < p2.id ? '${p1.id}|${p2.id}' : '${p2.id}|${p1.id}';
-            final slotKey = '$segKey|${p.id}';
-            final slot = segmentPoleSlots[slotKey] ?? 0;
-            segmentPoleSlots[slotKey] = slot + 1;
-            final nearPole = isAtP1
-                ? _offsetFromPoleAlongSegment(
-                    poleLat: y1,
-                    poleLng: x1,
-                    otherLat: y2,
-                    otherLng: x2,
-                    slot: slot,
-                  )
-                : _offsetFromPoleAlongSegment(
-                    poleLat: y2,
-                    poleLng: x2,
-                    otherLat: y1,
-                    otherLng: x1,
-                    slot: slot,
-                  );
-            final lng = nearPole.longitude;
-            final lat = nearPole.latitude;
+            // Важно: угол линии и интерполяция t должны использовать ОДИН порядок концов
+            // (как упорядочены полюса на ветке p1→p2). Сортировка по id давала переворот
+            // направления и «летающие» двухполюсные символы (разъединитель и т.д.).
+            final fromPoleStable = p1.id <= p2.id ? p1 : p2;
+            final toPoleStable = p1.id <= p2.id ? p2 : p1;
+            final angleRad = math.atan2(y2 - y1, x2 - x1);
+            final baseT = p.id == p1.id ? _equipmentBaseTNearPole : _equipmentBaseTFarPole;
+            final spread = (idx - (eqList.length - 1) / 2) * _equipmentSpreadStep;
+            final t = (baseT + spread).clamp(0.1, 0.9).toDouble();
+            final pos =
+                _interpolateAlongLineMercator(LatLng(y1, x1), LatLng(y2, x2), t);
+            final lng = pos.longitude;
+            final lat = pos.latitude;
             final iconPath = _lineEquipmentIconForEquipment(e)!;
             lineEquipmentFeatures.add({
               'type': 'Feature',
@@ -535,17 +508,17 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'icon': iconPath,
                 'equipment_type': e.equipmentType,
                 'name': e.name,
-                'from_pole_id': fromPole.id,
-                'to_pole_id': toPole.id,
+                'from_pole_id': fromPoleStable.id,
+                'to_pole_id': toPoleStable.id,
                 'line_id': pl.id,
                 'pole_id': e.poleId,
                 'equipment_id': e.id,
                 'pole_number': p.poleNumber,
                 'angle_rad': angleRad,
-                'from_lng': fx,
-                'from_lat': fy,
-                'to_lng': tx,
-                'to_lat': ty,
+                'from_lng': x1,
+                'from_lat': y1,
+                'to_lng': x2,
+                'to_lat': y2,
               },
             });
             renderedEquipment.add(e.id);
@@ -1049,16 +1022,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         });
       }
       for (final list in serverPolesByLine.values) {
-        list.sort((a, b) {
-          final snA = a['sequence_number'] as int?;
-          final snB = b['sequence_number'] as int?;
-          if (snA != null && snB != null && snA != snB) return snA.compareTo(snB);
-          final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
-          final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
-          if (oa != ob) return oa.compareTo(ob);
-          return ((a['pole_number']?.toString()) ?? '')
-              .compareTo((b['pole_number']?.toString()) ?? '');
-        });
+        list.sort(_compareServerPolesLikeBackendLineSort);
       }
 
       final equipmentByPoleServer = <int, List<Equipment>>{};
@@ -1107,7 +1071,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         }
         final renderedEquipment = <int>{};
-        final segmentPoleSlots = <String, int>{};
         for (final p in plPoles) {
           final pId = p['id'] as int;
           final pNum = (p['pole_number']?.toString()) ?? '';
@@ -1115,29 +1078,14 @@ class _MapPageState extends ConsumerState<MapPage> {
               .where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null)
               .toList()
             ..sort((a, b) => a.id.compareTo(b.id));
-          for (final e in eqList) {
+          for (var idx = 0; idx < eqList.length; idx++) {
+            final e = eqList[idx];
             if (renderedEquipment.contains(e.id)) continue;
             final candidates = adjacency[pId] ?? const <Map<String, dynamic>>[];
             if (candidates.isEmpty) continue;
-            Map<String, dynamic>? selected;
-            final ref = e.parentMainEquipmentPoleRef;
-            if (_usesDirectionalPoleRef(e.equipmentType) &&
-                ref != null &&
-                ref.trim().isNotEmpty) {
-              for (final s in candidates) {
-                final p1 = s['p1'] as Map<String, dynamic>;
-                final p2 = s['p2'] as Map<String, dynamic>;
-                final p1Id = p1['id'] as int;
-                final other = p1Id == pId ? p2 : p1;
-                final otherId = other['id'] as int;
-                final otherNum = (other['pole_number']?.toString()) ?? '';
-                if (_matchesPoleRef(ref, otherId, otherNum)) {
-                  selected = s;
-                  break;
-                }
-              }
-            }
-            selected ??= candidates.first;
+            final selected =
+                _pickLineEquipmentSegmentServer(candidates: candidates, poleId: pId, equipment: e);
+            if (selected == null) continue;
             final p1 = selected['p1'] as Map<String, dynamic>;
             final p2 = selected['p2'] as Map<String, dynamic>;
             final x1 = (p1['x_position'] as num?)?.toDouble();
@@ -1149,37 +1097,16 @@ class _MapPageState extends ConsumerState<MapPage> {
             final p2Id = p2['id'] as int;
             final fromP = p1Id <= p2Id ? p1 : p2;
             final toP = p1Id <= p2Id ? p2 : p1;
-            final fx = (fromP['x_position'] as num?)?.toDouble();
-            final fy = (fromP['y_position'] as num?)?.toDouble();
-            final tx = (toP['x_position'] as num?)?.toDouble();
-            final ty = (toP['y_position'] as num?)?.toDouble();
-            if (fx == null || fy == null || tx == null || ty == null) continue;
-            final angleRad = math.atan2(ty - fy, tx - fx);
-            final isAtP1 = pId == p1Id;
-            final segKey = p1Id < p2Id ? '$p1Id|$p2Id' : '$p2Id|$p1Id';
-            final slotKey = '$segKey|$pId';
-            final slot = segmentPoleSlots[slotKey] ?? 0;
-            segmentPoleSlots[slotKey] = slot + 1;
-            final nearPole = isAtP1
-                ? _offsetFromPoleAlongSegment(
-                    poleLat: y1,
-                    poleLng: x1,
-                    otherLat: y2,
-                    otherLng: x2,
-                    slot: slot,
-                  )
-                : _offsetFromPoleAlongSegment(
-                    poleLat: y2,
-                    poleLng: x2,
-                    otherLat: y1,
-                    otherLng: x1,
-                    slot: slot,
-                  );
-            double lng = nearPole.longitude;
-            double lat = nearPole.latitude;
-            // Временно игнорируем сохранённые x/y позиции оборудования.
-            // На проде есть исторические данные с "уплывшими" координатами,
-            // из-за которых маркеры уезжают от опоры. Рисуем строго от опоры.
+            // Тот же порядок p1→p2, что и при интерполяции (концы ветки), иначе угол
+            // экрана не совпадает с направлением линии — двухполюсные знаки «уезжают».
+            final angleRad = math.atan2(y2 - y1, x2 - x1);
+            final baseT = pId == p1Id ? _equipmentBaseTNearPole : _equipmentBaseTFarPole;
+            final spread = (idx - (eqList.length - 1) / 2) * _equipmentSpreadStep;
+            final t = (baseT + spread).clamp(0.1, 0.9).toDouble();
+            final pos =
+                _interpolateAlongLineMercator(LatLng(y1, x1), LatLng(y2, x2), t);
+            final lng = pos.longitude;
+            final lat = pos.latitude;
             final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
             lineEquipmentFeatures.add({
               'type': 'Feature',
@@ -1195,10 +1122,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'equipment_id': e.id,
                 'pole_number': pNum,
                 'angle_rad': angleRad,
-                'from_lng': fx,
-                'from_lat': fy,
-                'to_lng': tx,
-                'to_lat': ty,
+                'from_lng': x1,
+                'from_lat': y1,
+                'to_lng': x2,
+                'to_lat': y2,
               },
             });
             renderedEquipment.add(e.id);
@@ -1359,18 +1286,55 @@ class _MapPageState extends ConsumerState<MapPage> {
     final db = ref.read(drift_db.databaseProvider);
     for (final eq in serverEquipment) {
       try {
+        final ex = await db.getEquipment(eq.id);
         await db.insertEquipmentOrReplace(
           drift_db.EquipmentCompanion.insert(
             id: drift.Value(eq.id),
             poleId: eq.poleId,
             equipmentType: eq.equipmentType,
             name: eq.name,
-            // quantity / defect / criticality на сервере пока не используются — локальные значения не перетираем
+            quantity: drift.Value(ex?.quantity ?? 1),
+            defect: drift.Value(ex?.defect),
+            criticality: drift.Value(ex?.criticality),
+            defectAttachment: drift.Value(ex?.defectAttachment),
+            manufacturer: drift.Value(eq.manufacturer),
+            model: drift.Value(eq.model),
+            serialNumber: drift.Value(eq.serialNumber),
+            yearManufactured: drift.Value(eq.yearManufactured),
+            installationDate: drift.Value(eq.installationDate),
             condition: eq.condition,
             notes: drift.Value(eq.notes),
+            mrid: drift.Value(eq.mrid),
+            catalogItemId: drift.Value(eq.catalogItemId),
+            ratedCurrent: drift.Value(eq.ratedCurrent),
+            iTh: drift.Value(eq.iTh),
+            ipMax: drift.Value(eq.ipMax),
+            tTh: drift.Value(eq.tTh),
+            normalOpen: drift.Value(eq.normalOpen),
+            retained: drift.Value(eq.retained),
+            identifiedObjectDescription: drift.Value(eq.identifiedObjectDescription),
+            nameplate: drift.Value(eq.nameplate),
+            psrSubtype: drift.Value(eq.psrSubtype),
+            installationDisplayName: drift.Value(eq.installationDisplayName),
+            tmCode: drift.Value(eq.tmCode),
+            objectSubtype: drift.Value(eq.objectSubtype),
+            poleCount: drift.Value(eq.poleCount),
+            parentObjectRef: drift.Value(eq.parentObjectRef),
+            parentMainEquipmentPoleRef: drift.Value(eq.parentMainEquipmentPoleRef),
+            nominalVoltageKv: drift.Value(eq.nominalVoltageKv),
+            nominalBreakingCurrentKa: drift.Value(eq.nominalBreakingCurrentKa),
+            ownTripTimeSec: drift.Value(eq.ownTripTimeSec),
+            emergencyCurrentA: drift.Value(eq.emergencyCurrentA),
+            continuousCurrentA: drift.Value(eq.continuousCurrentA),
+            arresterType: drift.Value(eq.arresterType),
+            xPosition: drift.Value(eq.xPosition),
+            yPosition: drift.Value(eq.yPosition),
+            directionAngle: drift.Value(ex?.directionAngle),
             createdBy: eq.createdBy,
             createdAt: eq.createdAt,
             updatedAt: drift.Value(eq.updatedAt),
+            isLocal: drift.Value(ex?.isLocal ?? false),
+            needsSync: drift.Value(ex?.needsSync ?? false),
           ),
         );
       } catch (_) {
@@ -1553,7 +1517,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                         }
                       },
                       maxNativeZoom: 19,
-                      maxZoom: 18,
+                      maxZoom: 20,
                       userAgentPackageName: 'com.lepm.mobile',
                     ),
                     
@@ -1934,19 +1898,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       final isCurrentPatrol = lineId == _currentLineId;
       // Магистраль: только опоры без "/" в номере, линия не включает опоры отпаек
       final mainList = list.where((e) => !(e['pole_number'] as String).contains('/')).toList();
-      mainList.sort((a, b) {
-        const absentSeq = 1 << 20;
-        final sa = _toInt(a['sequence_number']);
-        final sb = _toInt(b['sequence_number']);
-        final ra = sa ?? absentSeq;
-        final rb = sb ?? absentSeq;
-        if (ra != rb) return ra.compareTo(rb);
-        final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
-        final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
-        if (oa != ob) return oa.compareTo(ob);
-        return ((a['pole_number']?.toString()) ?? '')
-            .compareTo((b['pole_number']?.toString()) ?? '');
-      });
+      mainList.sort(_compareServerPolesLikeBackendLineSort);
       if (mainList.length >= 2) {
         final points = mainList.map((e) => LatLng(_toDouble(e['lat']), _toDouble(e['lng']))).toList();
         final vl = _voltageKvForPowerLine(lineId);
@@ -2300,6 +2252,12 @@ class _MapPageState extends ConsumerState<MapPage> {
     return Offset(px, py);
   }
 
+  Offset _rotatedAnchorPx(String iconKey, List<double> anchorVb, double iconSize, double angleRad) {
+    final center = Offset(iconSize / 2, iconSize / 2);
+    final anchorPx = _viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
+    return _rotatePointAround(anchorPx, center, angleRad);
+  }
+
   double _modelAngleRadForIcon(String iconKey, double lineAngleRad) {
     if (iconKey == 'disconnector') {
       var a = lineAngleRad % math.pi;
@@ -2330,6 +2288,157 @@ class _MapPageState extends ConsumerState<MapPage> {
       final dy = to.latitude - from.latitude;
       return math.atan2(dy, dx);
     }
+  }
+
+  static const double _webMercatorR = 6378137.0;
+
+  double _mercatorYFromLatDeg(double latDeg) {
+    final latRad = latDeg * math.pi / 180.0;
+    return _webMercatorR * math.log(math.tan(math.pi / 4.0 + latRad / 2.0));
+  }
+
+  /// Точка на отрезке в координатах Web Mercator — совпадает с тем, как flutter_map
+  /// рисует Polyline между двумя LatLng (иначе линейная интерполяция в WGS84 даёт «зазор» от линии).
+  LatLng _interpolateAlongLineMercator(LatLng a, LatLng b, double t) {
+    final ax = _webMercatorR * a.longitude * math.pi / 180.0;
+    final ay = _mercatorYFromLatDeg(a.latitude);
+    final bx = _webMercatorR * b.longitude * math.pi / 180.0;
+    final by = _mercatorYFromLatDeg(b.latitude);
+    final x = ax + (bx - ax) * t;
+    final y = ay + (by - ay) * t;
+    final lng = (x / _webMercatorR) * 180.0 / math.pi;
+    final lat = (2.0 * math.atan(math.exp(y / _webMercatorR)) - math.pi / 2.0) *
+        180.0 /
+        math.pi;
+    return LatLng(lat, lng);
+  }
+
+  double _pointToSegmentDistSqMercator(double lngE, double latE, LatLng a, LatLng b) {
+    final ex = _webMercatorR * lngE * math.pi / 180.0;
+    final ey = _mercatorYFromLatDeg(latE);
+    final ax = _webMercatorR * a.longitude * math.pi / 180.0;
+    final ay = _mercatorYFromLatDeg(a.latitude);
+    final bx = _webMercatorR * b.longitude * math.pi / 180.0;
+    final by = _mercatorYFromLatDeg(b.latitude);
+    final abx = bx - ax;
+    final aby = by - ay;
+    final aex = ex - ax;
+    final aey = ey - ay;
+    final len2 = abx * abx + aby * aby;
+    if (len2 < 1e-12) {
+      final dx = ex - ax;
+      final dy = ey - ay;
+      return dx * dx + dy * dy;
+    }
+    var t = (aex * abx + aey * aby) / len2;
+    t = t.clamp(0.0, 1.0);
+    final cx = ax + abx * t;
+    final cy = ay + aby * t;
+    final dx = ex - cx;
+    final dy = ey - cy;
+    return dx * dx + dy * dy;
+  }
+
+  int _segmentOtherPoleIdFromAdjacencySeg(Map<String, dynamic> seg, int poleId) {
+    final p1 = seg['p1'];
+    if (p1 is drift_db.Pole) {
+      final p2 = seg['p2'] as drift_db.Pole;
+      return p1.id == poleId ? p2.id : p1.id;
+    }
+    final m1 = seg['p1'] as Map<String, dynamic>;
+    final m2 = seg['p2'] as Map<String, dynamic>;
+    final id1 = m1['id'] as int;
+    final id2 = m2['id'] as int;
+    return id1 == poleId ? id2 : id1;
+  }
+
+  Map<String, dynamic>? _pickLineEquipmentSegmentLocal({
+    required List<Map<String, dynamic>> candidates,
+    required int poleId,
+    required drift_db.EquipmentData equipment,
+  }) {
+    if (candidates.isEmpty) return null;
+    final refNotes = _localDirectionRefFromNotes(equipment);
+    final refDb = (equipment.parentMainEquipmentPoleRef ?? '').trim();
+    final refNotesTrimmed = (refNotes ?? '').trim();
+    final refPrefer = refDb.isNotEmpty ? refDb : refNotesTrimmed;
+    if (_usesDirectionalPoleRef(equipment.equipmentType) && refPrefer.isNotEmpty) {
+      for (final s in candidates) {
+        final p1 = s['p1'] as drift_db.Pole;
+        final p2 = s['p2'] as drift_db.Pole;
+        final other = p1.id == poleId ? p2 : p1;
+        if (_matchesPoleRef(refPrefer, other.id, other.poleNumber)) return s;
+      }
+    }
+    final elng = equipment.xPosition;
+    final elat = equipment.yPosition;
+    if (elng != null && elat != null) {
+      Map<String, dynamic>? best;
+      var bestD = double.infinity;
+      for (final s in candidates) {
+        final x1 = s['x1'] as double;
+        final y1 = s['y1'] as double;
+        final x2 = s['x2'] as double;
+        final y2 = s['y2'] as double;
+        final d = _pointToSegmentDistSqMercator(elng, elat, LatLng(y1, x1), LatLng(y2, x2));
+        if (d < bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      return best;
+    }
+    final sorted = List<Map<String, dynamic>>.from(candidates)
+      ..sort((a, b) => _segmentOtherPoleIdFromAdjacencySeg(a, poleId)
+          .compareTo(_segmentOtherPoleIdFromAdjacencySeg(b, poleId)));
+    return sorted.first;
+  }
+
+  Map<String, dynamic>? _pickLineEquipmentSegmentServer({
+    required List<Map<String, dynamic>> candidates,
+    required int poleId,
+    required Equipment equipment,
+  }) {
+    if (candidates.isEmpty) return null;
+    final directionRef = equipment.parentMainEquipmentPoleRef;
+    if (_usesDirectionalPoleRef(equipment.equipmentType) &&
+        directionRef != null &&
+        directionRef.trim().isNotEmpty) {
+      for (final s in candidates) {
+        final p1 = s['p1'] as Map<String, dynamic>;
+        final p2 = s['p2'] as Map<String, dynamic>;
+        final p1Id = p1['id'] as int;
+        final other = p1Id == poleId ? p2 : p1;
+        final otherId = other['id'] as int;
+        final otherNum = (other['pole_number']?.toString()) ?? '';
+        if (_matchesPoleRef(directionRef, otherId, otherNum)) return s;
+      }
+    }
+    final elng = equipment.xPosition;
+    final elat = equipment.yPosition;
+    if (elng != null && elat != null) {
+      Map<String, dynamic>? best;
+      var bestD = double.infinity;
+      for (final s in candidates) {
+        final p1 = s['p1'] as Map<String, dynamic>;
+        final p2 = s['p2'] as Map<String, dynamic>;
+        final x1 = (p1['x_position'] as num?)?.toDouble();
+        final y1 = (p1['y_position'] as num?)?.toDouble();
+        final x2 = (p2['x_position'] as num?)?.toDouble();
+        final y2 = (p2['y_position'] as num?)?.toDouble();
+        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+        final d = _pointToSegmentDistSqMercator(elng, elat, LatLng(y1, x1), LatLng(y2, x2));
+        if (d < bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      if (best != null) return best;
+    }
+    final sorted = List<Map<String, dynamic>>.from(candidates)
+      ..sort((a, b) => _segmentOtherPoleIdFromAdjacencySeg(a, poleId)
+          .compareTo(_segmentOtherPoleIdFromAdjacencySeg(b, poleId)));
+    return sorted.first;
   }
 
   LatLng _offsetByScreenPixels(LatLng base, double dxPx, double dyPx, double zoom) {
@@ -2419,6 +2528,26 @@ class _MapPageState extends ConsumerState<MapPage> {
     final parts = t.split('/');
     if (parts.length < 2) return 1 << 30;
     return int.tryParse(parts[1].trim()) ?? (1 << 30);
+  }
+
+  /// Совпадает с backend `map_tiles._line_sort_key`: все опоры с `sequence_number`
+  /// идут первыми (по возрастанию номера), затем без sequence (по номеру опоры).
+  /// Иначе рёбра для размещения оборудования не совпадают с LineString ЛЭП на карте.
+  int _compareServerPolesLikeBackendLineSort(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final snA = a['sequence_number'] as int?;
+    final snB = b['sequence_number'] as int?;
+    final hasA = snA != null;
+    final hasB = snB != null;
+    if (hasA != hasB) {
+      return hasA ? -1 : 1;
+    }
+    if (hasA && snA != null && snB != null && snA != snB) {
+      return snA.compareTo(snB);
+    }
+    final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
+    final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
+    if (oa != ob) return oa.compareTo(ob);
+    return ((a['pole_number']?.toString()) ?? '').compareTo((b['pole_number']?.toString()) ?? '');
   }
 
   String _branchKeyLocalPole(drift_db.Pole p) {
@@ -2661,27 +2790,55 @@ class _MapPageState extends ConsumerState<MapPage> {
     required double otherLng,
     required int slot,
   }) {
-    final dx = otherLng - poleLng;
-    final dy = otherLat - poleLat;
-    final len = math.sqrt(dx * dx + dy * dy);
-    if (len <= 1e-12) return LatLng(poleLat, poleLng);
+    final pole = LatLng(poleLat, poleLng);
+    final other = LatLng(otherLat, otherLng);
 
-    final ux = dx / len;
-    final uy = dy / len;
-    final nx = -uy;
-    final ny = ux;
+    try {
+      final cam = _mapController.camera;
+      final polePx = cam.latLngToScreenOffset(pole);
+      final otherPx = cam.latLngToScreenOffset(other);
+      final vx = otherPx.dx - polePx.dx;
+      final vy = otherPx.dy - polePx.dy;
+      final len = math.sqrt(vx * vx + vy * vy);
+      if (len <= 1e-6) return pole;
 
-    const alongMeters = 16.0;
-    final ring = (slot + 1) ~/ 2;
-    final side = slot.isEven ? 1.0 : -1.0;
-    final crossMeters = slot == 0 ? 0.0 : side * (14.0 * ring);
+      final ux = vx / len;
+      final uy = vy / len;
+      final nx = -uy;
+      final ny = ux;
 
-    final latRad = poleLat * math.pi / 180.0;
-    const metersPerDegLat = 111320.0;
-    final metersPerDegLng = math.max(111320.0 * math.cos(latRad).abs(), 1.0);
-    final dLat = (alongMeters * uy + crossMeters * ny) / metersPerDegLat;
-    final dLng = (alongMeters * ux + crossMeters * nx) / metersPerDegLng;
-    return LatLng(poleLat + dLat, poleLng + dLng);
+      // Pixel-based spacing keeps icons separated regardless of zoom.
+      const alongPx = 26.0;
+      final ring = (slot + 1) ~/ 2;
+      final side = slot.isEven ? 1.0 : -1.0;
+      final crossPx = slot == 0 ? 0.0 : side * (20.0 * ring);
+
+      final moved = polePx + Offset(
+        alongPx * ux + crossPx * nx,
+        alongPx * uy + crossPx * ny,
+      );
+      return cam.screenOffsetToLatLng(moved);
+    } catch (_) {
+      // Fallback for early lifecycle when camera projection is unavailable.
+      final dx = otherLng - poleLng;
+      final dy = otherLat - poleLat;
+      final len = math.sqrt(dx * dx + dy * dy);
+      if (len <= 1e-12) return LatLng(poleLat, poleLng);
+      final ux = dx / len;
+      final uy = dy / len;
+      final nx = -uy;
+      final ny = ux;
+      const alongMeters = 16.0;
+      final ring = (slot + 1) ~/ 2;
+      final side = slot.isEven ? 1.0 : -1.0;
+      final crossMeters = slot == 0 ? 0.0 : side * (14.0 * ring);
+      final latRad = poleLat * math.pi / 180.0;
+      const metersPerDegLat = 111320.0;
+      final metersPerDegLng = math.max(111320.0 * math.cos(latRad).abs(), 1.0);
+      final dLat = (alongMeters * uy + crossMeters * ny) / metersPerDegLat;
+      final dLng = (alongMeters * ux + crossMeters * nx) / metersPerDegLng;
+      return LatLng(poleLat + dLat, poleLng + dLng);
+    }
   }
 
   LatLng _projectPointToSegment({
@@ -2833,9 +2990,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             continue;
           }
           final latLng = LatLng(lat, lng);
-          // Точка маркера должна совпасть с точкой, куда `_equipmentPlacement`
-          // проецирует anchor/терминал на ось. Это устраняет микросдвиги полюса.
-          var markerPoint = latLng;
           final iconPath = props?['icon'] as String?;
           if (iconPath == null) {
             continue;
@@ -2857,7 +3011,6 @@ class _MapPageState extends ConsumerState<MapPage> {
 
           // Отдельно распознаём ЗН, разрядник, разъединитель и реклоузер (якоря и/или поворот по пролёту).
           final iconSize = 64.0;
-          final isDisconnector = iconPath.contains('/disconnector/');
 
           // Иконка с заливкой (цвет по линии)
           Widget iconWidget = SvgPicture.asset(
@@ -2882,7 +3035,6 @@ class _MapPageState extends ConsumerState<MapPage> {
 
           // У реклоузера поверх всегда белый квадрат в левом верхнем углу (не закрашивается)
           final isRecloser = iconPath.contains('/recloser/');
-          final isBreaker = iconPath.contains('/breaker/');
 
           Widget child = iconWidget;
 
@@ -2907,10 +3059,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
           }
 
-          // Поворот/смещение иконки по терминалам SVG (как в Angular):
-          // - Marker.point соответствует координате точки на линии (терминал)
-          // - Внутри маркера SVG смещаем так, чтобы anchor-текстурная точка легла на линию
-          // - Для disconnector используем осевой (axial) угол, чтобы символ не “переворачивался”
+          // Поворот/смещение иконки по правилам Angular:
+          // - Marker.point остаётся на вычисленной точке линии,
+          // - для однотерминальных (ЗН/ОПН) сдвигаем SVG так, чтобы anchor лег на точку линии.
           // Важно: как на Angular, угол линии берем в экранных координатах,
           // иначе WebMercator даёт “косой” поворот.
           final angleValue = props?['angle_rad'];
@@ -2927,32 +3078,29 @@ class _MapPageState extends ConsumerState<MapPage> {
               : (angleValue is num ? angleValue.toDouble() : null);
 
           if (lineAngleRad != null) {
-            final placement =
-                _equipmentPlacement(latLng, iconPath, lineAngleRad);
-            markerPoint = placement.markerCenter;
             final iconKey = _iconKeyFromIconPath(iconPath);
             final spec = iconKey != null ? _equipmentTerminalSpec[iconKey] : null;
             if (iconKey != null && spec != null) {
-              final iconAngleRad = placement.iconAngleRad;
+              final iconAngleRad = _modelAngleRadForIcon(iconKey, lineAngleRad) +
+                  (((spec['rotationOffsetDeg'] as num?)?.toDouble() ?? 0.0) * math.pi / 180.0);
               final t2Raw = _pairFromSpec(spec['t2']);
               final iconCenter = Offset(iconSize / 2, iconSize / 2);
 
               if (t2Raw == null) {
-                // ЗН, ОПН: якорь на трассе → translate в центр 64×64, rotate вокруг центра.
+                // ЗН/ОПН: anchor встает точно на точку линии (как iconAnchor в Angular).
                 final anchorVbRaw = spec['anchor'];
                 final anchorVb =
                     anchorVbRaw != null ? _pairFromSpec(anchorVbRaw) : null;
                 if (anchorVb != null) {
-                  final anchorPx =
-                      _viewBoxPointToIconPixels(iconKey, anchorVb, iconSize);
-                  child = Transform.rotate(
-                    angle: iconAngleRad,
-                    alignment: Alignment.center,
-                    child: Transform.translate(
-                      offset: Offset(
-                        iconCenter.dx - anchorPx.dx,
-                        iconCenter.dy - anchorPx.dy,
-                      ),
+                  final rotatedAnchor = _rotatedAnchorPx(iconKey, anchorVb, iconSize, iconAngleRad);
+                  child = Transform.translate(
+                    offset: Offset(
+                      iconCenter.dx - rotatedAnchor.dx,
+                      iconCenter.dy - rotatedAnchor.dy,
+                    ),
+                    child: Transform.rotate(
+                      angle: iconAngleRad,
+                      alignment: Alignment.center,
                       child: child,
                     ),
                   );
@@ -2991,7 +3139,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
           markers.add(
             Marker(
-              point: markerPoint,
+              point: latLng,
               width: iconSize,
               height: iconSize,
               child: child,
@@ -4683,26 +4831,58 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   String _historyFieldLabel(String key) {
     const map = <String, String>{
+      // опора / общие
       'pole_number': 'Номер опоры',
       'pole_type': 'Тип опоры',
       'material': 'Материал',
       'condition': 'Состояние',
       'notes': 'Примечание',
       'name': 'Наименование',
+      'card_comment': 'Комментарий карточки',
+      'card_comment_attachment': 'Вложения карточки',
+      // оборудование (см. backend Equipment / Flutter Equipment, каталог attrs_json)
+      'equipment_id': 'Оборудование (id)',
+      'equipment_type': 'Тип оборудования',
+      'pole_id': 'Опора (id)',
+      'mrid': 'mRID',
+      'manufacturer': 'Производитель',
+      'model': 'Модель',
+      'serial_number': 'Заводской номер',
+      'year_manufactured': 'Год выпуска',
+      'installation_date': 'Дата установки',
+      'catalog_item_id': 'Позиция справочника марок (id)',
+      'direction_angle': 'Угол направления от опоры, °',
+      'x_position': 'Долгота (x_position)',
+      'y_position': 'Широта (y_position)',
+      'quantity': 'Количество',
       'nameplate': 'Марка (табличка)',
       'identified_object_description': 'Номер единицы оборудования',
       'installation_display_name': 'Название электроустановки',
       'rated_current': 'Номинальный ток, А',
-      'i_th': 'Ток термической стойкости, А',
-      'ip_max': 'Максимальный пиковый ток КЗ, А',
-      't_th': 'Время термической стойкости, с',
+      'i_th': 'Ток термической стойкости (I_th), А',
+      'ip_max': 'Максимальный пиковый ток КЗ (i_p max), А',
+      't_th': 'Время термической стойкости (t_th), с',
       'normal_open': 'Нормально открыт',
       'retained': 'Фиксируемое состояние',
+      'psr_subtype': 'Подтип ПСР (retractable / sectionalizer / short_circuiter)',
+      'tm_code': 'Код ТМ / учётный код',
+      'object_subtype': 'Подтип объекта (CIM / профиль)',
+      'pole_count': 'Число полюсов',
+      'parent_object_ref': 'Ссылка на родительский объект',
+      'parent_main_equipment_pole_ref': 'Ссылка на полюс основного коммутационного оборудования',
+      'nominal_voltage_kv': 'Номинальное напряжение, кВ',
+      'nominal_breaking_current_ka': 'Номинальный ток отключения, кА',
+      'own_trip_time_sec': 'Собственное время отключения, с',
+      'emergency_current_a': 'Ток для режима перегрузки / аварийный, А',
+      'continuous_current_a': 'Длительно допустимый ток, А',
+      'nominal_discharge_current_a': 'Номинальный разрядный ток (ОПН), А',
+      'arrester_type': 'Тип разрядника (opn / valve / tube)',
       'defect': 'Дефект',
       'criticality': 'Критичность',
       'defect_attachment': 'Вложения дефекта',
-      'card_comment': 'Комментарий карточки',
-      'card_comment_attachment': 'Вложения карточки',
+      'created_by': 'Автор (id)',
+      'created_at': 'Создано',
+      'updated_at': 'Обновлено',
     };
     return map[key] ?? key;
   }

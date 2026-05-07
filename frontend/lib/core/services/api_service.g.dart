@@ -591,7 +591,10 @@ class _LepmRetrofit implements LepmRetrofit {
   }
 
   @override
-  Future<Equipment> updateEquipment(int id, EquipmentCreate equipmentData) async {
+  Future<Equipment> updateEquipment(
+    int id,
+    EquipmentCreate equipmentData,
+  ) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{};

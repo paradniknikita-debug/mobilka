@@ -3,7 +3,6 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ThemeService } from '../../../core/services/theme.service';
 
 @Component({
   selector: 'app-login',
@@ -20,8 +19,7 @@ export class LoginComponent implements OnInit {
     private authService: AuthService,
     private router: Router,
     private route: ActivatedRoute,
-    private snackBar: MatSnackBar,
-    public themeService: ThemeService
+    private snackBar: MatSnackBar
   ) {
     this.loginForm = this.fb.group({
       username: ['', [Validators.required]],
@@ -73,10 +71,6 @@ export class LoginComponent implements OnInit {
         });
       }
     });
-  }
-
-  toggleTheme(): void {
-    this.themeService.toggleTheme();
   }
 }
 

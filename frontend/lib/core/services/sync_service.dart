@@ -684,23 +684,67 @@ class SyncService extends StateNotifier<SyncState> {
     // Время обновляется в syncData() после успешного завершения
   }
 
+  static bool? _parseBoolNullable(dynamic v) {
+    if (v == null) return null;
+    if (v is bool) return v;
+    final s = v.toString().trim().toLowerCase();
+    if (s == 'true' || s == '1' || s == 'yes' || s == 'да') return true;
+    if (s == 'false' || s == '0' || s == 'no' || s == 'нет') return false;
+    return null;
+  }
+
   Map<String, dynamic> _equipmentToJson(EquipmentData equipment, Map<int, int> poleMapping) {
     final map = <String, dynamic>{
       'id': equipment.id,
       'pole_id': equipment.poleId,
       'equipment_type': equipment.equipmentType,
       'name': equipment.name,
-      'manufacturer': equipment.manufacturer,
-      'model': equipment.model,
-      'serial_number': equipment.serialNumber,
-      'year_manufactured': equipment.yearManufactured,
-      'installation_date': equipment.installationDate?.toIso8601String(),
+      'quantity': equipment.quantity,
       'condition': equipment.condition,
-      'notes': equipment.notes,
       'created_by': equipment.createdBy,
       'created_at': equipment.createdAt.toIso8601String(),
       'updated_at': equipment.updatedAt?.toIso8601String(),
     };
+    void put(String k, Object? v) {
+      if (v != null) map[k] = v;
+    }
+
+    put('manufacturer', equipment.manufacturer);
+    put('model', equipment.model);
+    put('serial_number', equipment.serialNumber);
+    put('year_manufactured', equipment.yearManufactured);
+    put('installation_date', equipment.installationDate?.toIso8601String());
+    put('notes', equipment.notes);
+    put('defect', equipment.defect);
+    put('criticality', equipment.criticality);
+    put('defect_attachment', equipment.defectAttachment);
+    put('mrid', equipment.mrid);
+    put('catalog_item_id', equipment.catalogItemId);
+    put('rated_current', equipment.ratedCurrent);
+    put('i_th', equipment.iTh);
+    put('ip_max', equipment.ipMax);
+    put('t_th', equipment.tTh);
+    put('normal_open', equipment.normalOpen);
+    put('retained', equipment.retained);
+    put('identified_object_description', equipment.identifiedObjectDescription);
+    put('nameplate', equipment.nameplate);
+    put('psr_subtype', equipment.psrSubtype);
+    put('installation_display_name', equipment.installationDisplayName);
+    put('tm_code', equipment.tmCode);
+    put('object_subtype', equipment.objectSubtype);
+    put('pole_count', equipment.poleCount);
+    put('parent_object_ref', equipment.parentObjectRef);
+    put('parent_main_equipment_pole_ref', equipment.parentMainEquipmentPoleRef);
+    put('nominal_voltage_kv', equipment.nominalVoltageKv);
+    put('nominal_breaking_current_ka', equipment.nominalBreakingCurrentKa);
+    put('own_trip_time_sec', equipment.ownTripTimeSec);
+    put('emergency_current_a', equipment.emergencyCurrentA);
+    put('continuous_current_a', equipment.continuousCurrentA);
+    put('arrester_type', equipment.arresterType);
+    put('x_position', equipment.xPosition);
+    put('y_position', equipment.yPosition);
+    put('direction_angle', equipment.directionAngle);
+
     final serverPoleId = poleMapping[equipment.poleId];
     if (serverPoleId != null && serverPoleId > 0) {
       map['pole_server_id'] = serverPoleId;
@@ -918,27 +962,121 @@ class SyncService extends StateNotifier<SyncState> {
     switch (action) {
       case 'create':
       case 'update':
+        final id = _toInt(data['id']);
+        final existing = await _database.getEquipment(id);
+        final poleId = _toInt(data['pole_id'] ?? data['tower_id']);
         await _database.insertEquipmentOrReplace(
           EquipmentCompanion.insert(
-            id: drift.Value(data['id']),
-            poleId: data['pole_id'] ?? data['tower_id'], // Поддержка старого формата
-            equipmentType: data['equipment_type'],
-            name: data['name'],
-            manufacturer: drift.Value(data['manufacturer']),
-            model: drift.Value(data['model']),
-            serialNumber: drift.Value(data['serial_number']),
-            yearManufactured: drift.Value(data['year_manufactured']),
-            installationDate: drift.Value(data['installation_date'] != null ? DateTime.parse(data['installation_date']) : null),
-            condition: data['condition'],
-            notes: drift.Value(data['notes']),
-            createdBy: data['created_by'],
-            createdAt: DateTime.parse(data['created_at']),
-            updatedAt: drift.Value(data['updated_at'] != null ? DateTime.parse(data['updated_at']) : null),
+            id: drift.Value(id),
+            poleId: poleId,
+            equipmentType: data['equipment_type'] as String? ?? '',
+            name: data['name'] as String? ?? '',
+            quantity: drift.Value(
+              data['quantity'] != null ? _toInt(data['quantity']) : (existing?.quantity ?? 1),
+            ),
+            defect: drift.Value(data['defect'] as String? ?? existing?.defect),
+            criticality: drift.Value(data['criticality'] as String? ?? existing?.criticality),
+            defectAttachment:
+                drift.Value(data['defect_attachment'] as String? ?? existing?.defectAttachment),
+            manufacturer: drift.Value(data['manufacturer'] as String? ?? existing?.manufacturer),
+            model: drift.Value(data['model'] as String? ?? existing?.model),
+            serialNumber: drift.Value(data['serial_number'] as String? ?? existing?.serialNumber),
+            yearManufactured: drift.Value(
+              data['year_manufactured'] != null
+                  ? _toInt(data['year_manufactured'])
+                  : existing?.yearManufactured,
+            ),
+            installationDate: drift.Value(
+              data['installation_date'] != null
+                  ? DateTime.parse(data['installation_date'].toString())
+                  : existing?.installationDate,
+            ),
+            condition: data['condition'] as String? ?? existing?.condition ?? 'good',
+            notes: drift.Value(data['notes'] as String? ?? existing?.notes),
+            mrid: drift.Value(data['mrid'] as String? ?? existing?.mrid),
+            catalogItemId: drift.Value(
+              data['catalog_item_id'] != null
+                  ? _toInt(data['catalog_item_id'])
+                  : existing?.catalogItemId,
+            ),
+            ratedCurrent: drift.Value(
+              data['rated_current'] != null
+                  ? _toDouble(data['rated_current'])
+                  : existing?.ratedCurrent,
+            ),
+            iTh: drift.Value(data['i_th'] != null ? _toDouble(data['i_th']) : existing?.iTh),
+            ipMax: drift.Value(data['ip_max'] != null ? _toDouble(data['ip_max']) : existing?.ipMax),
+            tTh: drift.Value(data['t_th'] != null ? _toDouble(data['t_th']) : existing?.tTh),
+            normalOpen:
+                drift.Value(_parseBoolNullable(data['normal_open']) ?? existing?.normalOpen),
+            retained: drift.Value(_parseBoolNullable(data['retained']) ?? existing?.retained),
+            identifiedObjectDescription: drift.Value(
+              data['identified_object_description'] as String? ??
+                  existing?.identifiedObjectDescription,
+            ),
+            nameplate: drift.Value(data['nameplate'] as String? ?? existing?.nameplate),
+            psrSubtype: drift.Value(data['psr_subtype'] as String? ?? existing?.psrSubtype),
+            installationDisplayName: drift.Value(
+              data['installation_display_name'] as String? ?? existing?.installationDisplayName,
+            ),
+            tmCode: drift.Value(data['tm_code'] as String? ?? existing?.tmCode),
+            objectSubtype: drift.Value(data['object_subtype'] as String? ?? existing?.objectSubtype),
+            poleCount: drift.Value(
+              data['pole_count'] != null ? _toInt(data['pole_count']) : existing?.poleCount,
+            ),
+            parentObjectRef:
+                drift.Value(data['parent_object_ref'] as String? ?? existing?.parentObjectRef),
+            parentMainEquipmentPoleRef: drift.Value(
+              data['parent_main_equipment_pole_ref'] as String? ??
+                  existing?.parentMainEquipmentPoleRef,
+            ),
+            nominalVoltageKv: drift.Value(
+              data['nominal_voltage_kv'] != null
+                  ? _toDouble(data['nominal_voltage_kv'])
+                  : existing?.nominalVoltageKv,
+            ),
+            nominalBreakingCurrentKa: drift.Value(
+              data['nominal_breaking_current_ka'] != null
+                  ? _toDouble(data['nominal_breaking_current_ka'])
+                  : existing?.nominalBreakingCurrentKa,
+            ),
+            ownTripTimeSec: drift.Value(
+              data['own_trip_time_sec'] != null
+                  ? _toDouble(data['own_trip_time_sec'])
+                  : existing?.ownTripTimeSec,
+            ),
+            emergencyCurrentA: drift.Value(
+              data['emergency_current_a'] != null
+                  ? _toDouble(data['emergency_current_a'])
+                  : existing?.emergencyCurrentA,
+            ),
+            continuousCurrentA: drift.Value(
+              data['continuous_current_a'] != null
+                  ? _toDouble(data['continuous_current_a'])
+                  : existing?.continuousCurrentA,
+            ),
+            arresterType: drift.Value(data['arrester_type'] as String? ?? existing?.arresterType),
+            xPosition: drift.Value(
+              data['x_position'] != null ? _toDouble(data['x_position']) : existing?.xPosition,
+            ),
+            yPosition: drift.Value(
+              data['y_position'] != null ? _toDouble(data['y_position']) : existing?.yPosition,
+            ),
+            directionAngle: drift.Value(
+              data['direction_angle'] != null
+                  ? _toDouble(data['direction_angle'])
+                  : existing?.directionAngle,
+            ),
+            createdBy: _toInt(data['created_by']),
+            createdAt: _parseDateTime(data['created_at']) ?? DateTime.now(),
+            updatedAt: drift.Value(_parseDateTime(data['updated_at']) ?? existing?.updatedAt),
+            isLocal: drift.Value(existing?.isLocal ?? false),
+            needsSync: drift.Value(existing?.needsSync ?? false),
           ),
         );
         break;
       case 'delete':
-        await _database.deleteEquipment(data['id']);
+        await _database.deleteEquipment(_toInt(data['id']));
         break;
     }
   }

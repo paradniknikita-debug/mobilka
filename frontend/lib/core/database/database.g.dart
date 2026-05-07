@@ -2161,6 +2161,289 @@ class $EquipmentTable extends Equipment
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _mridMeta = const VerificationMeta('mrid');
+  @override
+  late final GeneratedColumn<String> mrid = GeneratedColumn<String>(
+    'mrid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _catalogItemIdMeta = const VerificationMeta(
+    'catalogItemId',
+  );
+  @override
+  late final GeneratedColumn<int> catalogItemId = GeneratedColumn<int>(
+    'catalog_item_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ratedCurrentMeta = const VerificationMeta(
+    'ratedCurrent',
+  );
+  @override
+  late final GeneratedColumn<double> ratedCurrent = GeneratedColumn<double>(
+    'rated_current',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _iThMeta = const VerificationMeta('iTh');
+  @override
+  late final GeneratedColumn<double> iTh = GeneratedColumn<double>(
+    'i_th',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ipMaxMeta = const VerificationMeta('ipMax');
+  @override
+  late final GeneratedColumn<double> ipMax = GeneratedColumn<double>(
+    'ip_max',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tThMeta = const VerificationMeta('tTh');
+  @override
+  late final GeneratedColumn<double> tTh = GeneratedColumn<double>(
+    't_th',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _normalOpenMeta = const VerificationMeta(
+    'normalOpen',
+  );
+  @override
+  late final GeneratedColumn<bool> normalOpen = GeneratedColumn<bool>(
+    'normal_open',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("normal_open" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _retainedMeta = const VerificationMeta(
+    'retained',
+  );
+  @override
+  late final GeneratedColumn<bool> retained = GeneratedColumn<bool>(
+    'retained',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("retained" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _identifiedObjectDescriptionMeta =
+      const VerificationMeta('identifiedObjectDescription');
+  @override
+  late final GeneratedColumn<String> identifiedObjectDescription =
+      GeneratedColumn<String>(
+        'identified_object_description',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _nameplateMeta = const VerificationMeta(
+    'nameplate',
+  );
+  @override
+  late final GeneratedColumn<String> nameplate = GeneratedColumn<String>(
+    'nameplate',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _psrSubtypeMeta = const VerificationMeta(
+    'psrSubtype',
+  );
+  @override
+  late final GeneratedColumn<String> psrSubtype = GeneratedColumn<String>(
+    'psr_subtype',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _installationDisplayNameMeta =
+      const VerificationMeta('installationDisplayName');
+  @override
+  late final GeneratedColumn<String> installationDisplayName =
+      GeneratedColumn<String>(
+        'installation_display_name',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _tmCodeMeta = const VerificationMeta('tmCode');
+  @override
+  late final GeneratedColumn<String> tmCode = GeneratedColumn<String>(
+    'tm_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _objectSubtypeMeta = const VerificationMeta(
+    'objectSubtype',
+  );
+  @override
+  late final GeneratedColumn<String> objectSubtype = GeneratedColumn<String>(
+    'object_subtype',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _poleCountMeta = const VerificationMeta(
+    'poleCount',
+  );
+  @override
+  late final GeneratedColumn<int> poleCount = GeneratedColumn<int>(
+    'pole_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _parentObjectRefMeta = const VerificationMeta(
+    'parentObjectRef',
+  );
+  @override
+  late final GeneratedColumn<String> parentObjectRef = GeneratedColumn<String>(
+    'parent_object_ref',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _parentMainEquipmentPoleRefMeta =
+      const VerificationMeta('parentMainEquipmentPoleRef');
+  @override
+  late final GeneratedColumn<String> parentMainEquipmentPoleRef =
+      GeneratedColumn<String>(
+        'parent_main_equipment_pole_ref',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _nominalVoltageKvMeta = const VerificationMeta(
+    'nominalVoltageKv',
+  );
+  @override
+  late final GeneratedColumn<double> nominalVoltageKv = GeneratedColumn<double>(
+    'nominal_voltage_kv',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nominalBreakingCurrentKaMeta =
+      const VerificationMeta('nominalBreakingCurrentKa');
+  @override
+  late final GeneratedColumn<double> nominalBreakingCurrentKa =
+      GeneratedColumn<double>(
+        'nominal_breaking_current_ka',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _ownTripTimeSecMeta = const VerificationMeta(
+    'ownTripTimeSec',
+  );
+  @override
+  late final GeneratedColumn<double> ownTripTimeSec = GeneratedColumn<double>(
+    'own_trip_time_sec',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _emergencyCurrentAMeta = const VerificationMeta(
+    'emergencyCurrentA',
+  );
+  @override
+  late final GeneratedColumn<double> emergencyCurrentA =
+      GeneratedColumn<double>(
+        'emergency_current_a',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _continuousCurrentAMeta =
+      const VerificationMeta('continuousCurrentA');
+  @override
+  late final GeneratedColumn<double> continuousCurrentA =
+      GeneratedColumn<double>(
+        'continuous_current_a',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _arresterTypeMeta = const VerificationMeta(
+    'arresterType',
+  );
+  @override
+  late final GeneratedColumn<String> arresterType = GeneratedColumn<String>(
+    'arrester_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _xPositionMeta = const VerificationMeta(
+    'xPosition',
+  );
+  @override
+  late final GeneratedColumn<double> xPosition = GeneratedColumn<double>(
+    'x_position',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _yPositionMeta = const VerificationMeta(
+    'yPosition',
+  );
+  @override
+  late final GeneratedColumn<double> yPosition = GeneratedColumn<double>(
+    'y_position',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _directionAngleMeta = const VerificationMeta(
+    'directionAngle',
+  );
+  @override
+  late final GeneratedColumn<double> directionAngle = GeneratedColumn<double>(
+    'direction_angle',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdByMeta = const VerificationMeta(
     'createdBy',
   );
@@ -2241,6 +2524,32 @@ class $EquipmentTable extends Equipment
     installationDate,
     condition,
     notes,
+    mrid,
+    catalogItemId,
+    ratedCurrent,
+    iTh,
+    ipMax,
+    tTh,
+    normalOpen,
+    retained,
+    identifiedObjectDescription,
+    nameplate,
+    psrSubtype,
+    installationDisplayName,
+    tmCode,
+    objectSubtype,
+    poleCount,
+    parentObjectRef,
+    parentMainEquipmentPoleRef,
+    nominalVoltageKv,
+    nominalBreakingCurrentKa,
+    ownTripTimeSec,
+    emergencyCurrentA,
+    continuousCurrentA,
+    arresterType,
+    xPosition,
+    yPosition,
+    directionAngle,
     createdBy,
     createdAt,
     updatedAt,
@@ -2375,6 +2684,204 @@ class $EquipmentTable extends Equipment
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('mrid')) {
+      context.handle(
+        _mridMeta,
+        mrid.isAcceptableOrUnknown(data['mrid']!, _mridMeta),
+      );
+    }
+    if (data.containsKey('catalog_item_id')) {
+      context.handle(
+        _catalogItemIdMeta,
+        catalogItemId.isAcceptableOrUnknown(
+          data['catalog_item_id']!,
+          _catalogItemIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rated_current')) {
+      context.handle(
+        _ratedCurrentMeta,
+        ratedCurrent.isAcceptableOrUnknown(
+          data['rated_current']!,
+          _ratedCurrentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('i_th')) {
+      context.handle(
+        _iThMeta,
+        iTh.isAcceptableOrUnknown(data['i_th']!, _iThMeta),
+      );
+    }
+    if (data.containsKey('ip_max')) {
+      context.handle(
+        _ipMaxMeta,
+        ipMax.isAcceptableOrUnknown(data['ip_max']!, _ipMaxMeta),
+      );
+    }
+    if (data.containsKey('t_th')) {
+      context.handle(
+        _tThMeta,
+        tTh.isAcceptableOrUnknown(data['t_th']!, _tThMeta),
+      );
+    }
+    if (data.containsKey('normal_open')) {
+      context.handle(
+        _normalOpenMeta,
+        normalOpen.isAcceptableOrUnknown(data['normal_open']!, _normalOpenMeta),
+      );
+    }
+    if (data.containsKey('retained')) {
+      context.handle(
+        _retainedMeta,
+        retained.isAcceptableOrUnknown(data['retained']!, _retainedMeta),
+      );
+    }
+    if (data.containsKey('identified_object_description')) {
+      context.handle(
+        _identifiedObjectDescriptionMeta,
+        identifiedObjectDescription.isAcceptableOrUnknown(
+          data['identified_object_description']!,
+          _identifiedObjectDescriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('nameplate')) {
+      context.handle(
+        _nameplateMeta,
+        nameplate.isAcceptableOrUnknown(data['nameplate']!, _nameplateMeta),
+      );
+    }
+    if (data.containsKey('psr_subtype')) {
+      context.handle(
+        _psrSubtypeMeta,
+        psrSubtype.isAcceptableOrUnknown(data['psr_subtype']!, _psrSubtypeMeta),
+      );
+    }
+    if (data.containsKey('installation_display_name')) {
+      context.handle(
+        _installationDisplayNameMeta,
+        installationDisplayName.isAcceptableOrUnknown(
+          data['installation_display_name']!,
+          _installationDisplayNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tm_code')) {
+      context.handle(
+        _tmCodeMeta,
+        tmCode.isAcceptableOrUnknown(data['tm_code']!, _tmCodeMeta),
+      );
+    }
+    if (data.containsKey('object_subtype')) {
+      context.handle(
+        _objectSubtypeMeta,
+        objectSubtype.isAcceptableOrUnknown(
+          data['object_subtype']!,
+          _objectSubtypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pole_count')) {
+      context.handle(
+        _poleCountMeta,
+        poleCount.isAcceptableOrUnknown(data['pole_count']!, _poleCountMeta),
+      );
+    }
+    if (data.containsKey('parent_object_ref')) {
+      context.handle(
+        _parentObjectRefMeta,
+        parentObjectRef.isAcceptableOrUnknown(
+          data['parent_object_ref']!,
+          _parentObjectRefMeta,
+        ),
+      );
+    }
+    if (data.containsKey('parent_main_equipment_pole_ref')) {
+      context.handle(
+        _parentMainEquipmentPoleRefMeta,
+        parentMainEquipmentPoleRef.isAcceptableOrUnknown(
+          data['parent_main_equipment_pole_ref']!,
+          _parentMainEquipmentPoleRefMeta,
+        ),
+      );
+    }
+    if (data.containsKey('nominal_voltage_kv')) {
+      context.handle(
+        _nominalVoltageKvMeta,
+        nominalVoltageKv.isAcceptableOrUnknown(
+          data['nominal_voltage_kv']!,
+          _nominalVoltageKvMeta,
+        ),
+      );
+    }
+    if (data.containsKey('nominal_breaking_current_ka')) {
+      context.handle(
+        _nominalBreakingCurrentKaMeta,
+        nominalBreakingCurrentKa.isAcceptableOrUnknown(
+          data['nominal_breaking_current_ka']!,
+          _nominalBreakingCurrentKaMeta,
+        ),
+      );
+    }
+    if (data.containsKey('own_trip_time_sec')) {
+      context.handle(
+        _ownTripTimeSecMeta,
+        ownTripTimeSec.isAcceptableOrUnknown(
+          data['own_trip_time_sec']!,
+          _ownTripTimeSecMeta,
+        ),
+      );
+    }
+    if (data.containsKey('emergency_current_a')) {
+      context.handle(
+        _emergencyCurrentAMeta,
+        emergencyCurrentA.isAcceptableOrUnknown(
+          data['emergency_current_a']!,
+          _emergencyCurrentAMeta,
+        ),
+      );
+    }
+    if (data.containsKey('continuous_current_a')) {
+      context.handle(
+        _continuousCurrentAMeta,
+        continuousCurrentA.isAcceptableOrUnknown(
+          data['continuous_current_a']!,
+          _continuousCurrentAMeta,
+        ),
+      );
+    }
+    if (data.containsKey('arrester_type')) {
+      context.handle(
+        _arresterTypeMeta,
+        arresterType.isAcceptableOrUnknown(
+          data['arrester_type']!,
+          _arresterTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('x_position')) {
+      context.handle(
+        _xPositionMeta,
+        xPosition.isAcceptableOrUnknown(data['x_position']!, _xPositionMeta),
+      );
+    }
+    if (data.containsKey('y_position')) {
+      context.handle(
+        _yPositionMeta,
+        yPosition.isAcceptableOrUnknown(data['y_position']!, _yPositionMeta),
+      );
+    }
+    if (data.containsKey('direction_angle')) {
+      context.handle(
+        _directionAngleMeta,
+        directionAngle.isAcceptableOrUnknown(
+          data['direction_angle']!,
+          _directionAngleMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_by')) {
       context.handle(
         _createdByMeta,
@@ -2478,6 +2985,110 @@ class $EquipmentTable extends Equipment
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      mrid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mrid'],
+      ),
+      catalogItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}catalog_item_id'],
+      ),
+      ratedCurrent: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rated_current'],
+      ),
+      iTh: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}i_th'],
+      ),
+      ipMax: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}ip_max'],
+      ),
+      tTh: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}t_th'],
+      ),
+      normalOpen: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}normal_open'],
+      ),
+      retained: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}retained'],
+      ),
+      identifiedObjectDescription: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}identified_object_description'],
+      ),
+      nameplate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nameplate'],
+      ),
+      psrSubtype: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}psr_subtype'],
+      ),
+      installationDisplayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}installation_display_name'],
+      ),
+      tmCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tm_code'],
+      ),
+      objectSubtype: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}object_subtype'],
+      ),
+      poleCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pole_count'],
+      ),
+      parentObjectRef: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_object_ref'],
+      ),
+      parentMainEquipmentPoleRef: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_main_equipment_pole_ref'],
+      ),
+      nominalVoltageKv: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}nominal_voltage_kv'],
+      ),
+      nominalBreakingCurrentKa: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}nominal_breaking_current_ka'],
+      ),
+      ownTripTimeSec: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}own_trip_time_sec'],
+      ),
+      emergencyCurrentA: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}emergency_current_a'],
+      ),
+      continuousCurrentA: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}continuous_current_a'],
+      ),
+      arresterType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}arrester_type'],
+      ),
+      xPosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}x_position'],
+      ),
+      yPosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}y_position'],
+      ),
+      directionAngle: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}direction_angle'],
+      ),
       createdBy: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_by'],
@@ -2525,6 +3136,36 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   final DateTime? installationDate;
   final String condition;
   final String? notes;
+
+  /// Поля карты / карточки оборудования (как на сервере Equipment), для офлайна и выбора сегмента ЛЭП.
+  final String? mrid;
+  final int? catalogItemId;
+  final double? ratedCurrent;
+  final double? iTh;
+  final double? ipMax;
+  final double? tTh;
+  final bool? normalOpen;
+  final bool? retained;
+  final String? identifiedObjectDescription;
+  final String? nameplate;
+  final String? psrSubtype;
+  final String? installationDisplayName;
+  final String? tmCode;
+  final String? objectSubtype;
+  final int? poleCount;
+  final String? parentObjectRef;
+  final String? parentMainEquipmentPoleRef;
+  final double? nominalVoltageKv;
+  final double? nominalBreakingCurrentKa;
+  final double? ownTripTimeSec;
+  final double? emergencyCurrentA;
+  final double? continuousCurrentA;
+  final String? arresterType;
+
+  /// Долгота / широта объекта оборудования (CIM x/y), если заданы — помогают привязать к нужному пролёту.
+  final double? xPosition;
+  final double? yPosition;
+  final double? directionAngle;
   final int createdBy;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -2546,6 +3187,32 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     this.installationDate,
     required this.condition,
     this.notes,
+    this.mrid,
+    this.catalogItemId,
+    this.ratedCurrent,
+    this.iTh,
+    this.ipMax,
+    this.tTh,
+    this.normalOpen,
+    this.retained,
+    this.identifiedObjectDescription,
+    this.nameplate,
+    this.psrSubtype,
+    this.installationDisplayName,
+    this.tmCode,
+    this.objectSubtype,
+    this.poleCount,
+    this.parentObjectRef,
+    this.parentMainEquipmentPoleRef,
+    this.nominalVoltageKv,
+    this.nominalBreakingCurrentKa,
+    this.ownTripTimeSec,
+    this.emergencyCurrentA,
+    this.continuousCurrentA,
+    this.arresterType,
+    this.xPosition,
+    this.yPosition,
+    this.directionAngle,
     required this.createdBy,
     required this.createdAt,
     this.updatedAt,
@@ -2587,6 +3254,92 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     map['condition'] = Variable<String>(condition);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || mrid != null) {
+      map['mrid'] = Variable<String>(mrid);
+    }
+    if (!nullToAbsent || catalogItemId != null) {
+      map['catalog_item_id'] = Variable<int>(catalogItemId);
+    }
+    if (!nullToAbsent || ratedCurrent != null) {
+      map['rated_current'] = Variable<double>(ratedCurrent);
+    }
+    if (!nullToAbsent || iTh != null) {
+      map['i_th'] = Variable<double>(iTh);
+    }
+    if (!nullToAbsent || ipMax != null) {
+      map['ip_max'] = Variable<double>(ipMax);
+    }
+    if (!nullToAbsent || tTh != null) {
+      map['t_th'] = Variable<double>(tTh);
+    }
+    if (!nullToAbsent || normalOpen != null) {
+      map['normal_open'] = Variable<bool>(normalOpen);
+    }
+    if (!nullToAbsent || retained != null) {
+      map['retained'] = Variable<bool>(retained);
+    }
+    if (!nullToAbsent || identifiedObjectDescription != null) {
+      map['identified_object_description'] = Variable<String>(
+        identifiedObjectDescription,
+      );
+    }
+    if (!nullToAbsent || nameplate != null) {
+      map['nameplate'] = Variable<String>(nameplate);
+    }
+    if (!nullToAbsent || psrSubtype != null) {
+      map['psr_subtype'] = Variable<String>(psrSubtype);
+    }
+    if (!nullToAbsent || installationDisplayName != null) {
+      map['installation_display_name'] = Variable<String>(
+        installationDisplayName,
+      );
+    }
+    if (!nullToAbsent || tmCode != null) {
+      map['tm_code'] = Variable<String>(tmCode);
+    }
+    if (!nullToAbsent || objectSubtype != null) {
+      map['object_subtype'] = Variable<String>(objectSubtype);
+    }
+    if (!nullToAbsent || poleCount != null) {
+      map['pole_count'] = Variable<int>(poleCount);
+    }
+    if (!nullToAbsent || parentObjectRef != null) {
+      map['parent_object_ref'] = Variable<String>(parentObjectRef);
+    }
+    if (!nullToAbsent || parentMainEquipmentPoleRef != null) {
+      map['parent_main_equipment_pole_ref'] = Variable<String>(
+        parentMainEquipmentPoleRef,
+      );
+    }
+    if (!nullToAbsent || nominalVoltageKv != null) {
+      map['nominal_voltage_kv'] = Variable<double>(nominalVoltageKv);
+    }
+    if (!nullToAbsent || nominalBreakingCurrentKa != null) {
+      map['nominal_breaking_current_ka'] = Variable<double>(
+        nominalBreakingCurrentKa,
+      );
+    }
+    if (!nullToAbsent || ownTripTimeSec != null) {
+      map['own_trip_time_sec'] = Variable<double>(ownTripTimeSec);
+    }
+    if (!nullToAbsent || emergencyCurrentA != null) {
+      map['emergency_current_a'] = Variable<double>(emergencyCurrentA);
+    }
+    if (!nullToAbsent || continuousCurrentA != null) {
+      map['continuous_current_a'] = Variable<double>(continuousCurrentA);
+    }
+    if (!nullToAbsent || arresterType != null) {
+      map['arrester_type'] = Variable<String>(arresterType);
+    }
+    if (!nullToAbsent || xPosition != null) {
+      map['x_position'] = Variable<double>(xPosition);
+    }
+    if (!nullToAbsent || yPosition != null) {
+      map['y_position'] = Variable<double>(yPosition);
+    }
+    if (!nullToAbsent || directionAngle != null) {
+      map['direction_angle'] = Variable<double>(directionAngle);
     }
     map['created_by'] = Variable<int>(createdBy);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -2633,6 +3386,80 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      mrid: mrid == null && nullToAbsent ? const Value.absent() : Value(mrid),
+      catalogItemId: catalogItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(catalogItemId),
+      ratedCurrent: ratedCurrent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ratedCurrent),
+      iTh: iTh == null && nullToAbsent ? const Value.absent() : Value(iTh),
+      ipMax: ipMax == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ipMax),
+      tTh: tTh == null && nullToAbsent ? const Value.absent() : Value(tTh),
+      normalOpen: normalOpen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(normalOpen),
+      retained: retained == null && nullToAbsent
+          ? const Value.absent()
+          : Value(retained),
+      identifiedObjectDescription:
+          identifiedObjectDescription == null && nullToAbsent
+          ? const Value.absent()
+          : Value(identifiedObjectDescription),
+      nameplate: nameplate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameplate),
+      psrSubtype: psrSubtype == null && nullToAbsent
+          ? const Value.absent()
+          : Value(psrSubtype),
+      installationDisplayName: installationDisplayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(installationDisplayName),
+      tmCode: tmCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tmCode),
+      objectSubtype: objectSubtype == null && nullToAbsent
+          ? const Value.absent()
+          : Value(objectSubtype),
+      poleCount: poleCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(poleCount),
+      parentObjectRef: parentObjectRef == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentObjectRef),
+      parentMainEquipmentPoleRef:
+          parentMainEquipmentPoleRef == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentMainEquipmentPoleRef),
+      nominalVoltageKv: nominalVoltageKv == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nominalVoltageKv),
+      nominalBreakingCurrentKa: nominalBreakingCurrentKa == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nominalBreakingCurrentKa),
+      ownTripTimeSec: ownTripTimeSec == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownTripTimeSec),
+      emergencyCurrentA: emergencyCurrentA == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emergencyCurrentA),
+      continuousCurrentA: continuousCurrentA == null && nullToAbsent
+          ? const Value.absent()
+          : Value(continuousCurrentA),
+      arresterType: arresterType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(arresterType),
+      xPosition: xPosition == null && nullToAbsent
+          ? const Value.absent()
+          : Value(xPosition),
+      yPosition: yPosition == null && nullToAbsent
+          ? const Value.absent()
+          : Value(yPosition),
+      directionAngle: directionAngle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(directionAngle),
       createdBy: Value(createdBy),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
@@ -2666,6 +3493,44 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       ),
       condition: serializer.fromJson<String>(json['condition']),
       notes: serializer.fromJson<String?>(json['notes']),
+      mrid: serializer.fromJson<String?>(json['mrid']),
+      catalogItemId: serializer.fromJson<int?>(json['catalogItemId']),
+      ratedCurrent: serializer.fromJson<double?>(json['ratedCurrent']),
+      iTh: serializer.fromJson<double?>(json['iTh']),
+      ipMax: serializer.fromJson<double?>(json['ipMax']),
+      tTh: serializer.fromJson<double?>(json['tTh']),
+      normalOpen: serializer.fromJson<bool?>(json['normalOpen']),
+      retained: serializer.fromJson<bool?>(json['retained']),
+      identifiedObjectDescription: serializer.fromJson<String?>(
+        json['identifiedObjectDescription'],
+      ),
+      nameplate: serializer.fromJson<String?>(json['nameplate']),
+      psrSubtype: serializer.fromJson<String?>(json['psrSubtype']),
+      installationDisplayName: serializer.fromJson<String?>(
+        json['installationDisplayName'],
+      ),
+      tmCode: serializer.fromJson<String?>(json['tmCode']),
+      objectSubtype: serializer.fromJson<String?>(json['objectSubtype']),
+      poleCount: serializer.fromJson<int?>(json['poleCount']),
+      parentObjectRef: serializer.fromJson<String?>(json['parentObjectRef']),
+      parentMainEquipmentPoleRef: serializer.fromJson<String?>(
+        json['parentMainEquipmentPoleRef'],
+      ),
+      nominalVoltageKv: serializer.fromJson<double?>(json['nominalVoltageKv']),
+      nominalBreakingCurrentKa: serializer.fromJson<double?>(
+        json['nominalBreakingCurrentKa'],
+      ),
+      ownTripTimeSec: serializer.fromJson<double?>(json['ownTripTimeSec']),
+      emergencyCurrentA: serializer.fromJson<double?>(
+        json['emergencyCurrentA'],
+      ),
+      continuousCurrentA: serializer.fromJson<double?>(
+        json['continuousCurrentA'],
+      ),
+      arresterType: serializer.fromJson<String?>(json['arresterType']),
+      xPosition: serializer.fromJson<double?>(json['xPosition']),
+      yPosition: serializer.fromJson<double?>(json['yPosition']),
+      directionAngle: serializer.fromJson<double?>(json['directionAngle']),
       createdBy: serializer.fromJson<int>(json['createdBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
@@ -2692,6 +3557,40 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       'installationDate': serializer.toJson<DateTime?>(installationDate),
       'condition': serializer.toJson<String>(condition),
       'notes': serializer.toJson<String?>(notes),
+      'mrid': serializer.toJson<String?>(mrid),
+      'catalogItemId': serializer.toJson<int?>(catalogItemId),
+      'ratedCurrent': serializer.toJson<double?>(ratedCurrent),
+      'iTh': serializer.toJson<double?>(iTh),
+      'ipMax': serializer.toJson<double?>(ipMax),
+      'tTh': serializer.toJson<double?>(tTh),
+      'normalOpen': serializer.toJson<bool?>(normalOpen),
+      'retained': serializer.toJson<bool?>(retained),
+      'identifiedObjectDescription': serializer.toJson<String?>(
+        identifiedObjectDescription,
+      ),
+      'nameplate': serializer.toJson<String?>(nameplate),
+      'psrSubtype': serializer.toJson<String?>(psrSubtype),
+      'installationDisplayName': serializer.toJson<String?>(
+        installationDisplayName,
+      ),
+      'tmCode': serializer.toJson<String?>(tmCode),
+      'objectSubtype': serializer.toJson<String?>(objectSubtype),
+      'poleCount': serializer.toJson<int?>(poleCount),
+      'parentObjectRef': serializer.toJson<String?>(parentObjectRef),
+      'parentMainEquipmentPoleRef': serializer.toJson<String?>(
+        parentMainEquipmentPoleRef,
+      ),
+      'nominalVoltageKv': serializer.toJson<double?>(nominalVoltageKv),
+      'nominalBreakingCurrentKa': serializer.toJson<double?>(
+        nominalBreakingCurrentKa,
+      ),
+      'ownTripTimeSec': serializer.toJson<double?>(ownTripTimeSec),
+      'emergencyCurrentA': serializer.toJson<double?>(emergencyCurrentA),
+      'continuousCurrentA': serializer.toJson<double?>(continuousCurrentA),
+      'arresterType': serializer.toJson<String?>(arresterType),
+      'xPosition': serializer.toJson<double?>(xPosition),
+      'yPosition': serializer.toJson<double?>(yPosition),
+      'directionAngle': serializer.toJson<double?>(directionAngle),
       'createdBy': serializer.toJson<int>(createdBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
@@ -2716,6 +3615,32 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     Value<DateTime?> installationDate = const Value.absent(),
     String? condition,
     Value<String?> notes = const Value.absent(),
+    Value<String?> mrid = const Value.absent(),
+    Value<int?> catalogItemId = const Value.absent(),
+    Value<double?> ratedCurrent = const Value.absent(),
+    Value<double?> iTh = const Value.absent(),
+    Value<double?> ipMax = const Value.absent(),
+    Value<double?> tTh = const Value.absent(),
+    Value<bool?> normalOpen = const Value.absent(),
+    Value<bool?> retained = const Value.absent(),
+    Value<String?> identifiedObjectDescription = const Value.absent(),
+    Value<String?> nameplate = const Value.absent(),
+    Value<String?> psrSubtype = const Value.absent(),
+    Value<String?> installationDisplayName = const Value.absent(),
+    Value<String?> tmCode = const Value.absent(),
+    Value<String?> objectSubtype = const Value.absent(),
+    Value<int?> poleCount = const Value.absent(),
+    Value<String?> parentObjectRef = const Value.absent(),
+    Value<String?> parentMainEquipmentPoleRef = const Value.absent(),
+    Value<double?> nominalVoltageKv = const Value.absent(),
+    Value<double?> nominalBreakingCurrentKa = const Value.absent(),
+    Value<double?> ownTripTimeSec = const Value.absent(),
+    Value<double?> emergencyCurrentA = const Value.absent(),
+    Value<double?> continuousCurrentA = const Value.absent(),
+    Value<String?> arresterType = const Value.absent(),
+    Value<double?> xPosition = const Value.absent(),
+    Value<double?> yPosition = const Value.absent(),
+    Value<double?> directionAngle = const Value.absent(),
     int? createdBy,
     DateTime? createdAt,
     Value<DateTime?> updatedAt = const Value.absent(),
@@ -2743,6 +3668,56 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
         : this.installationDate,
     condition: condition ?? this.condition,
     notes: notes.present ? notes.value : this.notes,
+    mrid: mrid.present ? mrid.value : this.mrid,
+    catalogItemId: catalogItemId.present
+        ? catalogItemId.value
+        : this.catalogItemId,
+    ratedCurrent: ratedCurrent.present ? ratedCurrent.value : this.ratedCurrent,
+    iTh: iTh.present ? iTh.value : this.iTh,
+    ipMax: ipMax.present ? ipMax.value : this.ipMax,
+    tTh: tTh.present ? tTh.value : this.tTh,
+    normalOpen: normalOpen.present ? normalOpen.value : this.normalOpen,
+    retained: retained.present ? retained.value : this.retained,
+    identifiedObjectDescription: identifiedObjectDescription.present
+        ? identifiedObjectDescription.value
+        : this.identifiedObjectDescription,
+    nameplate: nameplate.present ? nameplate.value : this.nameplate,
+    psrSubtype: psrSubtype.present ? psrSubtype.value : this.psrSubtype,
+    installationDisplayName: installationDisplayName.present
+        ? installationDisplayName.value
+        : this.installationDisplayName,
+    tmCode: tmCode.present ? tmCode.value : this.tmCode,
+    objectSubtype: objectSubtype.present
+        ? objectSubtype.value
+        : this.objectSubtype,
+    poleCount: poleCount.present ? poleCount.value : this.poleCount,
+    parentObjectRef: parentObjectRef.present
+        ? parentObjectRef.value
+        : this.parentObjectRef,
+    parentMainEquipmentPoleRef: parentMainEquipmentPoleRef.present
+        ? parentMainEquipmentPoleRef.value
+        : this.parentMainEquipmentPoleRef,
+    nominalVoltageKv: nominalVoltageKv.present
+        ? nominalVoltageKv.value
+        : this.nominalVoltageKv,
+    nominalBreakingCurrentKa: nominalBreakingCurrentKa.present
+        ? nominalBreakingCurrentKa.value
+        : this.nominalBreakingCurrentKa,
+    ownTripTimeSec: ownTripTimeSec.present
+        ? ownTripTimeSec.value
+        : this.ownTripTimeSec,
+    emergencyCurrentA: emergencyCurrentA.present
+        ? emergencyCurrentA.value
+        : this.emergencyCurrentA,
+    continuousCurrentA: continuousCurrentA.present
+        ? continuousCurrentA.value
+        : this.continuousCurrentA,
+    arresterType: arresterType.present ? arresterType.value : this.arresterType,
+    xPosition: xPosition.present ? xPosition.value : this.xPosition,
+    yPosition: yPosition.present ? yPosition.value : this.yPosition,
+    directionAngle: directionAngle.present
+        ? directionAngle.value
+        : this.directionAngle,
     createdBy: createdBy ?? this.createdBy,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
@@ -2780,6 +3755,64 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           : this.installationDate,
       condition: data.condition.present ? data.condition.value : this.condition,
       notes: data.notes.present ? data.notes.value : this.notes,
+      mrid: data.mrid.present ? data.mrid.value : this.mrid,
+      catalogItemId: data.catalogItemId.present
+          ? data.catalogItemId.value
+          : this.catalogItemId,
+      ratedCurrent: data.ratedCurrent.present
+          ? data.ratedCurrent.value
+          : this.ratedCurrent,
+      iTh: data.iTh.present ? data.iTh.value : this.iTh,
+      ipMax: data.ipMax.present ? data.ipMax.value : this.ipMax,
+      tTh: data.tTh.present ? data.tTh.value : this.tTh,
+      normalOpen: data.normalOpen.present
+          ? data.normalOpen.value
+          : this.normalOpen,
+      retained: data.retained.present ? data.retained.value : this.retained,
+      identifiedObjectDescription: data.identifiedObjectDescription.present
+          ? data.identifiedObjectDescription.value
+          : this.identifiedObjectDescription,
+      nameplate: data.nameplate.present ? data.nameplate.value : this.nameplate,
+      psrSubtype: data.psrSubtype.present
+          ? data.psrSubtype.value
+          : this.psrSubtype,
+      installationDisplayName: data.installationDisplayName.present
+          ? data.installationDisplayName.value
+          : this.installationDisplayName,
+      tmCode: data.tmCode.present ? data.tmCode.value : this.tmCode,
+      objectSubtype: data.objectSubtype.present
+          ? data.objectSubtype.value
+          : this.objectSubtype,
+      poleCount: data.poleCount.present ? data.poleCount.value : this.poleCount,
+      parentObjectRef: data.parentObjectRef.present
+          ? data.parentObjectRef.value
+          : this.parentObjectRef,
+      parentMainEquipmentPoleRef: data.parentMainEquipmentPoleRef.present
+          ? data.parentMainEquipmentPoleRef.value
+          : this.parentMainEquipmentPoleRef,
+      nominalVoltageKv: data.nominalVoltageKv.present
+          ? data.nominalVoltageKv.value
+          : this.nominalVoltageKv,
+      nominalBreakingCurrentKa: data.nominalBreakingCurrentKa.present
+          ? data.nominalBreakingCurrentKa.value
+          : this.nominalBreakingCurrentKa,
+      ownTripTimeSec: data.ownTripTimeSec.present
+          ? data.ownTripTimeSec.value
+          : this.ownTripTimeSec,
+      emergencyCurrentA: data.emergencyCurrentA.present
+          ? data.emergencyCurrentA.value
+          : this.emergencyCurrentA,
+      continuousCurrentA: data.continuousCurrentA.present
+          ? data.continuousCurrentA.value
+          : this.continuousCurrentA,
+      arresterType: data.arresterType.present
+          ? data.arresterType.value
+          : this.arresterType,
+      xPosition: data.xPosition.present ? data.xPosition.value : this.xPosition,
+      yPosition: data.yPosition.present ? data.yPosition.value : this.yPosition,
+      directionAngle: data.directionAngle.present
+          ? data.directionAngle.value
+          : this.directionAngle,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -2806,6 +3839,32 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           ..write('installationDate: $installationDate, ')
           ..write('condition: $condition, ')
           ..write('notes: $notes, ')
+          ..write('mrid: $mrid, ')
+          ..write('catalogItemId: $catalogItemId, ')
+          ..write('ratedCurrent: $ratedCurrent, ')
+          ..write('iTh: $iTh, ')
+          ..write('ipMax: $ipMax, ')
+          ..write('tTh: $tTh, ')
+          ..write('normalOpen: $normalOpen, ')
+          ..write('retained: $retained, ')
+          ..write('identifiedObjectDescription: $identifiedObjectDescription, ')
+          ..write('nameplate: $nameplate, ')
+          ..write('psrSubtype: $psrSubtype, ')
+          ..write('installationDisplayName: $installationDisplayName, ')
+          ..write('tmCode: $tmCode, ')
+          ..write('objectSubtype: $objectSubtype, ')
+          ..write('poleCount: $poleCount, ')
+          ..write('parentObjectRef: $parentObjectRef, ')
+          ..write('parentMainEquipmentPoleRef: $parentMainEquipmentPoleRef, ')
+          ..write('nominalVoltageKv: $nominalVoltageKv, ')
+          ..write('nominalBreakingCurrentKa: $nominalBreakingCurrentKa, ')
+          ..write('ownTripTimeSec: $ownTripTimeSec, ')
+          ..write('emergencyCurrentA: $emergencyCurrentA, ')
+          ..write('continuousCurrentA: $continuousCurrentA, ')
+          ..write('arresterType: $arresterType, ')
+          ..write('xPosition: $xPosition, ')
+          ..write('yPosition: $yPosition, ')
+          ..write('directionAngle: $directionAngle, ')
           ..write('createdBy: $createdBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -2816,7 +3875,7 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     poleId,
     equipmentType,
@@ -2832,12 +3891,38 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     installationDate,
     condition,
     notes,
+    mrid,
+    catalogItemId,
+    ratedCurrent,
+    iTh,
+    ipMax,
+    tTh,
+    normalOpen,
+    retained,
+    identifiedObjectDescription,
+    nameplate,
+    psrSubtype,
+    installationDisplayName,
+    tmCode,
+    objectSubtype,
+    poleCount,
+    parentObjectRef,
+    parentMainEquipmentPoleRef,
+    nominalVoltageKv,
+    nominalBreakingCurrentKa,
+    ownTripTimeSec,
+    emergencyCurrentA,
+    continuousCurrentA,
+    arresterType,
+    xPosition,
+    yPosition,
+    directionAngle,
     createdBy,
     createdAt,
     updatedAt,
     isLocal,
     needsSync,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2857,6 +3942,33 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           other.installationDate == this.installationDate &&
           other.condition == this.condition &&
           other.notes == this.notes &&
+          other.mrid == this.mrid &&
+          other.catalogItemId == this.catalogItemId &&
+          other.ratedCurrent == this.ratedCurrent &&
+          other.iTh == this.iTh &&
+          other.ipMax == this.ipMax &&
+          other.tTh == this.tTh &&
+          other.normalOpen == this.normalOpen &&
+          other.retained == this.retained &&
+          other.identifiedObjectDescription ==
+              this.identifiedObjectDescription &&
+          other.nameplate == this.nameplate &&
+          other.psrSubtype == this.psrSubtype &&
+          other.installationDisplayName == this.installationDisplayName &&
+          other.tmCode == this.tmCode &&
+          other.objectSubtype == this.objectSubtype &&
+          other.poleCount == this.poleCount &&
+          other.parentObjectRef == this.parentObjectRef &&
+          other.parentMainEquipmentPoleRef == this.parentMainEquipmentPoleRef &&
+          other.nominalVoltageKv == this.nominalVoltageKv &&
+          other.nominalBreakingCurrentKa == this.nominalBreakingCurrentKa &&
+          other.ownTripTimeSec == this.ownTripTimeSec &&
+          other.emergencyCurrentA == this.emergencyCurrentA &&
+          other.continuousCurrentA == this.continuousCurrentA &&
+          other.arresterType == this.arresterType &&
+          other.xPosition == this.xPosition &&
+          other.yPosition == this.yPosition &&
+          other.directionAngle == this.directionAngle &&
           other.createdBy == this.createdBy &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -2880,6 +3992,32 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   final Value<DateTime?> installationDate;
   final Value<String> condition;
   final Value<String?> notes;
+  final Value<String?> mrid;
+  final Value<int?> catalogItemId;
+  final Value<double?> ratedCurrent;
+  final Value<double?> iTh;
+  final Value<double?> ipMax;
+  final Value<double?> tTh;
+  final Value<bool?> normalOpen;
+  final Value<bool?> retained;
+  final Value<String?> identifiedObjectDescription;
+  final Value<String?> nameplate;
+  final Value<String?> psrSubtype;
+  final Value<String?> installationDisplayName;
+  final Value<String?> tmCode;
+  final Value<String?> objectSubtype;
+  final Value<int?> poleCount;
+  final Value<String?> parentObjectRef;
+  final Value<String?> parentMainEquipmentPoleRef;
+  final Value<double?> nominalVoltageKv;
+  final Value<double?> nominalBreakingCurrentKa;
+  final Value<double?> ownTripTimeSec;
+  final Value<double?> emergencyCurrentA;
+  final Value<double?> continuousCurrentA;
+  final Value<String?> arresterType;
+  final Value<double?> xPosition;
+  final Value<double?> yPosition;
+  final Value<double?> directionAngle;
   final Value<int> createdBy;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
@@ -2901,6 +4039,32 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.installationDate = const Value.absent(),
     this.condition = const Value.absent(),
     this.notes = const Value.absent(),
+    this.mrid = const Value.absent(),
+    this.catalogItemId = const Value.absent(),
+    this.ratedCurrent = const Value.absent(),
+    this.iTh = const Value.absent(),
+    this.ipMax = const Value.absent(),
+    this.tTh = const Value.absent(),
+    this.normalOpen = const Value.absent(),
+    this.retained = const Value.absent(),
+    this.identifiedObjectDescription = const Value.absent(),
+    this.nameplate = const Value.absent(),
+    this.psrSubtype = const Value.absent(),
+    this.installationDisplayName = const Value.absent(),
+    this.tmCode = const Value.absent(),
+    this.objectSubtype = const Value.absent(),
+    this.poleCount = const Value.absent(),
+    this.parentObjectRef = const Value.absent(),
+    this.parentMainEquipmentPoleRef = const Value.absent(),
+    this.nominalVoltageKv = const Value.absent(),
+    this.nominalBreakingCurrentKa = const Value.absent(),
+    this.ownTripTimeSec = const Value.absent(),
+    this.emergencyCurrentA = const Value.absent(),
+    this.continuousCurrentA = const Value.absent(),
+    this.arresterType = const Value.absent(),
+    this.xPosition = const Value.absent(),
+    this.yPosition = const Value.absent(),
+    this.directionAngle = const Value.absent(),
     this.createdBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -2923,6 +4087,32 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.installationDate = const Value.absent(),
     required String condition,
     this.notes = const Value.absent(),
+    this.mrid = const Value.absent(),
+    this.catalogItemId = const Value.absent(),
+    this.ratedCurrent = const Value.absent(),
+    this.iTh = const Value.absent(),
+    this.ipMax = const Value.absent(),
+    this.tTh = const Value.absent(),
+    this.normalOpen = const Value.absent(),
+    this.retained = const Value.absent(),
+    this.identifiedObjectDescription = const Value.absent(),
+    this.nameplate = const Value.absent(),
+    this.psrSubtype = const Value.absent(),
+    this.installationDisplayName = const Value.absent(),
+    this.tmCode = const Value.absent(),
+    this.objectSubtype = const Value.absent(),
+    this.poleCount = const Value.absent(),
+    this.parentObjectRef = const Value.absent(),
+    this.parentMainEquipmentPoleRef = const Value.absent(),
+    this.nominalVoltageKv = const Value.absent(),
+    this.nominalBreakingCurrentKa = const Value.absent(),
+    this.ownTripTimeSec = const Value.absent(),
+    this.emergencyCurrentA = const Value.absent(),
+    this.continuousCurrentA = const Value.absent(),
+    this.arresterType = const Value.absent(),
+    this.xPosition = const Value.absent(),
+    this.yPosition = const Value.absent(),
+    this.directionAngle = const Value.absent(),
     required int createdBy,
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
@@ -2950,6 +4140,32 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     Expression<DateTime>? installationDate,
     Expression<String>? condition,
     Expression<String>? notes,
+    Expression<String>? mrid,
+    Expression<int>? catalogItemId,
+    Expression<double>? ratedCurrent,
+    Expression<double>? iTh,
+    Expression<double>? ipMax,
+    Expression<double>? tTh,
+    Expression<bool>? normalOpen,
+    Expression<bool>? retained,
+    Expression<String>? identifiedObjectDescription,
+    Expression<String>? nameplate,
+    Expression<String>? psrSubtype,
+    Expression<String>? installationDisplayName,
+    Expression<String>? tmCode,
+    Expression<String>? objectSubtype,
+    Expression<int>? poleCount,
+    Expression<String>? parentObjectRef,
+    Expression<String>? parentMainEquipmentPoleRef,
+    Expression<double>? nominalVoltageKv,
+    Expression<double>? nominalBreakingCurrentKa,
+    Expression<double>? ownTripTimeSec,
+    Expression<double>? emergencyCurrentA,
+    Expression<double>? continuousCurrentA,
+    Expression<String>? arresterType,
+    Expression<double>? xPosition,
+    Expression<double>? yPosition,
+    Expression<double>? directionAngle,
     Expression<int>? createdBy,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -2972,6 +4188,37 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       if (installationDate != null) 'installation_date': installationDate,
       if (condition != null) 'condition': condition,
       if (notes != null) 'notes': notes,
+      if (mrid != null) 'mrid': mrid,
+      if (catalogItemId != null) 'catalog_item_id': catalogItemId,
+      if (ratedCurrent != null) 'rated_current': ratedCurrent,
+      if (iTh != null) 'i_th': iTh,
+      if (ipMax != null) 'ip_max': ipMax,
+      if (tTh != null) 't_th': tTh,
+      if (normalOpen != null) 'normal_open': normalOpen,
+      if (retained != null) 'retained': retained,
+      if (identifiedObjectDescription != null)
+        'identified_object_description': identifiedObjectDescription,
+      if (nameplate != null) 'nameplate': nameplate,
+      if (psrSubtype != null) 'psr_subtype': psrSubtype,
+      if (installationDisplayName != null)
+        'installation_display_name': installationDisplayName,
+      if (tmCode != null) 'tm_code': tmCode,
+      if (objectSubtype != null) 'object_subtype': objectSubtype,
+      if (poleCount != null) 'pole_count': poleCount,
+      if (parentObjectRef != null) 'parent_object_ref': parentObjectRef,
+      if (parentMainEquipmentPoleRef != null)
+        'parent_main_equipment_pole_ref': parentMainEquipmentPoleRef,
+      if (nominalVoltageKv != null) 'nominal_voltage_kv': nominalVoltageKv,
+      if (nominalBreakingCurrentKa != null)
+        'nominal_breaking_current_ka': nominalBreakingCurrentKa,
+      if (ownTripTimeSec != null) 'own_trip_time_sec': ownTripTimeSec,
+      if (emergencyCurrentA != null) 'emergency_current_a': emergencyCurrentA,
+      if (continuousCurrentA != null)
+        'continuous_current_a': continuousCurrentA,
+      if (arresterType != null) 'arrester_type': arresterType,
+      if (xPosition != null) 'x_position': xPosition,
+      if (yPosition != null) 'y_position': yPosition,
+      if (directionAngle != null) 'direction_angle': directionAngle,
       if (createdBy != null) 'created_by': createdBy,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -2996,6 +4243,32 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     Value<DateTime?>? installationDate,
     Value<String>? condition,
     Value<String?>? notes,
+    Value<String?>? mrid,
+    Value<int?>? catalogItemId,
+    Value<double?>? ratedCurrent,
+    Value<double?>? iTh,
+    Value<double?>? ipMax,
+    Value<double?>? tTh,
+    Value<bool?>? normalOpen,
+    Value<bool?>? retained,
+    Value<String?>? identifiedObjectDescription,
+    Value<String?>? nameplate,
+    Value<String?>? psrSubtype,
+    Value<String?>? installationDisplayName,
+    Value<String?>? tmCode,
+    Value<String?>? objectSubtype,
+    Value<int?>? poleCount,
+    Value<String?>? parentObjectRef,
+    Value<String?>? parentMainEquipmentPoleRef,
+    Value<double?>? nominalVoltageKv,
+    Value<double?>? nominalBreakingCurrentKa,
+    Value<double?>? ownTripTimeSec,
+    Value<double?>? emergencyCurrentA,
+    Value<double?>? continuousCurrentA,
+    Value<String?>? arresterType,
+    Value<double?>? xPosition,
+    Value<double?>? yPosition,
+    Value<double?>? directionAngle,
     Value<int>? createdBy,
     Value<DateTime>? createdAt,
     Value<DateTime?>? updatedAt,
@@ -3018,6 +4291,36 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       installationDate: installationDate ?? this.installationDate,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
+      mrid: mrid ?? this.mrid,
+      catalogItemId: catalogItemId ?? this.catalogItemId,
+      ratedCurrent: ratedCurrent ?? this.ratedCurrent,
+      iTh: iTh ?? this.iTh,
+      ipMax: ipMax ?? this.ipMax,
+      tTh: tTh ?? this.tTh,
+      normalOpen: normalOpen ?? this.normalOpen,
+      retained: retained ?? this.retained,
+      identifiedObjectDescription:
+          identifiedObjectDescription ?? this.identifiedObjectDescription,
+      nameplate: nameplate ?? this.nameplate,
+      psrSubtype: psrSubtype ?? this.psrSubtype,
+      installationDisplayName:
+          installationDisplayName ?? this.installationDisplayName,
+      tmCode: tmCode ?? this.tmCode,
+      objectSubtype: objectSubtype ?? this.objectSubtype,
+      poleCount: poleCount ?? this.poleCount,
+      parentObjectRef: parentObjectRef ?? this.parentObjectRef,
+      parentMainEquipmentPoleRef:
+          parentMainEquipmentPoleRef ?? this.parentMainEquipmentPoleRef,
+      nominalVoltageKv: nominalVoltageKv ?? this.nominalVoltageKv,
+      nominalBreakingCurrentKa:
+          nominalBreakingCurrentKa ?? this.nominalBreakingCurrentKa,
+      ownTripTimeSec: ownTripTimeSec ?? this.ownTripTimeSec,
+      emergencyCurrentA: emergencyCurrentA ?? this.emergencyCurrentA,
+      continuousCurrentA: continuousCurrentA ?? this.continuousCurrentA,
+      arresterType: arresterType ?? this.arresterType,
+      xPosition: xPosition ?? this.xPosition,
+      yPosition: yPosition ?? this.yPosition,
+      directionAngle: directionAngle ?? this.directionAngle,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -3074,6 +4377,92 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (mrid.present) {
+      map['mrid'] = Variable<String>(mrid.value);
+    }
+    if (catalogItemId.present) {
+      map['catalog_item_id'] = Variable<int>(catalogItemId.value);
+    }
+    if (ratedCurrent.present) {
+      map['rated_current'] = Variable<double>(ratedCurrent.value);
+    }
+    if (iTh.present) {
+      map['i_th'] = Variable<double>(iTh.value);
+    }
+    if (ipMax.present) {
+      map['ip_max'] = Variable<double>(ipMax.value);
+    }
+    if (tTh.present) {
+      map['t_th'] = Variable<double>(tTh.value);
+    }
+    if (normalOpen.present) {
+      map['normal_open'] = Variable<bool>(normalOpen.value);
+    }
+    if (retained.present) {
+      map['retained'] = Variable<bool>(retained.value);
+    }
+    if (identifiedObjectDescription.present) {
+      map['identified_object_description'] = Variable<String>(
+        identifiedObjectDescription.value,
+      );
+    }
+    if (nameplate.present) {
+      map['nameplate'] = Variable<String>(nameplate.value);
+    }
+    if (psrSubtype.present) {
+      map['psr_subtype'] = Variable<String>(psrSubtype.value);
+    }
+    if (installationDisplayName.present) {
+      map['installation_display_name'] = Variable<String>(
+        installationDisplayName.value,
+      );
+    }
+    if (tmCode.present) {
+      map['tm_code'] = Variable<String>(tmCode.value);
+    }
+    if (objectSubtype.present) {
+      map['object_subtype'] = Variable<String>(objectSubtype.value);
+    }
+    if (poleCount.present) {
+      map['pole_count'] = Variable<int>(poleCount.value);
+    }
+    if (parentObjectRef.present) {
+      map['parent_object_ref'] = Variable<String>(parentObjectRef.value);
+    }
+    if (parentMainEquipmentPoleRef.present) {
+      map['parent_main_equipment_pole_ref'] = Variable<String>(
+        parentMainEquipmentPoleRef.value,
+      );
+    }
+    if (nominalVoltageKv.present) {
+      map['nominal_voltage_kv'] = Variable<double>(nominalVoltageKv.value);
+    }
+    if (nominalBreakingCurrentKa.present) {
+      map['nominal_breaking_current_ka'] = Variable<double>(
+        nominalBreakingCurrentKa.value,
+      );
+    }
+    if (ownTripTimeSec.present) {
+      map['own_trip_time_sec'] = Variable<double>(ownTripTimeSec.value);
+    }
+    if (emergencyCurrentA.present) {
+      map['emergency_current_a'] = Variable<double>(emergencyCurrentA.value);
+    }
+    if (continuousCurrentA.present) {
+      map['continuous_current_a'] = Variable<double>(continuousCurrentA.value);
+    }
+    if (arresterType.present) {
+      map['arrester_type'] = Variable<String>(arresterType.value);
+    }
+    if (xPosition.present) {
+      map['x_position'] = Variable<double>(xPosition.value);
+    }
+    if (yPosition.present) {
+      map['y_position'] = Variable<double>(yPosition.value);
+    }
+    if (directionAngle.present) {
+      map['direction_angle'] = Variable<double>(directionAngle.value);
+    }
     if (createdBy.present) {
       map['created_by'] = Variable<int>(createdBy.value);
     }
@@ -3110,6 +4499,32 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
           ..write('installationDate: $installationDate, ')
           ..write('condition: $condition, ')
           ..write('notes: $notes, ')
+          ..write('mrid: $mrid, ')
+          ..write('catalogItemId: $catalogItemId, ')
+          ..write('ratedCurrent: $ratedCurrent, ')
+          ..write('iTh: $iTh, ')
+          ..write('ipMax: $ipMax, ')
+          ..write('tTh: $tTh, ')
+          ..write('normalOpen: $normalOpen, ')
+          ..write('retained: $retained, ')
+          ..write('identifiedObjectDescription: $identifiedObjectDescription, ')
+          ..write('nameplate: $nameplate, ')
+          ..write('psrSubtype: $psrSubtype, ')
+          ..write('installationDisplayName: $installationDisplayName, ')
+          ..write('tmCode: $tmCode, ')
+          ..write('objectSubtype: $objectSubtype, ')
+          ..write('poleCount: $poleCount, ')
+          ..write('parentObjectRef: $parentObjectRef, ')
+          ..write('parentMainEquipmentPoleRef: $parentMainEquipmentPoleRef, ')
+          ..write('nominalVoltageKv: $nominalVoltageKv, ')
+          ..write('nominalBreakingCurrentKa: $nominalBreakingCurrentKa, ')
+          ..write('ownTripTimeSec: $ownTripTimeSec, ')
+          ..write('emergencyCurrentA: $emergencyCurrentA, ')
+          ..write('continuousCurrentA: $continuousCurrentA, ')
+          ..write('arresterType: $arresterType, ')
+          ..write('xPosition: $xPosition, ')
+          ..write('yPosition: $yPosition, ')
+          ..write('directionAngle: $directionAngle, ')
           ..write('createdBy: $createdBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -5091,6 +6506,32 @@ typedef $$EquipmentTableCreateCompanionBuilder =
       Value<DateTime?> installationDate,
       required String condition,
       Value<String?> notes,
+      Value<String?> mrid,
+      Value<int?> catalogItemId,
+      Value<double?> ratedCurrent,
+      Value<double?> iTh,
+      Value<double?> ipMax,
+      Value<double?> tTh,
+      Value<bool?> normalOpen,
+      Value<bool?> retained,
+      Value<String?> identifiedObjectDescription,
+      Value<String?> nameplate,
+      Value<String?> psrSubtype,
+      Value<String?> installationDisplayName,
+      Value<String?> tmCode,
+      Value<String?> objectSubtype,
+      Value<int?> poleCount,
+      Value<String?> parentObjectRef,
+      Value<String?> parentMainEquipmentPoleRef,
+      Value<double?> nominalVoltageKv,
+      Value<double?> nominalBreakingCurrentKa,
+      Value<double?> ownTripTimeSec,
+      Value<double?> emergencyCurrentA,
+      Value<double?> continuousCurrentA,
+      Value<String?> arresterType,
+      Value<double?> xPosition,
+      Value<double?> yPosition,
+      Value<double?> directionAngle,
       required int createdBy,
       required DateTime createdAt,
       Value<DateTime?> updatedAt,
@@ -5114,6 +6555,32 @@ typedef $$EquipmentTableUpdateCompanionBuilder =
       Value<DateTime?> installationDate,
       Value<String> condition,
       Value<String?> notes,
+      Value<String?> mrid,
+      Value<int?> catalogItemId,
+      Value<double?> ratedCurrent,
+      Value<double?> iTh,
+      Value<double?> ipMax,
+      Value<double?> tTh,
+      Value<bool?> normalOpen,
+      Value<bool?> retained,
+      Value<String?> identifiedObjectDescription,
+      Value<String?> nameplate,
+      Value<String?> psrSubtype,
+      Value<String?> installationDisplayName,
+      Value<String?> tmCode,
+      Value<String?> objectSubtype,
+      Value<int?> poleCount,
+      Value<String?> parentObjectRef,
+      Value<String?> parentMainEquipmentPoleRef,
+      Value<double?> nominalVoltageKv,
+      Value<double?> nominalBreakingCurrentKa,
+      Value<double?> ownTripTimeSec,
+      Value<double?> emergencyCurrentA,
+      Value<double?> continuousCurrentA,
+      Value<String?> arresterType,
+      Value<double?> xPosition,
+      Value<double?> yPosition,
+      Value<double?> directionAngle,
       Value<int> createdBy,
       Value<DateTime> createdAt,
       Value<DateTime?> updatedAt,
@@ -5202,6 +6669,136 @@ class $$EquipmentTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mrid => $composableBuilder(
+    column: $table.mrid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get catalogItemId => $composableBuilder(
+    column: $table.catalogItemId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get ratedCurrent => $composableBuilder(
+    column: $table.ratedCurrent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get iTh => $composableBuilder(
+    column: $table.iTh,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get ipMax => $composableBuilder(
+    column: $table.ipMax,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get tTh => $composableBuilder(
+    column: $table.tTh,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get normalOpen => $composableBuilder(
+    column: $table.normalOpen,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get retained => $composableBuilder(
+    column: $table.retained,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get identifiedObjectDescription => $composableBuilder(
+    column: $table.identifiedObjectDescription,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameplate => $composableBuilder(
+    column: $table.nameplate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get psrSubtype => $composableBuilder(
+    column: $table.psrSubtype,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get installationDisplayName => $composableBuilder(
+    column: $table.installationDisplayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tmCode => $composableBuilder(
+    column: $table.tmCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get objectSubtype => $composableBuilder(
+    column: $table.objectSubtype,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get poleCount => $composableBuilder(
+    column: $table.poleCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentObjectRef => $composableBuilder(
+    column: $table.parentObjectRef,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentMainEquipmentPoleRef => $composableBuilder(
+    column: $table.parentMainEquipmentPoleRef,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get nominalVoltageKv => $composableBuilder(
+    column: $table.nominalVoltageKv,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get nominalBreakingCurrentKa => $composableBuilder(
+    column: $table.nominalBreakingCurrentKa,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get ownTripTimeSec => $composableBuilder(
+    column: $table.ownTripTimeSec,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get emergencyCurrentA => $composableBuilder(
+    column: $table.emergencyCurrentA,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get continuousCurrentA => $composableBuilder(
+    column: $table.continuousCurrentA,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get arresterType => $composableBuilder(
+    column: $table.arresterType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get xPosition => $composableBuilder(
+    column: $table.xPosition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get yPosition => $composableBuilder(
+    column: $table.yPosition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get directionAngle => $composableBuilder(
+    column: $table.directionAngle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5315,6 +6912,136 @@ class $$EquipmentTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get mrid => $composableBuilder(
+    column: $table.mrid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get catalogItemId => $composableBuilder(
+    column: $table.catalogItemId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get ratedCurrent => $composableBuilder(
+    column: $table.ratedCurrent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get iTh => $composableBuilder(
+    column: $table.iTh,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get ipMax => $composableBuilder(
+    column: $table.ipMax,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get tTh => $composableBuilder(
+    column: $table.tTh,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get normalOpen => $composableBuilder(
+    column: $table.normalOpen,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get retained => $composableBuilder(
+    column: $table.retained,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get identifiedObjectDescription => $composableBuilder(
+    column: $table.identifiedObjectDescription,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameplate => $composableBuilder(
+    column: $table.nameplate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get psrSubtype => $composableBuilder(
+    column: $table.psrSubtype,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get installationDisplayName => $composableBuilder(
+    column: $table.installationDisplayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tmCode => $composableBuilder(
+    column: $table.tmCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get objectSubtype => $composableBuilder(
+    column: $table.objectSubtype,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get poleCount => $composableBuilder(
+    column: $table.poleCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentObjectRef => $composableBuilder(
+    column: $table.parentObjectRef,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentMainEquipmentPoleRef => $composableBuilder(
+    column: $table.parentMainEquipmentPoleRef,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get nominalVoltageKv => $composableBuilder(
+    column: $table.nominalVoltageKv,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get nominalBreakingCurrentKa => $composableBuilder(
+    column: $table.nominalBreakingCurrentKa,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get ownTripTimeSec => $composableBuilder(
+    column: $table.ownTripTimeSec,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get emergencyCurrentA => $composableBuilder(
+    column: $table.emergencyCurrentA,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get continuousCurrentA => $composableBuilder(
+    column: $table.continuousCurrentA,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get arresterType => $composableBuilder(
+    column: $table.arresterType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get xPosition => $composableBuilder(
+    column: $table.xPosition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get yPosition => $composableBuilder(
+    column: $table.yPosition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get directionAngle => $composableBuilder(
+    column: $table.directionAngle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdBy => $composableBuilder(
     column: $table.createdBy,
     builder: (column) => ColumnOrderings(column),
@@ -5409,6 +7136,116 @@ class $$EquipmentTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<String> get mrid =>
+      $composableBuilder(column: $table.mrid, builder: (column) => column);
+
+  GeneratedColumn<int> get catalogItemId => $composableBuilder(
+    column: $table.catalogItemId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get ratedCurrent => $composableBuilder(
+    column: $table.ratedCurrent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get iTh =>
+      $composableBuilder(column: $table.iTh, builder: (column) => column);
+
+  GeneratedColumn<double> get ipMax =>
+      $composableBuilder(column: $table.ipMax, builder: (column) => column);
+
+  GeneratedColumn<double> get tTh =>
+      $composableBuilder(column: $table.tTh, builder: (column) => column);
+
+  GeneratedColumn<bool> get normalOpen => $composableBuilder(
+    column: $table.normalOpen,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get retained =>
+      $composableBuilder(column: $table.retained, builder: (column) => column);
+
+  GeneratedColumn<String> get identifiedObjectDescription => $composableBuilder(
+    column: $table.identifiedObjectDescription,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get nameplate =>
+      $composableBuilder(column: $table.nameplate, builder: (column) => column);
+
+  GeneratedColumn<String> get psrSubtype => $composableBuilder(
+    column: $table.psrSubtype,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get installationDisplayName => $composableBuilder(
+    column: $table.installationDisplayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tmCode =>
+      $composableBuilder(column: $table.tmCode, builder: (column) => column);
+
+  GeneratedColumn<String> get objectSubtype => $composableBuilder(
+    column: $table.objectSubtype,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get poleCount =>
+      $composableBuilder(column: $table.poleCount, builder: (column) => column);
+
+  GeneratedColumn<String> get parentObjectRef => $composableBuilder(
+    column: $table.parentObjectRef,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get parentMainEquipmentPoleRef => $composableBuilder(
+    column: $table.parentMainEquipmentPoleRef,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get nominalVoltageKv => $composableBuilder(
+    column: $table.nominalVoltageKv,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get nominalBreakingCurrentKa => $composableBuilder(
+    column: $table.nominalBreakingCurrentKa,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get ownTripTimeSec => $composableBuilder(
+    column: $table.ownTripTimeSec,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get emergencyCurrentA => $composableBuilder(
+    column: $table.emergencyCurrentA,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get continuousCurrentA => $composableBuilder(
+    column: $table.continuousCurrentA,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get arresterType => $composableBuilder(
+    column: $table.arresterType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get xPosition =>
+      $composableBuilder(column: $table.xPosition, builder: (column) => column);
+
+  GeneratedColumn<double> get yPosition =>
+      $composableBuilder(column: $table.yPosition, builder: (column) => column);
+
+  GeneratedColumn<double> get directionAngle => $composableBuilder(
+    column: $table.directionAngle,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get createdBy =>
       $composableBuilder(column: $table.createdBy, builder: (column) => column);
 
@@ -5471,6 +7308,34 @@ class $$EquipmentTableTableManager
                 Value<DateTime?> installationDate = const Value.absent(),
                 Value<String> condition = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> mrid = const Value.absent(),
+                Value<int?> catalogItemId = const Value.absent(),
+                Value<double?> ratedCurrent = const Value.absent(),
+                Value<double?> iTh = const Value.absent(),
+                Value<double?> ipMax = const Value.absent(),
+                Value<double?> tTh = const Value.absent(),
+                Value<bool?> normalOpen = const Value.absent(),
+                Value<bool?> retained = const Value.absent(),
+                Value<String?> identifiedObjectDescription =
+                    const Value.absent(),
+                Value<String?> nameplate = const Value.absent(),
+                Value<String?> psrSubtype = const Value.absent(),
+                Value<String?> installationDisplayName = const Value.absent(),
+                Value<String?> tmCode = const Value.absent(),
+                Value<String?> objectSubtype = const Value.absent(),
+                Value<int?> poleCount = const Value.absent(),
+                Value<String?> parentObjectRef = const Value.absent(),
+                Value<String?> parentMainEquipmentPoleRef =
+                    const Value.absent(),
+                Value<double?> nominalVoltageKv = const Value.absent(),
+                Value<double?> nominalBreakingCurrentKa = const Value.absent(),
+                Value<double?> ownTripTimeSec = const Value.absent(),
+                Value<double?> emergencyCurrentA = const Value.absent(),
+                Value<double?> continuousCurrentA = const Value.absent(),
+                Value<String?> arresterType = const Value.absent(),
+                Value<double?> xPosition = const Value.absent(),
+                Value<double?> yPosition = const Value.absent(),
+                Value<double?> directionAngle = const Value.absent(),
                 Value<int> createdBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
@@ -5492,6 +7357,32 @@ class $$EquipmentTableTableManager
                 installationDate: installationDate,
                 condition: condition,
                 notes: notes,
+                mrid: mrid,
+                catalogItemId: catalogItemId,
+                ratedCurrent: ratedCurrent,
+                iTh: iTh,
+                ipMax: ipMax,
+                tTh: tTh,
+                normalOpen: normalOpen,
+                retained: retained,
+                identifiedObjectDescription: identifiedObjectDescription,
+                nameplate: nameplate,
+                psrSubtype: psrSubtype,
+                installationDisplayName: installationDisplayName,
+                tmCode: tmCode,
+                objectSubtype: objectSubtype,
+                poleCount: poleCount,
+                parentObjectRef: parentObjectRef,
+                parentMainEquipmentPoleRef: parentMainEquipmentPoleRef,
+                nominalVoltageKv: nominalVoltageKv,
+                nominalBreakingCurrentKa: nominalBreakingCurrentKa,
+                ownTripTimeSec: ownTripTimeSec,
+                emergencyCurrentA: emergencyCurrentA,
+                continuousCurrentA: continuousCurrentA,
+                arresterType: arresterType,
+                xPosition: xPosition,
+                yPosition: yPosition,
+                directionAngle: directionAngle,
                 createdBy: createdBy,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -5515,6 +7406,34 @@ class $$EquipmentTableTableManager
                 Value<DateTime?> installationDate = const Value.absent(),
                 required String condition,
                 Value<String?> notes = const Value.absent(),
+                Value<String?> mrid = const Value.absent(),
+                Value<int?> catalogItemId = const Value.absent(),
+                Value<double?> ratedCurrent = const Value.absent(),
+                Value<double?> iTh = const Value.absent(),
+                Value<double?> ipMax = const Value.absent(),
+                Value<double?> tTh = const Value.absent(),
+                Value<bool?> normalOpen = const Value.absent(),
+                Value<bool?> retained = const Value.absent(),
+                Value<String?> identifiedObjectDescription =
+                    const Value.absent(),
+                Value<String?> nameplate = const Value.absent(),
+                Value<String?> psrSubtype = const Value.absent(),
+                Value<String?> installationDisplayName = const Value.absent(),
+                Value<String?> tmCode = const Value.absent(),
+                Value<String?> objectSubtype = const Value.absent(),
+                Value<int?> poleCount = const Value.absent(),
+                Value<String?> parentObjectRef = const Value.absent(),
+                Value<String?> parentMainEquipmentPoleRef =
+                    const Value.absent(),
+                Value<double?> nominalVoltageKv = const Value.absent(),
+                Value<double?> nominalBreakingCurrentKa = const Value.absent(),
+                Value<double?> ownTripTimeSec = const Value.absent(),
+                Value<double?> emergencyCurrentA = const Value.absent(),
+                Value<double?> continuousCurrentA = const Value.absent(),
+                Value<String?> arresterType = const Value.absent(),
+                Value<double?> xPosition = const Value.absent(),
+                Value<double?> yPosition = const Value.absent(),
+                Value<double?> directionAngle = const Value.absent(),
                 required int createdBy,
                 required DateTime createdAt,
                 Value<DateTime?> updatedAt = const Value.absent(),
@@ -5536,6 +7455,32 @@ class $$EquipmentTableTableManager
                 installationDate: installationDate,
                 condition: condition,
                 notes: notes,
+                mrid: mrid,
+                catalogItemId: catalogItemId,
+                ratedCurrent: ratedCurrent,
+                iTh: iTh,
+                ipMax: ipMax,
+                tTh: tTh,
+                normalOpen: normalOpen,
+                retained: retained,
+                identifiedObjectDescription: identifiedObjectDescription,
+                nameplate: nameplate,
+                psrSubtype: psrSubtype,
+                installationDisplayName: installationDisplayName,
+                tmCode: tmCode,
+                objectSubtype: objectSubtype,
+                poleCount: poleCount,
+                parentObjectRef: parentObjectRef,
+                parentMainEquipmentPoleRef: parentMainEquipmentPoleRef,
+                nominalVoltageKv: nominalVoltageKv,
+                nominalBreakingCurrentKa: nominalBreakingCurrentKa,
+                ownTripTimeSec: ownTripTimeSec,
+                emergencyCurrentA: emergencyCurrentA,
+                continuousCurrentA: continuousCurrentA,
+                arresterType: arresterType,
+                xPosition: xPosition,
+                yPosition: yPosition,
+                directionAngle: directionAngle,
                 createdBy: createdBy,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

@@ -36,7 +36,7 @@ class AppConfig {
   // Map Configuration (minZoom 3 — не отдалять до дублирования континентов)
   static const double defaultZoom = 10.0;
   static const double minZoom = 3.0;
-  static const double maxZoom = 18.0;
+  static const double maxZoom = 20.0;
 
   /// Как на Angular: линейное оборудование при зуме ≤ этого значения скрыто;
   /// показывать только после достаточного зума (иначе значки «теряются»).
@@ -63,7 +63,7 @@ class AppConfig {
   
   // Database Configuration
   static const String databaseName = 'lepm_local.db';
-  static const int databaseVersion = 10;
+  static const int databaseVersion = 11;
   
   // Storage Keys
   static const String authTokenKey = 'auth_token';

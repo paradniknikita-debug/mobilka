@@ -31,36 +31,6 @@ body {
   color: var(--app-text);
 }
 
-body.app-theme-dark {
-  --app-bg: #0f172a;
-  --app-text: #e2e8f0;
-  --app-text-muted: rgba(226, 232, 240, 0.78);
-  --surface-1: #111827;
-  --surface-2: #1f2937;
-  --border-color: rgba(226, 232, 240, 0.2);
-  --toolbar-bg: #0b1220;
-  --toolbar-text: #e2e8f0;
-  --sidebar-bg: #111827;
-  --sidebar-shadow: 2px 0 10px rgba(0, 0, 0, 0.45);
-  --map-legend-bg: #111827;
-  --toggle-icon: rgba(226, 232, 240, 0.9);
-}
-
-body.app-theme-light {
-  --app-bg: #f5f7fb;
-  --app-text: #0f172a;
-  --app-text-muted: rgba(15, 23, 42, 0.72);
-  --surface-1: #ffffff;
-  --surface-2: #f8fafc;
-  --border-color: rgba(15, 23, 42, 0.14);
-  --toolbar-bg: #1976d2;
-  --toolbar-text: #ffffff;
-  --sidebar-bg: #ffffff;
-  --sidebar-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
-  --map-legend-bg: #ffffff;
-  --toggle-icon: rgba(0, 0, 0, 0.7);
-}
-
 /* Leaflet карта */
 #map {
   height: 100%;

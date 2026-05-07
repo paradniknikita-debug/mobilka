@@ -309,10 +309,6 @@ export class ApiService {
     return this.http.get<AClineSegment>(`${this.apiUrl}/cim/acline-segments/${segmentId}`);
   }
 
-  getPoleTerminals(poleId: number): Observable<Terminal[]> {
-    return this.http.get<Terminal[]>(`${this.apiUrl}/cim/poles/${poleId}/terminals`);
-  }
-
   // ========== Sync ==========
   uploadSyncBatch(batch: any): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/sync/upload`, batch);

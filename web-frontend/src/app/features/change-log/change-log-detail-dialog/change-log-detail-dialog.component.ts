@@ -206,6 +206,63 @@ export class ChangeLogDetailDialogComponent {
     return labels[type] ?? type;
   }
 
+  /** Подписи полей для журнала (API snake_case + типовые payload-ключи). */
+  fieldLabelRu(key: string): string {
+    const map: Record<string, string> = {
+      pole_number: 'Номер опоры',
+      pole_type: 'Тип опоры',
+      material: 'Материал',
+      condition: 'Состояние',
+      notes: 'Примечание',
+      name: 'Наименование',
+      card_comment: 'Комментарий карточки',
+      card_comment_attachment: 'Вложения карточки',
+      equipment_id: 'Оборудование (id)',
+      equipment_type: 'Тип оборудования',
+      pole_id: 'Опора (id)',
+      mrid: 'mRID',
+      manufacturer: 'Производитель',
+      model: 'Модель',
+      serial_number: 'Заводской номер',
+      year_manufactured: 'Год выпуска',
+      installation_date: 'Дата установки',
+      catalog_item_id: 'Позиция справочника марок (id)',
+      direction_angle: 'Угол направления от опоры, °',
+      x_position: 'Долгота (x_position)',
+      y_position: 'Широта (y_position)',
+      quantity: 'Количество',
+      nameplate: 'Марка (табличка)',
+      identified_object_description: 'Номер единицы оборудования',
+      installation_display_name: 'Название электроустановки',
+      rated_current: 'Номинальный ток, А',
+      i_th: 'Ток термической стойкости (I_th), А',
+      ip_max: 'Максимальный пиковый ток КЗ (i_p max), А',
+      t_th: 'Время термической стойкости (t_th), с',
+      normal_open: 'Нормально открыт',
+      retained: 'Фиксируемое состояние',
+      psr_subtype: 'Подтип ПСР (retractable / sectionalizer / short_circuiter)',
+      tm_code: 'Код ТМ / учётный код',
+      object_subtype: 'Подтип объекта (CIM / профиль)',
+      pole_count: 'Число полюсов',
+      parent_object_ref: 'Ссылка на родительский объект',
+      parent_main_equipment_pole_ref: 'Ссылка на полюс основного коммутационного оборудования',
+      nominal_voltage_kv: 'Номинальное напряжение, кВ',
+      nominal_breaking_current_ka: 'Номинальный ток отключения, кА',
+      own_trip_time_sec: 'Собственное время отключения, с',
+      emergency_current_a: 'Ток для режима перегрузки / аварийный, А',
+      continuous_current_a: 'Длительно допустимый ток, А',
+      nominal_discharge_current_a: 'Номинальный разрядный ток (ОПН), А',
+      arrester_type: 'Тип разрядника (opn / valve / tube)',
+      defect: 'Дефект',
+      criticality: 'Критичность',
+      defect_attachment: 'Вложения дефекта',
+      created_by: 'Автор (id)',
+      created_at: 'Создано',
+      updated_at: 'Обновлено',
+    };
+    return map[key] ?? key;
+  }
+
   toggleMaximize(): void {
     this.isMaximized = !this.isMaximized;
     if (this.isMaximized) {

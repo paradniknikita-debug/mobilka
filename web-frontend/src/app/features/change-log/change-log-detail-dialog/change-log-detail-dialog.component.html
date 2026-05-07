@@ -87,7 +87,7 @@
           </thead>
           <tbody>
             <tr *ngFor="let row of displayedRows" [class.changed]="row.changed" [class.row-added]="row.added" [class.row-removed]="row.removed">
-              <td class="key">{{ row.key }}</td>
+              <td class="key">{{ fieldLabelRu(row.key) }}</td>
               <td class="before">{{ row.before }}</td>
               <td class="after">{{ row.after }}</td>
             </tr>

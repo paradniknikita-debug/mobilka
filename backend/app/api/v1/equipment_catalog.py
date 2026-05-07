@@ -360,7 +360,18 @@ async def download_catalog_template(
             {"column": "type_code", "required": "yes", "note": "Код типа, см. reference_types"},
             {"column": "brand", "required": "yes", "note": "Марка/линейка оборудования"},
             {"column": "model", "required": "yes", "note": "Модель оборудования"},
-            {"column": "attrs_json", "required": "no", "note": "JSON со спец-характеристиками (например i_th, ip_max, t_th, tm_code, arrester_type)"},
+            {
+                "column": "attrs_json",
+                "required": "no",
+                "note": (
+                    "JSON характеристик (ключи как в API оборудования / Flutter add_equipment_dialog): "
+                    "rated_current, i_th, ip_max, t_th, normal_open, retained, nominal_voltage_kv, "
+                    "nominal_breaking_current_ka, own_trip_time_sec, emergency_current_a, continuous_current_a, "
+                    "nominal_discharge_current_a (ОПН), tm_code, object_subtype, psr_subtype, arrester_type, "
+                    "pole_count, parent_object_ref, parent_main_equipment_pole_ref, installation_display_name, "
+                    "nameplate, identified_object_description"
+                ),
+            },
             {"column": "is_active", "required": "no", "note": "true/false, по умолчанию true"},
         ]
     )
