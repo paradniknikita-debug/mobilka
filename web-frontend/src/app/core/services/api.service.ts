@@ -155,8 +155,8 @@ export class ApiService {
     return this.http.get(url, { responseType: 'blob' });
   }
 
-  /** Загрузить вложение к карточке опоры (фото, голос, схема, видео). Возвращает url для сохранения в card_comment_attachment. */
-  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema' | 'video', file: File): Observable<{ url: string; type: string; filename: string }> {
+  /** Загрузить вложение к карточке опоры. Возвращает url для сохранения в card_comment_attachment. */
+  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema' | 'video' | 'file', file: File): Observable<{ url: string; type: string; filename: string }> {
     const formData = new FormData();
     formData.append('attachment_type', attachmentType);
     formData.append('file', file);

@@ -50,6 +50,7 @@ export class CreateObjectDialogComponent implements OnInit {
   lineId?: number;
   isLoading = false;
   equipmentUid: string | null = null;
+  equipmentPoleDisplayName = '';
   equipmentCatalogItems: EquipmentCatalogItem[] = [];
   equipmentNeighborPoleOptions: { value: string; label: string }[] = [];
 
@@ -384,15 +385,30 @@ export class CreateObjectDialogComponent implements OnInit {
     this.equipmentForm.get('pole_id')?.valueChanges.subscribe((value) => {
       const poleId = Number(value);
       if (Number.isFinite(poleId) && poleId > 0) {
+        this.loadEquipmentPoleDisplayName(poleId);
         this.updateEquipmentNeighborOptions(poleId);
       } else {
+        this.equipmentPoleDisplayName = '';
         this.equipmentNeighborPoleOptions = [];
       }
     });
     const initialPoleId = Number(this.data?.poleId ?? this.equipmentForm.getRawValue()?.pole_id);
     if (Number.isFinite(initialPoleId) && initialPoleId > 0) {
+      this.loadEquipmentPoleDisplayName(initialPoleId);
       this.updateEquipmentNeighborOptions(initialPoleId);
     }
+  }
+
+  private loadEquipmentPoleDisplayName(poleId: number): void {
+    this.apiService.getPole(poleId).subscribe({
+      next: (pole) => {
+        const number = String((pole as any)?.pole_number ?? '').trim();
+        this.equipmentPoleDisplayName = number ? number : `Опора ${poleId}`;
+      },
+      error: () => {
+        this.equipmentPoleDisplayName = `Опора ${poleId}`;
+      }
+    });
   }
 
   private mapEquipmentTypeToCatalogCode(type: string): string | null {

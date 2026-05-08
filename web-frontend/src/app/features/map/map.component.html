@@ -46,14 +46,10 @@
       </button>
     </div>
     <div class="pole-properties-content">
-      <!-- Как во Flutter: Название, UID, Участок линии, Позиция, Порядок, затем остальное -->
+      <!-- Как во Flutter: Название, Участок линии, Позиция, Порядок, затем остальное -->
       <div class="property-item">
         <span class="property-label">Название:</span>
         <span class="property-value">{{ selectedPole.pole_number ?? selectedPole.poleNumber ?? '—' }}</span>
-      </div>
-      <div class="property-item">
-        <span class="property-label">UID:</span>
-        <span class="property-value uid-value">{{ selectedPole.mrid ?? '—' }}</span>
       </div>
       <div class="property-item">
         <span class="property-label">Участок линии:</span>
@@ -193,6 +189,14 @@
       </div>
     </div>
     <div class="pole-properties-actions">
+      <button
+        mat-stroked-button
+        (click)="openEditSelectedPoleDialog()"
+        class="action-button"
+      >
+        <mat-icon>edit</mat-icon>
+        Редактировать опору
+      </button>
       <button 
         mat-stroked-button 
         (click)="openCreatePoleFromTapPolePanel()" 
@@ -219,16 +223,12 @@
         <span class="property-value">{{ selectedEquipment.name ?? '—' }}</span>
       </div>
       <div class="property-item">
-        <span class="property-label">UID:</span>
-        <span class="property-value uid-value">{{ selectedEquipment.mrid ?? '—' }}</span>
-      </div>
-      <div class="property-item">
         <span class="property-label">Тип:</span>
         <span class="property-value">{{ selectedEquipment.equipment_type ?? '—' }}</span>
       </div>
       <div class="property-item">
-        <span class="property-label">Опора ID:</span>
-        <span class="property-value">{{ selectedEquipment.pole_id ?? '—' }}</span>
+        <span class="property-label">Опора:</span>
+        <span class="property-value">{{ selectedEquipmentPoleLabel() }}</span>
       </div>
       <div class="property-item" *ngIf="selectedEquipment.manufacturer">
         <span class="property-label">Производитель:</span>

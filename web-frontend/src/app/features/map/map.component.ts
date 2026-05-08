@@ -2446,15 +2446,7 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   attachmentTypeLabel(t: string): string {
-    const m: Record<string, string> = {
-      photo: 'Фото',
-      schema: 'Схема',
-      voice: 'Голос',
-      video: 'Видео',
-      file: 'Файл'
-    };
-    const k = (t || '').toLowerCase().trim();
-    return m[k] || (t ? t : 'Вложение');
+    return 'Вложение';
   }
 
   /** Открыть предпросмотр изображения в модальном окне на странице (с загрузкой через API и авторизацией). */
@@ -2575,6 +2567,50 @@ export class MapComponent implements OnInit, OnDestroy {
     });
   }
 
+  selectedEquipmentPoleLabel(): string {
+    const name = String(
+      this.selectedEquipment?.pole_number
+      ?? this.selectedEquipment?.pole_name
+      ?? this.selectedEquipment?.poleNumber
+      ?? ''
+    ).trim();
+    if (name) {
+      return name;
+    }
+    const poleId = this.selectedEquipment?.pole_id;
+    return poleId != null ? `Опора ${poleId}` : '—';
+  }
+
+  openEditSelectedPoleDialog(): void {
+    const poleId = Number(this.selectedPole?.id);
+    const lineId = Number(this.selectedPole?.line_id);
+    if (!Number.isFinite(poleId) || poleId <= 0 || !Number.isFinite(lineId) || lineId <= 0) {
+      this.snackBar.open('Не удалось открыть редактирование: опора не выбрана', 'Закрыть', { duration: 2500 });
+      return;
+    }
+
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      disableClose: false,
+      autoFocus: false,
+      restoreFocus: false,
+      panelClass: 'create-object-dialog-panel',
+      data: {
+        isEdit: true,
+        objectType: 'pole',
+        poleId,
+        lineId,
+      }
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        this.loadMapData();
+      }
+    });
+  }
+
   private openEquipmentProperties(feature: GeoJSONFeature): void {
     const props = feature?.properties || {};
     const eqId = props['equipment_id'] ?? props['id'];
@@ -2601,6 +2637,14 @@ export class MapComponent implements OnInit, OnDestroy {
 
     if (lineId != null && poleId != null) {
       this.mapService.requestSelectPoleInTree(Number(lineId), Number(poleId), props['segment_id'] ?? undefined);
+      this.apiService.getPole(Number(poleId)).subscribe({
+        next: (pole) => {
+          const name = String((pole as any)?.pole_number ?? '').trim();
+          if (name) {
+            (this.selectedEquipment as any).pole_name = name;
+          }
+        }
+      });
     }
     if (eqId != null) {
       this.apiService.getEquipment(Number(eqId)).subscribe({

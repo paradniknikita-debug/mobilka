@@ -80,15 +80,15 @@ def _extension_for_content_type(content_type: str, attachment_type: str) -> str:
 @router.post("/poles/{pole_id}/attachments")
 async def upload_pole_attachment(
     pole_id: int,
-    attachment_type: str = Form(..., description="photo | voice | schema | video"),
+    attachment_type: str = Form(..., description="photo | voice | schema | video | file"),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if attachment_type not in ("photo", "voice", "schema", "video"):
+    if attachment_type not in ("photo", "voice", "schema", "video", "file"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="attachment_type: photo, voice, schema или video",
+            detail="attachment_type: photo, voice, schema, video или file",
         )
     result = await db.execute(select(Pole).where(Pole.id == pole_id))
     pole = result.scalar_one_or_none()
@@ -126,8 +126,14 @@ async def upload_pole_attachment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Видео: допустимые типы {ALLOWED_VIDEO}",
         )
+    # file — универсальный тип вложения: проверка только по максимальному размеру.
 
     ext = _extension_for_content_type(content_type, attachment_type)
+    if attachment_type == "file" and file.filename:
+        fn = file.filename.strip().lower()
+        dot = fn.rfind(".")
+        if dot > 0 and dot < len(fn) - 1:
+            ext = fn[dot:]
     name = f"{uuid.uuid4().hex}{ext}"
     content = await file.read()
     if len(content) > MAX_SIZE_MB * 1024 * 1024:

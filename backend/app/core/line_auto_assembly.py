@@ -886,69 +886,27 @@ async def auto_create_span(
     to_display = await _connectivity_node_display_name(db, new_connectivity_node.id)
     from_short = _short_label_for_span(from_display)
     to_short = _short_label_for_span(to_display)
-    switch_label = await _main_switching_label_on_pole(db, previous_pole.id)
-
-    # Если на начальной опоре пролёта есть секционирующее оборудование:
-    # моделируем разбиение как два пролёта внутри той же геометрии:
-    # 1) опора -> оборудование
-    # 2) оборудование -> следующая опора
-    # Длину делим пополам, чтобы суммарная длина не изменилась.
-    if switch_label:
-        span_a = Span(
-            mrid=generate_mrid(),
-            span_number=f"Пролёт {from_short}-{switch_label}",
-            line_id=power_line_id,
-            from_pole_id=previous_pole.id,
-            to_pole_id=new_pole.id,
-            from_connectivity_node_id=previous_cn.id,
-            to_connectivity_node_id=new_connectivity_node.id,
-            line_section_id=line_section.id,
-            length=distance / 2.0,
-            conductor_type=conductor_type or "AC-70",
-            conductor_material=conductor_material or "алюминий",
-            sequence_number=span_count + 1,
-            created_by=current_user_id,
-        )
-        db.add(span_a)
-        await db.flush()
-
-        span_b = Span(
-            mrid=generate_mrid(),
-            span_number=f"Пролёт {switch_label}-{to_short}",
-            line_id=power_line_id,
-            from_pole_id=previous_pole.id,
-            to_pole_id=new_pole.id,
-            from_connectivity_node_id=previous_cn.id,
-            to_connectivity_node_id=new_connectivity_node.id,
-            line_section_id=line_section.id,
-            length=distance / 2.0,
-            conductor_type=conductor_type or "AC-70",
-            conductor_material=conductor_material or "алюминий",
-            sequence_number=span_count + 2,
-            created_by=current_user_id,
-        )
-        db.add(span_b)
-        await db.flush()
-        span = span_b
-    else:
-        span_number = f"Пролёт {from_short}-{to_short}"
-        span = Span(
-            mrid=generate_mrid(),
-            span_number=span_number,
-            line_id=power_line_id,
-            from_pole_id=previous_pole.id,
-            to_pole_id=new_pole.id,
-            from_connectivity_node_id=previous_cn.id,
-            to_connectivity_node_id=new_connectivity_node.id,
-            line_section_id=line_section.id,
-            length=distance,  # в метрах
-            conductor_type=conductor_type or "AC-70",
-            conductor_material=conductor_material or "алюминий",
-            sequence_number=span_count + 1,
-            created_by=current_user_id
-        )
-        db.add(span)
-        await db.flush()
+    # В БД храним только физический пролёт между опорами/подстанциями.
+    # Коммутационное оборудование влияет на наименование участка, но НЕ порождает отдельные
+    # дублирующие пролёты вида "СР-СР" внутри одной и той же пары опор.
+    span_number = f"Пролёт {from_short}-{to_short}"
+    span = Span(
+        mrid=generate_mrid(),
+        span_number=span_number,
+        line_id=power_line_id,
+        from_pole_id=previous_pole.id,
+        to_pole_id=new_pole.id,
+        from_connectivity_node_id=previous_cn.id,
+        to_connectivity_node_id=new_connectivity_node.id,
+        line_section_id=line_section.id,
+        length=distance,  # в метрах
+        conductor_type=conductor_type or "AC-70",
+        conductor_material=conductor_material or "алюминий",
+        sequence_number=span_count + 1,
+        created_by=current_user_id
+    )
+    db.add(span)
+    await db.flush()
     
     # Обновляем общую длину секции
     result = await db.execute(

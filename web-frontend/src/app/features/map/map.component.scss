@@ -207,7 +207,7 @@
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 280px;
+  width: 360px;
   max-width: calc(100% - 24px);
   background: white;
   border-radius: 8px 0 0 0;
@@ -284,13 +284,17 @@
     font-weight: 500;
     color: rgba(0, 0, 0, 0.6);
     margin-right: 8px;
-    flex-shrink: 0;
+    flex: 0 0 42%;
+    max-width: 42%;
+    white-space: normal;
+    overflow-wrap: anywhere;
     font-size: 12px;
   }
 
   .property-value {
     color: rgba(0, 0, 0, 0.87);
-    text-align: right;
+    text-align: left;
+    flex: 1 1 auto;
     word-break: break-word;
     font-size: 12px;
 
