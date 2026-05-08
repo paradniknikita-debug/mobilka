@@ -18,6 +18,7 @@ from .patrol_session import PatrolSession
 from .change_log import ChangeLog
 from .sync_client_mapping import SyncClientMapping
 from .equipment_catalog import EquipmentCatalogItem
+from .line_conductor_catalog import LineConductorCatalogItem
 # Временно закомментировано до применения миграции
 # from .base_voltage import BaseVoltage
 # from .wire_info import WireInfo
@@ -49,6 +50,7 @@ __all__ = [
     "ChangeLog",
     "SyncClientMapping",
     "EquipmentCatalogItem",
+    "LineConductorCatalogItem",
     # "BaseVoltage",  # Временно закомментировано
     # "WireInfo"  # Временно закомментировано
 ]

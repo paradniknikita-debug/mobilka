@@ -223,6 +223,18 @@ class _MapPageState extends ConsumerState<MapPage> {
         _getCurrentLocation(),
         _loadMapData(),
       ]);
+      // Страховка от гонки первого входа (auth/map ready/web):
+      // если после первой загрузки карта пустая, повторяем загрузку один раз.
+      if (mounted && !_hasAnyRenderableMapData()) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        if (mounted) {
+          await _loadMapData(skipAutoCenter: true);
+        }
+      }
+      // Если всё ещё пусто — хотя бы локальные данные.
+      if (mounted && !_hasAnyRenderableMapData()) {
+        await _loadMapDataFromLocal(skipAutoCenter: true);
+      }
       await _syncPatrolGpsTracking();
       
       if (mounted) {
@@ -248,6 +260,20 @@ class _MapPageState extends ConsumerState<MapPage> {
         );
       }
     }
+  }
+
+  bool _hasAnyRenderableMapData() {
+    int len(Map<String, dynamic>? fc) {
+      final features = fc?['features'];
+      if (features is List) return features.length;
+      return 0;
+    }
+
+    return len(_polesData) > 0 ||
+        len(_powerLinesData) > 0 ||
+        len(_lineEquipmentData) > 0 ||
+        len(_substationsData) > 0 ||
+        len(_tapsData) > 0;
   }
 
   Future<void> _getCurrentLocation() async {
@@ -708,6 +734,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       return;
     }
     _patrolGpsSampleCounter = 0;
+    final prefs = ref.read(prefsProvider);
     _patrolGpsSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
@@ -737,7 +764,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         }
       }
-      final prefs = ref.read(prefsProvider);
       final activeLineId = prefs?.getInt(AppConfig.activeSessionPowerLineIdKey);
       if (activeLineId == null) {
         _stopPatrolGpsTracking();
@@ -1209,10 +1235,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         return;
       }
 
-      // 5xx с сервера (часто несовпадение схемы БД и моделей): локальные данные уже загружены выше — не блокируем карту.
+      // 5xx с сервера (часто несовпадение схемы БД и моделей): показываем локальные данные.
       final statusCode = e is DioException ? e.response?.statusCode : null;
       final isServerError = statusCode != null && statusCode >= 500 && statusCode < 600;
       if (isServerError && mounted) {
+        await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
         setState(() => _errorMessage = null);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1261,6 +1288,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
       
       if (mounted) {
+        // Любая прочая ошибка: пробуем не оставлять пустую карту.
+        await _loadMapDataFromLocal(skipAutoCenter: skipAutoCenter);
         final userMsg = userMessageForMapLoadError(e);
         setState(() {
           _errorMessage = userMsg;
@@ -1465,6 +1494,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                     onMapReady: () {
                       _mapReady = true;
                       try {
+                        final z = _mapController.camera.zoom;
+                        if (mounted) {
+                          setState(() => _equipmentZoom = z);
+                        }
                         final target = _pendingCenterOnObjects ?? _pendingCenterOnLocation ?? _currentLocation;
                         final zoom = _pendingCenterZoom ?? AppConfig.defaultZoom;
                         if (target != null) {
@@ -2065,10 +2098,17 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Безопасное преобразование в double (null → 0.0), чтобы избежать "Null is not a subtype of num".
   static double _toDouble(dynamic v) {
     if (v == null) return 0.0;
-    if (v is double) return v;
+    if (v is double) return v.isFinite ? v : 0.0;
     if (v is int) return v.toDouble();
-    if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v) ?? 0.0;
+    if (v is num) {
+      final d = v.toDouble();
+      return d.isFinite ? d : 0.0;
+    }
+    if (v is String) {
+      final d = double.tryParse(v);
+      if (d == null || !d.isFinite) return 0.0;
+      return d;
+    }
     return 0.0;
   }
 
@@ -2079,6 +2119,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         ? voltageLevel.toInt()
         : voltageLevel;
     return '$v кВ';
+  }
+
+  /// Формат длины линии: «н/д» при отсутствии, иначе «X.XX км».
+  static String _formatLineLengthDisplay(double? lengthKm) {
+    if (lengthKm == null || lengthKm <= 0) return 'н/д';
+    return '${lengthKm.toStringAsFixed(2)} км';
   }
 
   /// Максимальная критичность по оборудованию опоры: high > medium > low.
@@ -2293,7 +2339,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   static const double _webMercatorR = 6378137.0;
 
   double _mercatorYFromLatDeg(double latDeg) {
-    final latRad = latDeg * math.pi / 180.0;
+    // Защита от ±90° и мусорных значений: WebMercator определён до ~85.0511°.
+    final safeLat = latDeg.clamp(-85.05112878, 85.05112878);
+    final latRad = safeLat * math.pi / 180.0;
     return _webMercatorR * math.log(math.tan(math.pi / 4.0 + latRad / 2.0));
   }
 
@@ -3396,10 +3444,23 @@ class _MapPageState extends ConsumerState<MapPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text(
-                      _formatVoltageDisplay(pl.voltageLevel),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    subtitle: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _formatVoltageDisplay(pl.voltageLevel),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatLineLengthDisplay(pl.length),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                        ),
+                      ],
                     ),
                     onTap: () {
                       setState(() {
@@ -3448,11 +3509,25 @@ class _MapPageState extends ConsumerState<MapPage> {
       subtitle: GestureDetector(
         onLongPress: onLongPressDeleteLine,
         behavior: HitTestBehavior.translucent,
-        child: Text(
-          _formatVoltageDisplay(powerLine.voltageLevel),
-          style: const TextStyle(fontSize: 11),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _formatVoltageDisplay(powerLine.voltageLevel),
+                style: const TextStyle(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _formatLineLengthDisplay(powerLine.length),
+              style: const TextStyle(fontSize: 11),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+            ),
+          ],
         ),
       ),
       children: [

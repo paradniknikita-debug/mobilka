@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments, reports, equipment_catalog, base_voltage, wire_info
+from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments, reports, equipment_catalog, line_conductor_catalog, base_voltage, wire_info
 from app.core.config import settings
 from app.core.media_storage import log_media_storage_mode
 from app.core.redis_client import set_redis_client, get_redis_client
@@ -22,6 +22,7 @@ from app.models import (
     Branch, Substation, GeographicRegion, AClineSegment,
     ConnectivityNode, Terminal, LineSection, PatrolSession,
     ChangeLog,
+    LineConductorCatalogItem,
 )
 redis_client = None
 security = HTTPBearer()
@@ -149,6 +150,7 @@ app.include_router(power_lines.router, prefix="/api/v1/power-lines", tags=["powe
 app.include_router(poles.router, prefix="/api/v1/poles", tags=["poles"])
 app.include_router(equipment.router, prefix="/api/v1/equipment", tags=["equipment"])
 app.include_router(equipment_catalog.router, prefix="/api/v1/equipment-catalog", tags=["equipment-catalog"])
+app.include_router(line_conductor_catalog.router, prefix="/api/v1/line-conductor-catalog", tags=["line-conductor-catalog"])
 app.include_router(map_tiles.router, prefix="/api/v1/map", tags=["map"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(substations.router, prefix="/api/v1/substations", tags=["substations"])

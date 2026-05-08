@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData, text
+from sqlalchemy import create_engine, MetaData, text, select, and_, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -76,6 +76,119 @@ async def get_db():
             yield session
         finally:
             await session.close()
+
+
+async def seed_default_equipment_catalog():
+    """
+    Идемпотентно заполняет equipment_catalog дефолтными марками и характеристиками.
+    - Добавляет отсутствующие записи.
+    - Для существующих заполняет только пустые поля характеристик.
+    """
+    from app.api.v1.equipment_catalog import _default_catalog_payloads
+    from app.models.equipment_catalog import EquipmentCatalogItem
+
+    defaults = _default_catalog_payloads()
+    inserted = 0
+    updated = 0
+
+    async with AsyncSessionLocal() as db:
+        for row in defaults:
+            existing = (
+                await db.execute(
+                    select(EquipmentCatalogItem).where(
+                        and_(
+                            EquipmentCatalogItem.type_code == row["type_code"],
+                            func.lower(EquipmentCatalogItem.brand) == row["brand"].lower(),
+                            func.lower(EquipmentCatalogItem.model) == row["model"].lower(),
+                        )
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing:
+                changed = False
+                for field in (
+                    "full_name",
+                    "voltage_kv",
+                    "current_a",
+                    "manufacturer",
+                    "country",
+                    "description",
+                    "attrs_json",
+                ):
+                    current_value = getattr(existing, field)
+                    new_value = row.get(field)
+                    is_empty = current_value is None or (
+                        isinstance(current_value, str) and not current_value.strip()
+                    )
+                    if is_empty and new_value is not None:
+                        setattr(existing, field, new_value)
+                        changed = True
+                if changed:
+                    updated += 1
+                continue
+            db.add(EquipmentCatalogItem(**row, created_by=None))
+            inserted += 1
+        await db.commit()
+
+    logger.info(
+        "Seed equipment_catalog completed: inserted=%s, updated=%s, total_defaults=%s",
+        inserted,
+        updated,
+        len(defaults),
+    )
+
+
+async def seed_default_line_conductor_catalog():
+    """
+    Идемпотентно заполняет line_conductor_catalog марками из CSV файла в корне проекта.
+    """
+    from app.api.v1.line_conductor_catalog import load_defaults_from_csv
+    from app.models.line_conductor_catalog import LineConductorCatalogItem
+
+    defaults = load_defaults_from_csv()
+    if not defaults:
+        logger.warning("CSV со справочником проводов не найден или пуст, seed line_conductor_catalog пропущен")
+        return
+
+    inserted = 0
+    updated = 0
+    async with AsyncSessionLocal() as db:
+        for row in defaults:
+            mark = (row.get("mark") or "").strip()
+            voltage_kv = row.get("voltage_kv")
+            if not mark or voltage_kv is None:
+                continue
+            existing = (
+                await db.execute(
+                    select(LineConductorCatalogItem).where(
+                        and_(
+                            func.lower(LineConductorCatalogItem.mark) == mark.lower(),
+                            LineConductorCatalogItem.voltage_kv == float(voltage_kv),
+                        )
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing:
+                if not existing.is_active:
+                    existing.is_active = True
+                    updated += 1
+                continue
+            db.add(
+                LineConductorCatalogItem(
+                    mark=mark,
+                    voltage_kv=float(voltage_kv),
+                    is_active=True,
+                )
+            )
+            inserted += 1
+        await db.commit()
+
+    logger.info(
+        "Seed line_conductor_catalog completed: inserted=%s, updated=%s, total_defaults=%s",
+        inserted,
+        updated,
+        len(defaults),
+    )
 
 async def init_db():
     """Инициализация базы данных с обработкой ошибок"""
@@ -454,6 +567,8 @@ async def init_db():
                 """))
             
             logger.info("База данных успешно инициализирована")
+            await seed_default_equipment_catalog()
+            await seed_default_line_conductor_catalog()
             return
             
         except Exception as e:

@@ -227,7 +227,9 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
   bool get _isRecloser =>
       _equipmentTypeKey == 'recloser' || _equipmentTypeKey == 'реклоузер';
   bool get _isSurgeArrester =>
-      _equipmentTypeKey == 'surge_arrester' || _equipmentTypeKey == 'разрядник';
+      _equipmentTypeKey == 'surge_arrester' ||
+      _equipmentTypeKey == 'arrester' ||
+      _equipmentTypeKey == 'разрядник';
   bool get _isSwitchLike => _isDisconnector || _isGroundingSwitch;
   bool get _isSwitchLikeForm =>
       _isSwitchLike || _isBreaker || _isRecloser;
@@ -276,6 +278,22 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
   String _sanitizeBrandSuggestion(String raw) {
     var s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (s.toLowerCase() == 'другое') return _noBrandLabel;
+    // Убираем дубли вида "Бренд Модель" + "Модель" для всех типов оборудования.
+    final parts = s.split(' ');
+    if (parts.length >= 2) {
+      final head = parts.first.trim();
+      final tail = parts.sublist(1).join(' ').trim();
+      final headNorm = _normalizeSwitchBrandKey(head);
+      final tailNorm = _normalizeSwitchBrandKey(tail);
+      final repeatedHeadInTail =
+          headNorm.isNotEmpty &&
+          tailNorm.isNotEmpty &&
+          tailNorm.startsWith(headNorm) &&
+          tailNorm.length > headNorm.length;
+      if (repeatedHeadInTail) {
+        s = tail;
+      }
+    }
     if (!_isGroundingSwitch) return s;
     final lower = s.toLowerCase();
     if (lower.startsWith('зн ')) {
@@ -369,6 +387,31 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
       _dispatcherNameController.text = (widget.initialDispatcherName ?? '').trim();
       _brandController.text = (widget.initialBrand ?? '').trim();
     }
+
+    final hasInitialElectricalValues =
+        widget.initialRatedCurrent != null ||
+        widget.initialITh != null ||
+        widget.initialIpMax != null ||
+        widget.initialTTh != null ||
+        widget.initialNormalOpen != null ||
+        widget.initialRetained != null ||
+        widget.initialNominalVoltageKv != null ||
+        widget.initialNominalBreakingCurrentKa != null ||
+        widget.initialOwnTripTimeSec != null ||
+        widget.initialEmergencyCurrentA != null ||
+        widget.initialContinuousCurrentA != null ||
+        (widget.initialTmCode?.trim().isNotEmpty == true) ||
+        (widget.initialObjectSubtype?.trim().isNotEmpty == true) ||
+        (widget.initialPsrSubtype?.trim().isNotEmpty == true) ||
+        (widget.initialArresterType?.trim().isNotEmpty == true);
+
+    final initialBrand = _brandController.text.trim();
+    if (_isElectricalEquipment &&
+        !hasInitialElectricalValues &&
+        initialBrand.isNotEmpty &&
+        !_isNoBrandSelected) {
+      _tryApplyCatalogPresetByInput(initialBrand);
+    }
   }
 
   @override
@@ -396,16 +439,18 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
   }
 
   List<String> get _brandSuggestions {
-    final base = EquipmentReferenceData.getBrandsForCategory(widget.categoryTitle);
     final extra = widget.catalogExtraBrands ?? const <String>[];
     final seen = <String>{};
     final out = <String>[];
-    for (final x in [...base, ...extra]) {
+    for (final x in extra) {
       final k = _sanitizeBrandSuggestion(x);
       if (k.isEmpty || seen.contains(k)) continue;
       if (!_isBrandAllowedForLine(k)) continue;
       seen.add(k);
       out.add(k);
+    }
+    if (!seen.contains(_noBrandLabel) && _isBrandAllowedForLine(_noBrandLabel)) {
+      out.add(_noBrandLabel);
     }
     return out;
   }
@@ -509,6 +554,37 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
       return true;
     }
 
+    if (_isSurgeArrester) {
+      final opn = RegExp(r'^(ОПНП?|OPN)-?(\d+(?:\.\d+)?)$', caseSensitive: false)
+          .firstMatch(key);
+      if (opn != null) {
+        final kv = _toDouble(opn.group(2));
+        setState(() {
+          _lastAppliedCatalogLabel = key;
+          if (kv != null) _nominalVoltageController.text = kv.toString();
+          // Для типовых ОПН берём базовый разрядный ток по умолчанию.
+          _ratedCurrentController.text = '10000';
+          _arresterType = 'opn';
+          _electricalExpanded = true;
+        });
+        return true;
+      }
+
+      final rvoRvm = RegExp(r'^(РВО|RVO|РВМ|RVM)-?(\d+(?:\.\d+)?)$', caseSensitive: false)
+          .firstMatch(key);
+      if (rvoRvm != null) {
+        final kv = _toDouble(rvoRvm.group(2));
+        setState(() {
+          _lastAppliedCatalogLabel = key;
+          if (kv != null) _nominalVoltageController.text = kv.toString();
+          _ratedCurrentController.text = '5000';
+          _arresterType = 'valve';
+          _electricalExpanded = true;
+        });
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -519,7 +595,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     if (b.isEmpty) return false;
     if (b.toLowerCase() == 'другое' || b.toLowerCase() == _noBrandLabel.toLowerCase()) return true;
     final voltage = _catalogVoltageByBrand(b) ?? _extractVoltageFromBrand(b);
-    if (voltage == null) return true;
+    if (voltage == null) return false;
     return (voltage - expected).abs() <= 0.001;
   }
 
@@ -558,7 +634,29 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     if (prefixed != null) {
       return _toDouble(prefixed.group(1)?.replaceAll(',', '.'));
     }
+    final compact = raw.replaceAll(RegExp(r'\s+'), '');
+    final compactPrefixed = RegExp(
+      r'^[A-ZА-Я0-9/._]+-(\d+(?:[.,]\d+)?)(?:/|$)',
+    ).firstMatch(compact);
+    if (compactPrefixed != null) {
+      return _toDouble(compactPrefixed.group(1)?.replaceAll(',', '.'));
+    }
     return null;
+  }
+
+  void _clearElectricalCharacteristics() {
+    _lastAppliedCatalogLabel = null;
+    _ratedCurrentController.clear();
+    _iThController.clear();
+    _ipMaxController.clear();
+    _tThController.clear();
+    _nominalBreakingCurrentController.clear();
+    _ownTripTimeController.clear();
+    _emergencyCurrentController.clear();
+    _continuousCurrentController.clear();
+    _normalOpen = null;
+    _retained = null;
+    _electricalExpanded = false;
   }
 
   bool _applyCatalogPresetByLabel(String label) {
@@ -978,7 +1076,12 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                   ),
                   style: const TextStyle(color: PatrolColors.textPrimary),
                   onChanged: (v) {
-                    setState(() {});
+                    setState(() {
+                      if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
+                          v.trim().toLowerCase() == 'другое') {
+                        _clearElectricalCharacteristics();
+                      }
+                    });
                     _tryApplyCatalogPresetByInput(v);
                   },
                 ),
@@ -995,11 +1098,13 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                         setState(() {
                           if (!v) {
                             _brandController.text = '';
+                            _clearElectricalCharacteristics();
                             return;
                           }
                           if (s.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
                               s.trim().toLowerCase() == 'другое') {
                             _brandController.text = _noBrandLabel;
+                            _clearElectricalCharacteristics();
                             return;
                           }
                           _brandController.text = s;
@@ -1201,7 +1306,12 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                   ),
                   style: const TextStyle(color: PatrolColors.textPrimary),
                   onChanged: (v) {
-                    setState(() {});
+                    setState(() {
+                      if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
+                          v.trim().toLowerCase() == 'другое') {
+                        _clearElectricalCharacteristics();
+                      }
+                    });
                     _tryApplyCatalogPresetByInput(v);
                   },
                 ),
@@ -1218,11 +1328,13 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                         setState(() {
                           if (!v) {
                             _brandController.text = '';
+                            _clearElectricalCharacteristics();
                             return;
                           }
                           if (s.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
                               s.trim().toLowerCase() == 'другое') {
                             _brandController.text = _noBrandLabel;
+                            _clearElectricalCharacteristics();
                             return;
                           }
                           _brandController.text = s;

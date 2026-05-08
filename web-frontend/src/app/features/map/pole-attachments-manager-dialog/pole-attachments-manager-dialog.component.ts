@@ -1,4 +1,5 @@
 import { Component, Inject, OnInit, ViewChild, ElementRef } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatTableDataSource } from '@angular/material/table';
 import { ApiService } from '../../../core/services/api.service';
@@ -133,7 +134,14 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
         URL.revokeObjectURL(url);
         this.snackBar.open('Файл сохранён', 'Закрыть', { duration: 2000 });
       },
-      error: () => this.snackBar.open('Ошибка скачивания', 'Закрыть', { duration: 3000 })
+      error: (e: HttpErrorResponse) => {
+        const detail =
+          (typeof e?.error === 'string' && e.error.trim()) ||
+          e?.error?.detail ||
+          e?.message ||
+          'Ошибка скачивания';
+        this.snackBar.open(detail, 'Закрыть', { duration: 4000 });
+      }
     });
   }
 

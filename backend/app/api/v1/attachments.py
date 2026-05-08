@@ -22,8 +22,18 @@ router = APIRouter()
 
 THUMBNAIL_MAX_SIZE = (150, 150)
 
-ALLOWED_IMAGE = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-ALLOWED_VOICE = {"audio/mpeg", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/wav", "audio/webm"}
+ALLOWED_IMAGE = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/x-ms-bmp"}
+ALLOWED_VOICE = {
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/m4a",
+    "audio/x-m4a",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/webm",
+    "video/webm",
+    "audio/ogg",
+}
 ALLOWED_SCHEMA = {"image/svg+xml", "image/png", "application/pdf"}
 ALLOWED_VIDEO = {"video/mp4", "video/webm", "video/quicktime"}
 MAX_SIZE_MB = 25
@@ -40,6 +50,8 @@ def _guess_content_type_from_name(name: str) -> str:
         return "image/gif"
     if lower.endswith(".webp"):
         return "image/webp"
+    if lower.endswith(".bmp"):
+        return "image/bmp"
     if lower.endswith(".svg"):
         return "image/svg+xml"
     if lower.endswith(".pdf"):
@@ -50,6 +62,8 @@ def _guess_content_type_from_name(name: str) -> str:
         return "audio/mpeg"
     if lower.endswith(".wav"):
         return "audio/wav"
+    if lower.endswith(".ogg"):
+        return "audio/ogg"
     if lower.endswith(".webm"):
         return "video/webm"
     if lower.endswith(".mp4"):
@@ -59,7 +73,19 @@ def _guess_content_type_from_name(name: str) -> str:
 
 def _extension_for_content_type(content_type: str, attachment_type: str) -> str:
     if attachment_type == "voice":
-        return ".m4a" if "m4a" in (content_type or "") or "mp4" in content_type else ".mp3"
+        ct = (content_type or "").lower()
+        if "ogg" in ct:
+            return ".ogg"
+        if "wav" in ct:
+            return ".wav"
+        if "webm" in ct:
+            return ".webm"
+        if "m4a" in ct or "mp4" in ct:
+            return ".m4a"
+        if "mpeg" in ct or "mp3" in ct:
+            return ".mp3"
+        # Консервативный fallback для неизвестных voice MIME.
+        return ".m4a"
     if attachment_type == "video":
         return ".mp4" if "mp4" in (content_type or "") or "quicktime" in (content_type or "") else ".webm"
     if attachment_type == "photo" or attachment_type == "schema":
@@ -205,6 +231,28 @@ async def get_pole_attachment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка чтения файла: {str(e)}",
         ) from e
+    # Legacy fallback: у старых голосовых вложений расширение в URL могло
+    # не совпасть с фактическим файлом (например, .mp3 vs .ogg/.m4a).
+    # Пробуем соседние голосовые расширения до 404.
+    if content is None:
+        lower = filename.lower()
+        dot = lower.rfind(".")
+        if dot > 0:
+            stem = filename[:dot]
+            ext = lower[dot:]
+            if ext in {".mp3", ".m4a", ".ogg", ".wav", ".webm"}:
+                for alt_ext in (".ogg", ".m4a", ".mp3", ".wav", ".webm"):
+                    if alt_ext == ext:
+                        continue
+                    alt_name = f"{stem}{alt_ext}"
+                    try:
+                        alt_content, alt_media_type = media_get(pole_id, alt_name)
+                    except Exception:
+                        alt_content, alt_media_type = None, None
+                    if alt_content is not None:
+                        content, media_type = alt_content, alt_media_type
+                        filename = alt_name
+                        break
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
 

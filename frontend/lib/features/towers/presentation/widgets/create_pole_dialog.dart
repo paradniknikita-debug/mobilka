@@ -141,6 +141,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   String? _conductorType = PoleReferenceData.defaultConductorType;
   String? _conductorMaterial = PoleReferenceData.defaultConductorMaterial;
   String? _conductorSection = PoleReferenceData.defaultConductorSection;
+  final _conductorTypeController = TextEditingController();
+  List<String> _conductorSuggestions = const [];
+  double? _expectedLineVoltageKv;
   bool _isTap = false;
 
   /// Показывать выбор «Магистраль» / «Отпайка от X — ветка N» (как в Angular).
@@ -162,7 +165,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     if (t == 'зн' || t == 'zn') return 'grounding_switch';
     if (t == 'выключатель') return 'breaker';
     if (t == 'реклоузер') return 'recloser';
-    if (t == 'разрядник') return 'surge_arrester';
+    if (t == 'разрядник' || t == 'surge_arrester' || t == 'arrester' || t == 'opn' || t == 'опн') return 'arrester';
     if (t == 'траверса') return 'cross_arm';
     return t;
   }
@@ -494,23 +497,76 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final picker = ImagePicker();
       final file = await picker.pickImage(source: ImageSource.gallery);
       if (file == null || !mounted) return;
+      final fileBytes = await file.readAsBytes();
+      if (fileBytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Не удалось прочитать выбранное фото'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
       final uid = ref.read(prefsProvider).getInt(AppConfig.userIdKey) ?? 0;
       final auth = ref.read(authServiceProvider);
       String? uname;
       if (auth is AuthStateAuthenticated) {
         uname = auth.user.fullName.isNotEmpty ? auth.user.fullName : auth.user.username;
       }
-      setState(() => _cardCommentAttachments.add(
-            PoleCardAttachmentCodec.newPhotoAttachment(
+      final fileName = file.name.trim().isNotEmpty
+          ? file.name.trim()
+          : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ext = fileName.contains('.') ? fileName.split('.').last : 'jpg';
+
+      // Для существующей опоры сразу загружаем фото на сервер,
+      // чтобы вложение не потерялось при повторном открытии карточки.
+      final existingPoleId = widget.poleId;
+      if (existingPoleId != null) {
+        final api = ref.read(apiServiceProvider);
+        final uploaded = await api.uploadPoleAttachment(
+          existingPoleId,
+          'photo',
+          fileBytes,
+          fileName,
+        );
+        final url = uploaded['url']?.toString();
+        if (url != null && url.isNotEmpty) {
+          setState(() => _cardCommentAttachments.add({
+                'id': const Uuid().v4(),
+                't': 'photo',
+                'url': url,
+                'filename': fileName,
+                'added_by': uid,
+                'added_at': DateTime.now().toUtc().toIso8601String(),
+                if (uploaded['thumbnail_url'] != null)
+                  'thumbnail_url': uploaded['thumbnail_url'],
+                if (uname != null && uname.isNotEmpty) 'added_by_name': uname,
+              }));
+          return;
+        }
+      }
+
+      setState(() => _cardCommentAttachments.add({
+            ...PoleCardAttachmentCodec.newPhotoAttachment(
               file.path,
               userId: uid,
               userName: uname,
             ),
-          ));
+            'filename': fileName,
+            // На web path из picker часто недоступен при последующей отправке.
+            // Сохраняем bytes как fallback до _resolveCardCommentAttachments.
+            'bytes_b64': base64Encode(fileBytes),
+            'original_ext': ext,
+          }));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(_formatUploadError(e, fallback: 'Ошибка загрузки фото')),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -529,20 +585,53 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         continue;
       }
       final path = m['p'] as String?;
-      if (path == null || path.isEmpty) continue;
+      final bytesB64 = m['bytes_b64'] as String?;
       final type = m['t'] as String? ?? 'file';
       try {
-        final bytes = await readAttachmentBytes(path);
+        List<int> bytes = const [];
+        if (bytesB64 != null && bytesB64.isNotEmpty) {
+          bytes = base64Decode(bytesB64);
+        } else if (path != null && path.isNotEmpty) {
+          bytes = await readAttachmentBytes(path);
+        }
         if (bytes.isEmpty) continue;
-        final ext = path.contains('.') ? path.split('.').last : 'jpg';
-        final result = await api.uploadPoleAttachment(poleId, type, bytes, 'upload.$ext');
+        String ext = 'jpg';
+        if (path != null && path.contains('.')) {
+          ext = path.split('.').last;
+        } else if ((m['original_ext'] as String?)?.isNotEmpty ?? false) {
+          ext = (m['original_ext'] as String).trim();
+        }
+        final filename = (m['filename'] as String?)?.trim().isNotEmpty == true
+            ? (m['filename'] as String).trim()
+            : 'upload.$ext';
+        final result = await api.uploadPoleAttachment(
+          poleId,
+          type,
+          bytes,
+          filename,
+        );
         final url = result['url'] as String?;
         if (url != null) {
           final entry = <String, dynamic>{'t': type, 'url': url};
           if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+          if ((m['id'] as String?)?.isNotEmpty ?? false) entry['id'] = m['id'];
+          if ((m['added_by'] as Object?) != null) entry['added_by'] = m['added_by'];
+          if ((m['added_at'] as String?)?.isNotEmpty ?? false) entry['added_at'] = m['added_at'];
+          if ((m['added_by_name'] as String?)?.isNotEmpty ?? false) {
+            entry['added_by_name'] = m['added_by_name'];
+          }
+          if ((m['filename'] as String?)?.isNotEmpty ?? false) entry['filename'] = m['filename'];
           resolved.add(entry);
         }
-      } catch (_) {}
+      } on DioException catch (e) {
+        throw StateError(
+          'Ошибка загрузки вложения "${m['filename'] ?? 'файл'}": ${_dioErrorMessage(e)}',
+        );
+      } catch (e) {
+        throw StateError(
+          'Ошибка загрузки вложения "${m['filename'] ?? 'файл'}": $e',
+        );
+      }
     }
     return resolved;
   }
@@ -637,8 +726,18 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         }
         return;
       }
-      final ext =
-          name.contains('.') ? name.split('.').last.toLowerCase() : 'bin';
+      final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+      if (!_isAllowedAttachmentExt(ext)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Неподдерживаемый формат файла: .${ext.isEmpty ? 'unknown' : ext}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
       var attType = 'file';
       if (const {'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'}.contains(ext)) {
         attType = 'photo';
@@ -675,7 +774,91 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка файла: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(_formatUploadError(e, fallback: 'Ошибка загрузки файла')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Веб: выбор аудиофайла с диска как голосового вложения.
+  Future<void> _pickCardCommentVoiceFileWeb() async {
+    final pid = widget.poleId;
+    if (pid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Сначала сохраните опору — затем можно добавить голосовой файл.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      final r = await FilePicker.platform.pickFiles(
+        withData: true,
+        type: FileType.custom,
+        allowedExtensions: const ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'webm'],
+      );
+      if (r == null || r.files.isEmpty || !mounted) return;
+      final f = r.files.first;
+      final bytes = f.bytes;
+      final name = f.name;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Не удалось прочитать аудиофайл')),
+          );
+        }
+        return;
+      }
+      final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+      if (!const {'m4a', 'mp3', 'wav', 'aac', 'ogg', 'webm'}.contains(ext)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Неподдерживаемый формат ГС: .${ext.isEmpty ? 'unknown' : ext}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      final api = ref.read(apiServiceProvider);
+      final res = await api.uploadPoleAttachment(pid, 'voice', bytes, name);
+      final url = res['url'] as String?;
+      if (url == null || url.isEmpty) return;
+      final uid = ref.read(prefsProvider).getInt(AppConfig.userIdKey) ?? 0;
+      final auth = ref.read(authServiceProvider);
+      String? uname;
+      if (auth is AuthStateAuthenticated) {
+        uname = auth.user.fullName.isNotEmpty
+            ? auth.user.fullName
+            : auth.user.username;
+      }
+      setState(() {
+        _cardCommentAttachments.add({
+          'id': const Uuid().v4(),
+          't': 'voice',
+          'url': url,
+          'filename': name,
+          'added_by': uid,
+          'added_at': DateTime.now().toUtc().toIso8601String(),
+          if (uname != null && uname.isNotEmpty) 'added_by_name': uname,
+        });
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_formatUploadError(e, fallback: 'Ошибка загрузки голосового файла')),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -728,6 +911,116 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         );
       }
     }
+  }
+
+  String _dioErrorMessage(DioException e) {
+    final data = e.response?.data;
+    if (data is Map && data['detail'] != null) {
+      final detail = data['detail'];
+      return detail is String ? detail : detail.toString();
+    }
+    return e.message ?? e.toString();
+  }
+
+  bool _isAllowedAttachmentExt(String ext) {
+    const allowed = {
+      'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp',
+      'm4a', 'mp3', 'wav', 'aac', 'ogg',
+      'mp4', 'webm', 'mov',
+      'pdf', 'dwg',
+    };
+    return allowed.contains(ext.toLowerCase());
+  }
+
+  String _formatUploadError(Object e, {required String fallback}) {
+    if (e is DioException) {
+      final detail = _dioErrorMessage(e).trim();
+      if (detail.isNotEmpty) return detail;
+    }
+    final text = e.toString().trim();
+    if (text.isNotEmpty) return text;
+    return fallback;
+  }
+
+  Future<void> _openAttachmentsFieldSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: PatrolColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final hasItems = _cardCommentAttachments.isNotEmpty;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Вложения',
+                    style: TextStyle(
+                      color: PatrolColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.photo_library, color: PatrolColors.textPrimary),
+                  title: const Text('Добавить фото', style: TextStyle(color: PatrolColors.textPrimary)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _pickCommentImage();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.attach_file, color: PatrolColors.textPrimary),
+                  title: const Text('Добавить файл', style: TextStyle(color: PatrolColors.textPrimary)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _pickCardCommentFileAny();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.table_rows, color: hasItems ? PatrolColors.textPrimary : Colors.white38),
+                  title: Text(
+                    'Открыть таблицу вложений',
+                    style: TextStyle(color: hasItems ? PatrolColors.textPrimary : Colors.white38),
+                  ),
+                  subtitle: Text(
+                    hasItems ? 'Вложений: ${_cardCommentAttachments.length}' : 'Нет вложений',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  onTap: hasItems
+                      ? () {
+                          final raw = _encodeCardAttachmentsForDb();
+                          Navigator.of(ctx).pop();
+                          if (raw != null) {
+                            showPoleAttachmentsTable(context, raw);
+                          }
+                        }
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Удаление только дефекта у оборудования; марка и количество сохраняются.
@@ -850,6 +1143,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   void initState() {
     super.initState();
     _materialController = TextEditingController();
+    _conductorTypeController.text = _conductorType ?? '';
     if (widget.isEditMode && widget.poleId != null) {
       _poleMask = PoleNumberMask();
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadPoleForEdit());
@@ -893,6 +1187,36 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     } else if (widget.tapPoleId != null && widget.tapBranchIndex != null) {
       _branchSelection = '${widget.tapPoleId}:${widget.tapBranchIndex}';
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadLineVoltageAndConductorCatalog();
+    });
+  }
+
+  Future<void> _loadLineVoltageAndConductorCatalog() async {
+    await _loadExpectedLineVoltageKv();
+    await _loadConductorCatalog();
+  }
+
+  Future<void> _loadExpectedLineVoltageKv() async {
+    double? v;
+    try {
+      final api = ref.read(apiServiceProvider);
+      final line = await api.getPowerLine(widget.lineId);
+      v = line.voltageLevel;
+    } catch (_) {
+      try {
+        final db = ref.read(databaseProvider);
+        final localLine = await db.getPowerLine(widget.lineId);
+        v = localLine?.voltageLevel;
+      } catch (_) {
+        v = null;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _expectedLineVoltageKv = v;
+    });
   }
 
   void _applyLoadedPoleToState(Pole pole, List<Equipment> equipmentList) {
@@ -917,6 +1241,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       _conductorType = pole.conductorType;
       _conductorMaterial = pole.conductorMaterial;
       _conductorSection = pole.conductorSection;
+      _conductorTypeController.text = pole.conductorType ?? '';
       _isTap = pole.isTapPole;
       if (pole.tapPoleId != null && pole.tapBranchIndex != null) {
         _branchSelection = '${pole.tapPoleId}:${pole.tapBranchIndex}';
@@ -1439,10 +1764,43 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   @override
   void dispose() {
     _materialController.dispose();
+    _conductorTypeController.dispose();
     _structuralDefectController.dispose();
     _newCardCommentController.dispose();
     _cardCommentRecorder.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadConductorCatalog() async {
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final rows = await apiService.getLineConductorCatalogRaw(
+        null,
+        _expectedLineVoltageKv,
+        true,
+        0,
+        1000,
+      );
+      if (!mounted) return;
+      final seen = <String>{};
+      final suggestions = <String>[];
+      for (final row in rows) {
+        final mark = (row['mark'] ?? '').toString().trim();
+        if (mark.isEmpty) continue;
+        final key = mark.toLowerCase();
+        if (seen.add(key)) {
+          suggestions.add(mark);
+        }
+      }
+      setState(() {
+        _conductorSuggestions = suggestions;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _conductorSuggestions = PoleReferenceData.conductorTypes;
+      });
+    }
   }
 
   String? _equipmentCatalogTypeCode(String categoryTitle) {
@@ -1468,19 +1826,42 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     final code = _equipmentCatalogTypeCode(categoryTitle);
     if (code == null) return const [];
     final prefs = ref.read(prefsProvider);
+    List<EquipmentCatalogItem> fromCacheByAliases() {
+      final aliases = <String>{
+        code,
+        if (code == 'zn') 'grounding_switch',
+        if (code == 'grounding_switch') 'zn',
+        if (code == 'arrester') 'surge_arrester',
+        if (code == 'surge_arrester') 'arrester',
+      };
+      final seen = <int>{};
+      final out = <EquipmentCatalogItem>[];
+      for (final alias in aliases) {
+        for (final item in EquipmentCatalogCache.loadByType(prefs, alias)) {
+          if (seen.add(item.id)) out.add(item);
+        }
+      }
+      return out;
+    }
     try {
       final api = ref.read(apiServiceProvider);
       var live = await api.getEquipmentCatalog(typeCode: code, limit: 500);
-      if (live.isEmpty && code == 'zn') {
-        live = await api.getEquipmentCatalog(typeCode: 'grounding_switch', limit: 500);
+      if (live.isEmpty && (code == 'zn' || code == 'grounding_switch')) {
+        final alt = code == 'zn' ? 'grounding_switch' : 'zn';
+        live = await api.getEquipmentCatalog(typeCode: alt, limit: 500);
+      }
+      if (live.isEmpty && (code == 'arrester' || code == 'surge_arrester')) {
+        final alt = code == 'arrester' ? 'surge_arrester' : 'arrester';
+        live = await api.getEquipmentCatalog(typeCode: alt, limit: 500);
       }
       if (live.isNotEmpty) {
         final all = await api.getEquipmentCatalog(limit: 5000, isActive: true);
         await EquipmentCatalogCache.save(prefs, all);
+        return live;
       }
-      return live;
+      return fromCacheByAliases();
     } catch (_) {
-      return EquipmentCatalogCache.loadByType(prefs, code);
+      return fromCacheByAliases();
     }
   }
 
@@ -1521,14 +1902,27 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final line = await api.getPowerLine(widget.lineId);
       expectedLineVoltageKv = line.voltageLevel;
     } catch (_) {
-      expectedLineVoltageKv = null;
+      try {
+        final db = ref.read(databaseProvider);
+        final localLine = await db.getPowerLine(widget.lineId);
+        expectedLineVoltageKv = localLine?.voltageLevel;
+      } catch (_) {
+        expectedLineVoltageKv = null;
+      }
     }
 
     final catalogItems = await _fetchCatalogItems(categoryTitle);
+    final filteredCatalogItems = expectedLineVoltageKv == null
+        ? catalogItems
+        : catalogItems.where((e) {
+            final kv = e.voltageKv;
+            if (kv == null) return false;
+            return (kv - expectedLineVoltageKv!).abs() <= 0.001;
+          }).toList();
     final directionNeighborOptions = await _resolveDirectionNeighborOptions();
     final seen = <String>{};
     final extra = <String>[];
-    for (final e in catalogItems) {
+    for (final e in filteredCatalogItems) {
       final label = (e.fullName != null && e.fullName!.trim().isNotEmpty)
           ? e.fullName!.trim()
           : '${e.brand} ${e.model}'.trim();
@@ -1571,7 +1965,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         initialParentMainEquipmentPoleRef: initialParentMainEquipmentPoleRef,
         directionNeighborOptions: directionNeighborOptions.isEmpty ? null : directionNeighborOptions,
         catalogExtraBrands: extra.isEmpty ? null : extra,
-        catalogItems: catalogItems.isEmpty ? null : catalogItems,
+        catalogItems: filteredCatalogItems.isEmpty ? null : filteredCatalogItems,
         expectedLineVoltageKv: expectedLineVoltageKv,
       ),
     );
@@ -2147,6 +2541,37 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final apiService = ref.read(apiServiceProvider);
       _poleNumber = _poleMask.apiString;
       _material = _materialController.text.trim().isEmpty ? null : _materialController.text.trim();
+      _conductorType = _conductorTypeController.text.trim().isEmpty
+          ? null
+          : _conductorTypeController.text.trim();
+
+      if (_conductorType != null &&
+          _conductorType!.isNotEmpty &&
+          _expectedLineVoltageKv != null) {
+        final rows = await apiService.getLineConductorCatalogRaw(
+          _conductorType,
+          null,
+          true,
+          0,
+          100,
+        );
+        final exactRows = rows.where((row) {
+          final mark = (row['mark'] ?? '').toString().trim().toLowerCase();
+          return mark == _conductorType!.trim().toLowerCase();
+        }).toList();
+        if (exactRows.isNotEmpty) {
+          final hasNominalMatch = exactRows.any((row) {
+            final raw = row['voltage_kv'];
+            final kv = raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '');
+            return kv != null && (kv - _expectedLineVoltageKv!).abs() <= 0.001;
+          });
+          if (!hasNominalMatch) {
+            throw StateError(
+              'Марка "$_conductorType" не соответствует номиналу линии ${_expectedLineVoltageKv!.toStringAsFixed(_expectedLineVoltageKv!.truncateToDouble() == _expectedLineVoltageKv ? 0 : 1)} кВ',
+            );
+          }
+        }
+      }
       final cardCommentJson = _cardCommentSerialized();
 
       final branch = _resolveBranchFieldsForSubmit();
@@ -2540,6 +2965,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final isOffline = e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
           e.response == null;
+      final errMsg = _dioErrorMessage(e);
       if (isOffline && mounted) {
         final saved = await _savePoleToLocalDb();
         if (mounted && saved) {
@@ -2557,12 +2983,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           );
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка: ${e.message}'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Ошибка: $errMsg'), backgroundColor: Colors.red),
           );
         }
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: ${e.message ?? e.toString()}'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Ошибка: $errMsg'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
@@ -2957,6 +3383,49 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       ),
                       const SizedBox(height: 20),
 
+                      TextFormField(
+                        controller: _conductorTypeController,
+                        decoration: InputDecoration(
+                          labelText: 'Марка провода ЛЭП',
+                          hintText: 'Например: СИП-3 1х70',
+                          helperText: _expectedLineVoltageKv == null
+                              ? 'Справочник марок из БД, можно ввести вручную'
+                              : 'Показаны марки для ${_expectedLineVoltageKv!.toStringAsFixed(_expectedLineVoltageKv!.truncateToDouble() == _expectedLineVoltageKv ? 0 : 1)} кВ',
+                          helperStyle: TextStyle(fontSize: 11, color: PatrolColors.textSecondary),
+                          prefixIcon: const Icon(Icons.cable, size: 20, color: PatrolColors.textSecondary),
+                          filled: true,
+                          fillColor: PatrolColors.surfaceCard,
+                        ),
+                        style: const TextStyle(color: PatrolColors.textPrimary),
+                        onChanged: (v) => _conductorType = v.trim().isEmpty ? null : v.trim(),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: (_conductorSuggestions.isNotEmpty
+                                  ? _conductorSuggestions
+                                  : PoleReferenceData.conductorTypes)
+                              .take(30)
+                              .map((mark) {
+                            final selected = (_conductorTypeController.text.trim() == mark);
+                            return ChoiceChip(
+                              label: Text(mark),
+                              selected: selected,
+                              onSelected: (_) {
+                                setState(() {
+                                  _conductorTypeController.text = mark;
+                                  _conductorType = mark;
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
                       // Оборудование на опоре: 0 из 6
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3327,12 +3796,13 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.black26),
                         ),
-                        child: _cardCommentMessages.isEmpty
+                        child: _cardCommentMessages.isEmpty &&
+                                _cardCommentAttachments.isEmpty
                             ? const Center(
                                 child: Padding(
                                   padding: EdgeInsets.all(12),
                                   child: Text(
-                                    'Нет сообщений',
+                                    'Нет сообщений и вложений',
                                     style: TextStyle(
                                       color: PatrolColors.textSecondary,
                                       fontSize: 13,
@@ -3340,94 +3810,214 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                   ),
                                 ),
                               )
-                            : ListView.builder(
+                            : ListView(
                                 padding: const EdgeInsets.all(8),
-                                itemCount: _cardCommentMessages.length,
-                                itemBuilder: (context, i) {
-                                  final m = _cardCommentMessages[i];
-                                  final whoRaw = (m['user_name'] as String?)?.trim();
-                                  final who = whoRaw != null && whoRaw.isNotEmpty
-                                      ? whoRaw
-                                      : (m['user_id'] != null ? 'id ${m['user_id']}' : '—');
-                                  final when = PoleCardCommentCodec.formatDateTime(
-                                    m['at'] as String?,
-                                  );
-                                  final voiceUrl =
-                                      (m['voice_url'] as String?)?.trim() ?? '';
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: Container(
+                                children: [
+                                  ..._cardCommentMessages.map((m) {
+                                    final whoRaw = (m['user_name'] as String?)?.trim();
+                                    final who = whoRaw != null && whoRaw.isNotEmpty
+                                        ? whoRaw
+                                        : (m['user_id'] != null
+                                            ? 'id ${m['user_id']}'
+                                            : '—');
+                                    final when = PoleCardCommentCodec.formatDateTime(
+                                      m['at'] as String?,
+                                    );
+                                    final voiceUrl =
+                                        (m['voice_url'] as String?)?.trim() ?? '';
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: PatrolColors.surfaceCard,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    who,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  when,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            if ((m['text'] as String?)
+                                                    ?.trim()
+                                                    .isNotEmpty ??
+                                                false)
+                                              Text(
+                                                '${m['text']}',
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                            if (voiceUrl.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.mic,
+                                                    size: 18,
+                                                    color:
+                                                        PatrolColors.accentBlue,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  TextButton(
+                                                    onPressed: () async {
+                                                      final uri = Uri.parse(
+                                                        _absoluteAttachmentUrl(
+                                                          voiceUrl,
+                                                        ),
+                                                      );
+                                                      if (await canLaunchUrl(
+                                                        uri,
+                                                      )) {
+                                                        await launchUrl(
+                                                          uri,
+                                                          mode: LaunchMode
+                                                              .externalApplication,
+                                                        );
+                                                      }
+                                                    },
+                                                    child: const Text(
+                                                      'Прослушать голос',
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                  if (_cardCommentAttachments.isNotEmpty)
+                                    Container(
                                       width: double.infinity,
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
                                         color: PatrolColors.surfaceCard,
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
-                                          color: Colors.black.withValues(alpha: 0.08),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.08,
+                                          ),
                                         ),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  who,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Text(
-                                                when,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade600,
-                                                ),
-                                              ),
-                                            ],
+                                          Text(
+                                            'Вложения (${_cardCommentAttachments.length})',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                            ),
                                           ),
-                                          const SizedBox(height: 4),
-                                          if ((m['text'] as String?)?.trim().isNotEmpty ??
-                                              false)
-                                            Text(
-                                              '${m['text']}',
-                                              style: const TextStyle(
-                                                  fontSize: 14, height: 1.35),
-                                            ),
-                                          if (voiceUrl.isNotEmpty) ...[
-                                            const SizedBox(height: 6),
-                                            Row(
-                                              children: [
-                                                Icon(Icons.mic,
-                                                    size: 18,
-                                                    color: PatrolColors.accentBlue),
-                                                const SizedBox(width: 6),
-                                                TextButton(
-                                                  onPressed: () async {
-                                                    final uri = Uri.parse(
-                                                        _absoluteAttachmentUrl(
-                                                            voiceUrl));
-                                                    if (await canLaunchUrl(
-                                                        uri)) {
-                                                      await launchUrl(uri,
-                                                          mode: LaunchMode
-                                                              .externalApplication);
-                                                    }
-                                                  },
-                                                  child: const Text(
-                                                      'Прослушать голос'),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 6,
+                                            children:
+                                                _cardCommentAttachments
+                                                    .asMap()
+                                                    .entries
+                                                    .map((e) {
+                                                      final type =
+                                                          (e.value['t']
+                                                                  as String?)
+                                                              ?.toLowerCase() ??
+                                                          '';
+                                                      final isVoice =
+                                                          type == 'voice';
+                                                      final isFile =
+                                                          type == 'file' ||
+                                                          type == 'schema' ||
+                                                          type == 'video';
+                                                      final label =
+                                                          isVoice
+                                                              ? 'Голос'
+                                                              : (isFile
+                                                                  ? 'Файл'
+                                                                  : 'Фото');
+                                                      final icon =
+                                                          isVoice
+                                                              ? Icons.mic
+                                                              : (isFile
+                                                                  ? Icons
+                                                                      .attach_file
+                                                                  : Icons.photo);
+                                                      return Chip(
+                                                        label: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              icon,
+                                                              size: 16,
+                                                              color:
+                                                                  PatrolColors
+                                                                      .textPrimary,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 4,
+                                                            ),
+                                                            Text(
+                                                              label,
+                                                              style:
+                                                                  const TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                  ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        deleteIcon: const Icon(
+                                                          Icons.close,
+                                                          size: 18,
+                                                        ),
+                                                        onDeleted:
+                                                            () => setState(
+                                                              () =>
+                                                                  _cardCommentAttachments
+                                                                      .removeAt(
+                                                                        e.key,
+                                                                      ),
+                                                            ),
+                                                      );
+                                                    })
+                                                    .toList(),
+                                          ),
                                         ],
                                       ),
                                     ),
-                                  );
-                                },
+                                ],
                               ),
                       ),
                       const SizedBox(height: 8),
@@ -3466,18 +4056,26 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          OutlinedButton.icon(
-                            onPressed: _pickCommentImage,
-                            icon: const Icon(Icons.photo_library, size: 20),
-                            label: const Text('Фото'),
-                            style: OutlinedButton.styleFrom(foregroundColor: PatrolColors.textPrimary),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isLoading ? null : _openAttachmentsFieldSheet,
+                              icon: const Icon(Icons.attach_file, size: 20),
+                              label: Text(
+                                _cardCommentAttachments.isEmpty
+                                    ? 'Вложения'
+                                    : 'Вложения (${_cardCommentAttachments.length})',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: PatrolColors.textPrimary,
+                              ),
+                            ),
                           ),
                           if (kIsWeb) ...[
                             const SizedBox(width: 8),
                             OutlinedButton.icon(
-                              onPressed: _isLoading ? null : _pickCardCommentFileAny,
-                              icon: const Icon(Icons.attach_file, size: 20),
-                              label: const Text('Файл'),
+                              onPressed: _isLoading ? null : _pickCardCommentVoiceFileWeb,
+                              icon: const Icon(Icons.mic, size: 20),
+                              label: const Text('Голос'),
                               style: OutlinedButton.styleFrom(
                                   foregroundColor: PatrolColors.textPrimary),
                             ),
@@ -3493,44 +4091,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                               ),
                             ),
                           ],
-                          if (_cardCommentAttachments.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                final raw = _encodeCardAttachmentsForDb();
-                                if (raw != null) {
-                                  showPoleAttachmentsTable(context, raw);
-                                }
-                              },
-                              icon: const Icon(Icons.table_rows, size: 20),
-                              label: const Text('Таблица'),
-                              style: OutlinedButton.styleFrom(foregroundColor: PatrolColors.textPrimary),
-                            ),
-                          ],
                         ],
                       ),
-                      if (_cardCommentAttachments.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: _cardCommentAttachments.asMap().entries.map((e) {
-                            final isVoice = e.value['t'] == 'voice';
-                            return Chip(
-                              label: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(isVoice ? Icons.mic : Icons.photo, size: 16, color: PatrolColors.textPrimary),
-                                  const SizedBox(width: 4),
-                                  Text(isVoice ? 'Голос' : 'Фото', style: const TextStyle(fontSize: 12)),
-                                ],
-                              ),
-                              deleteIcon: const Icon(Icons.close, size: 18),
-                              onDeleted: () => setState(() => _cardCommentAttachments.removeAt(e.key)),
-                            );
-                          }).toList(),
-                        ),
-                      ],
                       const SizedBox(height: 24),
                     ],
                   ),

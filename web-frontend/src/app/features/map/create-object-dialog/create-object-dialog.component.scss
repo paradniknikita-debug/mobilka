@@ -325,6 +325,20 @@
       margin: 0 0 14px 0;
       line-height: 1.25;
     }
+
+    // В форме оборудования подписи заметно длиннее, чем в карточке опоры.
+    // Держим их в одной строке с ellipsis, чтобы не было наложений между рядами.
+    ::ng-deep .mdc-floating-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: calc(100% - 8px);
+    }
+
+    // Чуть компактнее подписи в полях оборудования.
+    ::ng-deep .mat-mdc-form-field .mdc-floating-label {
+      font-size: 11px;
+    }
   }
 
   .form-section {
@@ -464,10 +478,25 @@
     min-height: 22px;
   }
 
+  // Не даём floating-label переноситься, но и не обрезаем его искусственно.
+  // Агрессивное обрезание делало подписи почти нечитабельными ("Номер о...", "Л...").
   ::ng-deep .mdc-floating-label {
-    white-space: normal;
-    line-height: 1.15;
-    max-width: 95%;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.2;
+    max-width: none;
+  }
+
+  // Немного уменьшаем подписи, чтобы длинные названия чаще помещались.
+  ::ng-deep .mat-mdc-form-field .mdc-floating-label {
+    font-size: 12px;
+  }
+
+  // Явно растягиваем поля в 2-колоночной сетке и не даем им сжиматься по контенту.
+  .row-2 > mat-form-field {
+    width: 100%;
+    min-width: 0;
   }
 
   .import-section {
@@ -499,13 +528,23 @@
     }
   }
 
-  @media (max-width: 980px) {
+  // В сложных формах переходим в 1 колонку раньше, чтобы не сжимать поля
+  // до состояния, когда подписи начинают накладываться.
+  @media (max-width: 1280px) {
     .row-2 {
       grid-template-columns: 1fr;
     }
 
     .half-width {
       width: 100%;
+    }
+  }
+
+  // Для оборудования перестраиваем 2-колоночные ряды раньше,
+  // чтобы длинные технические названия полей не наезжали друг на друга.
+  @media (max-width: 1600px) {
+    .equipment-form .row-2 {
+      grid-template-columns: 1fr;
     }
   }
 }

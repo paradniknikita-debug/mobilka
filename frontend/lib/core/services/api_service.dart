@@ -34,13 +34,16 @@ String _guessMimeForPoleAttachment(String filename) {
   if (f.endsWith('.png')) return 'image/png';
   if (f.endsWith('.gif')) return 'image/gif';
   if (f.endsWith('.webp')) return 'image/webp';
+  if (f.endsWith('.bmp')) return 'image/bmp';
   if (f.endsWith('.svg')) return 'image/svg+xml';
   if (f.endsWith('.pdf')) return 'application/pdf';
   if (f.endsWith('.m4a')) return 'audio/mp4';
   if (f.endsWith('.mp3')) return 'audio/mpeg';
   if (f.endsWith('.wav')) return 'audio/wav';
+  if (f.endsWith('.ogg')) return 'audio/ogg';
   if (f.endsWith('.webm')) return 'video/webm';
   if (f.endsWith('.mp4')) return 'video/mp4';
+  if (f.endsWith('.mov')) return 'video/quicktime';
   return 'application/octet-stream';
 }
 
@@ -224,6 +227,7 @@ abstract class LepmRetrofit {
 
   @POST('/equipment-catalog/seed-defaults')
   Future<JsonDict> seedEquipmentCatalogDefaultsRaw();
+
 }
 
 /// Публичный HTTP-контракт приложения (Map / модели без `JsonDict` в типах для вызывающего кода).
@@ -305,6 +309,14 @@ abstract class ApiServiceWithExport {
   Future<Map<String, dynamic>> createEquipmentCatalogItemRaw(Map<String, dynamic> payload);
 
   Future<Map<String, dynamic>> seedEquipmentCatalogDefaultsRaw();
+
+  Future<List<Map<String, dynamic>>> getLineConductorCatalogRaw(
+    String? query,
+    double? voltageKv,
+    bool? isActive,
+    int? skip,
+    int? limit,
+  );
 
   /// Бинарные ответы и multipart (не через Retrofit).
   Future<Response<List<int>>> exportCimXml(
@@ -847,6 +859,31 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   @override
   Future<Map<String, dynamic>> seedEquipmentCatalogDefaultsRaw() =>
       _rest.seedEquipmentCatalogDefaultsRaw().then((j) => j.data);
+
+  @override
+  Future<List<Map<String, dynamic>>> getLineConductorCatalogRaw(
+    String? query,
+    double? voltageKv,
+    bool? isActive,
+    int? skip,
+    int? limit,
+  ) async {
+    final response = await _dio.get<List<dynamic>>(
+      '/line-conductor-catalog',
+      queryParameters: {
+        if (query != null) 'q': query,
+        if (voltageKv != null) 'voltage_kv': voltageKv,
+        if (isActive != null) 'is_active': isActive,
+        if (skip != null) 'skip': skip,
+        if (limit != null) 'limit': limit,
+      },
+    );
+    final data = response.data ?? const [];
+    return data
+        .whereType<Map>()
+        .map((x) => Map<String, dynamic>.from(x))
+        .toList();
+  }
 
   @override
   Future<List<EquipmentCatalogItem>> getEquipmentCatalog({

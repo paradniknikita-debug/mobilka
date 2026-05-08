@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { User, UserCreate, AuthResponse } from '../models/user.model';
 import { PowerLine, PowerLineCreate } from '../models/power-line.model';
@@ -144,15 +144,96 @@ export class ApiService {
 
   /** Полный URL вложения карточки опоры (для img/audio src). relativeUrl — путь от бэкенда, например /api/v1/attachments/poles/1/file.jpg */
   getAttachmentUrl(relativeUrl: string): string {
-    const path = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const raw = (relativeUrl || '').trim();
+    if (!raw) return raw;
     const base = this.apiUrl.replace(/\/api\/v1\/?$/, '');
-    return `${base}${path}`;
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw);
+        const pathAndQuery = `${u.pathname || ''}${u.search || ''}${u.hash || ''}`;
+        if (u.pathname.startsWith('/api/v1/')) {
+          return `${base}${pathAndQuery}`;
+        }
+        if (u.pathname.startsWith('/attachments/')) {
+          return `${base}/api/v1${pathAndQuery}`;
+        }
+      } catch {
+        // Если URL некорректный — используем как есть.
+      }
+      return raw;
+    }
+
+    const normalized = raw.startsWith('/') ? raw : `/${raw}`;
+    if (normalized.startsWith('/api/v1/')) {
+      return `${base}${normalized}`;
+    }
+    if (normalized.startsWith('/attachments/')) {
+      return `${base}/api/v1${normalized}`;
+    }
+    return `${base}${normalized}`;
   }
 
   /** Скачать вложение как Blob (для сохранения на диск с правильным именем). */
   getAttachmentBlob(relativeUrl: string): Observable<Blob> {
-    const url = this.getAttachmentUrl(relativeUrl);
-    return this.http.get(url, { responseType: 'blob' });
+    const raw = (relativeUrl || '').trim();
+    const candidates = this.buildAttachmentUrlCandidates(raw);
+    if (!candidates.length) {
+      return this.http.get(this.getAttachmentUrl(raw), { responseType: 'blob' });
+    }
+
+    const tryByIndex = (index: number): Observable<Blob> => {
+      const url = candidates[index];
+      return this.http.get(url, { responseType: 'blob' }).pipe(
+        catchError((err) => {
+          if (index + 1 < candidates.length) {
+            return tryByIndex(index + 1);
+          }
+          throw err;
+        })
+      );
+    };
+
+    return tryByIndex(0);
+  }
+
+  /** Для legacy голосовых ссылок (.mp3/.ogg/.m4a...) пробуем соседние расширения. */
+  private buildAttachmentUrlCandidates(relativeUrl: string): string[] {
+    if (!relativeUrl) return [];
+    if (/^https?:\/\//i.test(relativeUrl)) {
+      // Полный URL уже готов к запросу, не нормализуем как относительный путь.
+      const qIdx = relativeUrl.indexOf('?');
+      const hashIdx = relativeUrl.indexOf('#');
+      const cutAt = [qIdx, hashIdx].filter((x) => x >= 0).reduce((a, b) => Math.min(a, b), Number.MAX_SAFE_INTEGER);
+      const basePart = cutAt === Number.MAX_SAFE_INTEGER ? relativeUrl : relativeUrl.slice(0, cutAt);
+      const suffix = cutAt === Number.MAX_SAFE_INTEGER ? '' : relativeUrl.slice(cutAt);
+      const dot = basePart.lastIndexOf('.');
+      if (dot < 0) return [relativeUrl];
+      const ext = basePart.slice(dot).toLowerCase();
+      const voiceExt = ['.mp3', '.ogg', '.m4a', '.wav', '.webm'];
+      if (!voiceExt.includes(ext)) return [relativeUrl];
+      const stem = basePart.slice(0, dot);
+      return [ext, ...voiceExt.filter((x) => x !== ext)].map((e) => `${stem}${e}${suffix}`);
+    }
+
+    const normalized = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const dot = normalized.lastIndexOf('.');
+    if (dot < 0) {
+      return [this.getAttachmentUrl(normalized)];
+    }
+
+    const ext = normalized.slice(dot).toLowerCase();
+    const voiceExt = ['.mp3', '.ogg', '.m4a', '.wav', '.webm'];
+    if (!voiceExt.includes(ext)) {
+      return [this.getAttachmentUrl(normalized)];
+    }
+
+    const stem = normalized.slice(0, dot);
+    const ordered = [ext, ...voiceExt.filter((x) => x !== ext)];
+    const out: string[] = [];
+    for (const e of ordered) {
+      out.push(this.getAttachmentUrl(`${stem}${e}`));
+    }
+    return out;
   }
 
   /** Загрузить вложение к карточке опоры. Возвращает url для сохранения в card_comment_attachment. */

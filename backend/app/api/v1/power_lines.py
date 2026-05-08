@@ -1,4 +1,5 @@
 from typing import List, Optional, Tuple
+import math
 import re
 import uuid
 from pydantic import BaseModel
@@ -435,13 +436,58 @@ def _power_line_orm_to_dict(pl) -> dict:
 
 
 async def _recompute_power_line_length(db: AsyncSession, power_line_id: int) -> float:
-    """Сумма длин всех пролётов линии (м) -> длина в км. Используется для авторасчёта."""
+    """Сумма длин всех пролётов линии (м) -> длина в км; fallback — по координатам опор."""
     from sqlalchemy import func as sql_func
     r = await db.execute(
         select(sql_func.coalesce(sql_func.sum(Span.length), 0)).where(Span.line_id == power_line_id)
     )
-    total_m = r.scalar() or 0
-    return round(float(total_m) / 1000.0, 6)
+    total_m = float(r.scalar() or 0.0)
+    if total_m > 0:
+        return round(total_m / 1000.0, 6)
+
+    poles_result = await db.execute(
+        select(Pole)
+        .options(
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+        )
+        .where(Pole.line_id == power_line_id)
+    )
+    poles = poles_result.scalars().all()
+    if len(poles) < 2:
+        return 0.0
+
+    poles_sorted = sorted(
+        poles,
+        key=lambda p: (
+            getattr(p, "sequence_number", None) is None,
+            getattr(p, "sequence_number", 0) or 0,
+            getattr(p, "id", 0) or 0,
+        ),
+    )
+
+    def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        r_earth_m = 6371000.0
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        d_phi = math.radians(lat2 - lat1)
+        d_lambda = math.radians(lon2 - lon1)
+        a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return r_earth_m * c
+
+    total_by_coords_m = 0.0
+    prev = None
+    for pole in poles_sorted:
+        lat = pole.get_latitude()
+        lon = pole.get_longitude()
+        if lat is None or lon is None:
+            continue
+        if prev is not None:
+            total_by_coords_m += _haversine_m(prev[0], prev[1], float(lat), float(lon))
+        prev = (float(lat), float(lon))
+
+    return round(total_by_coords_m / 1000.0, 6)
 
 
 def _fill_pole_coordinates(pole: Pole) -> None:

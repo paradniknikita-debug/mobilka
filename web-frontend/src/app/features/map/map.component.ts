@@ -8,6 +8,7 @@ import { Subject } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
+import { HttpErrorResponse } from '@angular/common/http';
 import { CreateObjectDialogComponent } from './create-object-dialog/create-object-dialog.component';
 import { PoleConnectivityDialogComponent } from './pole-connectivity-dialog/pole-connectivity-dialog.component';
 import { PoleSequenceDialogComponent } from './pole-sequence-dialog/pole-sequence-dialog.component';
@@ -93,6 +94,20 @@ export class MapComponent implements OnInit, OnDestroy {
     } else {
       return `${(distanceMeters * 100).toFixed(0)} см`;
     }
+  }
+
+  private distanceMetersForZoom(zoom: number): number {
+    if (!this.map) return Number.POSITIVE_INFINITY;
+    const center = this.map.getCenter();
+    const lat = center.lat;
+    const resolution = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+    const metersPerPixel = resolution;
+    const mapWidth = this.map.getSize().x || 1000;
+    return metersPerPixel * mapWidth;
+  }
+
+  private isEquipmentVisibleAtZoom(zoom: number): boolean {
+    return this.distanceMetersForZoom(zoom) <= 1000;
   }
   
   private destroy$ = new Subject<void>();
@@ -2268,8 +2283,7 @@ export class MapComponent implements OnInit, OnDestroy {
   /** Показывать оборудование при зуме >= minZoomToShowEquipment; скрывать при отдалении ниже порога. */
   private updateEquipmentVisibility(): void {
     if (!this.map) return;
-    const threshold = (environment.map as any).minZoomToShowEquipment ?? 14;
-    const show = this.currentZoom >= threshold;
+    const show = this.isEquipmentVisibleAtZoom(this.currentZoom);
     this.equipmentGeoJsonMarkers.forEach(m => {
       if (show) { if (!this.map!.hasLayer(m)) m.addTo(this.map!); }
       else { this.map!.removeLayer(m); }
@@ -2479,8 +2493,13 @@ export class MapComponent implements OnInit, OnDestroy {
         URL.revokeObjectURL(url);
         this.snackBar.open('Файл сохранён', 'Закрыть', { duration: 2000 });
       },
-      error: () => {
-        this.snackBar.open('Ошибка загрузки файла', 'Закрыть', { duration: 3000 });
+      error: (e: HttpErrorResponse) => {
+        const detail =
+          (typeof e?.error === 'string' && e.error.trim()) ||
+          e?.error?.detail ||
+          e?.message ||
+          'Ошибка загрузки файла';
+        this.snackBar.open(detail, 'Закрыть', { duration: 4000 });
       }
     });
   }
