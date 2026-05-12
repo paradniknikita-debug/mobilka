@@ -22,7 +22,8 @@ COPY requirements.txt .
 # Проверка boto3 — в requirements.txt уже есть; падаем при сборке, если S3-клиент не ставится
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt \
-    && python -c "import boto3; print('boto3 OK', boto3.__version__)"
+    && python -c "import boto3; print('boto3 OK', boto3.__version__)" \
+    && python -c "import reportlab; from fpdf import FPDF; print('pdf export OK', reportlab.Version)"
 
 # 3) Код приложения — меняется чаще всего; слой с pip не трогаем
 COPY . .
