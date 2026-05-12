@@ -50,13 +50,26 @@ def _safe_filename_part(s: str, max_len: int = 60) -> str:
     return t or "passport"
 
 
+def _bundled_passport_ttf() -> Optional[Path]:
+    """DejaVu Sans из репозитория (fonts/DejaVuSans.ttf) — чтобы PDF с кириллицей работал в Docker без системных шрифтов."""
+    p = Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"
+    return p if p.is_file() else None
+
+
 def _system_ttf_candidates() -> List[Path]:
-    return [
-        Path(r"C:\Windows\Fonts\arial.ttf"),
-        Path(r"C:\Windows\Fonts\ARIAL.TTF"),
-        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-        Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
-    ]
+    bundled = _bundled_passport_ttf()
+    out: List[Path] = []
+    if bundled is not None:
+        out.append(bundled)
+    out.extend(
+        [
+            Path(r"C:\Windows\Fonts\arial.ttf"),
+            Path(r"C:\Windows\Fonts\ARIAL.TTF"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+        ]
+    )
+    return out
 
 
 def _first_existing_ttf() -> Optional[Path]:
@@ -123,15 +136,34 @@ def _build_pdf_reportlab(
     story.append(Spacer(1, 0.4 * cm))
 
     flat = _flatten(snapshot_envelope.get("data") or {})
-    table_data: List[List[str]] = [["Параметр", "Значение"]]
+    cell_style = ParagraphStyle(
+        name="PassportCell",
+        parent=getSampleStyleSheet()["Normal"],
+        fontName=font,
+        fontSize=8,
+        leading=10,
+    )
+    table_data: List[List[Any]] = [
+        [_p("<b>Параметр</b>", font, size=9, space_after=0), _p("<b>Значение</b>", font, size=9, space_after=0)]
+    ]
     for k, v in flat[:400]:
         vs = v
         if isinstance(v, (dict, list)):
             vs = json.dumps(v, ensure_ascii=False, default=str)[:500]
-        table_data.append([str(k), str(vs)])
+        ck = escape(str(k)).replace("\n", "<br/>")
+        cv = escape(str(vs)).replace("\n", "<br/>")
+        table_data.append([Paragraph(ck, cell_style), Paragraph(cv, cell_style)])
 
     if len(flat) > 400:
-        table_data.append(["…", f"ещё строк: {len(flat) - 400} (полные данные — в XLSX/JSON)"])
+        table_data.append(
+            [
+                Paragraph(escape("…"), cell_style),
+                Paragraph(
+                    escape(f"ещё строк: {len(flat) - 400} (полные данные — в XLSX/JSON)"),
+                    cell_style,
+                ),
+            ]
+        )
 
     tw = doc.width
     t = Table(table_data, colWidths=[tw * 0.42, tw * 0.58])
@@ -139,8 +171,6 @@ def _build_pdf_reportlab(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
-                ("FONTNAME", (0, 0), (-1, -1), font),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
                 ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]

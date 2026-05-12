@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Dict, Optional, Tuple
@@ -176,6 +177,9 @@ async def export_tech_passport(
             status_code=500,
             detail=str(e) or "Сбой формирования файла (проверьте зависимости: pip install reportlab python-docx fpdf2)",
         ) from e
+    except Exception as e:
+        logging.getLogger(__name__).exception("export_tech_passport failed: passport_id=%s format=%s", passport_id, export_format)
+        raise HTTPException(status_code=500, detail=str(e) or "Сбой формирования файла") from e
 
     safe = f"passport_{row.id}_{suffix}"
     return StreamingResponse(

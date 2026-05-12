@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, from, of, throwError } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpParams, HttpResponse } from '@angular/common/http';
+import { Observable, from, throwError } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { User, UserCreate, AuthResponse } from '../models/user.model';
@@ -882,30 +882,37 @@ export class ApiService {
         responseType: 'blob',
       })
       .pipe(
-        switchMap((resp) => {
-          if (resp.ok && resp.body) {
-            return of(resp.body);
+        map((resp: HttpResponse<Blob>) => {
+          if (!resp.body) {
+            throw new Error('Пустой ответ сервера');
           }
-          const blob = resp.body as Blob | null;
-          if (!blob) {
-            return throwError(() => new Error(`HTTP ${resp.status}`));
+          return resp.body;
+        }),
+        catchError((err: HttpErrorResponse) => {
+          const blob = err.error;
+          if (blob instanceof Blob) {
+            return from(blob.text()).pipe(
+              switchMap((t) => {
+                let msg = `Ошибка ${err.status}`;
+                try {
+                  const j = JSON.parse(t) as { detail?: unknown };
+                  if (typeof j.detail === 'string') {
+                    msg = j.detail;
+                  }
+                } catch {
+                  if (t?.trim()) {
+                    msg = t.trim();
+                  }
+                }
+                return throwError(() => new Error(msg));
+              }),
+            );
           }
-          return from(blob.text()).pipe(
-            switchMap((t) => {
-              let msg = `Ошибка ${resp.status}`;
-              try {
-                const j = JSON.parse(t) as { detail?: unknown };
-                if (typeof j.detail === 'string') {
-                  msg = j.detail;
-                }
-              } catch {
-                if (t?.trim()) {
-                  msg = t.trim();
-                }
-              }
-              return throwError(() => new Error(msg));
-            }),
-          );
+          const d = (err.error as { detail?: unknown } | null)?.detail;
+          if (typeof d === 'string') {
+            return throwError(() => new Error(d));
+          }
+          return throwError(() => new Error(err.message || `Ошибка ${err.status}`));
         }),
       );
   }
