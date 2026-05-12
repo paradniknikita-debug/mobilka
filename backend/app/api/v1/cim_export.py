@@ -721,6 +721,21 @@ def _power_line_to_cim(
                 seg_b_per_km = sum((float(getattr(ls, "b", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
                 seg_g_per_km = sum((float(getattr(ls, "g", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
 
+        seg_nameplate: Optional[str] = None
+        lss = getattr(segment, "line_sections", None) or []
+        if lss:
+            lss_sorted = sorted(
+                lss,
+                key=lambda ls: (
+                    getattr(ls, "sequence_number", None) is None,
+                    getattr(ls, "sequence_number", 0) or 0,
+                ),
+            )
+            first_ls = lss_sorted[0]
+            seg_nameplate = (getattr(first_ls, "conductor_type", None) or "").strip() or None
+        if not seg_nameplate:
+            seg_nameplate = (getattr(segment, "conductor_type", None) or "").strip() or None
+
         segment_obj = AClineSegmentCIMObject(
             mrid=segment.mrid,
             name=segment.name or segment.code,
@@ -750,6 +765,7 @@ def _power_line_to_cim(
             normally_in_service=getattr(segment, "normally_in_service", True),
             equipment_container=cim_ref(power_line.mrid),
             base_voltage=base_voltage_ref,
+            nameplate=seg_nameplate,
         )
         acline_segments_list.append(cim_ref(segment.mrid))
         cim_objects.append(segment_obj)
@@ -1832,7 +1848,7 @@ async def apply_cim_552_diff(
         cn_id_by_mrid[mrid] = cn.id
 
     # Поддержка связок через Terminal:
-    # ACLineSegment -> ConductingEquipment.Terminals -> Terminal.ConnectivityNode.
+    # ACLineSegment -> ConductingEquipment.Terminals -> Terminals.ConnectivityNode (в XML импортируется как ConnectivityNode).
     term_cn_map: Dict[str, str] = {}
     ce_terminal_map: Dict[str, List[str]] = {}
     for obj in apply_objects:

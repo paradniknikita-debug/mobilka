@@ -432,6 +432,7 @@ class AClineSegmentCIMObject(CIMObject):
         normally_in_service: Optional[bool] = True,
         equipment_container: Optional[Dict[str, str]] = None,
         base_voltage: Optional[Dict[str, str]] = None,
+        nameplate: Optional[str] = None,
     ):
         super().__init__(mrid, name)
         self.from_node = from_node
@@ -462,6 +463,7 @@ class AClineSegmentCIMObject(CIMObject):
         self.normally_in_service = normally_in_service
         self.equipment_container = equipment_container
         self.base_voltage = base_voltage
+        self.nameplate = nameplate
 
     def get_cim_class(self) -> str:
         return "ACLineSegment"
@@ -483,15 +485,15 @@ class AClineSegmentCIMObject(CIMObject):
             result["Equipment.EquipmentContainer"] = self.equipment_container
 
         if self.from_node:
-            result["Terminal.ConnectivityNode"] = self.from_node
+            result["Terminals.ConnectivityNode"] = self.from_node
 
         if self.to_node:
-            if "Terminal.ConnectivityNode" in result:
-                if not isinstance(result["Terminal.ConnectivityNode"], list):
-                    result["Terminal.ConnectivityNode"] = [result["Terminal.ConnectivityNode"]]
-                result["Terminal.ConnectivityNode"].append(self.to_node)
+            if "Terminals.ConnectivityNode" in result:
+                if not isinstance(result["Terminals.ConnectivityNode"], list):
+                    result["Terminals.ConnectivityNode"] = [result["Terminals.ConnectivityNode"]]
+                result["Terminals.ConnectivityNode"].append(self.to_node)
             else:
-                result["Terminal.ConnectivityNode"] = self.to_node
+                result["Terminals.ConnectivityNode"] = self.to_node
 
         if self.length is not None:
             result["Conductor.length"] = self.length
@@ -531,8 +533,11 @@ class AClineSegmentCIMObject(CIMObject):
             result["shortCircuitEndTemperature"] = self.short_circuit_end_temperature
         if self.wire_splitting_factor is not None:
             result["wireSplittingFactor"] = self.wire_splitting_factor
-        if self.normally_in_service is not None:
-            result["Equipment.normallyInService"] = self.normally_in_service
+        if self.nameplate:
+            result["me:Equipment.nameplate"] = self.nameplate
+        result["Equipment.normallyInService"] = (
+            True if self.normally_in_service is None else bool(self.normally_in_service)
+        )
         if self.base_voltage:
             result["ConductingEquipment.BaseVoltage"] = self.base_voltage
 
@@ -932,7 +937,7 @@ class TerminalCIMObject(CIMObject):
         if self.name:
             result["IdentifiedObject.name"] = self.name
         if self.connectivity_node:
-            result["Terminal.ConnectivityNode"] = self.connectivity_node
+            result["Terminals.ConnectivityNode"] = self.connectivity_node
         if self.conducting_equipment:
             result["Terminal.ConductingEquipment"] = self.conducting_equipment
         if self.sequence_number is not None:
