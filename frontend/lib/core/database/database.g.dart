@@ -2087,6 +2087,28 @@ class $EquipmentTable extends Equipment
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _cardCommentMeta = const VerificationMeta(
+    'cardComment',
+  );
+  @override
+  late final GeneratedColumn<String> cardComment = GeneratedColumn<String>(
+    'card_comment',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cardCommentAttachmentMeta =
+      const VerificationMeta('cardCommentAttachment');
+  @override
+  late final GeneratedColumn<String> cardCommentAttachment =
+      GeneratedColumn<String>(
+        'card_comment_attachment',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _manufacturerMeta = const VerificationMeta(
     'manufacturer',
   );
@@ -2517,6 +2539,8 @@ class $EquipmentTable extends Equipment
     defect,
     criticality,
     defectAttachment,
+    cardComment,
+    cardCommentAttachment,
     manufacturer,
     model,
     serialNumber,
@@ -2625,6 +2649,24 @@ class $EquipmentTable extends Equipment
         defectAttachment.isAcceptableOrUnknown(
           data['defect_attachment']!,
           _defectAttachmentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('card_comment')) {
+      context.handle(
+        _cardCommentMeta,
+        cardComment.isAcceptableOrUnknown(
+          data['card_comment']!,
+          _cardCommentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('card_comment_attachment')) {
+      context.handle(
+        _cardCommentAttachmentMeta,
+        cardCommentAttachment.isAcceptableOrUnknown(
+          data['card_comment_attachment']!,
+          _cardCommentAttachmentMeta,
         ),
       );
     }
@@ -2957,6 +2999,14 @@ class $EquipmentTable extends Equipment
         DriftSqlType.string,
         data['${effectivePrefix}defect_attachment'],
       ),
+      cardComment: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}card_comment'],
+      ),
+      cardCommentAttachment: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}card_comment_attachment'],
+      ),
       manufacturer: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}manufacturer'],
@@ -3129,6 +3179,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
 
   /// Вложения к описанию иного дефекта: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
   final String? defectAttachment;
+
+  /// Комментарий карточки оборудования (как у опоры)
+  final String? cardComment;
+
+  /// Вложения к комментарию карточки (JSON с url или локальным p)
+  final String? cardCommentAttachment;
   final String? manufacturer;
   final String? model;
   final String? serialNumber;
@@ -3180,6 +3236,8 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     this.defect,
     this.criticality,
     this.defectAttachment,
+    this.cardComment,
+    this.cardCommentAttachment,
     this.manufacturer,
     this.model,
     this.serialNumber,
@@ -3235,6 +3293,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     }
     if (!nullToAbsent || defectAttachment != null) {
       map['defect_attachment'] = Variable<String>(defectAttachment);
+    }
+    if (!nullToAbsent || cardComment != null) {
+      map['card_comment'] = Variable<String>(cardComment);
+    }
+    if (!nullToAbsent || cardCommentAttachment != null) {
+      map['card_comment_attachment'] = Variable<String>(cardCommentAttachment);
     }
     if (!nullToAbsent || manufacturer != null) {
       map['manufacturer'] = Variable<String>(manufacturer);
@@ -3367,6 +3431,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       defectAttachment: defectAttachment == null && nullToAbsent
           ? const Value.absent()
           : Value(defectAttachment),
+      cardComment: cardComment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardComment),
+      cardCommentAttachment: cardCommentAttachment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardCommentAttachment),
       manufacturer: manufacturer == null && nullToAbsent
           ? const Value.absent()
           : Value(manufacturer),
@@ -3484,6 +3554,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       defect: serializer.fromJson<String?>(json['defect']),
       criticality: serializer.fromJson<String?>(json['criticality']),
       defectAttachment: serializer.fromJson<String?>(json['defectAttachment']),
+      cardComment: serializer.fromJson<String?>(json['cardComment']),
+      cardCommentAttachment: serializer.fromJson<String?>(
+        json['cardCommentAttachment'],
+      ),
       manufacturer: serializer.fromJson<String?>(json['manufacturer']),
       model: serializer.fromJson<String?>(json['model']),
       serialNumber: serializer.fromJson<String?>(json['serialNumber']),
@@ -3550,6 +3624,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       'defect': serializer.toJson<String?>(defect),
       'criticality': serializer.toJson<String?>(criticality),
       'defectAttachment': serializer.toJson<String?>(defectAttachment),
+      'cardComment': serializer.toJson<String?>(cardComment),
+      'cardCommentAttachment': serializer.toJson<String?>(
+        cardCommentAttachment,
+      ),
       'manufacturer': serializer.toJson<String?>(manufacturer),
       'model': serializer.toJson<String?>(model),
       'serialNumber': serializer.toJson<String?>(serialNumber),
@@ -3608,6 +3686,8 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     Value<String?> defect = const Value.absent(),
     Value<String?> criticality = const Value.absent(),
     Value<String?> defectAttachment = const Value.absent(),
+    Value<String?> cardComment = const Value.absent(),
+    Value<String?> cardCommentAttachment = const Value.absent(),
     Value<String?> manufacturer = const Value.absent(),
     Value<String?> model = const Value.absent(),
     Value<String?> serialNumber = const Value.absent(),
@@ -3657,6 +3737,10 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     defectAttachment: defectAttachment.present
         ? defectAttachment.value
         : this.defectAttachment,
+    cardComment: cardComment.present ? cardComment.value : this.cardComment,
+    cardCommentAttachment: cardCommentAttachment.present
+        ? cardCommentAttachment.value
+        : this.cardCommentAttachment,
     manufacturer: manufacturer.present ? manufacturer.value : this.manufacturer,
     model: model.present ? model.value : this.model,
     serialNumber: serialNumber.present ? serialNumber.value : this.serialNumber,
@@ -3740,6 +3824,12 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
       defectAttachment: data.defectAttachment.present
           ? data.defectAttachment.value
           : this.defectAttachment,
+      cardComment: data.cardComment.present
+          ? data.cardComment.value
+          : this.cardComment,
+      cardCommentAttachment: data.cardCommentAttachment.present
+          ? data.cardCommentAttachment.value
+          : this.cardCommentAttachment,
       manufacturer: data.manufacturer.present
           ? data.manufacturer.value
           : this.manufacturer,
@@ -3832,6 +3922,8 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           ..write('defect: $defect, ')
           ..write('criticality: $criticality, ')
           ..write('defectAttachment: $defectAttachment, ')
+          ..write('cardComment: $cardComment, ')
+          ..write('cardCommentAttachment: $cardCommentAttachment, ')
           ..write('manufacturer: $manufacturer, ')
           ..write('model: $model, ')
           ..write('serialNumber: $serialNumber, ')
@@ -3884,6 +3976,8 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
     defect,
     criticality,
     defectAttachment,
+    cardComment,
+    cardCommentAttachment,
     manufacturer,
     model,
     serialNumber,
@@ -3935,6 +4029,8 @@ class EquipmentData extends DataClass implements Insertable<EquipmentData> {
           other.defect == this.defect &&
           other.criticality == this.criticality &&
           other.defectAttachment == this.defectAttachment &&
+          other.cardComment == this.cardComment &&
+          other.cardCommentAttachment == this.cardCommentAttachment &&
           other.manufacturer == this.manufacturer &&
           other.model == this.model &&
           other.serialNumber == this.serialNumber &&
@@ -3985,6 +4081,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
   final Value<String?> defect;
   final Value<String?> criticality;
   final Value<String?> defectAttachment;
+  final Value<String?> cardComment;
+  final Value<String?> cardCommentAttachment;
   final Value<String?> manufacturer;
   final Value<String?> model;
   final Value<String?> serialNumber;
@@ -4032,6 +4130,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.defect = const Value.absent(),
     this.criticality = const Value.absent(),
     this.defectAttachment = const Value.absent(),
+    this.cardComment = const Value.absent(),
+    this.cardCommentAttachment = const Value.absent(),
     this.manufacturer = const Value.absent(),
     this.model = const Value.absent(),
     this.serialNumber = const Value.absent(),
@@ -4080,6 +4180,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     this.defect = const Value.absent(),
     this.criticality = const Value.absent(),
     this.defectAttachment = const Value.absent(),
+    this.cardComment = const Value.absent(),
+    this.cardCommentAttachment = const Value.absent(),
     this.manufacturer = const Value.absent(),
     this.model = const Value.absent(),
     this.serialNumber = const Value.absent(),
@@ -4133,6 +4235,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     Expression<String>? defect,
     Expression<String>? criticality,
     Expression<String>? defectAttachment,
+    Expression<String>? cardComment,
+    Expression<String>? cardCommentAttachment,
     Expression<String>? manufacturer,
     Expression<String>? model,
     Expression<String>? serialNumber,
@@ -4181,6 +4285,9 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       if (defect != null) 'defect': defect,
       if (criticality != null) 'criticality': criticality,
       if (defectAttachment != null) 'defect_attachment': defectAttachment,
+      if (cardComment != null) 'card_comment': cardComment,
+      if (cardCommentAttachment != null)
+        'card_comment_attachment': cardCommentAttachment,
       if (manufacturer != null) 'manufacturer': manufacturer,
       if (model != null) 'model': model,
       if (serialNumber != null) 'serial_number': serialNumber,
@@ -4236,6 +4343,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     Value<String?>? defect,
     Value<String?>? criticality,
     Value<String?>? defectAttachment,
+    Value<String?>? cardComment,
+    Value<String?>? cardCommentAttachment,
     Value<String?>? manufacturer,
     Value<String?>? model,
     Value<String?>? serialNumber,
@@ -4284,6 +4393,9 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
       defect: defect ?? this.defect,
       criticality: criticality ?? this.criticality,
       defectAttachment: defectAttachment ?? this.defectAttachment,
+      cardComment: cardComment ?? this.cardComment,
+      cardCommentAttachment:
+          cardCommentAttachment ?? this.cardCommentAttachment,
       manufacturer: manufacturer ?? this.manufacturer,
       model: model ?? this.model,
       serialNumber: serialNumber ?? this.serialNumber,
@@ -4355,6 +4467,14 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
     }
     if (defectAttachment.present) {
       map['defect_attachment'] = Variable<String>(defectAttachment.value);
+    }
+    if (cardComment.present) {
+      map['card_comment'] = Variable<String>(cardComment.value);
+    }
+    if (cardCommentAttachment.present) {
+      map['card_comment_attachment'] = Variable<String>(
+        cardCommentAttachment.value,
+      );
     }
     if (manufacturer.present) {
       map['manufacturer'] = Variable<String>(manufacturer.value);
@@ -4492,6 +4612,8 @@ class EquipmentCompanion extends UpdateCompanion<EquipmentData> {
           ..write('defect: $defect, ')
           ..write('criticality: $criticality, ')
           ..write('defectAttachment: $defectAttachment, ')
+          ..write('cardComment: $cardComment, ')
+          ..write('cardCommentAttachment: $cardCommentAttachment, ')
           ..write('manufacturer: $manufacturer, ')
           ..write('model: $model, ')
           ..write('serialNumber: $serialNumber, ')
@@ -6499,6 +6621,8 @@ typedef $$EquipmentTableCreateCompanionBuilder =
       Value<String?> defect,
       Value<String?> criticality,
       Value<String?> defectAttachment,
+      Value<String?> cardComment,
+      Value<String?> cardCommentAttachment,
       Value<String?> manufacturer,
       Value<String?> model,
       Value<String?> serialNumber,
@@ -6548,6 +6672,8 @@ typedef $$EquipmentTableUpdateCompanionBuilder =
       Value<String?> defect,
       Value<String?> criticality,
       Value<String?> defectAttachment,
+      Value<String?> cardComment,
+      Value<String?> cardCommentAttachment,
       Value<String?> manufacturer,
       Value<String?> model,
       Value<String?> serialNumber,
@@ -6634,6 +6760,16 @@ class $$EquipmentTableFilterComposer
 
   ColumnFilters<String> get defectAttachment => $composableBuilder(
     column: $table.defectAttachment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cardComment => $composableBuilder(
+    column: $table.cardComment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cardCommentAttachment => $composableBuilder(
+    column: $table.cardCommentAttachment,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6877,6 +7013,16 @@ class $$EquipmentTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get cardComment => $composableBuilder(
+    column: $table.cardComment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cardCommentAttachment => $composableBuilder(
+    column: $table.cardCommentAttachment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get manufacturer => $composableBuilder(
     column: $table.manufacturer,
     builder: (column) => ColumnOrderings(column),
@@ -7107,6 +7253,16 @@ class $$EquipmentTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get cardComment => $composableBuilder(
+    column: $table.cardComment,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get cardCommentAttachment => $composableBuilder(
+    column: $table.cardCommentAttachment,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get manufacturer => $composableBuilder(
     column: $table.manufacturer,
     builder: (column) => column,
@@ -7301,6 +7457,8 @@ class $$EquipmentTableTableManager
                 Value<String?> defect = const Value.absent(),
                 Value<String?> criticality = const Value.absent(),
                 Value<String?> defectAttachment = const Value.absent(),
+                Value<String?> cardComment = const Value.absent(),
+                Value<String?> cardCommentAttachment = const Value.absent(),
                 Value<String?> manufacturer = const Value.absent(),
                 Value<String?> model = const Value.absent(),
                 Value<String?> serialNumber = const Value.absent(),
@@ -7350,6 +7508,8 @@ class $$EquipmentTableTableManager
                 defect: defect,
                 criticality: criticality,
                 defectAttachment: defectAttachment,
+                cardComment: cardComment,
+                cardCommentAttachment: cardCommentAttachment,
                 manufacturer: manufacturer,
                 model: model,
                 serialNumber: serialNumber,
@@ -7399,6 +7559,8 @@ class $$EquipmentTableTableManager
                 Value<String?> defect = const Value.absent(),
                 Value<String?> criticality = const Value.absent(),
                 Value<String?> defectAttachment = const Value.absent(),
+                Value<String?> cardComment = const Value.absent(),
+                Value<String?> cardCommentAttachment = const Value.absent(),
                 Value<String?> manufacturer = const Value.absent(),
                 Value<String?> model = const Value.absent(),
                 Value<String?> serialNumber = const Value.absent(),
@@ -7448,6 +7610,8 @@ class $$EquipmentTableTableManager
                 defect: defect,
                 criticality: criticality,
                 defectAttachment: defectAttachment,
+                cardComment: cardComment,
+                cardCommentAttachment: cardCommentAttachment,
                 manufacturer: manufacturer,
                 model: model,
                 serialNumber: serialNumber,

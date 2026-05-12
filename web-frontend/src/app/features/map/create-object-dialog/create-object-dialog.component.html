@@ -1,5 +1,5 @@
 <div class="create-object-dialog" [class.substation-edit]="isEditMode && selectedObjectType === 'substation'" appResizableDialog>
-  <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : isEditMode && selectedObjectType === 'substation' ? 'Редактирование подстанции' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
+  <h2 mat-dialog-title>{{ isEditMode && selectedObjectType === 'pole' ? 'Редактирование опоры' : isEditMode && selectedObjectType === 'substation' ? 'Редактирование подстанции' : isEditMode && selectedObjectType === 'equipment' ? 'Редактирование оборудования' : (selectedObjectType === 'pole' ? 'Создание опоры' : 'Создание объекта') }}</h2>
 
   <mat-dialog-content>
     <!-- Шаг 1: Выбор типа объекта -->
@@ -583,6 +583,9 @@
           <mat-form-field appearance="outline" class="half-width">
             <mat-label>Номинальное напряжение</mat-label>
             <input matInput formControlName="nominal_voltage" placeholder="Например: 10 кВ">
+            <mat-hint *ngIf="isNominalVoltageLockedByLine()">
+              Совпадает с классом напряжения линии ({{ equipmentLineVoltageKv }} кВ)
+            </mat-hint>
           </mat-form-field>
         </div>
 
@@ -626,10 +629,6 @@
               }}
             </mat-label>
             <input matInput formControlName="identified_object_description" placeholder="Учётный / инвентарный номер">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Номинальное напряжение, кВ</mat-label>
-            <input matInput formControlName="nominal_voltage" placeholder="Например: 10">
           </mat-form-field>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Родительский объект в базовом дереве</mat-label>
@@ -710,10 +709,6 @@
             <mat-label>Родительский объект в базовом дереве</mat-label>
             <input matInput [value]="equipmentPoleDisplayName || '—'" disabled>
             <mat-hint>Полюс оборудования: два.</mat-hint>
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Номинальное напряжение, кВ</mat-label>
-            <input matInput formControlName="nominal_voltage" placeholder="Например: 10">
           </mat-form-field>
         </ng-container>
 
@@ -833,6 +828,69 @@
           <mat-label>Описание / примечания</mat-label>
           <textarea matInput formControlName="notes" rows="2" placeholder="Доп. информация по оборудованию"></textarea>
         </mat-form-field>
+
+        <mat-expansion-panel class="expansion-section">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Комментарий и медиа карточки оборудования</mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="card-comment-chat">
+            <div class="card-comment-messages">
+              <div
+                class="card-comment-bubble"
+                *ngFor="let m of equipmentCardCommentMessages; trackBy: trackCommentById"
+              >
+                <div class="card-comment-bubble-meta">
+                  <span class="card-comment-author">{{ commentAuthorLabel(m) }}</span>
+                  <span class="card-comment-time">{{ formatCardCommentAt(m.at) }}</span>
+                </div>
+                <div class="card-comment-bubble-text" *ngIf="m.text">{{ m.text }}</div>
+                <div class="card-comment-bubble-voice" *ngIf="m.voice_url">
+                  <mat-icon>mic</mat-icon>
+                  <app-attachment-media-view class="card-comment-voice-player" [url]="m.voice_url" type="voice"></app-attachment-media-view>
+                </div>
+              </div>
+              <div class="card-comment-empty" *ngIf="!equipmentCardCommentMessages.length">
+                Нет сообщений
+              </div>
+            </div>
+            <div class="card-comment-input-row">
+              <mat-form-field appearance="outline" class="card-comment-input-field">
+                <mat-label>Сообщение</mat-label>
+                <textarea
+                  matInput
+                  [(ngModel)]="newEquipmentCardCommentDraft"
+                  [ngModelOptions]="{standalone: true}"
+                  name="equipmentCardDraft"
+                  rows="2"
+                  placeholder="Введите текст…"
+                ></textarea>
+              </mat-form-field>
+              <button
+                mat-flat-button
+                color="primary"
+                type="button"
+                class="card-comment-send-btn"
+                (click)="sendEquipmentCardComment()"
+              >
+                Отправить
+              </button>
+            </div>
+          </div>
+          <ng-container *ngIf="isEditMode && data?.equipmentId">
+            <button
+              mat-stroked-button
+              type="button"
+              class="pole-attachments-open-btn"
+              (click)="openEquipmentAttachmentsManager()"
+            >
+              <mat-icon>attach_file</mat-icon>
+              Вложения ({{ equipmentAttachments.length }})
+            </button>
+            <p class="pole-attachments-hint">
+              После изменений сохраните оборудование. Для нового объекта сначала создайте запись, затем добавьте файлы.
+            </p>
+          </ng-container>
+        </mat-expansion-panel>
       </form>
     </div>
   </mat-dialog-content>

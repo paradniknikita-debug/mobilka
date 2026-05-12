@@ -9,7 +9,8 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.change_log import ChangeLog
 from app.models.user import User
-from app.models.power_line import Pole, Equipment
+from app.models.power_line import Pole, Equipment, PowerLine
+from app.core.equipment_nominal_voltage import nominal_kv_from_line_voltage
 from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.location import Location
 from app.schemas.power_line import EquipmentCreate, EquipmentResponse, PoleResponse
@@ -148,6 +149,24 @@ async def create_equipment(
         "parentMainEquipmentPoleRef"
     )
     nominal_voltage_kv = data.get("nominal_voltage_kv") or data.get("nominalVoltageKv")
+    if nominal_voltage_kv is not None:
+        try:
+            nominal_voltage_kv = float(nominal_voltage_kv)
+        except (TypeError, ValueError):
+            nominal_voltage_kv = None
+    line_vl = None
+    if pole.line_id:
+        pl_row = await db.get(PowerLine, pole.line_id)
+        if pl_row is not None and getattr(pl_row, "voltage_level", None) is not None:
+            try:
+                line_vl = float(pl_row.voltage_level)
+            except (TypeError, ValueError):
+                line_vl = None
+    nominal_voltage_kv = nominal_kv_from_line_voltage(
+        str(equipment_type) if equipment_type else None,
+        line_vl,
+        nominal_voltage_kv,
+    )
     nominal_breaking_current_ka = data.get("nominal_breaking_current_ka") or data.get(
         "nominalBreakingCurrentKa"
     )
@@ -171,6 +190,8 @@ async def create_equipment(
     defect = data.get("defect")
     criticality = data.get("criticality")
     defect_attachment = data.get("defect_attachment") or data.get("defectAttachment")
+    card_comment = data.get("card_comment") or data.get("cardComment")
+    card_comment_attachment = data.get("card_comment_attachment") or data.get("cardCommentAttachment")
     db_equipment = Equipment(
         equipment_type=equipment_type,
         name=name,
@@ -184,6 +205,8 @@ async def create_equipment(
         defect=defect,
         criticality=criticality,
         defect_attachment=defect_attachment,
+        card_comment=card_comment,
+        card_comment_attachment=card_comment_attachment,
         pole_id=pole_id,
         x_position=float(raw_lon) if raw_lon is not None else None,
         y_position=float(raw_lat) if raw_lat is not None else None,

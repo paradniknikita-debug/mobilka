@@ -484,6 +484,10 @@ class Equipment {
   final double? continuousCurrentA;
   @JsonKey(name: 'arrester_type')
   final String? arresterType;
+  @JsonKey(name: 'card_comment')
+  final String? cardComment;
+  @JsonKey(name: 'card_comment_attachment')
+  final String? cardCommentAttachment;
   @JsonKey(name: 'x_position')
   final double? xPosition;
   @JsonKey(name: 'y_position')
@@ -530,6 +534,8 @@ class Equipment {
     this.emergencyCurrentA,
     this.continuousCurrentA,
     this.arresterType,
+    this.cardComment,
+    this.cardCommentAttachment,
     this.xPosition,
     this.yPosition,
     required this.createdBy,
@@ -578,6 +584,10 @@ class Equipment {
     double? emergencyCurrentA,
     double? continuousCurrentA,
     String? arresterType,
+    String? cardComment,
+    String? cardCommentAttachment,
+    double? xPosition,
+    double? yPosition,
   }) {
     return Equipment(
       id: id ?? this.id,
@@ -618,6 +628,10 @@ class Equipment {
       emergencyCurrentA: emergencyCurrentA ?? this.emergencyCurrentA,
       continuousCurrentA: continuousCurrentA ?? this.continuousCurrentA,
       arresterType: arresterType ?? this.arresterType,
+      cardComment: cardComment ?? this.cardComment,
+      cardCommentAttachment: cardCommentAttachment ?? this.cardCommentAttachment,
+      xPosition: xPosition ?? this.xPosition,
+      yPosition: yPosition ?? this.yPosition,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -646,6 +660,10 @@ class EquipmentCreate {
   final String? criticality;
   @JsonKey(name: 'defect_attachment')
   final String? defectAttachment;
+  @JsonKey(name: 'card_comment')
+  final String? cardComment;
+  @JsonKey(name: 'card_comment_attachment')
+  final String? cardCommentAttachment;
   @JsonKey(name: 'rated_current')
   final double? ratedCurrent;
   @JsonKey(name: 'i_th')
@@ -705,6 +723,8 @@ class EquipmentCreate {
     this.defect,
     this.criticality,
     this.defectAttachment,
+    this.cardComment,
+    this.cardCommentAttachment,
     this.ratedCurrent,
     this.iTh,
     this.ipMax,

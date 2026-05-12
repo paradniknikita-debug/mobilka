@@ -76,6 +76,10 @@ class Equipment extends Table {
   TextColumn get criticality => text().nullable()(); // low | medium | high
   /// Вложения к описанию иного дефекта: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
   TextColumn get defectAttachment => text().nullable()();
+  /// Комментарий карточки оборудования (как у опоры)
+  TextColumn get cardComment => text().nullable()();
+  /// Вложения к комментарию карточки (JSON с url или локальным p)
+  TextColumn get cardCommentAttachment => text().nullable()();
   TextColumn get manufacturer => text().nullable()();
   TextColumn get model => text().nullable()();
   TextColumn get serialNumber => text().nullable()();
@@ -264,6 +268,10 @@ class AppDatabase extends _$AppDatabase {
             await migrator.addColumn(equipment, equipment.yPosition);
             await migrator.addColumn(equipment, equipment.directionAngle);
           }
+          if (from < 12) {
+            await migrator.addColumn(equipment, equipment.cardComment);
+            await migrator.addColumn(equipment, equipment.cardCommentAttachment);
+          }
         },
       );
 
@@ -382,6 +390,11 @@ class AppDatabase extends _$AppDatabase {
       (update(poles)..where((tbl) => tbl.id.equals(poleId)))
           .write(PolesCompanion(cardCommentAttachment: Value(json)));
 
+  /// Обновить JSON вложений карточки оборудования после загрузки файлов на сервер.
+  Future<int> setEquipmentCardCommentAttachment(int equipmentId, String? json) =>
+      (update(equipment)..where((tbl) => tbl.id.equals(equipmentId)))
+          .write(EquipmentCompanion(cardCommentAttachment: Value(json)));
+
   /// После синка: локальная опора (id &lt; 0) → серверный id. Иначе остаются две строки и UI теряет вложения.
   Future<void> reassignPoleLocalToServerId(int localId, int serverId) async {
     if (localId >= 0 || serverId <= 0 || localId == serverId) return;
@@ -445,6 +458,92 @@ class AppDatabase extends _$AppDatabase {
     await (update(equipment)..where((tbl) => tbl.poleId.equals(localId)))
         .write(EquipmentCompanion(poleId: Value(serverId)));
     await deletePole(localId);
+  }
+
+  /// Локальное оборудование (id &lt; 0) → серверный id после синхронизации.
+  Future<void> reassignEquipmentLocalToServerId(
+    int localId,
+    int serverId, {
+    bool keepNeedsSync = false,
+  }) async {
+    if (localId >= 0 || serverId <= 0 || localId == serverId) return;
+    final e = await getEquipment(localId);
+    if (e == null) return;
+
+    final existingServer = await getEquipment(serverId);
+    if (existingServer != null) {
+      final locA = e.cardCommentAttachment;
+      final srvA = existingServer.cardCommentAttachment;
+      final locC = e.cardComment;
+      final srvC = existingServer.cardComment;
+      final patch = EquipmentCompanion(
+        cardComment: (srvC == null || srvC.isEmpty) && locC != null && locC.isNotEmpty
+            ? Value(locC)
+            : const Value.absent(),
+        cardCommentAttachment: (srvA == null || srvA.isEmpty) && locA != null && locA.isNotEmpty
+            ? Value(locA)
+            : const Value.absent(),
+      );
+      if (patch.cardComment.present || patch.cardCommentAttachment.present) {
+        await (update(equipment)..where((tbl) => tbl.id.equals(serverId))).write(patch);
+      }
+      await deleteEquipment(localId);
+      return;
+    }
+
+    await insertEquipmentOrReplace(
+      EquipmentCompanion.insert(
+        id: Value(serverId),
+        poleId: e.poleId,
+        equipmentType: e.equipmentType,
+        name: e.name,
+        quantity: Value(e.quantity),
+        defect: Value(e.defect),
+        criticality: Value(e.criticality),
+        defectAttachment: Value(e.defectAttachment),
+        cardComment: Value(e.cardComment),
+        cardCommentAttachment: Value(e.cardCommentAttachment),
+        manufacturer: Value(e.manufacturer),
+        model: Value(e.model),
+        serialNumber: Value(e.serialNumber),
+        yearManufactured: Value(e.yearManufactured),
+        installationDate: Value(e.installationDate),
+        condition: e.condition,
+        notes: Value(e.notes),
+        mrid: Value(e.mrid),
+        catalogItemId: Value(e.catalogItemId),
+        ratedCurrent: Value(e.ratedCurrent),
+        iTh: Value(e.iTh),
+        ipMax: Value(e.ipMax),
+        tTh: Value(e.tTh),
+        normalOpen: Value(e.normalOpen),
+        retained: Value(e.retained),
+        identifiedObjectDescription: Value(e.identifiedObjectDescription),
+        nameplate: Value(e.nameplate),
+        psrSubtype: Value(e.psrSubtype),
+        installationDisplayName: Value(e.installationDisplayName),
+        tmCode: Value(e.tmCode),
+        objectSubtype: Value(e.objectSubtype),
+        poleCount: Value(e.poleCount),
+        parentObjectRef: Value(e.parentObjectRef),
+        parentMainEquipmentPoleRef: Value(e.parentMainEquipmentPoleRef),
+        nominalVoltageKv: Value(e.nominalVoltageKv),
+        nominalBreakingCurrentKa: Value(e.nominalBreakingCurrentKa),
+        ownTripTimeSec: Value(e.ownTripTimeSec),
+        emergencyCurrentA: Value(e.emergencyCurrentA),
+        continuousCurrentA: Value(e.continuousCurrentA),
+        arresterType: Value(e.arresterType),
+        xPosition: Value(e.xPosition),
+        yPosition: Value(e.yPosition),
+        directionAngle: Value(e.directionAngle),
+        createdBy: e.createdBy,
+        createdAt: e.createdAt,
+        updatedAt: Value(e.updatedAt),
+        isLocal: const Value(false),
+        needsSync: Value(keepNeedsSync),
+      ),
+    );
+    await deleteEquipment(localId);
   }
 
   // Методы для работы с оборудованием

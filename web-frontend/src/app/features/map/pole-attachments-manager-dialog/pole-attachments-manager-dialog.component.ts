@@ -6,9 +6,14 @@ import { ApiService } from '../../../core/services/api.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PoleCardAttachmentItem } from '../../../core/models/pole-card-attachment.model';
 
+export type CardAttachmentsEntity = 'pole' | 'equipment';
+
 export interface PoleAttachmentsManagerDialogData {
-  poleId: number;
+  entity: CardAttachmentsEntity;
+  entityId: number;
   items: PoleCardAttachmentItem[];
+  /** @deprecated используйте entity + entityId */
+  poleId?: number;
 }
 
 @Component({
@@ -25,6 +30,9 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
   pendingType: 'photo' | 'voice' | 'schema' | 'video' | 'file' = 'file';
   uploading = false;
 
+  private _entity: CardAttachmentsEntity = 'pole';
+  private _entityId = 0;
+
   constructor(
     public dialogRef: MatDialogRef<PoleAttachmentsManagerDialogComponent, PoleCardAttachmentItem[]>,
     @Inject(MAT_DIALOG_DATA) public data: PoleAttachmentsManagerDialogData,
@@ -33,6 +41,14 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    const d = this.data as PoleAttachmentsManagerDialogData;
+    if (d.entity && d.entityId != null) {
+      this._entity = d.entity;
+      this._entityId = Number(d.entityId);
+    } else if (d.poleId != null) {
+      this._entity = 'pole';
+      this._entityId = Number(d.poleId);
+    }
     this.localItems = JSON.parse(JSON.stringify(this.data.items || []));
     this.dataSource.data = this.localItems;
   }
@@ -92,8 +108,16 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
+    if (!this._entityId) {
+      this.snackBar.open('Не задан идентификатор объекта для загрузки', 'Закрыть', { duration: 3000 });
+      return;
+    }
     this.uploading = true;
-    this.apiService.uploadPoleAttachment(this.data.poleId, this.pendingType, file).subscribe({
+    const upload$ =
+      this._entity === 'equipment'
+        ? this.apiService.uploadEquipmentAttachment(this._entityId, this.pendingType, file)
+        : this.apiService.uploadPoleAttachment(this._entityId, this.pendingType, file);
+    upload$.subscribe({
       next: (res) => {
         const att: PoleCardAttachmentItem = {
           t: res.type || this.pendingType,
@@ -108,7 +132,11 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
         this.localItems = [...this.localItems, att];
         this.dataSource.data = this.localItems;
         this.uploading = false;
-        this.snackBar.open('Файл загружен. Сохраните опору, чтобы закрепить вложения в карточке.', 'Закрыть', { duration: 4000 });
+        const hint =
+          this._entity === 'equipment'
+            ? 'Файл загружен. Сохраните оборудование, чтобы закрепить вложения в карточке.'
+            : 'Файл загружен. Сохраните опору, чтобы закрепить вложения в карточке.';
+        this.snackBar.open(hint, 'Закрыть', { duration: 4000 });
       },
       error: () => {
         this.uploading = false;

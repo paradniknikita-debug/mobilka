@@ -180,7 +180,7 @@ async def upload_sync_batch(
     failed_count = 0
     errors = []
     # Маппинг локальных (отрицательных) id → серверные id после создания
-    id_mapping: Dict[str, Dict[int, int]] = {"power_line": {}, "pole": {}}
+    id_mapping: Dict[str, Dict[int, int]] = {"power_line": {}, "pole": {}, "equipment": {}}
     ordered = _order_for_sync(batch.records)
     
     logger.info("sync/upload: записей в пакете=%d, типы=%s", len(ordered), [f"{r.entity_type}:{r.action}" for r in ordered])
@@ -261,6 +261,7 @@ async def upload_sync_batch(
         id_mapping_response = {
             "pole": {str(k): v for k, v in id_mapping["pole"].items()},
             "power_line": {str(k): v for k, v in id_mapping["power_line"].items()},
+            "equipment": {str(k): v for k, v in id_mapping.get("equipment", {}).items()},
         }
     else:
         await db.rollback()
@@ -428,7 +429,36 @@ async def _download_sync_data_impl(
             "installation_date": eq.installation_date.isoformat() if eq.installation_date else None,
             "condition": eq.condition,
             "notes": eq.notes,
+            "defect": eq.defect,
+            "criticality": eq.criticality,
+            "defect_attachment": getattr(eq, "defect_attachment", None),
+            "card_comment": getattr(eq, "card_comment", None),
+            "card_comment_attachment": getattr(eq, "card_comment_attachment", None),
             "catalog_item_id": eq.catalog_item_id,
+            "rated_current": eq.rated_current,
+            "i_th": eq.i_th,
+            "ip_max": eq.ip_max,
+            "t_th": eq.t_th,
+            "normal_open": eq.normal_open,
+            "retained": eq.retained,
+            "identified_object_description": eq.identified_object_description,
+            "nameplate": eq.nameplate,
+            "psr_subtype": eq.psr_subtype,
+            "installation_display_name": eq.installation_display_name,
+            "tm_code": eq.tm_code,
+            "object_subtype": eq.object_subtype,
+            "pole_count": eq.pole_count,
+            "parent_object_ref": eq.parent_object_ref,
+            "parent_main_equipment_pole_ref": eq.parent_main_equipment_pole_ref,
+            "nominal_voltage_kv": eq.nominal_voltage_kv,
+            "nominal_breaking_current_ka": eq.nominal_breaking_current_ka,
+            "own_trip_time_sec": eq.own_trip_time_sec,
+            "emergency_current_a": eq.emergency_current_a,
+            "continuous_current_a": eq.continuous_current_a,
+            "arrester_type": eq.arrester_type,
+            "x_position": eq.x_position,
+            "y_position": eq.y_position,
+            "direction_angle": eq.direction_angle,
             "created_by": eq.created_by,
             "created_at": eq.created_at.isoformat() if eq.created_at else None,
             "updated_at": eq.updated_at.isoformat() if eq.updated_at else None,
@@ -516,7 +546,7 @@ async def process_sync_record(
     id_mapping: Optional[Dict[str, Dict[int, int]]] = None
 ):
     """Обработка одной записи синхронизации. id_mapping заполняется при создании ЛЭП/опор с локальным (отрицательным) id."""
-    id_mapping = id_mapping or {"power_line": {}, "pole": {}}
+    id_mapping = id_mapping or {"power_line": {}, "pole": {}, "equipment": {}}
     data = record.data
     
     if record.entity_type == "power_line":
@@ -816,16 +846,28 @@ async def process_sync_record(
                     pole_id=pole_id_val,
                     equipment_type=data['equipment_type'],
                     name=data['name'],
-                    manufacturer=data.get('manufacturer'),
-                    model=data.get('model'),
-                    serial_number=data.get('serial_number'),
-                    year_manufactured=data.get('year_manufactured'),
-                    installation_date=datetime.fromisoformat(data['installation_date']) if data.get('installation_date') else None,
                     condition=data.get('condition', 'good'),
-                    notes=data.get('notes'),
-                    created_by=user.id
+                    created_by=user.id,
                 )
                 db.add(db_eq)
+                await db.flush()
+                _eq_skip = {'id', 'mrid', 'pole_id', 'pole_server_id', 'equipment_type', 'name', 'created_at', 'created_by', 'created_by_id', 'action'}
+                for key, value in data.items():
+                    if key in _eq_skip or not hasattr(db_eq, key):
+                        continue
+                    if key == 'installation_date':
+                        if value is None or value == '':
+                            setattr(db_eq, key, None)
+                        else:
+                            setattr(db_eq, key, datetime.fromisoformat(str(value).replace('Z', '+00:00')))
+                    elif key in ('created_at', 'updated_at'):
+                        continue
+                    else:
+                        setattr(db_eq, key, value)
+                client_eq_id = _to_int(data.get("id"))
+                if client_eq_id is not None and client_eq_id < 0 and db_eq.id is not None:
+                    id_mapping.setdefault("equipment", {})
+                    id_mapping["equipment"][client_eq_id] = db_eq.id
         
         elif record.action == SyncAction.UPDATE:
             result = await db.execute(

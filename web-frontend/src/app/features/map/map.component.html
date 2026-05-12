@@ -197,6 +197,15 @@
         <mat-icon>edit</mat-icon>
         Редактировать опору
       </button>
+      <button
+        mat-stroked-button
+        (click)="openChangeLogForSelectedPole()"
+        class="action-button"
+        matTooltip="Все записи журнала по этой опоре"
+      >
+        <mat-icon>history</mat-icon>
+        Журнал изменений
+      </button>
       <button 
         mat-stroked-button 
         (click)="openCreatePoleFromTapPolePanel()" 
@@ -258,6 +267,15 @@
       </div>
     </div>
     <div class="pole-properties-actions">
+      <button
+        mat-stroked-button
+        (click)="openChangeLogForSelectedEquipment()"
+        class="action-button"
+        matTooltip="Все записи журнала по этому оборудованию"
+      >
+        <mat-icon>history</mat-icon>
+        Журнал изменений
+      </button>
       <button mat-stroked-button (click)="openEditEquipmentDialog()" class="action-button">
         <mat-icon>edit</mat-icon>
         Редактировать оборудование

@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ChangeLogEntry, ModelIssue } from '../../core/models/change-log.model';
 import { MatDialog } from '@angular/material/dialog';
@@ -29,13 +30,24 @@ export class ChangeLogComponent implements OnInit {
   issuesError: string | null = null;
   selectedTabIndex = 0;
 
+  /** Фильтр с маршрута `/change-log?entity_type=pole&entity_id=12` (переход с карты). */
+  private _routeEntityType: string | undefined;
+  private _routeEntityId: number | undefined;
+
   constructor(
     private apiService: ApiService,
     private dialog: MatDialog,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit(): void {
+    const q = this.route.snapshot.queryParamMap;
+    const et = q.get('entity_type')?.trim();
+    const eidRaw = q.get('entity_id');
+    const eidNum = eidRaw != null && eidRaw !== '' ? Number(eidRaw) : NaN;
+    this._routeEntityType = et || undefined;
+    this._routeEntityId = Number.isFinite(eidNum) ? eidNum : undefined;
     this.load();
   }
 
@@ -44,6 +56,8 @@ export class ChangeLogComponent implements OnInit {
     this.error = null;
     this.apiService.getChangeLog({
       limit: 500,
+      entity_type: this._routeEntityType,
+      entity_id: this._routeEntityId,
     }).subscribe({
       next: (list) => {
         this.entries = list || [];
@@ -209,14 +223,24 @@ export class ChangeLogComponent implements OnInit {
     }
     if (p['topology_rebuild'] === true) {
       const n = p['created_spans'];
+      const ln = typeof p['line_name'] === 'string' && String(p['line_name']).trim() ? String(p['line_name']).trim() : null;
       const msg = typeof p['message'] === 'string' ? p['message'] : 'Автосборка топологии';
-      return n != null ? `${msg}: ${n} пролётов` : msg;
+      const head = ln ? `«${ln}» — ${msg}` : msg;
+      return n != null ? `${head}: ${n} пролётов` : head;
     }
     if (p['pole_card'] === true && typeof p['summary_ru'] === 'string') {
       return p['summary_ru'] as string;
     }
     if (p['data_quality_warning'] === true && typeof p['message_ru'] === 'string') {
       return p['message_ru'] as string;
+    }
+    const eqName = p['equipment_name'];
+    if (typeof eqName === 'string' && eqName.trim()) {
+      return eqName.trim();
+    }
+    const poleNum = p['pole_number'];
+    if (typeof poleNum === 'string' && poleNum.trim() && entry.entity_type === 'pole') {
+      return poleNum.trim();
     }
     const v = p?.name ?? p?.['title'];
     return typeof v === 'string' ? v : (entry.entity_name ?? '—');
@@ -225,7 +249,11 @@ export class ChangeLogComponent implements OnInit {
   getUid(entry: ChangeLogEntry): string {
     const p = entry.payload;
     const v = p?.mrid ?? p?.['uid'];
-    return typeof v === 'string' ? v : '—';
+    if (typeof v === 'string' && v.trim()) return v;
+    if (entry.entity_id != null && (entry.entity_type === 'patrol_session' || entry.entity_type === 'session')) {
+      return String(entry.entity_id);
+    }
+    return '—';
   }
 
   formatDate(s: string): string {
@@ -260,7 +288,8 @@ export class ChangeLogComponent implements OnInit {
       acline_segment: 'Участок линии',
       line_section: 'Секция линии',
       session: 'Сессия',
-      patrol_session: 'Обход ЛЭП'
+      patrol_session: 'Обход ЛЭП',
+      connectivity_node: 'Узел соединения',
     };
     return labels[type] ?? type;
   }

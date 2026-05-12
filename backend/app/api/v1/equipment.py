@@ -7,7 +7,8 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
-from app.models.power_line import Equipment, Pole
+from app.models.power_line import Equipment, Pole, PowerLine
+from app.core.equipment_nominal_voltage import nominal_kv_from_line_voltage
 from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.change_log import ChangeLog
 from app.schemas.power_line import EquipmentResponse, EquipmentCreate
@@ -101,6 +102,8 @@ async def update_equipment(
         "defect": equipment.defect,
         "criticality": equipment.criticality,
         "defect_attachment": getattr(equipment, "defect_attachment", None),
+        "card_comment": getattr(equipment, "card_comment", None),
+        "card_comment_attachment": getattr(equipment, "card_comment_attachment", None),
         "rated_current": equipment.rated_current,
         "i_th": equipment.i_th,
         "ip_max": equipment.ip_max,
@@ -125,6 +128,26 @@ async def update_equipment(
     }
 
     data = equipment_data.model_dump() if hasattr(equipment_data, "model_dump") else equipment_data.dict()
+
+    pole_row = await db.get(Pole, equipment.pole_id)
+    line_vl = None
+    if pole_row is not None and pole_row.line_id:
+        pl_row = await db.get(PowerLine, pole_row.line_id)
+        if pl_row is not None and getattr(pl_row, "voltage_level", None) is not None:
+            try:
+                line_vl = float(pl_row.voltage_level)
+            except (TypeError, ValueError):
+                line_vl = None
+    eq_type = data.get("equipment_type") or equipment.equipment_type
+    client_nv = data.get("nominal_voltage_kv")
+    if client_nv is None:
+        client_nv = equipment.nominal_voltage_kv
+    else:
+        try:
+            client_nv = float(client_nv)
+        except (TypeError, ValueError):
+            client_nv = equipment.nominal_voltage_kv
+    data["nominal_voltage_kv"] = nominal_kv_from_line_voltage(eq_type, line_vl, client_nv)
 
     # Если выбрана справочная позиция и ток не задан вручную,
     # подставляем номинальный ток из каталога.
@@ -162,6 +185,8 @@ async def update_equipment(
         "defect": equipment.defect,
         "criticality": equipment.criticality,
         "defect_attachment": getattr(equipment, "defect_attachment", None),
+        "card_comment": getattr(equipment, "card_comment", None),
+        "card_comment_attachment": getattr(equipment, "card_comment_attachment", None),
         "rated_current": equipment.rated_current,
         "i_th": equipment.i_th,
         "ip_max": equipment.ip_max,

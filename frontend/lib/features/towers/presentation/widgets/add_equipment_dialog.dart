@@ -250,6 +250,20 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
   bool get _isElectricalEquipment =>
       _isSwitchLike || _isBreaker || _isRecloser || _isSurgeArrester;
 
+  /// Номинал линии задан — номинальное напряжение оборудования только с линии, без ручного ввода.
+  bool get _lineVoltageLocksNominal =>
+      widget.expectedLineVoltageKv != null && _isElectricalEquipment;
+
+  String _formatKvForDisplay(double kv) => kv == kv.truncateToDouble()
+      ? kv.truncate().toString()
+      : kv.toStringAsFixed(1);
+
+  void _applyLineVoltageToNominalControllerIfLocked() {
+    if (!_lineVoltageLocksNominal) return;
+    _nominalVoltageController.text =
+        _formatKvForDisplay(widget.expectedLineVoltageKv!);
+  }
+
   bool get _isNonElectricalStructure {
     const nonElectricalKeys = {
       'фундамент',
@@ -337,11 +351,16 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         _isElectricalEquipment ? (widget.initialIdentifiedObjectDescription ?? '') : '';
     _installationNameController.text =
         _isSwitchLikeForm ? (widget.initialInstallationDisplayName ?? '') : '';
-    _nominalVoltageController.text =
-        widget.initialNominalVoltageKv?.toString() ??
-            (widget.expectedLineVoltageKv != null
-                ? widget.expectedLineVoltageKv!.toString()
-                : '');
+    if (_lineVoltageLocksNominal) {
+      _nominalVoltageController.text =
+          _formatKvForDisplay(widget.expectedLineVoltageKv!);
+    } else {
+      _nominalVoltageController.text =
+          widget.initialNominalVoltageKv?.toString() ??
+              (widget.expectedLineVoltageKv != null
+                  ? _formatKvForDisplay(widget.expectedLineVoltageKv!)
+                  : '');
+    }
     _tmCodeController.text = (_isBreaker || _isRecloser || _isSurgeArrester)
         ? (widget.initialTmCode ?? '')
         : '';
@@ -538,6 +557,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         if (_isGroundingSwitch) _psrSubtype = 'short_circuiter';
         _electricalExpanded = true;
       });
+      _applyLineVoltageToNominalControllerIfLocked();
       return true;
     }
 
@@ -551,6 +571,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         if (_isGroundingSwitch) _psrSubtype = 'short_circuiter';
         _electricalExpanded = true;
       });
+      _applyLineVoltageToNominalControllerIfLocked();
       return true;
     }
 
@@ -567,6 +588,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
           _arresterType = 'opn';
           _electricalExpanded = true;
         });
+        _applyLineVoltageToNominalControllerIfLocked();
         return true;
       }
 
@@ -581,6 +603,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
           _arresterType = 'valve';
           _electricalExpanded = true;
         });
+        _applyLineVoltageToNominalControllerIfLocked();
         return true;
       }
     }
@@ -713,7 +736,10 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
       _tThController.text = tTh?.toString() ?? '';
       _normalOpen = normalOpen;
       _retained = retained;
-      if (nominalVoltageKv != null) {
+      if (_lineVoltageLocksNominal) {
+        _nominalVoltageController.text =
+            _formatKvForDisplay(widget.expectedLineVoltageKv!);
+      } else if (nominalVoltageKv != null) {
         _nominalVoltageController.text = nominalVoltageKv.toString();
       }
       _nominalBreakingCurrentController.text = nominalBreakingCurrentKa?.toString() ?? '';
@@ -842,7 +868,9 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     }
     double? parseNullableDouble(String text) => double.tryParse(text.trim().replaceAll(',', '.'));
     final expectedLineVoltage = widget.expectedLineVoltageKv;
-    final enteredNominalVoltage = parseNullableDouble(_nominalVoltageController.text);
+    final enteredNominalVoltage = _lineVoltageLocksNominal && expectedLineVoltage != null
+        ? expectedLineVoltage
+        : parseNullableDouble(_nominalVoltageController.text);
     final brandVoltage =
         _catalogVoltageByBrand(brand) ?? _extractVoltageFromBrand(brand);
 
@@ -859,26 +887,28 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         );
         return;
       }
-      if (enteredNominalVoltage == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Укажите номинальное напряжение оборудования: ${expectedLineVoltage.toStringAsFixed(expectedLineVoltage.truncateToDouble() == expectedLineVoltage ? 0 : 1)} кВ',
+      if (!_lineVoltageLocksNominal) {
+        if (enteredNominalVoltage == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Укажите номинальное напряжение оборудования: ${expectedLineVoltage.toStringAsFixed(expectedLineVoltage.truncateToDouble() == expectedLineVoltage ? 0 : 1)} кВ',
+              ),
+              backgroundColor: Colors.orange,
             ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      if ((enteredNominalVoltage - expectedLineVoltage).abs() > 0.001) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Номинал оборудования (${enteredNominalVoltage.toStringAsFixed(enteredNominalVoltage.truncateToDouble() == enteredNominalVoltage ? 0 : 1)} кВ) отличается от линии (${expectedLineVoltage.toStringAsFixed(expectedLineVoltage.truncateToDouble() == expectedLineVoltage ? 0 : 1)} кВ). Сохранение разрешено.',
+          );
+          return;
+        }
+        if ((enteredNominalVoltage - expectedLineVoltage).abs() > 0.001) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Номинал оборудования (${enteredNominalVoltage.toStringAsFixed(enteredNominalVoltage.truncateToDouble() == enteredNominalVoltage ? 0 : 1)} кВ) отличается от линии (${expectedLineVoltage.toStringAsFixed(expectedLineVoltage.truncateToDouble() == expectedLineVoltage ? 0 : 1)} кВ). Сохранение разрешено.',
+              ),
+              backgroundColor: Colors.orange,
             ),
-            backgroundColor: Colors.orange,
-          ),
-        );
+          );
+        }
       }
     }
 
@@ -1174,11 +1204,17 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                 ],
                 TextField(
                   controller: _nominalVoltageController,
+                  readOnly: _lineVoltageLocksNominal,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [_decimalInputFormatter],
+                  inputFormatters:
+                      _lineVoltageLocksNominal ? null : [_decimalInputFormatter],
                   decoration: InputDecoration(
                     labelText: 'Номинальное напряжение, кВ',
-                    hintText: 'Например: 10',
+                    hintText: _lineVoltageLocksNominal ? null : 'Например: 10',
+                    helperText: _lineVoltageLocksNominal
+                        ? 'Как у линии (${_formatKvForDisplay(widget.expectedLineVoltageKv!)} кВ), редактирование отключено'
+                        : null,
+                    helperMaxLines: 2,
                     filled: true,
                     fillColor: PatrolColors.surfaceCard,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

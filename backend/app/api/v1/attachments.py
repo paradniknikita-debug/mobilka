@@ -1,6 +1,6 @@
 """
 API загрузки и отдачи вложений карточки опоры: фото, схемы, голосовые заметки, видео.
-Хранилище: MinIO (S3) при заданных S3_* или локальный диск uploads/pole_attachments/.
+Хранилище: MinIO (S3) при заданных S3_* или локальный диск uploads/pole_attachments/ и uploads/equipment_attachments/.
 Для фото создаётся миниатюра (до 150px) и возвращается thumbnail_url для хранения в истории комментариев.
 """
 import io
@@ -10,13 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import Response
 
 from app.core.security import get_current_active_user
-from app.core.media_storage import media_put, media_get
+from app.core.media_storage import media_put, media_get, media_put_for, media_get_for
 from app.models.user import User
 from app.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.power_line import Pole
+from app.models.power_line import Pole, Equipment
 
 router = APIRouter()
 
@@ -247,6 +247,159 @@ async def get_pole_attachment(
                     alt_name = f"{stem}{alt_ext}"
                     try:
                         alt_content, alt_media_type = media_get(pole_id, alt_name)
+                    except Exception:
+                        alt_content, alt_media_type = None, None
+                    if alt_content is not None:
+                        content, media_type = alt_content, alt_media_type
+                        filename = alt_name
+                        break
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    return Response(
+        content=content,
+        media_type=media_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.post("/equipment/{equipment_id}/attachments")
+async def upload_equipment_attachment(
+    equipment_id: int,
+    attachment_type: str = Form(..., description="photo | voice | schema | video | file"),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if attachment_type not in ("photo", "voice", "schema", "video", "file"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="attachment_type: photo, voice, schema, video или file",
+        )
+    result = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оборудование не найдено")
+
+    content_type = (file.content_type or "").strip()
+    if not content_type and file.filename:
+        content_type = _guess_content_type_from_name(file.filename)
+    if not content_type:
+        content_type = {
+            "photo": "image/jpeg",
+            "voice": "audio/mp4",
+            "schema": "image/jpeg",
+            "video": "video/mp4",
+        }.get(attachment_type, "application/octet-stream")
+    if attachment_type == "photo" and content_type not in ALLOWED_IMAGE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Фото: допустимые типы {ALLOWED_IMAGE}",
+        )
+    if attachment_type == "voice" and content_type not in ALLOWED_VOICE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Голос: допустимые типы {ALLOWED_VOICE}",
+        )
+    if attachment_type == "schema" and content_type not in ALLOWED_SCHEMA and not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Схема: допустимые типы {ALLOWED_SCHEMA}",
+        )
+    if attachment_type == "video" and content_type not in ALLOWED_VIDEO:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Видео: допустимые типы {ALLOWED_VIDEO}",
+        )
+
+    ext = _extension_for_content_type(content_type, attachment_type)
+    if attachment_type == "file" and file.filename:
+        fn = file.filename.strip().lower()
+        dot = fn.rfind(".")
+        if dot > 0 and dot < len(fn) - 1:
+            ext = fn[dot:]
+    name = f"{uuid.uuid4().hex}{ext}"
+    content = await file.read()
+    if len(content) > MAX_SIZE_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Размер файла не более {MAX_SIZE_MB} МБ",
+        )
+
+    try:
+        media_put_for("equipment", equipment_id, name, content, content_type or "application/octet-stream")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Ошибка сохранения вложения оборудования")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Не удалось сохранить файл: {str(e)}",
+        ) from e
+
+    url = f"/api/v1/attachments/equipment/{equipment_id}/{name}"
+    out = {
+        "url": url,
+        "type": attachment_type,
+        "filename": name,
+        "added_at": datetime.utcnow().isoformat() + "Z",
+        "added_by_id": current_user.id,
+        "added_by_name": (getattr(current_user, "full_name", None) or getattr(current_user, "username", None) or "").strip() or None,
+    }
+
+    if attachment_type == "photo" and content_type in ALLOWED_IMAGE:
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(content))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            img.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            thumb_name = f"thumb_{uuid.uuid4().hex}.jpg"
+            media_put_for("equipment", equipment_id, thumb_name, buf.getvalue(), "image/jpeg")
+            out["thumbnail_url"] = f"/api/v1/attachments/equipment/{equipment_id}/{thumb_name}"
+        except Exception:
+            pass
+
+    return out
+
+
+@router.get("/equipment/{equipment_id}/{filename}")
+async def get_equipment_attachment(
+    equipment_id: int,
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недопустимое имя файла")
+    result = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оборудование не найдено")
+
+    try:
+        content, media_type = media_get_for("equipment", equipment_id, filename)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Ошибка чтения вложения оборудования")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка чтения файла: {str(e)}",
+        ) from e
+    if content is None:
+        lower = filename.lower()
+        dot = lower.rfind(".")
+        if dot > 0:
+            stem = filename[:dot]
+            ext = lower[dot:]
+            if ext in {".mp3", ".m4a", ".ogg", ".wav", ".webm"}:
+                for alt_ext in (".ogg", ".m4a", ".mp3", ".wav", ".webm"):
+                    if alt_ext == ext:
+                        continue
+                    alt_name = f"{stem}{alt_ext}"
+                    try:
+                        alt_content, alt_media_type = media_get_for("equipment", equipment_id, alt_name)
                     except Exception:
                         alt_content, alt_media_type = None, None
                     if alt_content is not None:

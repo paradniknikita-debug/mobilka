@@ -5,6 +5,7 @@ import 'dart:ui' show BlendMode, ColorFilter;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -26,7 +27,6 @@ import 'file_download_stub.dart' if (dart.library.html) 'file_download_web.dart'
 
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
-import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/offline_map_service.dart';
@@ -539,6 +539,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'line_id': pl.id,
                 'pole_id': e.poleId,
                 'equipment_id': e.id,
+                'mrid': e.mrid,
+                'card_comment': e.cardComment,
+                'card_comment_attachment': e.cardCommentAttachment,
+                'defect_attachment': e.defectAttachment,
                 'pole_number': p.poleNumber,
                 'angle_rad': angleRad,
                 'from_lng': x1,
@@ -1146,6 +1150,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                 'line_id': pl.id,
                 'pole_id': e.poleId,
                 'equipment_id': e.id,
+                'mrid': e.mrid,
+                'card_comment': e.cardComment,
+                'card_comment_attachment': e.cardCommentAttachment,
                 'pole_number': pNum,
                 'angle_rad': angleRad,
                 'from_lng': x1,
@@ -1326,6 +1333,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             defect: drift.Value(ex?.defect),
             criticality: drift.Value(ex?.criticality),
             defectAttachment: drift.Value(ex?.defectAttachment),
+            cardComment: drift.Value(eq.cardComment),
+            cardCommentAttachment: drift.Value(eq.cardCommentAttachment),
             manufacturer: drift.Value(eq.manufacturer),
             model: drift.Value(eq.model),
             serialNumber: drift.Value(eq.serialNumber),
@@ -1535,7 +1544,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                   children: [
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      // Если OSM недоступен (сеть, политика, web), подхватываем запасной CDN.
+                      fallbackUrl:
+                          'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
                       tileProvider: OfflineMapService.instance.getTileProvider(),
+                      keepBuffer: 1,
+                      panBuffer: 1,
                       errorTileCallback: (tile, error, stackTrace) {
                         final errorStr = error.toString().toLowerCase();
                         if (errorStr.contains('aborttrigger') ||
@@ -3387,6 +3401,18 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
           ),
           const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Дерево объектов',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          ),
           // Дерево объектов: только ЛЭП и подстанции (без блока «Обход»)
           Expanded(
             child: GestureDetector(
@@ -3485,16 +3511,136 @@ class _MapPageState extends ConsumerState<MapPage> {
     final linePoles = _getPoleFeaturesByLineId(powerLine.id);
     final lineSpans = _getSpanFeaturesByLineId(powerLine.id);
     final grouped = _groupLineObjectsBySegment(linePoles, lineSpans);
+    final uniquePolesSorted = _sortedUniquePoles(linePoles);
+    final segmentList = grouped['segments'] as List<dynamic>;
+    final orphanSpans = List<Map<String, dynamic>>.from(
+      (grouped['spans_without_segment'] as List<dynamic>).map((e) => e as Map<String, dynamic>),
+    );
+    _sortSpanFeaturesInPlace(orphanSpans);
 
     void onLongPressDeleteLine() => _showPowerLineContextMenu(powerLine);
+
+    final cs = Theme.of(context).colorScheme;
+    final treeExpandIcon = cs.onSurface.withValues(alpha: 0.82);
+    final treeExpandCollapsed = cs.onSurface.withValues(alpha: 0.52);
+    const treeChildInset = EdgeInsetsDirectional.only(start: 14);
+
+    final treeChildren = <Widget>[
+      ...segmentList.map<Widget>((seg) {
+        final segMap = seg as Map<String, dynamic>;
+        final segId = segMap['segment_id'] as int?;
+        final segName = (segMap['segment_name'] as String?) ?? (segId != null ? 'Участок $segId' : 'Участок без ID');
+        final segSpans = List<Map<String, dynamic>>.from((segMap['spans'] as List<dynamic>).cast<Map<String, dynamic>>());
+        _sortSpanFeaturesInPlace(segSpans);
+        // Один значок для всех участков линии (как общая группа на Angular без различия отпайка/магистраль).
+        final segIconColor = cs.onSurface.withValues(alpha: 0.62);
+
+        return ExpansionTile(
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          iconColor: treeExpandIcon,
+          collapsedIconColor: treeExpandCollapsed,
+          childrenPadding: treeChildInset,
+          leading: Icon(
+            Icons.linear_scale,
+            size: 17,
+            color: segIconColor,
+          ),
+          title: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  segName,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (segId != null)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Карточка участка',
+                  icon: const Icon(Icons.info_outline, size: 20),
+                  onPressed: () => _showSegmentCard(segId),
+                ),
+            ],
+          ),
+          subtitle: Text(
+            '${segSpans.length} прол.',
+            style: const TextStyle(fontSize: 10),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: segSpans.isEmpty
+              ? [
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    title: Text(
+                      'Пролётов нет',
+                      style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+                    ),
+                  ),
+                ]
+              : segSpans.map((sf) => _buildGeoSpanTreeTile(sf)).toList(),
+        );
+      }),
+      if (orphanSpans.isNotEmpty)
+        ExpansionTile(
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          iconColor: treeExpandIcon,
+          collapsedIconColor: treeExpandCollapsed,
+          childrenPadding: treeChildInset,
+          leading: Icon(Icons.link_off, size: 17, color: cs.onSurface.withValues(alpha: 0.55)),
+          title: Text(
+            'Пролёты без участка (${orphanSpans.length})',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            'Нет acline_segment_id в данных объекта',
+            style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: orphanSpans.map(_buildGeoSpanTreeTile).toList(),
+        ),
+      if (uniquePolesSorted.isNotEmpty)
+        ExpansionTile(
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          iconColor: treeExpandIcon,
+          collapsedIconColor: treeExpandCollapsed,
+          childrenPadding: treeChildInset,
+          leading: Icon(Icons.folder_outlined, size: 17, color: cs.onSurface.withValues(alpha: 0.62)),
+          title: Text(
+            'Опоры (${uniquePolesSorted.length})',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: uniquePolesSorted.map((p) => _buildGeoPoleTreeTile(p, powerLine, contentPadLeft: 22)).toList(),
+        ),
+    ];
+
+    final hasAnyObjects =
+        segmentList.isNotEmpty || orphanSpans.isNotEmpty || uniquePolesSorted.isNotEmpty;
 
     return ExpansionTile(
       initiallyExpanded: initiallyExpanded,
       dense: true,
       controlAffinity: ListTileControlAffinity.leading,
+      iconColor: treeExpandIcon,
+      collapsedIconColor: treeExpandCollapsed,
+      childrenPadding: treeChildInset,
       leading: GestureDetector(
         onLongPress: onLongPressDeleteLine,
-        child: const Icon(Icons.electrical_services, size: 14, color: Colors.red),
+        child: Icon(Icons.electrical_services, size: 18, color: Colors.grey.shade800),
       ),
       title: GestureDetector(
         onLongPress: onLongPressDeleteLine,
@@ -3531,49 +3677,11 @@ class _MapPageState extends ConsumerState<MapPage> {
         ),
       ),
       children: [
-        ...grouped['segments']!.map<Widget>((seg) {
-          final segMap = seg as Map<String, dynamic>;
-          final segId = segMap['segment_id'] as int?;
-          final segName = (segMap['segment_name'] as String?) ?? (segId != null ? 'Участок $segId' : 'Участок без ID');
-          final segPoles = (segMap['poles'] as List<dynamic>).cast<Map<String, dynamic>>();
-          final segSpans = (segMap['spans'] as List<dynamic>).cast<Map<String, dynamic>>();
-          final branchType = (segMap['branch_type'] as String?)?.toLowerCase();
-          final isTap = branchType == 'tap';
-
-          return ExpansionTile(
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            leading: Icon(isTap ? Icons.call_split : Icons.polyline, size: 12, color: isTap ? Colors.orange : Colors.green),
-            title: Text(
-              segName,
-              style: const TextStyle(fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              '${segPoles.length} опор • ${segSpans.length} пролётов',
-              style: const TextStyle(fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: segId != null
-                ? IconButton(
-                    icon: const Icon(Icons.info_outline, size: 18),
-                    tooltip: 'Карточка участка',
-                    onPressed: () => _showSegmentCard(segId),
-                  )
-                : null,
-            children: [
-              ...segPoles.map((poleFeature) => _buildGeoPoleTreeTile(poleFeature, powerLine)),
-            ],
-          );
-        }),
-        ...((grouped['poles_without_segment'] as List<dynamic>).cast<Map<String, dynamic>>())
-            .map((poleFeature) => _buildGeoPoleTreeTile(poleFeature, powerLine)),
-        if ((grouped['segments'] as List).isEmpty && (grouped['poles_without_segment'] as List).isEmpty)
+        ...treeChildren,
+        if (!hasAnyObjects)
           ListTile(
             dense: true,
-            contentPadding: const EdgeInsets.only(left: 32, right: 8),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
             title: Text(
               'Объекты линии не найдены',
               style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
@@ -3582,19 +3690,66 @@ class _MapPageState extends ConsumerState<MapPage> {
       ],
       onExpansionChanged: (expanded) async {
         if (expanded && geoFeature != null) {
-          // Центрируем карту на линии при разворачивании
           _centerOnFeature(geoFeature);
         }
       },
     );
   }
 
-  Widget _buildGeoPoleTreeTile(Map<String, dynamic> geoPole, PowerLine powerLine) {
+  /// Строка пролёта в дереве (как на Angular под участком ACLineSegment).
+  Widget _buildGeoSpanTreeTile(Map<String, dynamic> geoSpan) {
+    final props = Map<String, dynamic>.from(geoSpan['properties'] as Map? ?? {});
+    final mrid = props['mrid']?.toString().trim();
+    final sub = _treeSpanSubtitle(props);
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      leading: Icon(Icons.swap_horiz, size: 16, color: Colors.grey.shade700),
+      title: Text(
+        _treeSpanLabel(props),
+        style: const TextStyle(fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: sub == null || sub.isEmpty
+          ? null
+          : Text(
+              sub,
+              style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+      onTap: () {
+        Navigator.of(context).pop();
+        _centerOnFeature(geoSpan);
+        final line = '${_treeSpanLabel(props)}${sub != null && sub.isNotEmpty ? ' • $sub' : ''}';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(line), duration: const Duration(seconds: 2)),
+        );
+      },
+      onLongPress: mrid != null && mrid.isNotEmpty
+          ? () {
+              Clipboard.setData(ClipboardData(text: mrid));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('UID пролёта скопирован'), duration: Duration(seconds: 2)),
+              );
+            }
+          : null,
+    );
+  }
+
+  Widget _buildGeoPoleTreeTile(
+    Map<String, dynamic> geoPole,
+    PowerLine powerLine, {
+    double contentPadLeft = 44,
+  }) {
     final props = Map<String, dynamic>.from(geoPole['properties'] as Map? ?? {});
     final poleId = _toInt(props['id']);
     final poleNumber = (props['pole_number']?.toString() ?? '').trim();
     final poleType = (props['pole_type']?.toString() ?? '').trim();
     final poleEquipment = poleId != null ? _getEquipmentFeaturesByPoleId(poleId) : const <Map<String, dynamic>>[];
+    final isTapRoot = props['is_tap_pole'] == true;
+    final tapBranchBuilt = props['tap_branch_has_poles'] == true;
     return GestureDetector(
       onLongPress: () {
         if (poleId == null) return;
@@ -3612,23 +3767,47 @@ class _MapPageState extends ConsumerState<MapPage> {
         children: [
           ListTile(
             dense: true,
-            contentPadding: const EdgeInsets.only(left: 44, right: 8),
+            contentPadding: EdgeInsets.only(left: contentPadLeft, right: 8),
             tileColor: (_selectedPoleIdFromMap != null && poleId == _selectedPoleIdFromMap)
                 ? Colors.blue.withOpacity(0.12)
                 : null,
-            leading: Icon(MdiIcons.transmissionTower, size: 12, color: Colors.blue),
-            title: Text(
-              poleNumber.isEmpty ? 'Опора' : poleNumber,
-              style: const TextStyle(fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            leading: Icon(MdiIcons.transmissionTower, size: 14, color: Colors.blue.shade700),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    poleNumber.isEmpty ? 'Опора' : poleNumber,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isTapRoot)
+                  Tooltip(
+                    message: tapBranchBuilt ? 'Отпайка построена' : 'Отпайка не начата',
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: tapBranchBuilt ? Colors.orange.shade700 : null,
+                          border: Border.all(color: Colors.orange.shade700, width: tapBranchBuilt ? 0 : 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            subtitle: Text(
-              poleType,
-              style: const TextStyle(fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            subtitle: poleType.isEmpty
+                ? null
+                : Text(
+                    poleType,
+                    style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
             onTap: () {
               Navigator.of(context).pop();
               _centerOnFeature(geoPole);
@@ -3645,7 +3824,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 : (eqProps['equipment_type']?.toString() ?? 'Оборудование');
             return ListTile(
               dense: true,
-              contentPadding: const EdgeInsets.only(left: 76, right: 8),
+              contentPadding: EdgeInsets.only(left: contentPadLeft + 28, right: 8),
               leading: Icon(Icons.electrical_services, size: 12, color: Colors.deepOrange.shade400),
               title: Text(
                 eqLabel,
@@ -3794,6 +3973,80 @@ class _MapPageState extends ConsumerState<MapPage> {
       'poles_without_segment': polesWithoutSegment,
       'spans_without_segment': spansWithoutSegment,
     };
+  }
+
+  /// Все опоры линии без дубликатов, в том же порядке сортировки, что и на карте.
+  List<Map<String, dynamic>> _sortedUniquePoles(List<Map<String, dynamic>> poles) {
+    final seen = <int>{};
+    final out = <Map<String, dynamic>>[];
+    for (final p in poles) {
+      final id = _toInt((p['properties'] as Map?)?['id']);
+      if (id != null) {
+        if (seen.contains(id)) continue;
+        seen.add(id);
+      }
+      out.add(p);
+    }
+    out.sort((a, b) {
+      final pa = a['properties'] as Map<String, dynamic>? ?? const {};
+      final pb = b['properties'] as Map<String, dynamic>? ?? const {};
+      final sa = _toInt(pa['sequence_number']);
+      final sb = _toInt(pb['sequence_number']);
+      if (sa != null && sb != null && sa != sb) return sa.compareTo(sb);
+      final oa = _poleOrderFromNumber((pa['pole_number']?.toString()) ?? '');
+      final ob = _poleOrderFromNumber((pb['pole_number']?.toString()) ?? '');
+      if (oa != ob) return oa.compareTo(ob);
+      return ((pa['pole_number']?.toString()) ?? '').compareTo((pb['pole_number']?.toString()) ?? '');
+    });
+    return out;
+  }
+
+  void _sortSpanFeaturesInPlace(List<Map<String, dynamic>> spans) {
+    spans.sort((a, b) {
+      final pa = a['properties'] as Map<String, dynamic>? ?? const {};
+      final pb = b['properties'] as Map<String, dynamic>? ?? const {};
+      final ia = _toInt(pa['id']);
+      final ib = _toInt(pb['id']);
+      if (ia != null && ib != null && ia != ib) return ia.compareTo(ib);
+      return _treeSpanLabel(pa).compareTo(_treeSpanLabel(pb));
+    });
+  }
+
+  /// Как `getSpanDisplayName` на Angular.
+  String _treeSpanLabel(Map<String, dynamic> props) {
+    var sn = (props['span_number']?.toString() ?? '').trim();
+    sn = sn.replaceFirst(RegExp(r'^пролёт\s+', caseSensitive: false), '');
+    return 'Пролёт ${sn.isNotEmpty ? sn : 'не указано'}';
+  }
+
+  String? _treeSpanSubtitle(Map<String, dynamic> props) {
+    final parts = <String>[];
+    final fromId = _toInt(props['from_pole_id']);
+    final toId = _toInt(props['to_pole_id']);
+    final fa = fromId != null ? _poleNumberForTreeLookup(fromId) : null;
+    final ta = toId != null ? _poleNumberForTreeLookup(toId) : null;
+    if ((fa ?? '').trim().isNotEmpty && (ta ?? '').trim().isNotEmpty) {
+      parts.add('$fa → $ta');
+    }
+    final raw = props['length'];
+    final meters = raw is num
+        ? raw.toDouble()
+        : (raw is String ? double.tryParse(raw.trim()) : null);
+    if (meters != null && meters > 0) {
+      parts.add('${(meters / 1000).toStringAsFixed(2)} км');
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' • ');
+  }
+
+  String? _poleNumberForTreeLookup(int poleId) {
+    final f = _findPoleInGeoJSON(poleId);
+    final raw = f?['properties'];
+    if (raw is Map<String, dynamic>) {
+      final n = raw['pole_number']?.toString().trim();
+      if (n != null && n.isNotEmpty) return n;
+    }
+    return '#$poleId';
   }
 
   Map<String, dynamic>? _findPowerLineInGeoJSON(int lineId) {
@@ -4994,7 +5247,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         null,
         entityType,
         entityId,
-        20,
+        5,
         0,
       );
       if (!mounted) return;
@@ -5004,14 +5257,14 @@ class _MapPageState extends ConsumerState<MapPage> {
           if (rows.isEmpty) {
             return AlertDialog(
               title: const Text('История объекта'),
-              content: const Text('По этому объекту пока нет записей'),
+              content: const Text('По этому объекту пока нет записей (в приложении показываются последние 5 событий)'),
               actions: [
                 TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Закрыть')),
               ],
             );
           }
           return AlertDialog(
-            title: const Text('История объекта'),
+            title: const Text('История объекта (последние 5)'),
             content: SizedBox(
               width: 640,
               child: ListView.separated(
@@ -6189,7 +6442,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               title: const Text('Создать подстанцию'),
               onTap: () {
                 Navigator.of(context).pop();
-                _showCreateSubstationDialog();
+                _showCreateSubstationDialog(attachToLine: null);
               },
             ),
           ],
@@ -6206,6 +6459,21 @@ class _MapPageState extends ConsumerState<MapPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: const Icon(Icons.power, color: Colors.deepPurple),
+              title: const Text('Создать подстанцию и привязать к линии'),
+              subtitle: Text(
+                powerLine.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showCreateSubstationDialog(attachToLine: powerLine);
+              },
+            ),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Удалить линию'),
@@ -6581,14 +6849,15 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  void _showCreateSubstationDialog() async {
+  /// Создание подстанции; при [attachToLine] — выбор привязки к началу/концу линии (`PUT .../power-lines/{id}`, как Angular).
+  void _showCreateSubstationDialog({PowerLine? attachToLine}) async {
     final nameController = TextEditingController();
     final codeController = TextEditingController();
     final voltageController = TextEditingController();
     final addressController = TextEditingController();
     final descriptionController = TextEditingController();
+    final linkModeHolder = <int>[0];
 
-    // Получаем текущие координаты, если доступны
     double? latitude;
     double? longitude;
     try {
@@ -6608,159 +6877,189 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
 
-    showDialog(
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Создать подстанцию'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Название *',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: codeController,
-                decoration: const InputDecoration(
-                  labelText: 'Диспетчерское наименование *',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: voltageController,
-                decoration: const InputDecoration(
-                  labelText: 'Напряжение (кВ) *',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              if (latitude != null && longitude != null)
-                Text(
-                  'Координаты (x, y / ш, д): ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final lineHint = attachToLine == null ? '' : attachToLine.name;
+          return AlertDialog(
+            title: Text(attachToLine == null ? 'Создать подстанцию' : 'Подстанция и привязка к линии'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (attachToLine != null) ...[
+                    Text(
+                      'ЛЭП: $lineHint',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      value: linkModeHolder[0],
+                      decoration: const InputDecoration(
+                        labelText: 'Привязка к линии',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 0, child: Text('Не привязывать')),
+                        DropdownMenuItem(value: 1, child: Text('Подстанция в начале линии')),
+                        DropdownMenuItem(value: 2, child: Text('Подстанция в конце линии')),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        linkModeHolder[0] = v;
+                        setDialogState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Название *',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: addressController,
-                decoration: const InputDecoration(
-                  labelText: 'Адрес',
-                  border: OutlineInputBorder(),
-                ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    decoration: InputDecoration(
+                      labelText: 'Диспетчерское наименование',
+                      helperText: 'Необязательно; если пусто — как название',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: voltageController,
+                    decoration: const InputDecoration(
+                      labelText: 'Напряжение (кВ) *',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: 16),
+                  if (latitude != null && longitude != null)
+                    Text(
+                      'Координаты (ш, д): ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: addressController,
+                    decoration: const InputDecoration(
+                      labelText: 'Адрес',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Описание',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Описание',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Отмена'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  if (name.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Название обязательно для заполнения'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  if (voltageController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Напряжение обязательно для заполнения'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  if (latitude == null || longitude == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Не удалось получить координаты (широта/долгота). Включите GPS.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  final dispatcher = codeController.text.trim().isEmpty ? name : codeController.text.trim();
+                  final lm = attachToLine == null ? 0 : linkModeHolder[0];
+
+                  try {
+                    final apiService = ref.read(apiServiceProvider);
+                    final substationData = SubstationCreate(
+                      name: name,
+                      dispatcherName: dispatcher,
+                      voltageLevel: double.tryParse(voltageController.text.replaceAll(',', '.')) ?? 0.0,
+                      latitude: latitude!,
+                      longitude: longitude!,
+                      address: addressController.text.trim().isEmpty ? null : addressController.text.trim(),
+                      branchId: null,
+                      description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                    );
+
+                    final created = await apiService.createSubstation(substationData);
+
+                    if (attachToLine != null && lm != 0) {
+                      await apiService.updatePowerLine(
+                        attachToLine.id,
+                        lm == 1 ? {'substation_start_id': created.id} : {'substation_end_id': created.id},
+                      );
+                    }
+
+                    if (mounted) Navigator.of(dialogContext).pop();
+
+                    await _loadMapData();
+
+                    if (mounted) {
+                      final bind = lm == 0 ? '' : (lm == 1 ? 'Привязана к началу линии. ' : 'Привязана к концу линии. ');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${bind}Подстанция создана'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Ошибка: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Создать'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Название обязательно для заполнения'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (codeController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Диспетчерское наименование обязательно для заполнения'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (voltageController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Напряжение обязательно для заполнения'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (latitude == null || longitude == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Не удалось получить координаты (широта/долгота). Включите GPS.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              try {
-                final apiService = ref.read(apiServiceProvider);
-                final substationData = SubstationCreate(
-                  name: nameController.text.trim(),
-                  dispatcherName: codeController.text.trim(),
-                  voltageLevel: double.tryParse(voltageController.text) ?? 0.0,
-                  latitude: latitude!,
-                  longitude: longitude!,
-                  address: addressController.text.trim().isEmpty 
-                      ? null 
-                      : addressController.text.trim(),
-                  branchId: null, // Опциональное поле
-                  description: descriptionController.text.trim().isEmpty 
-                      ? null 
-                      : descriptionController.text.trim(),
-                );
-
-                await apiService.createSubstation(substationData);
-                
-                Navigator.of(context).pop();
-                
-                await _loadMapData();
-                
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Подстанция успешно создана'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Ошибка создания подстанции: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Создать'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

@@ -515,6 +515,19 @@ class ObjectPropertiesPanel extends ConsumerWidget {
         'Примечания:',
         objectProperties['notes']?.toString() ?? 'не указано',
       ),
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: PoleCardAttachmentsSection(
+          objectProperties: {
+            ...objectProperties,
+            'card_comment': objectProperties['card_comment']?.toString() ?? '',
+            'card_comment_attachment':
+                objectProperties['card_comment_attachment']?.toString() ??
+                    objectProperties['defect_attachment']?.toString() ??
+                    '',
+          },
+        ),
+      ),
     ];
   }
 

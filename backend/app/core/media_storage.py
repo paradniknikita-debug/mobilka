@@ -1,6 +1,7 @@
 """
 Абстракция хранилища медиа: локальный диск или S3-совместимое (MinIO).
-Если заданы S3_ENDPOINT_URL и ключи — используем MinIO/S3, иначе — uploads/pole_attachments/.
+Префиксы ключей: poles/{id}/..., equipment/{id}/...
+Локально: uploads/pole_attachments/ и uploads/equipment_attachments/
 """
 import logging
 from pathlib import Path
@@ -10,8 +11,10 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Локальная директория (fallback)
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "pole_attachments"
+UPLOAD_DIR_POLE = Path(__file__).resolve().parents[2] / "uploads" / "pole_attachments"
+UPLOAD_DIR_EQUIPMENT = Path(__file__).resolve().parents[2] / "uploads" / "equipment_attachments"
+# Обратная совместимость со старым именем
+UPLOAD_DIR = UPLOAD_DIR_POLE
 
 _s3_client = None
 _bucket = None
@@ -30,17 +33,21 @@ def log_media_storage_mode() -> None:
     """Вызвать при старте приложения: куда реально пишутся файлы вложений."""
     if _use_s3():
         logger.info(
-            "Вложения опор: MinIO/S3 (endpoint=%s, bucket=%s)",
+            "Вложения (опоры/оборудование): MinIO/S3 (endpoint=%s, bucket=%s)",
             settings.S3_ENDPOINT_URL,
             settings.S3_BUCKET_MEDIA,
         )
         print(
-            f"OK: Вложения опор — MinIO/S3 ({settings.S3_ENDPOINT_URL}, bucket={settings.S3_BUCKET_MEDIA})"
+            f"OK: Вложения — MinIO/S3 ({settings.S3_ENDPOINT_URL}, bucket={settings.S3_BUCKET_MEDIA})"
         )
     else:
-        logger.warning("Вложения опор: локальный диск %s (S3 не настроен)", UPLOAD_DIR)
+        logger.warning(
+            "Вложения: локальный диск опор=%s, оборудования=%s (S3 не настроен)",
+            UPLOAD_DIR_POLE,
+            UPLOAD_DIR_EQUIPMENT,
+        )
         print(
-            f"WARNING: Вложения опор — только локальный диск {UPLOAD_DIR} "
+            f"WARNING: Вложения — локально {UPLOAD_DIR_POLE} и {UPLOAD_DIR_EQUIPMENT} "
             "(задайте S3_* или в development уберите DISABLE_LOCAL_MINIO и поднимите MinIO на :9000)"
         )
 
@@ -55,7 +62,6 @@ def _get_s3_client():
     from botocore.config import Config
     from botocore.exceptions import ClientError
 
-    # path-style обязателен для MinIO за endpoint URL (иначе boto3 шлёт запросы на bucket.lepm.local)
     client = boto3.client(
         "s3",
         endpoint_url=settings.S3_ENDPOINT_URL,
@@ -73,7 +79,6 @@ def _get_s3_client():
     except ClientError as e:
         code = (e.response or {}).get("Error", {}).get("Code", "") or ""
         http_status = (e.response or {}).get("ResponseMetadata", {}).get("HTTPStatusCode")
-        # Нет bucket или нет доступа к проверке — пробуем создать (MinIO/AWS)
         if code in ("404", "NoSuchBucket", "NotFound") or http_status == 404:
             try:
                 client.create_bucket(Bucket=_bucket)
@@ -100,14 +105,28 @@ def _get_s3_client():
     return _s3_client, _bucket
 
 
-def media_put(pole_id: int, filename: str, content: bytes, content_type: str) -> None:
-    """Сохранить файл в выбранное хранилище."""
-    key = f"poles/{pole_id}/{filename}"
+def _local_dir_for_prefix(prefix: str) -> Path:
+    if prefix == "poles":
+        return UPLOAD_DIR_POLE
+    if prefix == "equipment":
+        return UPLOAD_DIR_EQUIPMENT
+    raise ValueError(f"Неизвестный префикс вложений: {prefix}")
+
+
+def media_put_for(
+    prefix: str,
+    entity_id: int,
+    filename: str,
+    content: bytes,
+    content_type: str,
+) -> None:
+    """Сохранить файл (S3 key: {prefix}/{entity_id}/{filename})."""
+    key = f"{prefix}/{entity_id}/{filename}"
     try:
         client, bucket = _get_s3_client()
     except Exception as e:
         logger.warning("S3 недоступен, локальный диск: %s", e)
-        client, bucket = None, None  # fallback на локальный диск при ошибке S3
+        client, bucket = None, None
     if client and bucket:
         client.put_object(
             Bucket=bucket,
@@ -116,8 +135,7 @@ def media_put(pole_id: int, filename: str, content: bytes, content_type: str) ->
             ContentType=content_type or "application/octet-stream",
         )
         return
-    # Локальный диск
-    d = UPLOAD_DIR / str(pole_id)
+    d = _local_dir_for_prefix(prefix) / str(entity_id)
     try:
         d.mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -129,8 +147,13 @@ def media_put(pole_id: int, filename: str, content: bytes, content_type: str) ->
         raise RuntimeError(f"Не удалось записать файл {target}: {e}") from e
 
 
-def _read_local(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
-    path = UPLOAD_DIR / str(pole_id) / filename
+def media_put(pole_id: int, filename: str, content: bytes, content_type: str) -> None:
+    """Сохранить вложение карточки опоры."""
+    media_put_for("poles", pole_id, filename, content, content_type)
+
+
+def _read_local_prefixed(prefix: str, entity_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
+    path = _local_dir_for_prefix(prefix) / str(entity_id) / filename
     if not path.is_file():
         return None, None
     try:
@@ -157,13 +180,12 @@ def _read_local(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[
     return content, content_type
 
 
-def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
-    """
-    Прочитать файл из хранилища.
-    Возвращает (content, content_type) или (None, None) если не найден.
-    При S3: если объекта нет, пробуем локальный диск (миграция со старого режима).
-    """
-    key = f"poles/{pole_id}/{filename}"
+def _read_local(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
+    return _read_local_prefixed("poles", pole_id, filename)
+
+
+def media_get_for(prefix: str, entity_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
+    key = f"{prefix}/{entity_id}/{filename}"
     try:
         client, bucket = _get_s3_client()
     except Exception as e:
@@ -176,16 +198,19 @@ def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[st
             content_type = resp.get("ContentType") or "application/octet-stream"
             return body, content_type
         except Exception:
-            pass  # fallback на локальный каталог
-    # Локальный диск (основной режим или fallback)
-    content, ct = _read_local(pole_id, filename)
+            pass
+    content, ct = _read_local_prefixed(prefix, entity_id, filename)
     if content is not None:
         return content, ct
     return None, None
 
 
+def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
+    return media_get_for("poles", pole_id, filename)
+
+
 def media_exists(pole_id: int, filename: str) -> bool:
-    """Проверить наличие файла."""
+    """Проверить наличие файла вложения опоры."""
     try:
         client, bucket = _get_s3_client()
     except Exception:
@@ -197,5 +222,5 @@ def media_exists(pole_id: int, filename: str) -> bool:
             return True
         except Exception:
             pass
-    path = UPLOAD_DIR / str(pole_id) / filename
+    path = UPLOAD_DIR_POLE / str(pole_id) / filename
     return path.is_file()

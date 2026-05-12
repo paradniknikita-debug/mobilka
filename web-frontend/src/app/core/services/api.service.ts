@@ -247,6 +247,20 @@ export class ApiService {
     );
   }
 
+  uploadEquipmentAttachment(
+    equipmentId: number,
+    attachmentType: 'photo' | 'voice' | 'schema' | 'video' | 'file',
+    file: File
+  ): Observable<{ url: string; type: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('attachment_type', attachmentType);
+    formData.append('file', file);
+    return this.http.post<{ url: string; type: string; filename: string }>(
+      `${this.apiUrl}/attachments/equipment/${equipmentId}/attachments`,
+      formData
+    );
+  }
+
   // ========== Spans ==========
   getSpansByPowerLine(lineId: number): Observable<Span[]> {
     return this.http.get<Span[]>(`${this.apiUrl}/power-lines/${lineId}/spans`);

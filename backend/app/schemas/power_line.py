@@ -207,6 +207,8 @@ class EquipmentBase(BaseModel):
     defect: Optional[str] = None
     criticality: Optional[str] = None  # low | medium | high
     defect_attachment: Optional[str] = None
+    card_comment: Optional[str] = None
+    card_comment_attachment: Optional[str] = None
     rated_current: Optional[float] = None
     i_th: Optional[float] = None
     ip_max: Optional[float] = None

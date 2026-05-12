@@ -75,6 +75,12 @@ abstract class LepmRetrofit {
   @GET('/power-lines/{id}')
   Future<PowerLine> getPowerLine(@Path('id') int id);
 
+  @PUT('/power-lines/{id}')
+  Future<PowerLine> updatePowerLine(
+    @Path('id') int id,
+    @Body() Map<String, dynamic> body,
+  );
+
   @DELETE('/power-lines/{id}')
   Future<void> deletePowerLine(@Path('id') int id);
 
@@ -239,6 +245,7 @@ abstract class ApiServiceWithExport {
   Future<List<PowerLine>> getPowerLines();
   Future<PowerLine> createPowerLine(PowerLineCreate powerLineData);
   Future<PowerLine> getPowerLine(int id);
+  Future<PowerLine> updatePowerLine(int id, Map<String, dynamic> body);
   Future<void> deletePowerLine(int id);
 
   Future<Pole> createPole(int powerLineId, PoleCreate poleData, {int? fromPoleId});
@@ -332,6 +339,14 @@ abstract class ApiServiceWithExport {
   /// Возвращает {url, thumbnail_url?, type, filename}.
   Future<Map<String, dynamic>> uploadPoleAttachment(
     int poleId,
+    String attachmentType,
+    List<int> fileBytes,
+    String filename,
+  );
+
+  /// Вложение карточки оборудования (те же типы, что у опоры).
+  Future<Map<String, dynamic>> uploadEquipmentAttachment(
+    int equipmentId,
     String attachmentType,
     List<int> fileBytes,
     String filename,
@@ -661,6 +676,33 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
     return data;
   }
 
+  @override
+  Future<Map<String, dynamic>> uploadEquipmentAttachment(
+    int equipmentId,
+    String attachmentType,
+    List<int> fileBytes,
+    String filename,
+  ) async {
+    final formData = FormData.fromMap({
+      'attachment_type': attachmentType,
+      'file': MultipartFile.fromBytes(
+        fileBytes,
+        filename: filename,
+        contentType: MediaType.parse(_guessMimeForPoleAttachment(filename)),
+      ),
+    });
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/attachments/equipment/$equipmentId/attachments',
+      data: formData,
+      options: Options(
+        contentType: 'multipart/form-data',
+      ),
+    );
+    final data = response.data;
+    if (data == null) throw Exception('Пустой ответ при загрузке вложения оборудования');
+    return data;
+  }
+
   // Делегируем все остальные методы к базовому сервису
   @override
   Future<AuthResponse> login(String username, String password) => _rest.login(username, password);
@@ -679,6 +721,10 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<PowerLine> getPowerLine(int id) => _rest.getPowerLine(id);
+
+  @override
+  Future<PowerLine> updatePowerLine(int id, Map<String, dynamic> body) =>
+      _rest.updatePowerLine(id, body);
 
   @override
   Future<void> deletePowerLine(int id) => _rest.deletePowerLine(id);

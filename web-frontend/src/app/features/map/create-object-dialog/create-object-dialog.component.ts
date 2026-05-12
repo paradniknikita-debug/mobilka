@@ -132,6 +132,14 @@ export class CreateObjectDialogComponent implements OnInit {
   poleCardCommentMessages: CardCommentMessage[] = [];
   newCardCommentDraft = '';
 
+  /** Карточка оборудования (редактирование / создание). */
+  equipmentCardCommentMessages: CardCommentMessage[] = [];
+  equipmentAttachments: PoleCardAttachmentItem[] = [];
+  newEquipmentCardCommentDraft = '';
+
+  /** Класс напряжения ЛЭП опоры, кВ — номинал коммутационного оборудования совпадает с ним. */
+  equipmentLineVoltageKv: number | null = null;
+
   readonly formatCardCommentAt = formatCardCommentDateTime;
 
   // Кэшированные вычисления для карточки подстанции,
@@ -381,6 +389,7 @@ export class CreateObjectDialogComponent implements OnInit {
         this.equipmentForm.patchValue({ psr_subtype: 'retractable' }, { emitEvent: false });
       }
       this.loadEquipmentCatalogForType(type);
+      this.refreshEquipmentLineVoltageFromPole();
     });
     this.equipmentForm.get('pole_id')?.valueChanges.subscribe((value) => {
       const poleId = Number(value);
@@ -391,12 +400,14 @@ export class CreateObjectDialogComponent implements OnInit {
         this.equipmentPoleDisplayName = '';
         this.equipmentNeighborPoleOptions = [];
       }
+      this.refreshEquipmentLineVoltageFromPole();
     });
     const initialPoleId = Number(this.data?.poleId ?? this.equipmentForm.getRawValue()?.pole_id);
     if (Number.isFinite(initialPoleId) && initialPoleId > 0) {
       this.loadEquipmentPoleDisplayName(initialPoleId);
       this.updateEquipmentNeighborOptions(initialPoleId);
     }
+    this.refreshEquipmentLineVoltageFromPole();
   }
 
   private loadEquipmentPoleDisplayName(poleId: number): void {
@@ -446,6 +457,52 @@ export class CreateObjectDialogComponent implements OnInit {
       'ground_wire'
     ]);
     return !!v && !nonElectrical.has(v);
+  }
+
+  isNominalVoltageLockedByLine(): boolean {
+    return this.equipmentLineVoltageKv != null && this.isElectricalEquipmentType();
+  }
+
+  private applyNominalVoltageFromLineLock(): void {
+    const ctl = this.equipmentForm.get('nominal_voltage');
+    if (!ctl) {
+      return;
+    }
+    if (this.isNominalVoltageLockedByLine()) {
+      const v = this.equipmentLineVoltageKv as number;
+      ctl.patchValue(String(v), { emitEvent: false });
+      ctl.disable({ emitEvent: false });
+    } else {
+      ctl.enable({ emitEvent: false });
+    }
+  }
+
+  private refreshEquipmentLineVoltageFromPole(): void {
+    const rawPid = this.equipmentForm.getRawValue()?.pole_id ?? this.data?.poleId;
+    const poleId = Number(rawPid);
+    if (!Number.isFinite(poleId) || poleId <= 0) {
+      this.equipmentLineVoltageKv = null;
+      this.applyNominalVoltageFromLineLock();
+      return;
+    }
+    this.apiService
+      .getPole(poleId)
+      .pipe(
+        switchMap((pole: any) => {
+          const lid = pole?.line_id;
+          if (!lid) {
+            return of(null);
+          }
+          return this.apiService.getPowerLine(Number(lid));
+        }),
+        catchError(() => of(null))
+      )
+      .subscribe((pl: any) => {
+        const v = pl?.voltage_level != null ? Number(pl.voltage_level) : NaN;
+        this.equipmentLineVoltageKv = Number.isFinite(v) ? v : null;
+        this.applyNominalVoltageFromLineLock();
+        this.cdr.markForCheck();
+      });
   }
 
   isSwitchLikeEquipmentType(type?: string | null): boolean {
@@ -519,6 +576,7 @@ export class CreateObjectDialogComponent implements OnInit {
 
     if (!matched || Object.keys(patch).length === 0) return false;
     this.equipmentForm.patchValue(patch);
+    this.applyNominalVoltageFromLineLock();
     this.snackBar.open(
       'Характеристики подставлены по марке оборудования. При необходимости измените вручную.',
       'Закрыть',
@@ -593,6 +651,7 @@ export class CreateObjectDialogComponent implements OnInit {
     if (arresterType != null && String(arresterType).trim() !== '') patch.arrester_type = String(arresterType).trim();
     if (Object.keys(patch).length > 0) {
       this.equipmentForm.patchValue(patch);
+      this.applyNominalVoltageFromLineLock();
       this.snackBar.open('Характеристики подставлены из каталога. При необходимости измените вручную.', 'Закрыть', { duration: 2500 });
     }
   }
@@ -608,7 +667,10 @@ export class CreateObjectDialogComponent implements OnInit {
           equipment_type: eq.equipment_type || '',
           pole_id: eq.pole_id,
           nominal_current: '',
-          nominal_voltage: '',
+          nominal_voltage:
+            (eq as any).nominal_voltage_kv != null && (eq as any).nominal_voltage_kv !== ''
+              ? String((eq as any).nominal_voltage_kv)
+              : '',
           nameplate: (eq as any).nameplate || '',
           identified_object_description: (eq as any).identified_object_description || '',
           installation_display_name: (eq as any).installation_display_name || '',
@@ -641,6 +703,9 @@ export class CreateObjectDialogComponent implements OnInit {
         if (pId > 0) {
           this.updateEquipmentNeighborOptions(pId);
         }
+        this.refreshEquipmentLineVoltageFromPole();
+        this.equipmentCardCommentMessages = parseCardCommentMessages((eq as any).card_comment);
+        this.equipmentAttachments = this.parseCardAttachments((eq as any).card_comment_attachment);
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -650,6 +715,40 @@ export class CreateObjectDialogComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  sendEquipmentCardComment(): void {
+    const text = this.newEquipmentCardCommentDraft?.trim();
+    if (!text) {
+      return;
+    }
+    const user = this.authService.getCurrentUser();
+    if (!user) {
+      this.snackBar.open('Войдите в систему, чтобы отправить комментарий', 'Закрыть', { duration: 4000 });
+      return;
+    }
+    this.equipmentCardCommentMessages = appendCardCommentMessage(this.equipmentCardCommentMessages, text, user);
+    this.newEquipmentCardCommentDraft = '';
+    this.cdr.markForCheck();
+  }
+
+  openEquipmentAttachmentsManager(): void {
+    const id = this.data?.equipmentId;
+    if (!id) return;
+    this.dialog
+      .open(PoleAttachmentsManagerDialogComponent, {
+        width: '880px',
+        maxWidth: '95vw',
+        maxHeight: '90vh',
+        data: { entity: 'equipment', entityId: id, items: [...this.equipmentAttachments] }
+      })
+      .afterClosed()
+      .subscribe((result: PoleCardAttachmentItem[] | undefined) => {
+        if (result) {
+          this.equipmentAttachments = result;
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   copyEquipmentUid(): void {
@@ -1161,7 +1260,7 @@ export class CreateObjectDialogComponent implements OnInit {
         width: '880px',
         maxWidth: '95vw',
         maxHeight: '90vh',
-        data: { poleId: this.poleId, items: [...this.poleAttachments] }
+        data: { entity: 'pole', entityId: this.poleId, items: [...this.poleAttachments] }
       })
       .afterClosed()
       .subscribe((result: PoleCardAttachmentItem[] | undefined) => {
@@ -1350,7 +1449,10 @@ export class CreateObjectDialogComponent implements OnInit {
       arrester_type:
         formValue.equipment_type === 'surge_arrester'
           ? ((formValue.arrester_type || '').trim() || undefined)
-          : undefined
+          : undefined,
+      card_comment: serializeCardCommentMessages(this.equipmentCardCommentMessages) || undefined,
+      card_comment_attachment:
+        this.equipmentAttachments.length > 0 ? JSON.stringify(this.equipmentAttachments) : undefined
     };
 
     if (!body.name) {
@@ -1570,7 +1672,10 @@ export class CreateObjectDialogComponent implements OnInit {
       arrester_type:
         formValue.equipment_type === 'surge_arrester'
           ? ((formValue.arrester_type || '').trim() || undefined)
-          : undefined
+          : undefined,
+      card_comment: serializeCardCommentMessages(this.equipmentCardCommentMessages) || undefined,
+      card_comment_attachment:
+        this.equipmentAttachments.length > 0 ? JSON.stringify(this.equipmentAttachments) : undefined
     };
 
     this.apiService.updateEquipment(equipmentId, body as any).subscribe({

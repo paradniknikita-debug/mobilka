@@ -19,6 +19,10 @@ export interface ChangeLogPayload {
   new_value?: Record<string, unknown>;
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
+  /** Снимки полей до/после (бэкенд update pole / equipment, sync Flutter). */
+  old?: Record<string, unknown>;
+  new?: Record<string, unknown>;
+  changed_fields?: string[];
   [key: string]: unknown;
 }
 

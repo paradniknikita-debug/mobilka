@@ -172,6 +172,61 @@ class SyncService extends StateNotifier<SyncState> {
     }
   }
 
+  /// Только выгрузка на сервер (без загрузки с сервера).
+  /// После старта обхода онлайн — чтобы отправить сессию, не запуская полный sync и не дублируя загрузку карты.
+  Future<void> pushLocalChangesOnly() async {
+    state = const SyncState.syncing();
+    try {
+      final connectivityResult = await _connectivity.checkConnectivity();
+      if (connectivityResult == ConnectivityResult.none) {
+        state = const SyncState.idle();
+        return;
+      }
+
+      await _flushPendingServerPatrolEnds();
+      await _uploadLocalChanges();
+      await _uploadPatrolSessions();
+
+      final pendingPatrols = await _database.getPendingPatrolSessions();
+      final queuedEnds = _prefs?.getStringList(AppConfig.pendingEndPatrolServerIdsKey) ?? [];
+      if (pendingPatrols.isNotEmpty || queuedEnds.isNotEmpty) {
+        final lines = <String>[];
+        for (final r in pendingPatrols.take(4)) {
+          if (r.lineId < 0) {
+            lines.add(
+              '• сессия #${r.id}: ЛЭП только локальная (line_id=${r.lineId}) — сначала синхронизируйте линию на сервер',
+            );
+          } else if (r.syncStatus == AppConfig.patrolSessionSyncStatusPendingEnd) {
+            lines.add(
+              '• сессия #${r.id}: завершение не дошло до сервера (server_id=${r.serverId})',
+            );
+          } else {
+            lines.add(
+              '• сессия #${r.id}: не создана на сервере (line_id=${r.lineId}) — проверьте, что такая ЛЭП есть на сервере',
+            );
+          }
+        }
+        if (pendingPatrols.length > 4) {
+          lines.add('• … и ещё ${pendingPatrols.length - 4} сессий');
+        }
+        if (queuedEnds.isNotEmpty) {
+          lines.add('• в очереди завершений (без локальной строки): ${queuedEnds.length}');
+        }
+        state = SyncState.error(
+          'Отправка не завершена полностью:\n${lines.join('\n')}',
+        );
+      } else {
+        state = const SyncState.completed();
+      }
+    } catch (e) {
+      final msg = e.toString();
+      final short = msg.contains('DioException') && msg.contains('status code')
+          ? _shortSyncError(msg)
+          : msg;
+      state = SyncState.error('Ошибка отправки на сервер: $short');
+    }
+  }
+
   static String _shortSyncError(String dioMessage) {
     if (dioMessage.contains('400')) return 'Сервер отклонил запрос (400). Проверьте данные или обновите приложение.';
     if (dioMessage.contains('401')) return 'Сессия истекла. Войдите снова.';
@@ -403,6 +458,8 @@ class SyncService extends StateNotifier<SyncState> {
     final poleMapping = _getSyncPoleMapping();
     final polesInBatch = poles.map((p) => p.id).toSet();
     final List<EquipmentData> equipmentToSync = [];
+    final Map<int, String?> equipmentCardAttachmentAfterUpload = {};
+    final Set<int> equipmentWithPendingAttachmentUpload = {};
     for (final eq in equipment) {
       final poleId = eq.poleId;
       final serverPoleId = poleMapping[poleId];
@@ -414,7 +471,73 @@ class SyncService extends StateNotifier<SyncState> {
         continue;
       }
       equipmentToSync.add(eq);
-      records.add(_createSyncRecord('equipment', 'create', _equipmentToJson(eq, poleMapping), batchId));
+      var eqData = _equipmentToJson(eq, poleMapping);
+      final eqAttachJson = eqData['card_comment_attachment'];
+      if (eqAttachJson != null && eqAttachJson is String) {
+        try {
+          final list = PoleCardAttachmentCodec.parseItemsJson(eqAttachJson);
+          final resolved = <Map<String, dynamic>>[];
+          List<Map<String, dynamic>>? pendingForNew;
+          final unresolvedForExisting = <Map<String, dynamic>>[];
+          for (final e in list) {
+            final m = Map<String, dynamic>.from(e);
+            if (m['url'] != null) {
+              resolved.add(m);
+              continue;
+            }
+            final path = m['p'] as String?;
+            if (path == null || path.isEmpty) continue;
+            final type = m['t'] as String? ?? 'photo';
+            if (eq.id > 0) {
+              try {
+                final bytes = await readAttachmentBytes(path);
+                if (bytes.isEmpty) continue;
+                final ext = path.contains('.') ? path.split('.').last : 'jpg';
+                final filename = 'upload.$ext';
+                final result = await _apiService.uploadEquipmentAttachment(eq.id, type, bytes, filename);
+                final url = result['url'] as String?;
+                if (url != null) {
+                  final entry = <String, dynamic>{'t': type, 'url': url};
+                  if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+                  resolved.add(entry);
+                } else {
+                  unresolvedForExisting.add(m);
+                }
+              } catch (_) {
+                unresolvedForExisting.add(m);
+              }
+            } else {
+              pendingForNew ??= [];
+              pendingForNew.add(m);
+            }
+          }
+          if (eq.id > 0) {
+            if (unresolvedForExisting.isNotEmpty) {
+              equipmentWithPendingAttachmentUpload.add(eq.id);
+              eqData.remove('card_comment_attachment');
+              final localPending = [...resolved, ...unresolvedForExisting];
+              equipmentCardAttachmentAfterUpload[eq.id] =
+                  localPending.isEmpty ? null : jsonEncode(localPending);
+            } else {
+              final enc = resolved.isEmpty ? null : jsonEncode(resolved);
+              eqData['card_comment_attachment'] = enc;
+              if (enc != null) {
+                equipmentCardAttachmentAfterUpload[eq.id] = enc;
+              }
+            }
+          } else {
+            eqData['card_comment_attachment'] = resolved.isEmpty ? null : jsonEncode(resolved);
+            if (pendingForNew != null && pendingForNew.isNotEmpty) {
+              eqData.remove('card_comment_attachment');
+              final localPending = [...resolved, ...pendingForNew];
+              equipmentCardAttachmentAfterUpload[eq.id] =
+                  localPending.isEmpty ? null : jsonEncode(localPending);
+              equipmentWithPendingAttachmentUpload.add(eq.id);
+            }
+          }
+        } catch (_) {}
+      }
+      records.add(_createSyncRecord('equipment', 'create', eqData, batchId));
     }
 
     if (records.isEmpty) return null;
@@ -428,6 +551,9 @@ class SyncService extends StateNotifier<SyncState> {
     if (response['success'] == true) {
       for (final e in poleCardAttachmentAfterUpload.entries) {
         await _database.setPoleCardCommentAttachment(e.key, e.value);
+      }
+      for (final e in equipmentCardAttachmentAfterUpload.entries) {
+        await _database.setEquipmentCardCommentAttachment(e.key, e.value);
       }
 
       final idMapping = response['id_mapping'];
@@ -556,6 +682,24 @@ class SyncService extends StateNotifier<SyncState> {
         }
       }
 
+      final idMappingEquipment = idMapping is Map && idMapping['equipment'] is Map
+          ? Map<String, dynamic>.from(idMapping['equipment'] as Map)
+          : <String, dynamic>{};
+      for (final e in idMappingEquipment.entries) {
+        final localId = int.tryParse(e.key.toString());
+        final srvRaw = e.value;
+        final serverEqId = srvRaw is int
+            ? srvRaw
+            : (srvRaw is num ? srvRaw.toInt() : int.tryParse(srvRaw?.toString() ?? ''));
+        if (localId != null && localId < 0 && serverEqId != null && serverEqId > 0) {
+          await _database.reassignEquipmentLocalToServerId(
+            localId,
+            serverEqId,
+            keepNeedsSync: equipmentWithPendingAttachmentUpload.contains(localId),
+          );
+        }
+      }
+
       if (idMappingPowerLine.isNotEmpty) {
         final plMapping = idMappingPowerLine;
           _saveSyncPowerLineMapping(plMapping);
@@ -598,7 +742,12 @@ class SyncService extends StateNotifier<SyncState> {
           }
       }
       for (final eq in equipmentToSync) {
-        await _database.setEquipmentNeedsSync(eq.id, false);
+        if (equipmentWithPendingAttachmentUpload.contains(eq.id)) {
+          continue;
+        }
+        if (eq.id > 0) {
+          await _database.setEquipmentNeedsSync(eq.id, false);
+        }
       }
       for (final pl in powerLines) {
         if (pl.id >= 0) await _database.setPowerLineNeedsSync(pl.id, false);
@@ -744,6 +893,8 @@ class SyncService extends StateNotifier<SyncState> {
     put('x_position', equipment.xPosition);
     put('y_position', equipment.yPosition);
     put('direction_angle', equipment.directionAngle);
+    put('card_comment', equipment.cardComment);
+    put('card_comment_attachment', equipment.cardCommentAttachment);
 
     final serverPoleId = poleMapping[equipment.poleId];
     if (serverPoleId != null && serverPoleId > 0) {
@@ -965,6 +1116,20 @@ class SyncService extends StateNotifier<SyncState> {
         final id = _toInt(data['id']);
         final existing = await _database.getEquipment(id);
         final poleId = _toInt(data['pole_id'] ?? data['tower_id']);
+        final serverComment = data['card_comment'] as String?;
+        final serverAttach = data['card_comment_attachment'] as String?;
+        String? mergedComment = serverComment;
+        if (mergedComment == null || mergedComment.isEmpty) {
+          final ex = existing?.cardComment;
+          if (ex != null && ex.isNotEmpty) mergedComment = ex;
+        }
+        final mergedAttachItems = _mergePoleAttachmentItems(
+          serverAttach,
+          existing?.cardCommentAttachment,
+        );
+        final mergedAttach =
+            mergedAttachItems.isEmpty ? null : jsonEncode(mergedAttachItems);
+        final keepNeedsSyncLocal = existing?.needsSync ?? false;
         await _database.insertEquipmentOrReplace(
           EquipmentCompanion.insert(
             id: drift.Value(id),
@@ -978,6 +1143,8 @@ class SyncService extends StateNotifier<SyncState> {
             criticality: drift.Value(data['criticality'] as String? ?? existing?.criticality),
             defectAttachment:
                 drift.Value(data['defect_attachment'] as String? ?? existing?.defectAttachment),
+            cardComment: drift.Value(mergedComment),
+            cardCommentAttachment: drift.Value(mergedAttach),
             manufacturer: drift.Value(data['manufacturer'] as String? ?? existing?.manufacturer),
             model: drift.Value(data['model'] as String? ?? existing?.model),
             serialNumber: drift.Value(data['serial_number'] as String? ?? existing?.serialNumber),
@@ -1071,7 +1238,7 @@ class SyncService extends StateNotifier<SyncState> {
             createdAt: _parseDateTime(data['created_at']) ?? DateTime.now(),
             updatedAt: drift.Value(_parseDateTime(data['updated_at']) ?? existing?.updatedAt),
             isLocal: drift.Value(existing?.isLocal ?? false),
-            needsSync: drift.Value(existing?.needsSync ?? false),
+            needsSync: drift.Value(keepNeedsSyncLocal),
           ),
         );
         break;

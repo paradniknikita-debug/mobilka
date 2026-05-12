@@ -45,6 +45,26 @@ export class ChangeLogDetailDialogComponent {
   rows: KeyValueRow[] = [];
   isMaximized = false;
 
+  private static isPlainObject(x: unknown): x is Record<string, unknown> {
+    return x !== null && typeof x === 'object' && !Array.isArray(x);
+  }
+
+  /** Стороны diff: API и бэкенд могут отдавать old_value/new_value, before/after или old/new. */
+  private resolveDiffSides(p: ChangeLogPayload | null): {
+    oldVal: Record<string, unknown> | undefined;
+    newVal: Record<string, unknown> | undefined;
+  } {
+    if (!ChangeLogDetailDialogComponent.isPlainObject(p)) {
+      return { oldVal: undefined, newVal: undefined };
+    }
+    const rawOld = p.old_value ?? p['before'] ?? p['old'];
+    const rawNew = p.new_value ?? p['after'] ?? p['new'];
+    return {
+      oldVal: ChangeLogDetailDialogComponent.isPlainObject(rawOld) ? rawOld : undefined,
+      newVal: ChangeLogDetailDialogComponent.isPlainObject(rawNew) ? rawNew : undefined,
+    };
+  }
+
   /** Payload как словарь для шаблона (строгий strictTemplates). */
   get pl(): Record<string, unknown> | null {
     const p = this.entry.payload;
@@ -98,10 +118,7 @@ export class ChangeLogDetailDialogComponent {
   }
 
   get jsonDiffLines(): JsonDiffLine[] {
-    const p = this.entry.payload as ChangeLogPayload | Record<string, unknown> | null;
-    if (!p || typeof p !== 'object') return [];
-    const oldVal = (p as any).old_value ?? (p as any).before;
-    const newVal = (p as any).new_value ?? (p as any).after;
+    const { oldVal, newVal } = this.resolveDiffSides(this.entry.payload as ChangeLogPayload | null);
     if (oldVal === undefined && newVal === undefined) return [];
     return this.buildUnifiedJsonDiff(oldVal, newVal);
   }
@@ -136,11 +153,16 @@ export class ChangeLogDetailDialogComponent {
 
   private buildRows(): void {
     const p = this.entry.payload as ChangeLogPayload | null;
-    const oldVal = (p?.old_value ?? p?.['before']) as Record<string, unknown> | undefined;
-    const newVal = (p?.new_value ?? p?.['after']) as Record<string, unknown> | undefined;
+    const { oldVal, newVal } = this.resolveDiffSides(p);
+    const cf = p && typeof p === 'object' ? p['changed_fields'] : undefined;
     const allKeys = new Set<string>();
     if (oldVal && typeof oldVal === 'object') Object.keys(oldVal).forEach(k => allKeys.add(k));
     if (newVal && typeof newVal === 'object') Object.keys(newVal).forEach(k => allKeys.add(k));
+    if (Array.isArray(cf)) {
+      cf.forEach(item => {
+        if (typeof item === 'string') allKeys.add(item);
+      });
+    }
     this.rows = Array.from(allKeys).map(key => {
       const b = oldVal?.[key];
       const a = newVal?.[key];
@@ -163,16 +185,21 @@ export class ChangeLogDetailDialogComponent {
     if (!p) return false;
     if ((p as any).pole_card === true) return false;
     if ((p as any).data_quality_warning === true) return false;
-    const oldVal = (p as any).old_value ?? (p as any).before;
-    const newVal = (p as any).new_value ?? (p as any).after;
-    return (oldVal && typeof oldVal === 'object' && Object.keys(oldVal).length > 0) ||
-           (newVal && typeof newVal === 'object' && Object.keys(newVal).length > 0);
+    const { oldVal, newVal } = this.resolveDiffSides(p as ChangeLogPayload);
+    const cf = (p as Record<string, unknown>)['changed_fields'];
+    const cfLen = Array.isArray(cf) ? cf.length : 0;
+    const oldKeys = oldVal && typeof oldVal === 'object' ? Object.keys(oldVal).length : 0;
+    const newKeys = newVal && typeof newVal === 'object' ? Object.keys(newVal).length : 0;
+    return oldKeys > 0 || newKeys > 0 || cfLen > 0;
   }
 
   get payloadRest(): Record<string, unknown> {
     const p = this.entry.payload as Record<string, unknown> | null;
     if (!p) return {};
-    const omit = new Set(['old_value', 'new_value', 'before', 'after', 'name', 'mrid', 'uid']);
+    const omit = new Set([
+      'old_value', 'new_value', 'before', 'after', 'old', 'new', 'changed_fields',
+      'name', 'mrid', 'uid',
+    ]);
     return Object.fromEntries(Object.entries(p).filter(([k]) => !omit.has(k)));
   }
 
@@ -201,7 +228,8 @@ export class ChangeLogDetailDialogComponent {
     if (!type) return '—';
     const labels: Record<string, string> = {
       pole: 'Опора', power_line: 'Линия', span: 'Пролёт', substation: 'Подстанция',
-      equipment: 'Оборудование', acline_segment: 'Участок линии', line_section: 'Секция линии', session: 'Сессия'
+      equipment: 'Оборудование', acline_segment: 'Участок линии', line_section: 'Секция линии', session: 'Сессия',
+      patrol_session: 'Обход ЛЭП', connectivity_node: 'Узел соединения',
     };
     return labels[type] ?? type;
   }
@@ -259,6 +287,21 @@ export class ChangeLogDetailDialogComponent {
       created_by: 'Автор (id)',
       created_at: 'Создано',
       updated_at: 'Обновлено',
+      height: 'Высота, м',
+      foundation_type: 'Тип фундамента',
+      year_installed: 'Год установки',
+      structural_defect: 'Конструктивный дефект',
+      structural_defect_criticality: 'Критичность конструктивного дефекта',
+      is_tap_pole: 'Отпаечная опора',
+      branch_type: 'Тип ветвления',
+      tap_pole_id: 'Опора отпайки (id)',
+      tap_branch_index: 'Индекс ветки отпайки',
+      conductor_type: 'Марка провода',
+      conductor_material: 'Материал провода',
+      conductor_section: 'Сечение провода',
+      line_id: 'Линия (id)',
+      spans_created: 'Созданные пролёты',
+      equipment_name: 'Наименование оборудования',
     };
     return map[key] ?? key;
   }

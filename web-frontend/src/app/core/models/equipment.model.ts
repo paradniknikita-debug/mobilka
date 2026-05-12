@@ -50,6 +50,10 @@ export interface Equipment {
   emergency_current_a?: number | null;
   continuous_current_a?: number | null;
   arrester_type?: string | null;
+  /** Комментарий карточки (JSON-история, как у опоры) */
+  card_comment?: string | null;
+  /** Вложения карточки (JSON массив с url) */
+  card_comment_attachment?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -91,5 +95,7 @@ export interface EquipmentCreate {
   emergency_current_a?: number | null;
   continuous_current_a?: number | null;
   arrester_type?: string | null;
+  card_comment?: string | null;
+  card_comment_attachment?: string | null;
 }
 

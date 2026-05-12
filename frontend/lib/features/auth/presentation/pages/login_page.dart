@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
 import '../widgets/login_form.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/base_url_manager.dart';
@@ -82,14 +80,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 // Форма входа
                 const LoginForm(),
                 const SizedBox(height: 16),
-                
-                // Ссылка на регистрацию
-                TextButton(
-                  onPressed: () => context.go('/register'),
-                  child: const Text('Нет аккаунта? Зарегистрироваться'),
-                ),
-                const SizedBox(height: 8),
-                
+
                 // Кнопка настроек сервера
                 TextButton.icon(
                   onPressed: () => _showServerSettings(context),

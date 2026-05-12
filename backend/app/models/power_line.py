@@ -348,6 +348,9 @@ class Equipment(Base):
     criticality = Column(String(20), nullable=True)
     # Мультимедиа дефекта: JSON-список [{t, url|p, thumbnail_url?}]
     defect_attachment = Column(Text, nullable=True)
+    # Комментарий карточки оборудования и вложения (как у опоры)
+    card_comment = Column(Text, nullable=True)
+    card_comment_attachment = Column(Text, nullable=True)
     # Электрические характеристики коммутационного оборудования
     rated_current = Column(Float, nullable=True)
     i_th = Column(Float, nullable=True)

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/pole_reference_data.dart';
@@ -13,6 +14,7 @@ import '../../../../core/models/power_line.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
+import '../../../../core/services/sync_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../home/presentation/pages/home_page.dart'
     show activeSessionProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
@@ -128,8 +130,8 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
         }
       }
       final best = await _captureBestPositionSampled(
-        maxSamples: 8,
-        maxDuration: const Duration(seconds: 12),
+        maxSamples: 3,
+        maxDuration: const Duration(seconds: 8),
         targetAccuracyMeters: 8.0,
       );
       if (mounted) {
@@ -549,14 +551,37 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
     ref.invalidate(showContinuePatrolButtonProvider);
     ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
 
+    final online = await _hasNetworkConnection();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Сохранено локально. Ожидает синхронизации.'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-    context.go('/map');
+    final messenger = ScaffoldMessenger.of(context);
+    final sync = ref.read(syncServiceProvider);
+
+    if (online) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Обход начат.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.go('/map');
+      // Сессия всегда пишется в Drift первой; при сети сразу отправляем очередь без полной загрузки карты с сервера.
+      unawaited(sync.pushLocalChangesOnly());
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Нет сети. Сессия сохранена на устройстве и будет отправлена на сервер при подключении.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      context.go('/map');
+    }
+  }
+
+  Future<bool> _hasNetworkConnection() async {
+    final result = await Connectivity().checkConnectivity();
+    return result != ConnectivityResult.none;
   }
 
   @override

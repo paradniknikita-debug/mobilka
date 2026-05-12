@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
 import { MapService, MapData } from '../../core/services/map.service';
 import { SidebarService } from '../../core/services/sidebar.service';
 import { GeoJSONCollection, GeoJSONFeature } from '../../core/models/geojson.model';
@@ -197,8 +198,30 @@ export class MapComponent implements OnInit, OnDestroy {
     private sidebarService: SidebarService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private router: Router
   ) {}
+
+  /** Полный журнал изменений по выбранной на карте сущности (Angular). */
+  openChangeLogForSelectedPole(): void {
+    const id = Number(this.selectedPole?.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    void this.router.navigate(['/change-log'], {
+      queryParams: { entity_type: 'pole', entity_id: id }
+    });
+  }
+
+  openChangeLogForSelectedEquipment(): void {
+    const id = Number(this.selectedEquipment?.equipment_id ?? this.selectedEquipment?.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    void this.router.navigate(['/change-log'], {
+      queryParams: { entity_type: 'equipment', entity_id: id }
+    });
+  }
 
   ngOnInit(): void {
     this.initMap();
