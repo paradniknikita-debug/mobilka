@@ -1,14 +1,16 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { AuthGuard } from './core/guards/auth.guard';
+import { AdminGuard } from './core/guards/admin.guard';
+import { PassportizationGuard } from './core/guards/passportization.guard';
 
 import { LoginComponent } from './features/auth/login/login.component';
 import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
 import { MapComponent } from './features/map/map.component';
 import { ChangeLogComponent } from './features/change-log/change-log.component';
-import { ReportsComponent } from './features/reports/reports.component';
 import { CimImportComponent } from './features/cim-import/cim-import.component';
-import { EquipmentCatalogComponent } from './features/equipment-catalog/equipment-catalog.component';
+import { AdminComponent } from './features/admin/admin.component';
+import { PassportizationComponent } from './features/passportization/passportization.component';
 
 const routes: Routes = [
   {
@@ -34,20 +36,42 @@ const routes: Routes = [
         component: ChangeLogComponent
       },
       {
+        path: 'passportization',
+        component: PassportizationComponent,
+        canActivate: [PassportizationGuard],
+      },
+      {
         path: 'reports',
-        component: ReportsComponent
+        component: PassportizationComponent,
+        canActivate: [PassportizationGuard],
+        data: { passportTab: 'reports' },
+      },
+      {
+        path: 'tech-passports',
+        component: PassportizationComponent,
+        canActivate: [PassportizationGuard],
+        data: { passportTab: 'passports' },
+      },
+      {
+        path: 'equipment-catalog',
+        component: PassportizationComponent,
+        canActivate: [PassportizationGuard],
+        data: { passportTab: 'equipment' },
       },
       {
         path: 'cim-import',
         component: CimImportComponent
       },
       {
-        path: 'equipment-catalog',
-        component: EquipmentCatalogComponent
+        path: 'admin',
+        component: AdminComponent,
+        canActivate: [AdminGuard],
       },
       {
         path: 'equipment-catalog-bulk',
-        redirectTo: '/equipment-catalog'
+        component: PassportizationComponent,
+        canActivate: [PassportizationGuard],
+        data: { passportTab: 'equipment' },
       },
       {
         path: 'power-lines',

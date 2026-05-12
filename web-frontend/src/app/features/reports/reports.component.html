@@ -1,25 +1,33 @@
-<div class="reports-page">
-  <div class="toolbar">
+<div class="reports-page" [class.reports-page--embedded]="embedded">
+  <div class="toolbar" *ngIf="!embedded">
     <h1>Отчёты</h1>
   </div>
 
   <div class="reports-toolbar">
-    <mat-form-field appearance="fill">
+    <mat-form-field appearance="outline" class="reports-line-field" subscriptSizing="dynamic">
       <mat-label>ЛЭП</mat-label>
-      <mat-select [(value)]="selectedLineId">
+      <mat-select [(ngModel)]="selectedLineId" (ngModelChange)="onLineSelectionChange()">
         <mat-option [value]="null">Все</mat-option>
         <mat-option *ngFor="let pl of powerLines" [value]="pl.id">{{ pl.name }}</mat-option>
       </mat-select>
     </mat-form-field>
+    <span class="reports-toolbar__hint" *ngIf="reportTabIndex === 1 && !selectedLineId && powerLines.length">
+      Выберите линию для сводки.
+    </span>
+  </div>
+
+  <div *ngIf="linesLoadError" class="error error--inline">
+    <mat-icon color="warn">error</mat-icon>
+    <p>{{ linesLoadError }}</p>
   </div>
 
   <mat-tab-group (selectedIndexChange)="onReportTabChange($event)" [(selectedIndex)]="reportTabIndex" class="report-tabs">
     <mat-tab label="Дефекты">
       <div class="reports-block">
         <div class="reports-filters">
-          <mat-form-field appearance="fill">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Критичность</mat-label>
-            <mat-select [(value)]="defectsCriticality">
+            <mat-select [(ngModel)]="defectsCriticality" name="defCrit">
               <mat-option [value]="null">Любая</mat-option>
               <mat-option value="low">Низкая</mat-option>
               <mat-option value="medium">Средняя</mat-option>
@@ -27,17 +35,17 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="fill">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Период: с</mat-label>
             <input matInput [(ngModel)]="defectsFromDt" placeholder="2026-01-01T00:00:00" />
           </mat-form-field>
 
-          <mat-form-field appearance="fill">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Период: по</mat-label>
             <input matInput [(ngModel)]="defectsToDt" placeholder="2026-01-31T23:59:59" />
           </mat-form-field>
 
-          <mat-form-field appearance="fill">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Поиск в дефекте</mat-label>
             <input matInput [(ngModel)]="defectsSearch" placeholder="например: изолятор" />
           </mat-form-field>
@@ -74,6 +82,14 @@
               <th mat-header-cell *matHeaderCellDef>Оборудование</th>
               <td mat-cell *matCellDef="let row">{{ row.equipment_name }}</td>
             </ng-container>
+            <ng-container matColumnDef="equipment_mrid">
+              <th mat-header-cell *matHeaderCellDef>UID оборудования</th>
+              <td mat-cell *matCellDef="let row" class="cell-mono" [matTooltip]="row.equipment_mrid || ''">{{ row.equipment_mrid || '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="pole_mrid">
+              <th mat-header-cell *matHeaderCellDef>UID опоры</th>
+              <td mat-cell *matCellDef="let row" class="cell-mono" [matTooltip]="row.pole_mrid || ''">{{ row.pole_mrid || '—' }}</td>
+            </ng-container>
             <ng-container matColumnDef="criticality">
               <th mat-header-cell *matHeaderCellDef>Критичность</th>
               <td mat-cell *matCellDef="let row">{{ row.criticality || '—' }}</td>
@@ -87,8 +103,8 @@
               <td mat-cell *matCellDef="let row">{{ row.defect_attachments?.length || 0 }}</td>
             </ng-container>
 
-            <tr mat-header-row *matHeaderRowDef="['pole_number','equipment_name','criticality','defect','attachments']"></tr>
-            <tr mat-row *matRowDef="let row; columns: ['pole_number','equipment_name','criticality','defect','attachments'];"></tr>
+            <tr mat-header-row *matHeaderRowDef="['pole_number','equipment_name','equipment_mrid','pole_mrid','criticality','defect','attachments']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['pole_number','equipment_name','equipment_mrid','pole_mrid','criticality','defect','attachments'];"></tr>
           </table>
         </div>
 
@@ -116,18 +132,22 @@
           <p>{{ reportsError }}</p>
         </div>
 
+        <div *ngIf="!reportsLoading && !reportsError && !selectedLineId && powerLines.length" class="tab-description">
+          Выберите ЛЭП в списке выше и нажмите «Показать».
+        </div>
+
         <div *ngIf="!reportsLoading && byLineReport" class="reports-summary">
-          <div><b>{{ byLineReport.line_name }}</b></div>
+          <div class="reports-summary__title">{{ byLineReport.line_name }}</div>
           <div>Опор: {{ byLineReport.poles_count }}</div>
           <div>Оборудования с дефектами: {{ byLineReport.equipment_with_defects_total }}</div>
-          <div style="margin-top:12px;">
-            <b>По критичности</b>
+          <div class="reports-summary__section">
+            <div class="reports-summary__section-title">По критичности</div>
             <div *ngFor="let k of (byLineReport.defects_by_criticality | keyvalue)">
               {{ k.key }}: {{ k.value }}
             </div>
           </div>
-          <div style="margin-top:12px;">
-            <b>Топ дефектов</b>
+          <div class="reports-summary__section">
+            <div class="reports-summary__section-title">Топ дефектов</div>
             <div *ngFor="let d of byLineReport.top_defects">{{ d.defect }}: {{ d.count }}</div>
           </div>
         </div>

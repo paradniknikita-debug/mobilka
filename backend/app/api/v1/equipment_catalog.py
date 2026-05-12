@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.roles import require_catalog_manager
 from app.core.security import get_current_active_user
 from app.database import get_db
 from app.models.equipment_catalog import EquipmentCatalogItem
@@ -21,6 +22,25 @@ from app.schemas.equipment_catalog import (
 )
 
 router = APIRouter()
+
+
+def _catalog_full_name(brand: str, model: str) -> str:
+    """
+    Полное имя без дублирования: если модель уже начинается с марки (РЛК-10/400 при brand=РЛК),
+    не повторяем марку в full_name.
+    """
+    b = (brand or "").strip()
+    m = (model or "").strip()
+    if not m:
+        return b
+    if not b:
+        return m
+    bl, ml = b.lower(), m.lower()
+    if ml == bl:
+        return m
+    if ml.startswith(bl + "-") or ml.startswith(bl + " "):
+        return m
+    return f"{b} {m}"
 
 
 def _normalize_type_code(value: Optional[str]) -> Optional[str]:
@@ -79,7 +99,7 @@ def _default_catalog_payloads() -> list[dict]:
                 "type_code": type_code,
                 "brand": brand,
                 "model": model,
-                "full_name": f"{brand} {model}",
+                "full_name": _catalog_full_name(brand, model),
                 "voltage_kv": kv,
                 "current_a": current_a,
                 "manufacturer": manufacturer,
@@ -97,8 +117,8 @@ def _default_catalog_payloads() -> list[dict]:
     add("disconnector", "РЛК", "РЛК-10/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 2, "normal_open": False, "retained": False})
     add("disconnector", "РЛК", "РЛК-35/630", 35, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "normal_open": False, "retained": False})
     add("disconnector", "РГН", "РГН-35/1000", 35, 1000, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "normal_open": False, "retained": False})
-    add("disconnector", "Siemens", "3DN1-110/2000", 110, 2000, {"i_th": 31500, "ip_max": 80000, "t_th": 3, "normal_open": False, "retained": False}, manufacturer="Siemens", country="DE")
-    add("disconnector", "ABB", "NALF-24/630", 24, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "normal_open": False, "retained": False}, manufacturer="ABB", country="SE")
+    add("disconnector", "УЗТТ", "РР-110/630", 110, 630, {"i_th": 31500, "ip_max": 80000, "t_th": 3, "normal_open": False, "retained": False}, manufacturer="Н/Д", country="BY")
+    add("disconnector", "КЭАЗ", "РВЗ-10/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "normal_open": False, "retained": False}, manufacturer="КЭАЗ", country="RU")
     add("disconnector", "РВ", "РВ-10/630", 10, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 4, "normal_open": False, "retained": False})
     add("disconnector", "Tavrida", "DS-10/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "normal_open": False, "retained": False}, manufacturer="Tavrida Electric", country="RU")
 
@@ -107,12 +127,12 @@ def _default_catalog_payloads() -> list[dict]:
     add("breaker", "ВВ/TEL", "ВВ/TEL-10-31.5/1600", 10, 1600, {"i_th": 31500, "ip_max": 80000, "t_th": 3, "nominal_breaking_current_ka": 31.5, "own_trip_time_sec": 0.05, "object_subtype": "vacuum_breaker"})
     add("breaker", "ВМП", "ВМП-10-20/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.09, "object_subtype": "withdrawable_breaker"})
     add("breaker", "ВМП", "ВМП-10-31.5/1000", 10, 1000, {"i_th": 31500, "ip_max": 80000, "t_th": 3, "nominal_breaking_current_ka": 31.5, "own_trip_time_sec": 0.09, "object_subtype": "withdrawable_breaker"})
-    add("breaker", "Siemens", "3AH5-35/1250", 35, 1250, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 25, "own_trip_time_sec": 0.05, "object_subtype": "vacuum_breaker"}, manufacturer="Siemens", country="DE")
-    add("breaker", "ABB", "VD4-12/1250", 12, 1250, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 25, "own_trip_time_sec": 0.05, "object_subtype": "vacuum_breaker"}, manufacturer="ABB", country="IT")
-    add("breaker", "Schneider", "Evolis-17.5/1250", 17.5, 1250, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 25, "own_trip_time_sec": 0.06, "object_subtype": "vacuum_breaker"}, manufacturer="Schneider", country="FR")
+    add("breaker", "КЭАЗ", "ВА-35/1600", 35, 1600, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 25, "own_trip_time_sec": 0.06, "object_subtype": "vacuum_breaker"}, manufacturer="КЭАЗ", country="RU")
+    add("breaker", "КЭАЗ", "ВА-10-20/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.08, "object_subtype": "vacuum_breaker"}, manufacturer="КЭАЗ", country="RU")
     add("breaker", "Tavrida", "BB/TEL-35-25/1600", 35, 1600, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 25, "own_trip_time_sec": 0.06, "object_subtype": "vacuum_breaker"})
-    add("breaker", "Hyundai", "HVG-24/1250", 24, 1250, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 25, "own_trip_time_sec": 0.05, "object_subtype": "vacuum_breaker"}, manufacturer="Hyundai", country="KR")
-    add("breaker", "LFB", "LFB-110/3150", 110, 3150, {"i_th": 40000, "ip_max": 100000, "t_th": 3, "nominal_breaking_current_ka": 40, "own_trip_time_sec": 0.03, "object_subtype": "sf6_breaker"}, manufacturer="Alstom Grid", country="FR")
+    add("breaker", "IEK", "ВУ-10-20/1000", 10, 1000, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.09, "object_subtype": "vacuum_breaker"}, manufacturer="IEK", country="RU")
+    add("breaker", "УЗТТ", "ВГ-110/3150", 110, 3150, {"i_th": 40000, "ip_max": 100000, "t_th": 3, "nominal_breaking_current_ka": 40, "own_trip_time_sec": 0.04, "object_subtype": "sf6_breaker"}, manufacturer="Н/Д", country="BY")
+    add("breaker", "УЗТТ", "ВН-10/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.08, "object_subtype": "vacuum_breaker"}, manufacturer="Н/Д", country="BY")
 
     # Grounding switch / ZN (10)
     add("zn", "ЗН", "ЗН-10", 10, 400, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False, "object_subtype": "short_circuiter", "i_th": 10000, "ip_max": 25000, "t_th": 1})
@@ -123,31 +143,30 @@ def _default_catalog_payloads() -> list[dict]:
     add("zn", "EKF", "ЗН-10/400-УХЛ1", 10, 400, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False})
     add("zn", "КЭАЗ", "ЗНЛ-10/630", 10, 630, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False})
     add("zn", "IEK", "ЗН-6/400", 6, 400, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False})
-    add("zn", "Hyundai", "GS-24/630", 24, 630, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False}, manufacturer="Hyundai", country="KR")
-    add("zn", "Siemens", "8DH10-GS/1250", 10, 1250, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False}, manufacturer="Siemens", country="DE")
+    add("zn", "IEK", "ЗНП-10/400", 10, 400, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False}, manufacturer="IEK", country="RU")
+    add("zn", "Tavrida", "ЗНП-10/630", 10, 630, {"psr_subtype": "short_circuiter", "pole_count": 1, "normal_open": True, "retained": False}, manufacturer="Tavrida Electric", country="RU")
 
     # Arrester (10)
     add("arrester", "ОПН", "ОПН-6", 6, 10000, {"arrester_type": "opn", "tm_code": "AR-OPN-6", "pole_count": 0, "nominal_discharge_current_a": 10000, "continuous_current_a": 400, "emergency_current_a": 20000})
     add("arrester", "ОПН", "ОПН-10", 10, 10000, {"arrester_type": "opn", "tm_code": "AR-OPN-10", "pole_count": 0, "nominal_discharge_current_a": 10000, "continuous_current_a": 550, "emergency_current_a": 20000})
     add("arrester", "ОПН", "ОПН-20", 20, 10000, {"arrester_type": "opn", "tm_code": "AR-OPN-20", "pole_count": 0, "nominal_discharge_current_a": 10000, "continuous_current_a": 550, "emergency_current_a": 20000})
     add("arrester", "ОПН", "ОПН-35", 35, 10000, {"arrester_type": "opn", "tm_code": "AR-OPN-35", "pole_count": 0, "nominal_discharge_current_a": 10000, "continuous_current_a": 550, "emergency_current_a": 20000})
-    add("arrester", "ABB", "POLIM-D-10", 10, None, {"arrester_type": "opn", "tm_code": "AR-POLIM-10", "pole_count": 0}, manufacturer="ABB", country="SE")
-    add("arrester", "Siemens", "3EK4-10", 10, None, {"arrester_type": "opn", "tm_code": "AR-3EK4-10", "pole_count": 0}, manufacturer="Siemens", country="DE")
-    add("arrester", "IEK", "ОПНп-10", 10, None, {"arrester_type": "valve", "tm_code": "AR-IEK-10", "pole_count": 0})
+    add("arrester", "КЭАЗ", "ПОДТ-10", 10, None, {"arrester_type": "opn", "tm_code": "AR-KEAZ-10", "pole_count": 0}, manufacturer="КЭАЗ", country="RU")
+    add("arrester", "Tavrida", "ОПНп-6/400", 6, None, {"arrester_type": "valve", "tm_code": "AR-TVR-6", "pole_count": 0}, manufacturer="Tavrida Electric", country="RU")
+    add("arrester", "IEK", "ОПНп-10", 10, None, {"arrester_type": "valve", "tm_code": "AR-IEK-10", "pole_count": 0}, manufacturer="IEK", country="RU")
     add("arrester", "КЭАЗ", "РВО-10", 10, 5000, {"arrester_type": "tube", "tm_code": "AR-RVO-10", "pole_count": 0, "nominal_discharge_current_a": 5000, "continuous_current_a": 300, "emergency_current_a": 10000})
     add("arrester", "РВМ", "РВМ-10", 10, 5000, {"arrester_type": "valve", "tm_code": "AR-RVM-10", "pole_count": 0, "nominal_discharge_current_a": 5000, "continuous_current_a": 300, "emergency_current_a": 10000})
-    add("arrester", "Schneider", "PRD-36", 36, 10000, {"arrester_type": "opn", "tm_code": "AR-PRD-36", "pole_count": 0, "nominal_discharge_current_a": 10000, "continuous_current_a": 600, "emergency_current_a": 20000}, manufacturer="Schneider", country="FR")
+    add("arrester", "ОПН", "ОПН-110", 110, 10000, {"arrester_type": "opn", "tm_code": "AR-OPN-110", "pole_count": 0, "nominal_discharge_current_a": 10000, "continuous_current_a": 550, "emergency_current_a": 20000})
 
-    # Recloser (10)
-    add("recloser", "NOJA", "OSM15", 15, 630, {"i_th": 12500, "ip_max": 32000, "t_th": 3, "nominal_breaking_current_ka": 12.5, "own_trip_time_sec": 0.04, "tm_code": "REC-OSM15", "pole_count": 2}, manufacturer="NOJA Power", country="AU")
-    add("recloser", "NOJA", "OSM27", 27, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.04, "tm_code": "REC-OSM27", "pole_count": 2}, manufacturer="NOJA Power", country="AU")
+    # Recloser (10) — только BY/RU
+    add("recloser", "УЗТТ", "РВ-15/630", 15, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 16, "own_trip_time_sec": 0.05, "tm_code": "REC-UZ-15", "pole_count": 2}, manufacturer="Н/Д", country="BY")
+    add("recloser", "КЭАЗ", "КР-10/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-KEAZ-10", "pole_count": 2}, manufacturer="КЭАЗ", country="RU")
     add("recloser", "Tavrida", "REC15", 15, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 16, "own_trip_time_sec": 0.05, "tm_code": "REC-TVR-15", "pole_count": 2}, manufacturer="Tavrida Electric", country="RU")
     add("recloser", "Tavrida", "REC27", 27, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-TVR-27", "pole_count": 2}, manufacturer="Tavrida Electric", country="RU")
-    add("recloser", "ABB", "RER615", 15, 800, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 16, "own_trip_time_sec": 0.05, "tm_code": "REC-RER615", "pole_count": 2}, manufacturer="ABB", country="SE")
-    add("recloser", "Schneider", "Nulec-N27", 27, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-NULEC-N27", "pole_count": 2}, manufacturer="Schneider", country="FR")
-    add("recloser", "Siemens", "Fusesaver-24", 24, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 16, "own_trip_time_sec": 0.04, "tm_code": "REC-FS-24", "pole_count": 2}, manufacturer="Siemens", country="DE")
-    add("recloser", "Eaton", "NOVA-27", 27, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-NOVA-27", "pole_count": 2}, manufacturer="Eaton", country="US")
-    add("recloser", "GE", "TriShot-15", 15, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 16, "own_trip_time_sec": 0.06, "tm_code": "REC-TRISHOT-15", "pole_count": 2}, manufacturer="GE", country="US")
+    add("recloser", "IEK", "РТ-10/630", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-IEK-10", "pole_count": 2}, manufacturer="IEK", country="RU")
+    add("recloser", "Tavrida", "REC-10M", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-TVR-10M", "pole_count": 2}, manufacturer="Tavrida Electric", country="RU")
+    add("recloser", "Tavrida", "REC-35/630", 35, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-TVR-35", "pole_count": 2}, manufacturer="Tavrida Electric", country="RU")
+    add("recloser", "УЗТТ", "РВ-27/630", 27, 630, {"i_th": 25000, "ip_max": 63000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-UZ-27", "pole_count": 2}, manufacturer="Н/Д", country="BY")
     add("recloser", "RECLOSER", "RECLOSER-10", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "REC-10", "pole_count": 2}, manufacturer="Generic", country="BY")
     add("recloser", "RCB", "RCB-10", 10, 630, {"i_th": 20000, "ip_max": 50000, "t_th": 3, "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.05, "tm_code": "RCB-10", "pole_count": 2}, manufacturer="Generic", country="BY")
 
@@ -194,17 +213,22 @@ async def get_catalog_items(
 @router.post("/", response_model=EquipmentCatalogResponse)
 async def create_catalog_item(
     payload: EquipmentCatalogCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     type_code = _normalize_type_code(payload.type_code)
     if not type_code:
         raise HTTPException(status_code=400, detail="type_code is required")
+    brand_s = payload.brand.strip()
+    model_s = payload.model.strip()
+    fn = (payload.full_name or "").strip() or None
+    if not fn:
+        fn = _catalog_full_name(brand_s, model_s)
     item = EquipmentCatalogItem(
         type_code=type_code,
-        brand=payload.brand.strip(),
-        model=payload.model.strip(),
-        full_name=payload.full_name,
+        brand=brand_s,
+        model=model_s,
+        full_name=fn,
         voltage_kv=payload.voltage_kv,
         current_a=payload.current_a,
         manufacturer=payload.manufacturer,
@@ -224,7 +248,7 @@ async def create_catalog_item(
 async def update_catalog_item(
     item_id: int,
     payload: EquipmentCatalogUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     _ = current_user
@@ -234,6 +258,10 @@ async def update_catalog_item(
     data = payload.model_dump(exclude_unset=True)
     if "type_code" in data:
         data["type_code"] = _normalize_type_code(data["type_code"])
+    if "full_name" not in data and ("brand" in data or "model" in data):
+        b = (data.get("brand") if "brand" in data else item.brand) or ""
+        m = (data.get("model") if "model" in data else item.model) or ""
+        data["full_name"] = _catalog_full_name(str(b).strip(), str(m).strip())
     for k, v in data.items():
         setattr(item, k, v)
     await db.commit()
@@ -245,7 +273,7 @@ async def update_catalog_item(
 async def delete_catalog_item(
     item_id: int,
     hard: bool = Query(default=False, description="hard=true удаляет запись физически"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     _ = current_user
@@ -262,7 +290,7 @@ async def delete_catalog_item(
 
 @router.get("/template")
 async def download_catalog_template(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
 ):
     _ = current_user
     columns = [
@@ -283,7 +311,7 @@ async def download_catalog_template(
             "type_code": "disconnector",
             "brand": "РЛНД",
             "model": "РЛНД-10/400",
-            "full_name": "Разъединитель линейный наружной установки РЛНД-10/400",
+            "full_name": "РЛНД-10/400",
             "voltage_kv": 10,
             "current_a": 400,
             "manufacturer": "Энергомаш",
@@ -388,7 +416,7 @@ async def download_catalog_template(
 @router.get("/export")
 async def export_catalog(
     fmt: str = Query(default="xlsx", pattern="^(xlsx|csv)$"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     _ = current_user
@@ -437,7 +465,7 @@ async def export_catalog(
 async def import_catalog(
     mode: str = Query(default="upsert", pattern="^(upsert|insert_only)$"),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     ext = (file.filename or "").lower()
@@ -479,11 +507,14 @@ async def import_catalog(
             )
         )
         existing = (await db.execute(stmt)).scalar_one_or_none()
+        raw_fn = None if pd.isna(row.get("full_name")) else str(row.get("full_name")).strip()
+        if not raw_fn:
+            raw_fn = _catalog_full_name(brand, model)
         payload = {
             "type_code": type_code,
             "brand": brand,
             "model": model,
-            "full_name": None if pd.isna(row.get("full_name")) else str(row.get("full_name")),
+            "full_name": raw_fn,
             "voltage_kv": None if pd.isna(row.get("voltage_kv")) else float(row.get("voltage_kv")),
             "current_a": None if pd.isna(row.get("current_a")) else float(row.get("current_a")),
             "manufacturer": None if pd.isna(row.get("manufacturer")) else str(row.get("manufacturer")),
@@ -508,7 +539,7 @@ async def import_catalog(
 
 @router.post("/seed-defaults")
 async def seed_default_catalog(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     defaults = _default_catalog_payloads()
@@ -531,8 +562,11 @@ async def seed_default_catalog(
         ).scalar_one_or_none()
         if existing:
             changed = False
+            new_fn = row.get("full_name")
+            if new_fn and getattr(existing, "full_name") != new_fn:
+                setattr(existing, "full_name", new_fn)
+                changed = True
             for field in (
-                "full_name",
                 "voltage_kv",
                 "current_a",
                 "manufacturer",

@@ -1,9 +1,11 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { Subject } from 'rxjs';
-import { filter, takeUntil } from 'rxjs/operators';
+import { Observable, Subject } from 'rxjs';
+import { filter, map, takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { Router, NavigationEnd } from '@angular/router';
 import { SidebarService } from '../../core/services/sidebar.service';
+import { User } from '../../core/models/user.model';
+import { canAccessPassportization, canUseExports, isAdminUser } from '../../core/utils/role-utils';
 
 @Component({
   selector: 'app-main-layout',
@@ -13,6 +15,11 @@ import { SidebarService } from '../../core/services/sidebar.service';
 export class MainLayoutComponent implements OnInit, OnDestroy {
   sidebarWidth = 350;
   sidebarVisible = true;
+  /** Текущий пользователь для условий в шаблоне (роли). */
+  readonly user$: Observable<User | null>;
+  readonly canUseExports$: Observable<boolean>;
+  readonly canAccessPassportization$: Observable<boolean>;
+  readonly isAdmin$: Observable<boolean>;
   /** Показывать кнопку раскрытия дерева только на карте (скрыта на Журнал и CIM/552) */
   showSidebarToggle = true;
   private destroy$ = new Subject<void>();
@@ -22,9 +29,13 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   constructor(
     private authService: AuthService,
-    private router: Router,
+    readonly router: Router,
     private sidebarService: SidebarService
   ) {
+    this.user$ = this.authService.currentUser$;
+    this.canUseExports$ = this.user$.pipe(map((u) => canUseExports(u ?? undefined)));
+    this.canAccessPassportization$ = this.user$.pipe(map((u) => canAccessPassportization(u ?? undefined)));
+    this.isAdmin$ = this.user$.pipe(map((u) => isAdminUser(u ?? undefined)));
     this.sidebarService.setSidebarVisible(this.sidebarVisible);
     this.sidebarService.setSidebarWidth(this.sidebarWidth);
   }
@@ -38,7 +49,15 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   }
 
   private updateShowSidebarToggle(url: string): void {
-    const hideOn = ['/change-log', '/cim-import', '/equipment-catalog', '/reports'];
+    const hideOn = [
+      '/change-log',
+      '/cim-import',
+      '/passportization',
+      '/reports',
+      '/equipment-catalog',
+      '/equipment-catalog-bulk',
+      '/admin',
+    ];
     const hide = hideOn.some(path => url.startsWith(path) || url.includes(path));
     this.showSidebarToggle = !hide;
     if (hide) {
@@ -90,5 +109,16 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     this.router.navigate(['/login']);
   }
 
+  /** Подсветка «Паспортизация» для /passportization и устаревших /reports, /equipment-catalog. */
+  isPassportizationRouteActive(): boolean {
+    const path = this.router.url.split('?')[0];
+    return (
+      path === '/passportization' ||
+      path === '/reports' ||
+      path === '/tech-passports' ||
+      path === '/equipment-catalog' ||
+      path === '/equipment-catalog-bulk'
+    );
+  }
 }
 

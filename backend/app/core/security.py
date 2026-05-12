@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 security = HTTPBearer()
+optional_bearer = HTTPBearer(auto_error=False)
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверка пароля"""
     return pwd_context.verify(plain_password, hashed_password)
@@ -67,3 +68,28 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """Текущий пользователь по Bearer-токену или None (для опциональной авторизации)."""
+    if credentials is None:
+        return None
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+    except JWTError:
+        return None
+    user = await get_user_by_username(db, username=username)
+    if user is None or not user.is_active:
+        return None
+    return user

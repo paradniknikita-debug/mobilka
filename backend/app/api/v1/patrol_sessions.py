@@ -29,6 +29,7 @@ def _session_to_response_with_names(
 ) -> PatrolSessionWithNamesResponse:
     return PatrolSessionWithNamesResponse(
         id=session.id,
+        mrid=session.mrid,
         user_id=session.user_id,
         line_id=session.line_id,
         note=session.note,
@@ -128,8 +129,10 @@ async def create_patrol_session(
         entity_type="patrol_session",
         entity_id=session.id,
         payload={
+            "mrid": session.mrid,
             "line_id": body.line_id,
             "line_name": pl.name if pl else None,
+            "line_mrid": pl.mrid if pl else None,
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "note": body.note,
         },
@@ -227,8 +230,10 @@ async def end_patrol_session(
         entity_type="patrol_session",
         entity_id=session.id,
         payload={
+            "mrid": session.mrid,
             "line_id": session.line_id,
             "line_name": pl.name if pl else None,
+            "line_mrid": pl.mrid if pl else None,
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
             "note": session.note,

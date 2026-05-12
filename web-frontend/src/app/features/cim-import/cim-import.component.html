@@ -19,6 +19,9 @@
         <mat-card-subtitle>Полная модель RDF/XML</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
+        <p *ngIf="!canExport()" class="export-hint">
+          Выгрузки CIM / 552 доступны ролям «Паспортист» и «Администратор». Импорт и запись в базу доступны всем авторизованным пользователям.
+        </p>
         <div class="file-area">
           <input #fileInput type="file" accept=".xml" (change)="onFileChange($event)" class="file-input">
           <button mat-stroked-button type="button" (click)="fileInput.click()" class="file-trigger">
@@ -28,7 +31,7 @@
         </div>
         
         <!-- Параметры экспорта: окно настроек по кнопке -->
-        <div class="export-options">
+        <div class="export-options" *ngIf="canExport()">
           <div class="export-settings-row">
             <button mat-stroked-button type="button" color="primary" (click)="openXmlExportSettings()">
               <mat-icon>tune</mat-icon>
@@ -63,7 +66,7 @@
             <mat-icon *ngIf="!isUploading">upload</mat-icon>
             {{ isUploading ? 'Импорт…' : 'Импортировать' }}
           </button>
-          <button mat-stroked-button color="primary" (click)="exportXml()" matTooltip="Скачать текущие данные в CIM XML">
+          <button *ngIf="canExport()" mat-stroked-button color="primary" (click)="exportXml()" matTooltip="Скачать текущие данные в CIM XML">
             <mat-icon>download</mat-icon>
             Экспорт CIM XML
           </button>
@@ -87,7 +90,7 @@
         </div>
 
         <!-- Параметры экспорта 552 diff -->
-        <div class="export-options">
+        <div class="export-options" *ngIf="canExport()">
           <div class="export-settings-row">
             <button mat-stroked-button type="button" color="primary" (click)="openDiffExportSettings()">
               <mat-icon>tune</mat-icon>
@@ -122,7 +125,7 @@
             <mat-icon *ngIf="!isUploading">upload</mat-icon>
             {{ isUploading ? 'Импорт 552…' : 'Импортировать 552 diff' }}
           </button>
-          <button mat-stroked-button color="primary" (click)="export552()" matTooltip="Скачать данные как один 552-диф">
+          <button *ngIf="canExport()" mat-stroked-button color="primary" (click)="export552()" matTooltip="Скачать данные как один 552-диф">
             <mat-icon>download</mat-icon>
             Экспорт 552 diff
           </button>

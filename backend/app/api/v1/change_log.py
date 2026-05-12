@@ -3,7 +3,7 @@ API журнала изменений и журнала несоответств
 События с веб- (Angular) и Flutter-клиентов: создание/редактирование/удаление объектов.
 Отдельный эндпоинт — проверка модели на «забытые» объекты и обрывы линий.
 """
-from typing import List, Optional, Dict, Set, Tuple
+from typing import List, Optional, Dict, Set, Tuple, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,8 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.change_log import ChangeLog
-from app.models.power_line import PowerLine, Pole, Span
+from app.models.power_line import PowerLine, Pole, Span, Equipment
+from app.models.patrol_session import PatrolSession
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.models.substation import Substation
@@ -58,6 +59,70 @@ async def _load_entity_names(
         select(model.id, name_col).where(model.id.in_(entity_ids))
     )
     return {r[0]: (r[1] or f"id={r[0]}") for r in result.fetchall()}
+
+
+async def _entity_mrid_lookup_for_change_log(
+    db: AsyncSession, rows: List[ChangeLog]
+) -> Dict[Tuple[str, int], str]:
+    """Соответствие (entity_type, entity_id) -> mrid для подстановки в ответ API."""
+    by_et: Dict[str, Set[int]] = {}
+    for r in rows:
+        if r.entity_id is None or not r.entity_type:
+            continue
+        if r.entity_type in (
+            "equipment",
+            "pole",
+            "power_line",
+            "patrol_session",
+        ):
+            by_et.setdefault(r.entity_type, set()).add(r.entity_id)
+
+    mrid_map: Dict[Tuple[str, int], str] = {}
+    if by_et.get("equipment"):
+        res = await db.execute(
+            select(Equipment.id, Equipment.mrid).where(Equipment.id.in_(by_et["equipment"]))
+        )
+        for i, m in res:
+            mrid_map[("equipment", i)] = m
+    if by_et.get("pole"):
+        res = await db.execute(select(Pole.id, Pole.mrid).where(Pole.id.in_(by_et["pole"])))
+        for i, m in res:
+            mrid_map[("pole", i)] = m
+    if by_et.get("power_line"):
+        res = await db.execute(
+            select(PowerLine.id, PowerLine.mrid).where(PowerLine.id.in_(by_et["power_line"]))
+        )
+        for i, m in res:
+            mrid_map[("power_line", i)] = m
+    if by_et.get("patrol_session"):
+        res = await db.execute(
+            select(PatrolSession.id, PatrolSession.mrid).where(
+                PatrolSession.id.in_(by_et["patrol_session"])
+            )
+        )
+        for i, m in res:
+            mrid_map[("patrol_session", i)] = m
+    return mrid_map
+
+
+def _payload_with_mrid(
+    payload: Any,
+    entity_type: Optional[str],
+    entity_id: Optional[int],
+    mrid_map: Dict[Tuple[str, int], str],
+) -> Any:
+    if entity_id is None or not entity_type:
+        return payload
+    mid = mrid_map.get((entity_type, entity_id))
+    if not mid:
+        return payload
+    if isinstance(payload, dict):
+        if payload.get("mrid") or payload.get("uid"):
+            return payload
+        return {**payload, "mrid": mid}
+    if payload is None:
+        return {"mrid": mid}
+    return payload
 
 
 @router.post("", response_model=ChangeLogResponse)
@@ -136,6 +201,8 @@ async def get_change_log(
     result = await db.execute(q)
     rows = result.scalars().all()
 
+    mrid_map = await _entity_mrid_lookup_for_change_log(db, list(rows))
+
     user_ids: Set[int] = {r.user_id for r in rows if r.user_id is not None}
     by_entity: Dict[str, Set[int]] = {}
     for r in rows:
@@ -159,7 +226,7 @@ async def get_change_log(
             "entity_type": r.entity_type,
             "entity_id": r.entity_id,
             "entity_name": entity_names.get(r.entity_type, {}).get(r.entity_id) if r.entity_id else None,
-            "payload": r.payload,
+            "payload": _payload_with_mrid(r.payload, r.entity_type, r.entity_id, mrid_map),
             "session_id": r.session_id,
         }
         out.append(ChangeLogResponse.model_validate(d))

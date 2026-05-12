@@ -12,7 +12,7 @@ class User {
   final String email;
   @JsonKey(name: 'full_name', defaultValue: '')
   final String fullName;
-  @JsonKey(defaultValue: 'engineer')
+  @JsonKey(defaultValue: 'field_engineer')
   final String role;
   @JsonKey(name: 'is_active', defaultValue: true)
   final bool isActive;
@@ -135,7 +135,7 @@ class UserCreate {
     required this.email,
     required this.fullName,
     required this.password,
-    this.role = 'engineer',
+    this.role = 'field_engineer',
     this.branchId,
   });
 

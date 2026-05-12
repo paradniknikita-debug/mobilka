@@ -4,9 +4,16 @@
     <span class="app-title">Система управления ЛЭП</span>
     <a mat-button routerLink="/map" routerLinkActive="active-tab" class="nav-tab">Карта</a>
     <a mat-button routerLink="/change-log" routerLinkActive="active-tab" class="nav-tab">Журнал</a>
-    <a mat-button routerLink="/reports" routerLinkActive="active-tab" class="nav-tab">Отчёты</a>
+    <a
+      mat-button
+      *ngIf="canAccessPassportization$ | async"
+      routerLink="/passportization"
+      [class.active-tab]="isPassportizationRouteActive()"
+      class="nav-tab"
+      >Паспортизация</a
+    >
     <a mat-button routerLink="/cim-import" routerLinkActive="active-tab" class="nav-tab">CIM / 552</a>
-    <a mat-button routerLink="/equipment-catalog" routerLinkActive="active-tab" class="nav-tab">Справочник</a>
+    <a mat-button *ngIf="isAdmin$ | async" routerLink="/admin" routerLinkActive="active-tab" class="nav-tab">Администрирование</a>
     <span class="spacer"></span>
     <button mat-icon-button [matMenuTriggerFor]="userMenu">
       <mat-icon>account_circle</mat-icon>

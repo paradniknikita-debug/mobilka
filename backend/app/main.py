@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments, reports, equipment_catalog, line_conductor_catalog, base_voltage, wire_info
+from app.api.v1 import admin, auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments, reports, equipment_catalog, line_conductor_catalog, base_voltage, wire_info, tech_passports
 from app.core.config import settings
 from app.core.media_storage import log_media_storage_mode
 from app.core.redis_client import set_redis_client, get_redis_client
@@ -23,6 +23,7 @@ from app.models import (
     ConnectivityNode, Terminal, LineSection, PatrolSession,
     ChangeLog,
     LineConductorCatalogItem,
+    TechPassport,
 )
 redis_client = None
 security = HTTPBearer()
@@ -146,6 +147,7 @@ async def test_endpoint(message: str = "Hello from backend!"):
 # в котором сгруппированы связанные эндпоинты. Например, все маршруты
 # для аутентификации (/login, /register, /refresh) можно держать в одном auth.router.
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(power_lines.router, prefix="/api/v1/power-lines", tags=["power-lines"])
 app.include_router(poles.router, prefix="/api/v1/poles", tags=["poles"])
 app.include_router(equipment.router, prefix="/api/v1/equipment", tags=["equipment"])
@@ -163,6 +165,7 @@ app.include_router(wire_info.router, prefix="/api/v1/cim/wire-info", tags=["wire
 app.include_router(patrol_sessions.router, prefix="/api/v1/patrol-sessions", tags=["patrol-sessions"])
 app.include_router(change_log.router, prefix="/api/v1/change-log", tags=["change-log"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
+app.include_router(tech_passports.router, prefix="/api/v1/tech-passports", tags=["tech-passports"])
 app.include_router(attachments.router, prefix="/api/v1/attachments", tags=["attachments"])
 # Обработчик исключений для обеспечения CORS заголовков даже при ошибках
 @app.exception_handler(Exception)

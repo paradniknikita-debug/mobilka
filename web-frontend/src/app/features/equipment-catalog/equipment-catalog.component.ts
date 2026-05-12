@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { EquipmentCatalogCreate, EquipmentCatalogItem } from '../../core/models/equipment-catalog.model';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { canManageCatalog } from '../../core/utils/role-utils';
 
 /** Код типа (латиница) → подпись для пользователя */
 const EQUIPMENT_TYPE_LABELS: Record<string, string> = {
@@ -24,6 +26,9 @@ const EQUIPMENT_TYPE_LABELS: Record<string, string> = {
   styleUrls: ['./equipment-catalog.component.scss']
 })
 export class EquipmentCatalogComponent implements OnInit {
+  /** Вкладка «Паспортизация» — без лишнего верхнего отступа под общий заголовок. */
+  @Input() embedded = false;
+
   items: EquipmentCatalogItem[] = [];
   isLoading = false;
   query = '';
@@ -56,10 +61,21 @@ export class EquipmentCatalogComponent implements OnInit {
   constructor(
     private readonly api: ApiService,
     private readonly snackBar: MatSnackBar,
+    private readonly auth: AuthService,
   ) {}
+
+  /** Паспортист и администратор — полное редактирование и выгрузки справочника. */
+  canManageCatalog(): boolean {
+    return canManageCatalog(this.auth.getCurrentUser());
+  }
 
   ngOnInit(): void {
     this.loadItems();
+  }
+
+  scrollToAnchor(anchorId: string): void {
+    const el = document.getElementById(anchorId);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   loadItems(): void {

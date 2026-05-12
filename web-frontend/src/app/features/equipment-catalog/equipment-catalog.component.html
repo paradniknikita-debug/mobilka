@@ -1,10 +1,22 @@
-<div class="catalog-page">
-  <mat-card class="catalog-card catalog-card--header">
+<div class="catalog-page" [class.catalog-page--embedded]="embedded">
+  <nav class="catalog-quick-nav" aria-label="Быстрый переход по разделам справочника">
+    <span class="catalog-quick-nav__label">Перейти:</span>
+    <button mat-stroked-button type="button" (click)="scrollToAnchor('catalog-filters')">Поиск и фильтры</button>
+    <button mat-stroked-button type="button" (click)="scrollToAnchor('catalog-positions')">Позиции</button>
+    <button *ngIf="canManageCatalog()" mat-stroked-button color="primary" type="button" (click)="scrollToAnchor('catalog-add-form')">
+      Добавить позицию
+    </button>
+  </nav>
+
+  <mat-card class="catalog-card catalog-card--header" id="catalog-filters">
     <mat-card-header>
       <mat-card-title>Справочник марок оборудования</mat-card-title>
       <mat-card-subtitle>Поиск, импорт и экспорт позиций каталога</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
+      <p *ngIf="!canManageCatalog()" class="read-only-hint">
+        Режим просмотра: редактирование, импорт и выгрузки доступны ролям «Паспортист» и «Администратор».
+      </p>
       <div class="toolbar-row toolbar-row--filters">
         <mat-form-field appearance="outline" class="field-grow">
           <mat-label>Поиск по тексту</mat-label>
@@ -33,6 +45,7 @@
         <div class="toolbar-actions">
           <button mat-raised-button color="primary" (click)="loadItems()">Найти</button>
           <button
+            *ngIf="canManageCatalog()"
             mat-stroked-button
             (click)="seedDefaults()"
             matTooltip="Добавляет в справочник типовые позиции (коды типов на английском; в таблице отображаются по-русски)"
@@ -45,7 +58,7 @@
 
       <mat-divider class="section-divider"></mat-divider>
 
-      <div class="toolbar-row toolbar-row--files">
+      <div class="toolbar-row toolbar-row--files" *ngIf="canManageCatalog()">
         <button mat-stroked-button (click)="downloadTemplate()">Шаблон XLSX</button>
         <button mat-stroked-button (click)="exportCatalog('xlsx')">Экспорт XLSX</button>
         <button mat-stroked-button (click)="exportCatalog('csv')">Экспорт CSV</button>
@@ -58,7 +71,7 @@
   </mat-card>
 
   <!-- Сразу после поиска — результаты; форма добавления ниже, без лишней прокрутки -->
-  <mat-card class="catalog-card catalog-card--table">
+  <mat-card class="catalog-card catalog-card--table" id="catalog-positions">
     <mat-card-header>
       <mat-card-title>Позиции ({{ items.length }})</mat-card-title>
       <mat-card-subtitle>Результат поиска и фильтра по типу</mat-card-subtitle>
@@ -92,7 +105,7 @@
               <td class="num">{{ item.voltage_kv ?? '—' }}</td>
               <td class="num">{{ item.current_a ?? '—' }}</td>
               <td class="col-actions">
-                <button mat-stroked-button color="warn" (click)="deactivate(item)">Деактивировать</button>
+                <button *ngIf="canManageCatalog()" mat-stroked-button color="warn" (click)="deactivate(item)">Деактивировать</button>
               </td>
             </tr>
           </tbody>
@@ -101,7 +114,7 @@
     </mat-card-content>
   </mat-card>
 
-  <mat-card class="catalog-card">
+  <mat-card class="catalog-card" *ngIf="canManageCatalog()" id="catalog-add-form">
     <mat-card-header>
       <mat-card-title>Штучное добавление</mat-card-title>
       <mat-card-subtitle>Обязательны тип (латинский код), марка и модель</mat-card-subtitle>

@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { canUseExports } from '../../core/utils/role-utils';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { CimPreviewMapDialogComponent, CimPreviewMapDialogData } from './cim-preview-map-dialog/cim-preview-map-dialog.component';
@@ -42,8 +44,13 @@ export class CimImportComponent implements OnInit {
   constructor(
     private apiService: ApiService,
     private dialog: MatDialog,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private auth: AuthService,
   ) {}
+
+  canExport(): boolean {
+    return canUseExports(this.auth.getCurrentUser());
+  }
 
   ngOnInit(): void {
     // Загружаем ЛЭП только для UI выбора “частично по ЛЭП”.

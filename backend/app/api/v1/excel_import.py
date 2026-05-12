@@ -9,6 +9,7 @@ import pandas as pd
 import io
 
 from app.database import get_db
+from app.core.roles import require_user_can_export
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
@@ -19,7 +20,7 @@ from app.models.geographic_region import GeographicRegion
 from app.schemas.power_line import PowerLineCreate, PoleCreate, SpanCreate, TapCreate, EquipmentCreate
 from app.schemas.substation import SubstationCreate
 
-router = APIRouter(prefix="/import", tags=["import"])
+router = APIRouter(prefix="/import", tags=["import"], dependencies=[Depends(require_user_can_export)])
 
 
 async def get_or_create_region(

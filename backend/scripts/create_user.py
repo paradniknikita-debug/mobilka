@@ -146,6 +146,7 @@ async def main() -> None:
             existing.email = email
             existing.full_name = full_name
             existing.hashed_password = get_password_hash(password)
+            existing.password_plain = password
             existing.role = role
             existing.branch_id = args.branch_id
             existing.is_active = bool(args.is_active)
@@ -162,6 +163,7 @@ async def main() -> None:
             email=email,
             full_name=full_name,
             hashed_password=get_password_hash(password),
+            password_plain=password,
             is_active=bool(args.is_active),
             is_superuser=bool(args.superuser),
             role=role,

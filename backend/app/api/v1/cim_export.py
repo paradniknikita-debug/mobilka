@@ -2,7 +2,7 @@
 API endpoints для экспорта данных в CIM форматы
 Соответствует стандартам IEC 61970-301 и IEC 61970-552:2016
 """
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 import tempfile
 import os
@@ -16,9 +16,10 @@ from io import BytesIO
 from collections import Counter, defaultdict
 
 from app.database import get_db
+from app.core.roles import require_user_can_export
 from app.core.security import get_current_active_user
 from app.models.user import User
-from app.models.substation import Substation, VoltageLevel
+from app.models.substation import Connection, Substation, VoltageLevel
 from app.models.power_line import PowerLine, Pole, Span, Equipment
 from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
@@ -298,6 +299,73 @@ def _substation_to_cim_objects_for_xml(
     return objects
 
 
+def _pole_gps_cim_objects(
+    pole: Pole,
+    pole_name: str,
+    *,
+    include_gps: bool,
+) -> Tuple[List[CIMObject], Optional[Dict[str, str]]]:
+    """
+    Location + PositionPoint для опоры: из связанной Location (как в БД) или из x/y на опоре
+    (аналогично подстанции с координатами на карте).
+    """
+    if not include_gps:
+        return [], None
+    out: List[CIMObject] = []
+    loc = getattr(pole, "location", None)
+    pps = list(getattr(loc, "position_points", None) or []) if loc is not None else []
+    lon = getattr(pole, "x_position", None)
+    lat = getattr(pole, "y_position", None)
+
+    if loc is not None and pps:
+        pp_refs = [{"mRID": pp.mrid} for pp in pps]
+        location_obj = LocationCIMObject(
+            mrid=loc.mrid,
+            name=pole_name,
+            position_points=pp_refs,
+            parent_object={"mRID": pole.mrid},
+        )
+        out.append(location_obj)
+        for pp in pps:
+            out.append(
+                PositionPointCIMObject(
+                    mrid=pp.mrid,
+                    name=pole_name,
+                    x_position=pp.x_position,
+                    y_position=pp.y_position,
+                    z_position=pp.z_position,
+                    location={"mRID": loc.mrid},
+                    parent_object={"mRID": loc.mrid},
+                )
+            )
+        return out, cim_ref(location_obj.mrid)
+
+    if lon is not None and lat is not None:
+        loc_mrid = generate_mrid()
+        pp_mrid = generate_mrid()
+        location_obj = LocationCIMObject(
+            mrid=loc_mrid,
+            name=pole_name,
+            position_points=[{"mRID": pp_mrid}],
+            parent_object={"mRID": pole.mrid},
+        )
+        out.append(location_obj)
+        out.append(
+            PositionPointCIMObject(
+                mrid=pp_mrid,
+                name=pole_name,
+                x_position=float(lon),
+                y_position=float(lat),
+                z_position=None,
+                location={"mRID": loc_mrid},
+                parent_object={"mRID": loc.mrid},
+            )
+        )
+        return out, cim_ref(location_obj.mrid)
+
+    return [], None
+
+
 def _pole_ref_from_connectivity_node(cn) -> Optional[Dict[str, str]]:
     """Ссылка на cim:Pole (опора) для its:LineSpan.StartTower / EndTower."""
     if cn is None:
@@ -333,30 +401,8 @@ def _power_line_to_cim_geometry_only(
         if not pole_name.lower().startswith(("опора", "оп.")):
             pole_name = f"Опора {pole_name}"
 
-        location_ref = None
-        if include_gps and getattr(pole, "location", None) is not None:
-            loc = pole.location
-            pp_refs = [{"mRID": pp.mrid} for pp in (getattr(loc, "position_points", None) or [])]
-            location_obj = LocationCIMObject(
-                mrid=loc.mrid,
-                name=pole_name,
-                position_points=pp_refs,
-                parent_object={"mRID": pole.mrid},
-            )
-            cim_objects.append(location_obj)
-            for pp in getattr(loc, "position_points", None) or []:
-                cim_objects.append(
-                    PositionPointCIMObject(
-                        mrid=pp.mrid,
-                        name=pole_name,
-                        x_position=pp.x_position,
-                        y_position=pp.y_position,
-                        z_position=pp.z_position,
-                        location={"mRID": loc.mrid},
-                        parent_object={"mRID": loc.mrid},
-                    )
-                )
-            location_ref = cim_ref(location_obj.mrid)
+        loc_objs, location_ref = _pole_gps_cim_objects(pole, pole_name, include_gps=include_gps)
+        cim_objects.extend(loc_objs)
 
         pole_obj = PoleCIMObject(
             mrid=pole.mrid,
@@ -962,30 +1008,8 @@ def _power_line_to_cim(
         # ChildObjects опоры: уникальные ConnectivityNode этой опоры на линии.
         child_refs = [cim_ref(m) for m in sorted(pole_cn_mrids.get(int(pole.id), set()))]
 
-        location_ref = None
-        if include_gps and getattr(pole, "location", None) is not None:
-            loc = pole.location
-            pp_refs = [{"mRID": pp.mrid} for pp in (getattr(loc, "position_points", None) or [])]
-            location_obj = LocationCIMObject(
-                mrid=loc.mrid,
-                name=pole_name,
-                position_points=pp_refs,
-                parent_object={"mRID": pole.mrid},
-            )
-            cim_objects.append(location_obj)
-            for pp in getattr(loc, "position_points", None) or []:
-                cim_objects.append(
-                    PositionPointCIMObject(
-                        mrid=pp.mrid,
-                        name=pole_name,
-                        x_position=pp.x_position,
-                        y_position=pp.y_position,
-                        z_position=pp.z_position,
-                        location={"mRID": loc.mrid},
-                        parent_object={"mRID": loc.mrid},
-                    )
-                )
-            location_ref = cim_ref(location_obj.mrid)
+        loc_objs, location_ref = _pole_gps_cim_objects(pole, pole_name, include_gps=include_gps)
+        cim_objects.extend(loc_objs)
 
         pole_obj = PoleCIMObject(
             mrid=pole.mrid,
@@ -1076,7 +1100,7 @@ async def export_cim_xml(
         True,
         description="Экспортировать уровни напряжения подстанции (VoltageLevel)",
     ),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_user_can_export),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1101,9 +1125,14 @@ async def export_cim_xml(
         include_substation_voltage_levels=include_substation_voltage_levels,
     )
 
-    substations_list = []
-    power_lines_list = []
+    substations_list: List[Substation] = []
+    power_lines_list: List[PowerLine] = []
     cim_topology_ensure: Optional[str] = None
+    sub_load_opts = [
+        selectinload(Substation.location).selectinload(Location.position_points),
+    ]
+    if include_substation_voltage_levels:
+        sub_load_opts.insert(0, selectinload(Substation.voltage_levels))
 
     # CIMpy не используем: иначе при include_equipment=false клиент получал бы «обрезанный» FullModel без дерева импорта.
     use_cimpy = False
@@ -1132,17 +1161,14 @@ async def export_cim_xml(
                 else:
                     raise
     
-    # Загружаем подстанции
-    if include_substations:
-        sub_opts = [selectinload(Substation.location).selectinload(Location.position_points)]
-        if include_substation_voltage_levels:
-            sub_opts.insert(0, selectinload(Substation.voltage_levels))
+    # Подстанции: при экспорте одной ЛЭП список заполняется после расчёта связей (connections, connected_line_ids).
+    if include_substations and not (line_id is not None and include_power_lines):
         result = await db.execute(
             select(Substation)
             .where(Substation.is_active == True)
-            .options(*sub_opts)
+            .options(*sub_load_opts)
         )
-        substations_list = result.scalars().all()
+        substations_list = list(result.scalars().all())
     
     # Загружаем ЛЭП с полной структурой (LineSection, Span, ConnectivityNode, Location)
     if include_power_lines:
@@ -1221,10 +1247,8 @@ async def export_cim_xml(
             )
         power_lines_list = result.scalars().all()
 
-    # Если экспортируем только одну ЛЭП — ограничиваем и подстанции старт/финиш.
+    # Если экспортируем только одну ЛЭП — подстанции по связям с этой линией (не только substation_start/end в карточке ЛЭП).
     if line_id is not None and include_substations and include_power_lines:
-        # Частичный экспорт должен включать не только "начало/конец",
-        # но и все подстанции, которые участвуют в отпайках выбранной ЛЭП.
         final_station_ids: set[int] = set()
         for pl in power_lines_list:
             if getattr(pl, "substation_start_id", None) is not None:
@@ -1233,10 +1257,8 @@ async def export_cim_xml(
                 final_station_ids.add(int(pl.substation_end_id))
 
             for seg in getattr(pl, "acline_segments", None) or []:
-                # Отпайка, заканчивающаяся на подстанции/КТП
                 if getattr(seg, "to_substation_id", None) is not None:
                     final_station_ids.add(int(seg.to_substation_id))
-                # Подстанция может быть задана и на ConnectivityNode
                 fn = getattr(seg, "from_node", None)
                 tn = getattr(seg, "to_node", None)
                 if fn is not None and getattr(fn, "substation_id", None) is not None:
@@ -1244,7 +1266,41 @@ async def export_cim_xml(
                 if tn is not None and getattr(tn, "substation_id", None) is not None:
                     final_station_ids.add(int(tn.substation_id))
 
-        substations_list = [s for s in substations_list if getattr(s, "id", None) in final_station_ids]
+        conn_rows = await db.execute(select(Connection.substation_id).where(Connection.line_id == line_id))
+        for sid in conn_rows.scalars().all():
+            if sid is not None:
+                final_station_ids.add(int(sid))
+
+        try:
+            cl_q = await db.execute(
+                select(Substation.id).where(
+                    Substation.connected_line_ids.isnot(None),
+                    Substation.connected_line_ids.contains([line_id]),
+                )
+            )
+            for sid in cl_q.scalars().all():
+                if sid is not None:
+                    final_station_ids.add(int(sid))
+        except Exception:
+            raw = await db.execute(
+                select(Substation.id, Substation.connected_line_ids).where(
+                    Substation.connected_line_ids.isnot(None)
+                )
+            )
+            for row in raw.all():
+                ids_arr = row.connected_line_ids
+                if ids_arr and line_id in list(ids_arr):
+                    final_station_ids.add(int(row.id))
+
+        if final_station_ids:
+            result = await db.execute(
+                select(Substation)
+                .where(Substation.id.in_(final_station_ids))
+                .options(*sub_load_opts)
+            )
+            substations_list = list(result.scalars().all())
+        else:
+            substations_list = []
     
     # Экспорт в XML
     logger = logging.getLogger(__name__)
@@ -1317,7 +1373,7 @@ async def export_cim_xml(
 async def export_cim_json(
     include_substations: bool = Query(True, description="Включить подстанции"),
     include_power_lines: bool = Query(True, description="Включить ЛЭП"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_user_can_export),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1421,7 +1477,7 @@ async def export_cim_552_diff(
     include_electrical_model: bool = Query(True, description="Включить электрическую модель ЛЭП"),
     include_defects: bool = Query(True, description="Включать поля дефектов оборудования в CIM"),
     include_substation_voltage_levels: bool = Query(True, description="Экспортировать VoltageLevel подстанций"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_user_can_export),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -2061,7 +2117,7 @@ async def cim_552_request(
     purpose: MessagePurpose = Query(..., description="Назначение запроса"),
     receiver_id: str = Query(..., description="ID получателя"),
     object_types: Optional[List[str]] = Query(None, description="Типы объектов для запроса"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_user_can_export),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -2127,7 +2183,7 @@ async def cim_552_request(
 @router.post("/552/response")
 async def cim_552_response(
     request_data: dict,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_user_can_export),
     db: AsyncSession = Depends(get_db)
 ):
     """

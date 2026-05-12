@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/auth/user_roles.dart';
 import '../../../../core/database/database.dart';
 import '../widgets/create_pole_dialog.dart';
 
@@ -92,9 +94,13 @@ class _TowersPageState extends ConsumerState<TowersPage> {
       poleSequenceNumber = 1;
     }
 
+    final auth = ref.read(authStateProvider);
+    final allowCatalog = auth is AuthStateAuthenticated && UserRoles.canMutateEquipmentCatalog(auth.user);
+
     final result = await showDialog<dynamic>(
       context: context,
       builder: (context) => CreatePoleDialog(
+        allowManualBrandOutsideCatalog: allowCatalog,
         lineId: _selectedPowerLineId!,
         initialPoleNumber: initialPoleNumber,
         poleSequenceNumber: poleSequenceNumber,

@@ -13,6 +13,12 @@ from app.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Span, Tap, Equipment
+from app.models.equipment_catalog import EquipmentCatalogItem
+from app.core.voltage_consistency import (
+    validate_pole_rated_voltage_for_line,
+    validate_catalog_item_for_line,
+    validate_equipment_nominal_for_line,
+)
 from app.models.location import Location, PositionPoint
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, LineSection, Terminal
@@ -42,6 +48,23 @@ from app.schemas.cim_line_structure import (
 )
 
 router = APIRouter()
+
+
+async def _validate_line_voltage_consistency(db: AsyncSession, line_id: int, line_kv: float) -> None:
+    """Проверка опор и оборудования на линии при смене номинального напряжения ЛЭП."""
+    poles_res = await db.execute(select(Pole).where(Pole.line_id == line_id))
+    for p in poles_res.scalars().all():
+        validate_pole_rated_voltage_for_line(line_kv, getattr(p, "rated_voltage", None))
+    eq_res = await db.execute(
+        select(Equipment, EquipmentCatalogItem)
+        .join(Pole, Equipment.pole_id == Pole.id)
+        .outerjoin(EquipmentCatalogItem, Equipment.catalog_item_id == EquipmentCatalogItem.id)
+        .where(Pole.line_id == line_id)
+    )
+    for row in eq_res.all():
+        eq, cat = row[0], row[1]
+        validate_catalog_item_for_line(line_kv, cat)
+        validate_equipment_nominal_for_line(line_kv, eq.equipment_type, eq.nominal_voltage_kv)
 
 
 def normalize_pole_number(s: Optional[str]) -> str:
@@ -810,6 +833,16 @@ async def update_power_line(
     for key, value in data.items():
         if hasattr(power_line, key):
             setattr(power_line, key, value)
+
+    if "voltage_level" in data and data.get("voltage_level") is not None:
+        try:
+            v_chk = float(power_line.voltage_level)
+            await _validate_line_voltage_consistency(db, power_line_id, v_chk)
+        except HTTPException:
+            raise
+        except (TypeError, ValueError):
+            pass
+
     await db.commit()
     await db.refresh(power_line)
 
@@ -933,6 +966,13 @@ async def create_pole(
             if not pole_dict.get("branch_type"):
                 pole_dict["branch_type"] = "tap"
     pole_dict.pop('start_new_tap', None)  # не поле БД, только флаг для логики
+
+    rv = getattr(pole_data, "rated_voltage", None)
+    if rv is not None and power_line.voltage_level is not None:
+        try:
+            validate_pole_rated_voltage_for_line(float(power_line.voltage_level), float(rv))
+        except (TypeError, ValueError):
+            pass
 
     lon_val = getattr(pole_data, 'x_position', None)
     lat_val = getattr(pole_data, 'y_position', None)
@@ -1495,6 +1535,12 @@ async def update_pole(
     for key, value in pole_dict.items():
         if hasattr(pole, key) and key != "is_tap" and value is not None:
             setattr(pole, key, value)
+
+    if power_line.voltage_level is not None and getattr(pole, "rated_voltage", None) is not None:
+        try:
+            validate_pole_rated_voltage_for_line(float(power_line.voltage_level), float(pole.rated_voltage))
+        except (TypeError, ValueError):
+            pass
 
     # Обновляем или создаем PositionPoint для координат опоры
     if x_position is not None or y_position is not None:

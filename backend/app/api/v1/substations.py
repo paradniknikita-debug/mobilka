@@ -146,7 +146,8 @@ async def create_substation(
     }
     return SubstationResponse.model_validate(response_data)
 
-@router.get("/", response_model=List[SubstationResponse])
+@router.get("", response_model=List[SubstationResponse])
+@router.get("/", response_model=List[SubstationResponse], include_in_schema=False)
 async def get_substations(
     skip: int = 0,
     limit: int = 100,

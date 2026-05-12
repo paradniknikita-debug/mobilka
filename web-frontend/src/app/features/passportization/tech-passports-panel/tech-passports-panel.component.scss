@@ -1,0 +1,66 @@
+.tech-passports {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.tech-passports__grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .tech-passports__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.full {
+  width: 100%;
+}
+
+.json-preview {
+  max-height: 420px;
+  overflow: auto;
+  font-size: 11px;
+  background: var(--mat-app-background, #f5f5f5);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+.tech-passports__table-card {
+  width: 100%;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.passports-table {
+  width: 100%;
+  min-width: 640px;
+}
+
+.mono {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.empty-hint {
+  margin: 1rem 0 0;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.loading-row {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}

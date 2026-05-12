@@ -26,6 +26,7 @@ async def main():
         user = result.scalar_one_or_none()
         if user:
             user.hashed_password = get_password_hash("admin_123456")
+            user.password_plain = "admin_123456"
             user.email = "admin@example.com"
             user.full_name = user.full_name or "Администратор"
             user.is_active = True
@@ -39,6 +40,7 @@ async def main():
                 email="admin@example.com",
                 full_name="Администратор",
                 hashed_password=get_password_hash("admin_123456"),
+                password_plain="admin_123456",
                 is_active=True,
                 is_superuser=True,
                 role="admin",

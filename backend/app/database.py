@@ -106,8 +106,11 @@ async def seed_default_equipment_catalog():
             ).scalar_one_or_none()
             if existing:
                 changed = False
+                new_fn = row.get("full_name")
+                if new_fn and getattr(existing, "full_name") != new_fn:
+                    setattr(existing, "full_name", new_fn)
+                    changed = True
                 for field in (
-                    "full_name",
                     "voltage_kv",
                     "current_a",
                     "manufacturer",
@@ -535,6 +538,12 @@ async def init_db():
                            AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'acline_segment' AND column_name = 'is_jumper')
                         THEN
                             ALTER TABLE acline_segment ADD COLUMN is_jumper BOOLEAN DEFAULT false;
+                        END IF;
+                        -- users: учётная копия пароля для админ-панели (alembic 20260512_160000)
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'password_plain')
+                        THEN
+                            ALTER TABLE users ADD COLUMN password_plain VARCHAR(255) NULL;
                         END IF;
                     END $$;
                 """))

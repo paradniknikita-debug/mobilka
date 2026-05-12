@@ -131,8 +131,9 @@ class AddEquipmentDialog extends StatefulWidget {
   this.directionNeighborOptions,
   /// Марки из серверного справочника (equipment-catalog), подмешиваются к локальному списку.
   this.catalogExtraBrands,
-  this.catalogItems,
-  this.expectedLineVoltageKv,
+    this.catalogItems,
+    this.expectedLineVoltageKv,
+    this.allowManualBrandOutsideCatalog = true,
   });
 
   final String categoryTitle;
@@ -170,6 +171,8 @@ class AddEquipmentDialog extends StatefulWidget {
   final List<EquipmentCatalogItem>? catalogItems;
   /// Номинал линии, кВ. Если задан — используем как подсказку для ввода.
   final double? expectedLineVoltageKv;
+  /// false — марка только из справочника (инженер-обходчик).
+  final bool allowManualBrandOutsideCatalog;
 
   @override
   State<AddEquipmentDialog> createState() => _AddEquipmentDialogState();
@@ -873,6 +876,21 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         : parseNullableDouble(_nominalVoltageController.text);
     final brandVoltage =
         _catalogVoltageByBrand(brand) ?? _extractVoltageFromBrand(brand);
+
+    if (!widget.allowManualBrandOutsideCatalog &&
+        _isElectricalEquipment &&
+        !_isNoBrandSelected &&
+        _isManualBrandInputMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Выберите марку из справочника. Добавление произвольных марок доступно паспортисту и администратору.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     if (_isElectricalEquipment && expectedLineVoltage != null) {
       if (brandVoltage != null &&

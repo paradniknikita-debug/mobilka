@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.core.security import get_current_active_user
+from app.core.voltage_consistency import validate_segment_voltage_for_line
 from app.models.user import User
 from app.models.cim_line_structure import ConnectivityNode, Terminal, LineSection
 from app.models.acline_segment import AClineSegment
@@ -384,6 +385,20 @@ async def create_acline_segment(
     wire_info = await _find_wire_info(db, payload.get("conductor_type"))
     payload = _fill_segment_defaults_from_wire_info(payload, wire_info)
 
+    line_kv = None
+    if power_line.voltage_level is not None:
+        try:
+            line_kv = float(power_line.voltage_level)
+        except (TypeError, ValueError):
+            line_kv = None
+    seg_kv = payload.get("voltage_level")
+    if seg_kv is not None:
+        try:
+            seg_kv = float(seg_kv)
+        except (TypeError, ValueError):
+            seg_kv = None
+    validate_segment_voltage_for_line(line_kv, seg_kv)
+
     db_segment = AClineSegment(
         mrid=mrid,
         name=payload["name"],
@@ -519,7 +534,22 @@ async def update_acline_segment(
         marker = segment_dict.get("conductor_type", getattr(segment, "conductor_type", None))
         wire_info = await _find_wire_info(db, marker)
         segment_dict = _fill_segment_defaults_from_wire_info(segment_dict, wire_info)
-    
+
+    power_line_row = await db.get(PowerLine, segment.line_id)
+    line_kv = None
+    if power_line_row is not None and power_line_row.voltage_level is not None:
+        try:
+            line_kv = float(power_line_row.voltage_level)
+        except (TypeError, ValueError):
+            line_kv = None
+    seg_kv = segment_dict.get("voltage_level", segment.voltage_level)
+    if seg_kv is not None:
+        try:
+            seg_kv = float(seg_kv)
+        except (TypeError, ValueError):
+            seg_kv = None
+    validate_segment_voltage_for_line(line_kv, seg_kv)
+
     for key, value in segment_dict.items():
         if hasattr(segment, key):
             setattr(segment, key, value)

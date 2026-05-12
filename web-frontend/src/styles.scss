@@ -1,8 +1,14 @@
-/* Общие стили */
+/* Общие стили
+ * Не обнуляем padding у * — Angular Material MDC (outline fields, select, table)
+ * опирается на внутренние отступы; глобальный padding: 0 «подрезает» текст сверху. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 * {
   margin: 0;
-  padding: 0;
-  box-sizing: border-box;
 }
 
 html, body {

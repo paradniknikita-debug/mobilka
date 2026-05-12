@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +18,7 @@ from app.models.patrol_session import PatrolSession
 from app.models.power_line import Equipment, PowerLine, Pole
 from app.models.user import User
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_active_user)])
 
 
 def _parse_iso_datetime(s: Optional[str]) -> Optional[datetime]:
@@ -89,9 +89,12 @@ def _equipment_to_defect_item(
     return {
         "line_id": line.id,
         "line_name": line.name,
+        "line_mrid": line.mrid,
         "pole_id": pole.id,
         "pole_number": pole.pole_number,
+        "pole_mrid": pole.mrid,
         "equipment_id": eq.id,
+        "equipment_mrid": eq.mrid,
         "equipment_type": eq.equipment_type,
         "equipment_name": eq.name,
         "defect": eq.defect,
@@ -171,10 +174,13 @@ async def defects_report(
     writer.writerow(
         [
             "line_id",
+            "line_mrid",
             "line_name",
             "pole_id",
+            "pole_mrid",
             "pole_number",
             "equipment_id",
+            "equipment_mrid",
             "equipment_type",
             "equipment_name",
             "defect",
@@ -191,10 +197,13 @@ async def defects_report(
         writer.writerow(
             [
                 it.get("line_id"),
+                it.get("line_mrid"),
                 it.get("line_name"),
                 it.get("pole_id"),
+                it.get("pole_mrid"),
                 it.get("pole_number"),
                 it.get("equipment_id"),
+                it.get("equipment_mrid"),
                 it.get("equipment_type"),
                 it.get("equipment_name"),
                 it.get("defect"),
@@ -229,7 +238,10 @@ async def by_line_report(
 
     line = await db.get(PowerLine, line_id)
     if not line:
-        return {"error": "power line not found", "line_id": line_id}
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ЛЭП не найдена",
+        )
 
     poles_q = await db.execute(select(func.count(Pole.id)).where(Pole.line_id == line_id))
     poles_count = poles_q.scalar_one()

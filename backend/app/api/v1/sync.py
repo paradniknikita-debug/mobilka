@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import uuid
 
 from app.database import get_db
+from app.core.roles import can_manage_equipment_catalog
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.branch import Branch
@@ -776,6 +777,7 @@ async def process_sync_record(
                             entity_type="pole",
                             entity_id=pole.id,
                             payload={
+                                "mrid": pole.mrid,
                                 "line_id": pole.line_id,
                                 "changed_fields": changed_fields,
                                 "old": {k: old_snapshot.get(k) for k in changed_fields},
@@ -907,6 +909,8 @@ async def process_sync_record(
                 await db.execute(delete(Equipment).where(Equipment.id == eq.id))
 
     elif record.entity_type == "equipment_catalog":
+        if not can_manage_equipment_catalog(user):
+            raise ValueError("Недостаточно прав для изменения справочника оборудования (марки)")
         if record.action == SyncAction.CREATE:
             existing = await db.execute(
                 select(EquipmentCatalogItem).where(EquipmentCatalogItem.id == data.get("id"))

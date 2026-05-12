@@ -1,0 +1,89 @@
+<div class="passportization">
+  <header class="passport-hero">
+    <div class="passport-hero__badge" aria-hidden="true">
+      <mat-icon>folder_special</mat-icon>
+    </div>
+    <div class="passport-hero__text">
+      <h1>Паспортизация</h1>
+      <p class="passport-hero__lead">
+        Отчёты по ЛЭП, оборудованию и обходам, выгрузки для анализа и справочники марок — в одном месте.
+        Здесь же ведутся марки проводов линий и марки оборудования; технические паспорта ЛЭП, опор и подстанций — со снимком данных и выгрузкой в PDF, Word и Excel.
+      </p>
+      <p *ngIf="!canManagePassportization()" class="passport-hero__read-only">
+        У вас доступ только для просмотра: создание и изменение справочников и паспортов недоступны.
+      </p>
+    </div>
+  </header>
+
+  <mat-tab-group
+    class="passport-tabs"
+    mat-stretch-tabs="false"
+    animationDuration="200ms"
+    [selectedIndex]="tabIndex"
+    (selectedIndexChange)="onTabChange($event)"
+  >
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <span class="tab-label">
+          <mat-icon class="tab-label__icon">assessment</mat-icon>
+          Отчёты
+        </span>
+      </ng-template>
+      <div class="tab-panel">
+        <p class="tab-hint">Дефекты, сводка по линии, журнал обходов — JSON и CSV где доступно.</p>
+        <app-reports [embedded]="true"></app-reports>
+      </div>
+    </mat-tab>
+
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <span class="tab-label">
+          <mat-icon class="tab-label__icon">badge</mat-icon>
+          Паспорта
+        </span>
+      </ng-template>
+      <div class="tab-panel">
+        <p class="tab-hint">
+          Формирование паспорта вручную по объекту, перечень сохранённых паспортов и выгрузка в PDF, DOCX или XLSX (роли с правом выгрузки).
+        </p>
+        <app-tech-passports-panel></app-tech-passports-panel>
+      </div>
+    </mat-tab>
+
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <span class="tab-label">
+          <mat-icon class="tab-label__icon">precision_manufacturing</mat-icon>
+          Марки оборудования
+        </span>
+      </ng-template>
+      <div class="tab-panel">
+        <p class="tab-hint">
+          <ng-container *ngIf="canManagePassportization(); else equipmentReadOnlyHint">
+            Справочник типоразмеров для карточек оборудования: импорт, экспорт, ручное редактирование.
+          </ng-container>
+          <ng-template #equipmentReadOnlyHint>Справочник типоразмеров для карточек оборудования (только просмотр).</ng-template>
+        </p>
+        <app-equipment-catalog [embedded]="true"></app-equipment-catalog>
+      </div>
+    </mat-tab>
+
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <span class="tab-label">
+          <mat-icon class="tab-label__icon">cable</mat-icon>
+          Марки проводов ЛЭП
+        </span>
+      </ng-template>
+      <div class="tab-panel tab-panel--conductors">
+        <p class="tab-hint">
+          <ng-container *ngIf="canManagePassportization(); else conductorsReadOnlyHint">
+            Номинальные марки проводников по напряжению — для сегментов и учёта линии.
+          </ng-container>
+          <ng-template #conductorsReadOnlyHint>Номинальные марки проводников по напряжению (только просмотр).</ng-template>
+        </p>
+        <app-line-conductor-catalog-panel></app-line-conductor-catalog-panel>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

@@ -1,5 +1,5 @@
 .change-log-page {
-  padding: 16px;
+  padding: calc(48px + 16px) clamp(12px, 2.5vw, 28px) 16px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -282,6 +282,14 @@
 
 .issues-table {
   margin-top: 8px;
+}
+
+.change-log-uid-cell {
+  max-width: 280px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  vertical-align: top;
 }
 
 .uid-cell {

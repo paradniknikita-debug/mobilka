@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { PowerLine } from '../../core/models/power-line.model';
 
@@ -8,7 +8,12 @@ import { PowerLine } from '../../core/models/power-line.model';
   styleUrls: ['./reports.component.scss']
 })
 export class ReportsComponent implements OnInit {
+  /** Внутри «Паспортизация» — без дублирующего заголовка страницы. */
+  @Input() embedded = false;
+
   powerLines: PowerLine[] = [];
+  /** Ошибка загрузки списка ЛЭП (отдельно от ошибок отчёта). */
+  linesLoadError: string | null = null;
   reportsError: string | null = null;
   reportsLoading = false;
   reportTabIndex = 0; // 0=defects,1=byLine,2=patrol
@@ -31,11 +36,33 @@ export class ReportsComponent implements OnInit {
   ngOnInit(): void {
     this.apiService.getPowerLines().subscribe({
       next: (list) => {
-        this.powerLines = list || [];
-        this.selectedLineId = this.selectedLineId ?? (this.powerLines.length ? this.powerLines[0].id : null);
+        this.linesLoadError = null;
+        this.powerLines = (list || []).map((pl) => ({ ...pl, id: Number(pl.id) }));
+        this.syncDefaultLineForTab();
       },
-      error: () => {}
+      error: (e) => {
+        this.linesLoadError =
+          e?.error?.detail || e?.message || 'Не удалось загрузить список ЛЭП';
+        this.powerLines = [];
+        this.selectedLineId = null;
+      }
     });
+  }
+
+  /** Вкладка «По ЛЭП» требует конкретную линию; «Все» оставляем для дефектов/обходов. */
+  private syncDefaultLineForTab(): void {
+    if (!this.powerLines.length) {
+      this.selectedLineId = null;
+      return;
+    }
+    const valid =
+      this.selectedLineId != null && this.powerLines.some((p) => p.id === this.selectedLineId);
+    if (!valid) {
+      this.selectedLineId = null;
+    }
+    if (this.reportTabIndex === 1 && this.selectedLineId == null) {
+      this.selectedLineId = this.powerLines[0].id;
+    }
   }
 
   onReportTabChange(i: number): void {
@@ -44,6 +71,7 @@ export class ReportsComponent implements OnInit {
     this.byLineReport = null;
     this.defectsReport = null;
     this.patrolReport = null;
+    this.syncDefaultLineForTab();
   }
 
   loadDefectsReport(): void {
@@ -98,6 +126,10 @@ export class ReportsComponent implements OnInit {
         this.reportsLoading = false;
       }
     });
+  }
+
+  onLineSelectionChange(): void {
+    this.byLineReport = null;
   }
 
   loadByLineReport(): void {

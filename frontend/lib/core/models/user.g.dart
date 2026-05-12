@@ -11,7 +11,7 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
   username: json['username'] as String? ?? '',
   email: json['email'] as String? ?? '',
   fullName: json['full_name'] as String? ?? '',
-  role: json['role'] as String? ?? 'engineer',
+  role: json['role'] as String? ?? 'field_engineer',
   isActive: json['is_active'] as bool? ?? true,
   isSuperuser: json['is_superuser'] as bool? ?? false,
   branchId: (json['branch_id'] as num?)?.toInt(),
@@ -37,7 +37,7 @@ UserCreate _$UserCreateFromJson(Map<String, dynamic> json) => UserCreate(
   email: json['email'] as String,
   fullName: json['full_name'] as String,
   password: json['password'] as String,
-  role: json['role'] as String? ?? 'engineer',
+  role: json['role'] as String? ?? 'field_engineer',
   branchId: (json['branch_id'] as num?)?.toInt(),
 );
 

@@ -1,0 +1,302 @@
+/* Контент внутри .map-wrapper: тулбар absolute 48px — отступ сверху обязателен */
+.admin-page {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  min-height: min-content;
+  padding: calc(48px + 20px) clamp(12px, 2.5vw, 36px) 48px;
+  background: var(--app-bg);
+}
+
+.admin-page__inner {
+  width: 100%;
+  max-width: min(1240px, 100%);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.admin-header {
+  margin-bottom: 20px;
+  padding-right: 4px;
+}
+
+.admin-title {
+  margin: 0 0 8px;
+  font-size: clamp(1.125rem, 1.5vw, 1.35rem);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--app-text);
+  letter-spacing: normal;
+}
+
+.admin-lead {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--app-text-muted);
+}
+
+.block {
+  margin-bottom: clamp(16px, 2vw, 22px);
+}
+
+.admin-card {
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+
+  .admin-card__header {
+    display: block;
+    padding: 16px 16px 0;
+    box-sizing: border-box;
+  }
+
+  ::ng-deep .mat-mdc-card-header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  ::ng-deep .mat-mdc-card-title {
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: normal;
+    line-height: 1.4;
+    color: var(--app-text);
+  }
+
+  ::ng-deep .mat-mdc-card-subtitle {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--app-text-muted);
+    margin-bottom: 0;
+  }
+
+  ::ng-deep .mat-mdc-card-content {
+    padding: 12px 16px 16px;
+  }
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: clamp(10px, 1.5vw, 14px);
+}
+
+.metric {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metric .label {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--app-text-muted);
+  line-height: 1.45;
+  overflow: visible;
+}
+
+.metric .val {
+  font-size: clamp(1rem, 1.8vw, 1.125rem);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--app-text);
+  font-variant-numeric: tabular-nums;
+  overflow: visible;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px 16px;
+  margin-bottom: 16px;
+  align-items: start;
+}
+
+.form-field {
+  width: 100%;
+}
+
+.form-field--wide {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 720px) {
+  .form-field--wide {
+    grid-column: span 2;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .form-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .form-field--wide {
+    grid-column: span 3;
+  }
+}
+
+.stats-fallback {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--app-text-muted);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.users-table {
+  width: 100%;
+  min-width: 880px;
+  table-layout: fixed;
+}
+
+.users-table .cell-password {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  word-break: break-all;
+}
+
+.users-table ::ng-deep {
+  .mat-column-id {
+    width: 56px;
+    box-sizing: border-box;
+  }
+
+  .mat-column-username {
+    width: 14%;
+  }
+
+  .mat-column-password_plain {
+    width: 18%;
+  }
+
+  .mat-column-full_name {
+    width: 22%;
+    word-break: break-word;
+  }
+
+  .mat-column-role {
+    width: 240px;
+  }
+
+  .mat-column-active {
+    width: 88px;
+    text-align: center;
+  }
+
+  .mat-mdc-header-cell {
+    font-weight: 500;
+    font-size: 0.8125rem;
+    color: var(--app-text-muted);
+    vertical-align: middle;
+    line-height: 1.45;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .mat-mdc-cell {
+    font-size: 0.875rem;
+    font-weight: 400;
+    vertical-align: middle;
+    line-height: 1.45;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
+.dense-field {
+  width: 100%;
+  max-width: 240px;
+  margin: 0;
+}
+
+.dense-field ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
+
+/* Компактное поле в таблице: без обрезания текста select */
+.dense-field ::ng-deep .mat-mdc-text-field-wrapper {
+  overflow: visible;
+}
+
+.dense-field ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 48px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.dense-field ::ng-deep .mat-mdc-select,
+.dense-field ::ng-deep .mat-mdc-select-trigger {
+  line-height: 1.5;
+  align-items: center;
+}
+
+/* Только форма «Новый пользователь» — не трогаем .dense-field в таблице */
+.admin-page .form-grid ::ng-deep {
+  .mat-mdc-form-field {
+    overflow: visible;
+  }
+
+  .mat-mdc-text-field-wrapper {
+    overflow: visible;
+  }
+
+  .mat-mdc-form-field-flex {
+    align-items: stretch;
+  }
+
+  .mat-mdc-form-field-infix {
+    min-height: 56px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    box-sizing: border-box;
+  }
+
+  .mdc-floating-label {
+    overflow: visible;
+    line-height: 1.25;
+  }
+
+  input.mat-mdc-input-element,
+  textarea.mat-mdc-input-element {
+    line-height: 1.5;
+    height: auto;
+    min-height: 1.5em;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    box-sizing: border-box;
+  }
+
+  .mat-mdc-select-trigger {
+    line-height: 1.5;
+    min-height: 1.5em;
+    align-items: center;
+  }
+}

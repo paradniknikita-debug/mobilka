@@ -9,6 +9,8 @@ export interface User {
   branch_id?: number;
   created_at: string;
   updated_at?: string;
+  /** Учётная копия пароля (только ответ /admin/users). Пусто для старых записей до смены пароля. */
+  password_plain?: string | null;
 }
 
 export interface UserCreate {

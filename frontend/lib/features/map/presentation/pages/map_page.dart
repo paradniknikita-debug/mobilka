@@ -27,6 +27,7 @@ import 'file_download_stub.dart' if (dart.library.html) 'file_download_web.dart'
 
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/auth/user_roles.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/offline_map_service.dart';
@@ -1447,19 +1448,28 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  bool _allowManualCatalogFromAuth() {
+    final s = ref.read(authStateProvider);
+    if (s is! AuthStateAuthenticated) return false;
+    return UserRoles.canMutateEquipmentCatalog(s.user);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authStateProvider);
+    final canExportCim = auth is AuthStateAuthenticated && UserRoles.canExportCim(auth.user);
     // Автообновление карты после синхронизации отключено — зум и данные не сбрасываются.
     // Обновить данные можно вручную кнопкой «Обновить».
     return Scaffold(
       appBar: AppBar(
         title: const Text('Карта'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: _exportCimXml,
-            tooltip: 'Экспорт в CIM XML',
-          ),
+          if (canExportCim)
+            IconButton(
+              icon: const Icon(Icons.download),
+              onPressed: _exportCimXml,
+              tooltip: 'Экспорт в CIM XML',
+            ),
           IconButton(
             icon: const Icon(Icons.my_location),
             onPressed: _centerOnCurrentLocation,
@@ -4628,6 +4638,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
+        allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: powerLineId,
         poleId: poleId,
         existingPolesCount: 0,
@@ -4672,6 +4683,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     await showDialog(
       context: context,
       builder: (context) => CreatePoleDialog(
+        allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: lineId,
         poleId: poleId,
       ),
@@ -4788,6 +4800,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
+        allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: lineId,
         tapPoleId: tapPoleId,
         tapBranchIndex: nextBranchIndex,
@@ -4895,6 +4908,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
+        allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: lineId,
         tapPoleId: tapPoleId,
         tapBranchIndex: tapBranchIndex,
@@ -4999,6 +5013,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => CreatePoleDialog(
+        allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: selectedLineId,
         tapPoleId: tapPoleIdForFab,
         tapBranchIndex: tapBranchIndexForFab,

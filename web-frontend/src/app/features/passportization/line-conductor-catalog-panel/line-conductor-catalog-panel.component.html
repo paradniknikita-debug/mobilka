@@ -1,0 +1,78 @@
+<div class="conductor-panel">
+  <mat-card class="intro-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar class="avatar">cable</mat-icon>
+      <mat-card-title>Марки проводов ЛЭП</mat-card-title>
+      <mat-card-subtitle>
+        Справочник для сегментов и карточек линии. Совпадение по паре «марка + номинальное напряжение, кВ» обновляет запись.
+      </mat-card-subtitle>
+    </mat-card-header>
+  </mat-card>
+
+  <p *ngIf="!canEditCatalog()" class="read-only-hint">
+    Режим просмотра: добавление и деактивация марок — только «Паспортист» и «Администратор».
+  </p>
+
+  <mat-card class="form-card" *ngIf="canEditCatalog()">
+    <mat-card-title>Добавить или активировать марку</mat-card-title>
+    <mat-card-content>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Марка провода</mat-label>
+          <input matInput [(ngModel)]="mark" placeholder="Например: АС 185/29" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="kv">
+          <mat-label>Напряжение, кВ</mat-label>
+          <input matInput type="number" [(ngModel)]="voltageKv" placeholder="10" />
+        </mat-form-field>
+        <button mat-flat-button color="primary" type="button" (click)="add()">Сохранить</button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="table-card">
+    <mat-card-header>
+      <mat-card-title>Активные позиции</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="toolbar-search">
+        <mat-form-field appearance="outline" class="search-field" subscriptSizing="dynamic">
+          <mat-label>Поиск по марке</mat-label>
+          <input matInput [(ngModel)]="search" (keyup.enter)="load()" />
+        </mat-form-field>
+        <button mat-stroked-button color="primary" type="button" (click)="load()">
+          <mat-icon>search</mat-icon>
+          Найти
+        </button>
+      </div>
+      <div *ngIf="loading" class="loading">Загрузка…</div>
+      <div class="table-wrap" *ngIf="!loading">
+        <table mat-table [dataSource]="items" class="marks-table">
+          <ng-container matColumnDef="mark">
+            <th mat-header-cell *matHeaderCellDef>Марка</th>
+            <td mat-cell *matCellDef="let r">{{ r.mark }}</td>
+          </ng-container>
+          <ng-container matColumnDef="voltage_kv">
+            <th mat-header-cell *matHeaderCellDef class="num">кВ</th>
+            <td mat-cell *matCellDef="let r" class="num">{{ r.voltage_kv }}</td>
+          </ng-container>
+          <ng-container matColumnDef="is_active">
+            <th mat-header-cell *matHeaderCellDef>Статус</th>
+            <td mat-cell *matCellDef="let r">{{ r.is_active ? 'Активна' : '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let r">
+              <button mat-stroked-button color="warn" type="button" (click)="deactivate(r)">Деактивировать</button>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+        <p *ngIf="!items.length" class="empty">
+          Нет записей.<ng-container *ngIf="canEditCatalog()"> Добавьте марку выше или расширьте поиск.</ng-container>
+        </p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -32,6 +32,7 @@ class PatrolSessionUpdate(BaseModel):
 
 class PatrolSessionResponse(BaseModel):
     id: int
+    mrid: str
     user_id: int
     line_id: int  # id линии (ЛЭП)
     note: Optional[str]

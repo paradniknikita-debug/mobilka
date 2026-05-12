@@ -11,9 +11,11 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     full_name = Column(String(100), nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    # Копия пароля для отображения администратору (закрытый контур). Не используется в /auth/me.
+    password_plain = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    role = Column(String(20), default="engineer")  # engineer, dispatcher, admin
+    role = Column(String(40), default="field_engineer")  # admin | passport_clerk | field_engineer
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

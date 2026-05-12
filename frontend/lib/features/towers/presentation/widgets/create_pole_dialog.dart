@@ -80,6 +80,8 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
   final int? tapBranchIndex;
   /// true = открыт сценарий «Начать новую отпайку» от отпаечной опоры (вторая/третья ветка).
   final bool startNewTap;
+  /// У паспортиста/админа можно вводить марки вне справочника; у инженера — только из каталога.
+  final bool allowManualBrandOutsideCatalog;
 
   const CreatePoleDialog({
     super.key,
@@ -93,6 +95,7 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
     this.tapPoleId,
     this.tapBranchIndex,
     this.startNewTap = false,
+    this.allowManualBrandOutsideCatalog = true,
   });
 
   bool get isEditMode => poleId != null;
@@ -1967,6 +1970,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         catalogExtraBrands: extra.isEmpty ? null : extra,
         catalogItems: filteredCatalogItems.isEmpty ? null : filteredCatalogItems,
         expectedLineVoltageKv: expectedLineVoltageKv,
+        allowManualBrandOutsideCatalog: widget.allowManualBrandOutsideCatalog,
       ),
     );
   }

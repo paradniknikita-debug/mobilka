@@ -71,6 +71,10 @@ import { ImagePreviewDialogComponent } from './features/map/image-preview-dialog
 import { PoleAttachmentsManagerDialogComponent } from './features/map/pole-attachments-manager-dialog/pole-attachments-manager-dialog.component';
 import { ResizableDialogDirective } from './core/directives/resizable-dialog.directive';
 import { EquipmentCatalogComponent } from './features/equipment-catalog/equipment-catalog.component';
+import { AdminComponent } from './features/admin/admin.component';
+import { PassportizationComponent } from './features/passportization/passportization.component';
+import { LineConductorCatalogPanelComponent } from './features/passportization/line-conductor-catalog-panel/line-conductor-catalog-panel.component';
+import { TechPassportsPanelComponent } from './features/passportization/tech-passports-panel/tech-passports-panel.component';
 
 @NgModule({
   declarations: [
@@ -95,6 +99,10 @@ import { EquipmentCatalogComponent } from './features/equipment-catalog/equipmen
     CimImportComponent,
     CimExportSettingsDialogComponent,
     EquipmentCatalogComponent,
+    AdminComponent,
+    PassportizationComponent,
+    LineConductorCatalogPanelComponent,
+    TechPassportsPanelComponent,
     CimPreviewMapDialogComponent,
     AttachmentImageViewComponent,
     AttachmentMediaViewComponent,

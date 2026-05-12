@@ -9,6 +9,7 @@ from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.power_line import Equipment, Pole, PowerLine
 from app.core.equipment_nominal_voltage import nominal_kv_from_line_voltage
+from app.core.voltage_consistency import validate_catalog_item_for_line, validate_equipment_nominal_for_line
 from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.change_log import ChangeLog
 from app.schemas.power_line import EquipmentResponse, EquipmentCreate
@@ -157,10 +158,14 @@ async def update_equipment(
             catalog_item_id = int(catalog_item_id)
         except (TypeError, ValueError):
             catalog_item_id = None
-    if data.get("rated_current") is None and catalog_item_id is not None:
+    catalog_item = None
+    if catalog_item_id is not None:
         catalog_item = await db.get(EquipmentCatalogItem, catalog_item_id)
-        if catalog_item is not None and getattr(catalog_item, "current_a", None) is not None:
-            data["rated_current"] = float(catalog_item.current_a)
+    if data.get("rated_current") is None and catalog_item is not None and getattr(catalog_item, "current_a", None) is not None:
+        data["rated_current"] = float(catalog_item.current_a)
+
+    validate_catalog_item_for_line(line_vl, catalog_item)
+    validate_equipment_nominal_for_line(line_vl, eq_type, data.get("nominal_voltage_kv"))
 
     # Переносим все обновляемые поля; координаты (x_position, y_position) и pole_id
     # при необходимости можно менять, при этом координаты считаются независимыми от опоры.
@@ -223,6 +228,7 @@ async def update_equipment(
                 entity_type="equipment",
                 entity_id=equipment.id,
                 payload={
+                    "mrid": equipment.mrid,
                     "equipment_type": equipment.equipment_type,
                     "equipment_name": equipment.name,
                     "pole_id": equipment.pole_id,

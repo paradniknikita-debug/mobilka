@@ -46,6 +46,7 @@ async def create_test_data():
                     email="admin@example.com",
                     full_name="Администратор",
                     hashed_password=get_password_hash("admin123"),
+                    password_plain="admin123",
                     is_active=True,
                     is_superuser=True,
                     role="admin",

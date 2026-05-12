@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+import { Observable, from, of, throwError } from 'rxjs';
+import { map, catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { User, UserCreate, AuthResponse } from '../models/user.model';
 import { PowerLine, PowerLineCreate } from '../models/power-line.model';
@@ -19,6 +19,29 @@ import {
 } from '../models/cim.model';
 import { ChangeLogEntry, ChangeLogFilters, ModelIssue } from '../models/change-log.model';
 import { EquipmentCatalogCreate, EquipmentCatalogItem } from '../models/equipment-catalog.model';
+import { LineConductorCatalogCreate, LineConductorCatalogItem } from '../models/line-conductor-catalog.model';
+
+/** Технические паспорта (паспортизация) */
+export interface TechPassportListItem {
+  id: number;
+  mrid: string;
+  title: string;
+  object_type: string;
+  object_mrid: string;
+  object_id?: number | null;
+  stp_reference?: string | null;
+  created_at?: string | null;
+}
+
+export interface TechPassportListResponse {
+  items: TechPassportListItem[];
+  total: number;
+}
+
+export interface TechPassportDetail extends TechPassportListItem {
+  snapshot_json: Record<string, unknown>;
+  manual_sections?: Record<string, unknown> | null;
+}
 
 /** Ответ POST /cim/apply/552-diff */
 export interface CimApply552DiffResponse {
@@ -71,6 +94,29 @@ export class ApiService {
 
   getCurrentUser(): Observable<User> {
     return this.http.get<User>(`${this.apiUrl}/auth/me`);
+  }
+
+  getAdminStats(): Observable<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>(`${this.apiUrl}/admin/stats`);
+  }
+
+  getAdminUsers(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/admin/users`);
+  }
+
+  createAdminUser(body: UserCreate): Observable<User> {
+    return this.http.post<User>(`${this.apiUrl}/admin/users`, body);
+  }
+
+  patchAdminUser(
+    id: number,
+    body: Partial<{ full_name: string; email: string; role: string; is_active: boolean; password: string }>,
+  ): Observable<User> {
+    return this.http.patch<User>(`${this.apiUrl}/admin/users/${id}`, body);
+  }
+
+  deleteAdminUser(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/admin/users/${id}`);
   }
 
   // ========== Power Lines ==========
@@ -368,6 +414,27 @@ export class ApiService {
   exportEquipmentCatalog(format: 'xlsx' | 'csv' = 'xlsx'): Observable<Blob> {
     const params = new HttpParams().set('fmt', format);
     return this.http.get(`${this.apiUrl}/equipment-catalog/export`, { params, responseType: 'blob' });
+  }
+
+  // ========== Line conductor marks (ЛЭП) ==========
+  getLineConductorCatalog(params?: {
+    q?: string;
+    voltage_kv?: number;
+    is_active?: boolean;
+    skip?: number;
+    limit?: number;
+  }): Observable<LineConductorCatalogItem[]> {
+    let httpParams = new HttpParams();
+    if (params?.q) httpParams = httpParams.set('q', params.q);
+    if (params?.voltage_kv != null) httpParams = httpParams.set('voltage_kv', String(params.voltage_kv));
+    if (params?.is_active != null) httpParams = httpParams.set('is_active', String(params.is_active));
+    if (params?.skip != null) httpParams = httpParams.set('skip', String(params.skip));
+    if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
+    return this.http.get<LineConductorCatalogItem[]>(`${this.apiUrl}/line-conductor-catalog`, { params: httpParams });
+  }
+
+  createLineConductorCatalogItem(payload: LineConductorCatalogCreate): Observable<LineConductorCatalogItem> {
+    return this.http.post<LineConductorCatalogItem>(`${this.apiUrl}/line-conductor-catalog`, payload);
   }
 
   // ========== Substations ==========
@@ -779,6 +846,68 @@ export class ApiService {
     if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
     if (params?.offset != null) httpParams = httpParams.set('offset', String(params.offset));
     return this.http.get<any>(`${this.apiUrl}/reports/patrol`, { params: httpParams });
+  }
+
+  // ========== Tech passports ==========
+  listTechPassports(skip = 0, limit = 50): Observable<TechPassportListResponse> {
+    const params = new HttpParams().set('skip', String(skip)).set('limit', String(limit));
+    return this.http.get<TechPassportListResponse>(`${this.apiUrl}/tech-passports`, { params });
+  }
+
+  createTechPassport(body: {
+    object_type: string;
+    object_id?: number | null;
+    object_mrid?: string | null;
+    title?: string | null;
+    stp_reference?: string | null;
+    manual_sections?: Record<string, unknown> | null;
+  }): Observable<TechPassportDetail> {
+    return this.http.post<TechPassportDetail>(`${this.apiUrl}/tech-passports`, body);
+  }
+
+  getTechPassport(id: number): Observable<TechPassportDetail> {
+    return this.http.get<TechPassportDetail>(`${this.apiUrl}/tech-passports/${id}`);
+  }
+
+  deleteTechPassport(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/tech-passports/${id}`);
+  }
+
+  downloadTechPassportExport(id: number, format: 'pdf' | 'docx' | 'xlsx'): Observable<Blob> {
+    const params = new HttpParams().set('format', format);
+    return this.http
+      .get(`${this.apiUrl}/tech-passports/${id}/export`, {
+        params,
+        observe: 'response',
+        responseType: 'blob',
+      })
+      .pipe(
+        switchMap((resp) => {
+          if (resp.ok && resp.body) {
+            return of(resp.body);
+          }
+          const blob = resp.body as Blob | null;
+          if (!blob) {
+            return throwError(() => new Error(`HTTP ${resp.status}`));
+          }
+          return from(blob.text()).pipe(
+            switchMap((t) => {
+              let msg = `Ошибка ${resp.status}`;
+              try {
+                const j = JSON.parse(t) as { detail?: unknown };
+                if (typeof j.detail === 'string') {
+                  msg = j.detail;
+                }
+              } catch {
+                if (t?.trim()) {
+                  msg = t.trim();
+                }
+              }
+              return throwError(() => new Error(msg));
+            }),
+          );
+        }),
+      );
   }
 }
 

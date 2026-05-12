@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.roles import require_catalog_manager
 from app.core.security import get_current_active_user
 from app.database import get_db
 from app.models.line_conductor_catalog import LineConductorCatalogItem
@@ -94,7 +95,7 @@ async def get_line_conductor_catalog(
 @router.post("/", response_model=LineConductorCatalogResponse)
 async def create_line_conductor_catalog_item(
     payload: LineConductorCatalogCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
     _ = current_user

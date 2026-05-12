@@ -11,6 +11,7 @@ from app.models.change_log import ChangeLog
 from app.models.user import User
 from app.models.power_line import Pole, Equipment, PowerLine
 from app.core.equipment_nominal_voltage import nominal_kv_from_line_voltage
+from app.core.voltage_consistency import validate_catalog_item_for_line, validate_equipment_nominal_for_line
 from app.models.equipment_catalog import EquipmentCatalogItem
 from app.models.location import Location
 from app.schemas.power_line import EquipmentCreate, EquipmentResponse, PoleResponse
@@ -186,6 +187,15 @@ async def create_equipment(
         # Автоподстановка номинального тока из справочника, если не задан вручную.
         if rated_current is None and catalog_item is not None and getattr(catalog_item, "current_a", None) is not None:
             rated_current = float(catalog_item.current_a)
+    else:
+        catalog_item = None
+
+    validate_catalog_item_for_line(line_vl, catalog_item)
+    validate_equipment_nominal_for_line(
+        line_vl,
+        str(equipment_type) if equipment_type else None,
+        nominal_voltage_kv,
+    )
 
     defect = data.get("defect")
     criticality = data.get("criticality")
@@ -253,6 +263,7 @@ async def create_equipment(
                     entity_type="equipment",
                     entity_id=db_equipment.id,
                     payload={
+                        "mrid": db_equipment.mrid,
                         "equipment_type": db_equipment.equipment_type,
                         "equipment_name": db_equipment.name,
                         "pole_id": pole_id,

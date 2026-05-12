@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/map/presentation/pages/map_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
@@ -44,18 +43,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      final isRegistering = state.matchedLocation == '/register' || currentPath == '/register';
+      // Регистрация только через веб-админку
+      if (!isAuthenticated && currentPath == '/register') {
+        return '/login';
+      }
 
-      // Если не авторизован и не на странице логина/регистрации - перенаправляем на логин
-      if (!isAuthenticated && !isLoggingIn && !isRegistering) {
+      // Если не авторизован и не на странице логина — перенаправляем на логин
+      if (!isAuthenticated && !isLoggingIn) {
         if (kDebugMode) {
           print('[Router] → /login (не авторизован)');
         }
         return '/login';
       }
 
-      // Если авторизован и на странице логина/регистрации - перенаправляем на главный экран
-      if (isAuthenticated && (isLoggingIn || isRegistering)) {
+      // Если авторизован и на странице логина — перенаправляем на главный экран
+      if (isAuthenticated && isLoggingIn) {
         if (kDebugMode) {
           print('[Router] → / (после входа)');
         }
@@ -90,10 +92,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (context, state) => const RegisterPage(),
       ),
       GoRoute(
         path: '/map',

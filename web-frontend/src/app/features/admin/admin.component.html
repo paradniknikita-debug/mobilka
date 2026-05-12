@@ -1,0 +1,148 @@
+<div class="admin-page">
+  <div class="admin-page__inner">
+  <header class="admin-header">
+    <h1 class="admin-title">Администрирование</h1>
+    <p class="admin-lead">
+      Метрики нагрузки и учётные записи. Создание пользователей и смена ролей доступны только администратору.
+      В таблице показывается учётная копия пароля (как при последнем задании через эту систему); для записей,
+      созданных ранее, поле может быть пустым — задайте пароль повторно через «Сменить пароль».
+    </p>
+  </header>
+
+  <mat-card class="block admin-card">
+    <mat-card-header class="admin-card__header">
+      <mat-card-title>Сводка и состояние сервисов</mat-card-title>
+      <mat-card-subtitle>Счётчики сущностей, пинг БД и Redis (кэш/очереди).</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="metrics" *ngIf="stats as s; else statsLoading">
+        <div class="metric"><span class="label">Пользователей (всего)</span><span class="val">{{ s['users'] }}</span></div>
+        <div class="metric"><span class="label">Активных</span><span class="val">{{ s['users_active'] }}</span></div>
+        <div class="metric"><span class="label">Админов</span><span class="val">{{ s['users_admins'] }}</span></div>
+        <div class="metric"><span class="label">ЛЭП</span><span class="val">{{ s['power_lines'] }}</span></div>
+        <div class="metric"><span class="label">Сегменты ЛЭП</span><span class="val">{{ s['acline_segments'] }}</span></div>
+        <div class="metric"><span class="label">Опоры</span><span class="val">{{ s['poles'] }}</span></div>
+        <div class="metric"><span class="label">Оборудование</span><span class="val">{{ s['equipment'] }}</span></div>
+        <div class="metric"><span class="label">Подстанции</span><span class="val">{{ s['substations'] }}</span></div>
+        <div class="metric"><span class="label">Техпаспорта</span><span class="val">{{ s['tech_passports'] }}</span></div>
+        <div class="metric"><span class="label">Журнал изменений</span><span class="val">{{ s['change_log_entries'] }}</span></div>
+        <div class="metric"><span class="label">Сессии обходов</span><span class="val">{{ s['patrol_sessions'] }}</span></div>
+        <div class="metric"><span class="label">База данных</span><span class="val">{{ s['database'] }} <ng-container *ngIf="s['database_ping_ms'] != null">({{ s['database_ping_ms'] }} ms)</ng-container></span></div>
+        <div class="metric"><span class="label">Redis</span><span class="val">{{ s['redis'] }} <ng-container *ngIf="s['redis_ping_ms'] != null">({{ s['redis_ping_ms'] }} ms)</ng-container></span></div>
+      </div>
+      <ng-template #statsLoading>
+        <mat-progress-spinner *ngIf="loading" diameter="36" mode="indeterminate"></mat-progress-spinner>
+        <p *ngIf="!loading && !stats" class="stats-fallback">Не удалось загрузить сводку.</p>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="block admin-card">
+    <mat-card-header class="admin-card__header">
+      <mat-card-title>Новый пользователь</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="form-grid">
+        <mat-form-field appearance="outline" class="form-field" subscriptSizing="dynamic">
+          <mat-label>Логин</mat-label>
+          <input matInput [(ngModel)]="createForm.username" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="form-field" subscriptSizing="dynamic">
+          <mat-label>Email</mat-label>
+          <input matInput [(ngModel)]="createForm.email" type="email" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="form-field form-field--wide" subscriptSizing="dynamic">
+          <mat-label>ФИО</mat-label>
+          <input matInput [(ngModel)]="createForm.full_name" autocomplete="off" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="form-field" subscriptSizing="dynamic">
+          <mat-label>Пароль</mat-label>
+          <input matInput [(ngModel)]="createForm.password" type="password" autocomplete="new-password" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="form-field" subscriptSizing="dynamic">
+          <mat-label>Роль</mat-label>
+          <mat-select [(ngModel)]="createForm.role">
+            <mat-option *ngFor="let r of roleOptions" [value]="r.value">{{ r.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+      <div class="form-actions">
+        <button mat-flat-button color="primary" type="button" (click)="createUser()">Создать</button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="block admin-card">
+    <mat-card-header class="admin-card__header">
+      <mat-card-title>Пользователи</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="table-scroll">
+      <table mat-table [dataSource]="users" class="users-table">
+        <ng-container matColumnDef="id">
+          <th mat-header-cell *matHeaderCellDef>ID</th>
+          <td mat-cell *matCellDef="let u">{{ u.id }}</td>
+        </ng-container>
+        <ng-container matColumnDef="username">
+          <th mat-header-cell *matHeaderCellDef>Логин</th>
+          <td mat-cell *matCellDef="let u">{{ u.username }}</td>
+        </ng-container>
+        <ng-container matColumnDef="password_plain">
+          <th mat-header-cell *matHeaderCellDef>Пароль (учётная копия)</th>
+          <td mat-cell *matCellDef="let u" class="cell-password">{{ u.password_plain || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="full_name">
+          <th mat-header-cell *matHeaderCellDef>ФИО</th>
+          <td mat-cell *matCellDef="let u">{{ u.full_name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="role">
+          <th mat-header-cell *matHeaderCellDef>Роль</th>
+          <td mat-cell *matCellDef="let u">
+            <mat-form-field appearance="outline" class="dense-field" subscriptSizing="dynamic">
+              <mat-select
+                [value]="normalizeRole(u.role)"
+                (selectionChange)="onRoleChange(u, $event.value)"
+              >
+                <mat-option *ngFor="let r of roleOptions" [value]="r.value">{{ r.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="active">
+          <th mat-header-cell *matHeaderCellDef>Активен</th>
+          <td mat-cell *matCellDef="let u">
+            <mat-checkbox color="primary" [checked]="u.is_active" (change)="onActiveChange(u, $event.checked)"></mat-checkbox>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let u">
+            <button
+              mat-icon-button
+              type="button"
+              matTooltip="Сменить пароль"
+              (click)="changePassword(u)"
+            >
+              <mat-icon>vpn_key</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
+              color="warn"
+              matTooltip="Удалить пользователя"
+              [disabled]="currentUserId != null && u.id === currentUserId"
+              (click)="deleteUser(u)"
+            >
+              <mat-icon>delete_forever</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+  </div>
+</div>

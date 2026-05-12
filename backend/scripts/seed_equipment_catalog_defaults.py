@@ -30,8 +30,11 @@ async def main() -> None:
 
             if existing:
                 changed = False
+                new_fn = row.get("full_name")
+                if new_fn and getattr(existing, "full_name") != new_fn:
+                    setattr(existing, "full_name", new_fn)
+                    changed = True
                 for field in (
-                    "full_name",
                     "voltage_kv",
                     "current_a",
                     "manufacturer",

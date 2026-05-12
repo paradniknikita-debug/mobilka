@@ -249,10 +249,7 @@ export class ChangeLogComponent implements OnInit {
   getUid(entry: ChangeLogEntry): string {
     const p = entry.payload;
     const v = p?.mrid ?? p?.['uid'];
-    if (typeof v === 'string' && v.trim()) return v;
-    if (entry.entity_id != null && (entry.entity_type === 'patrol_session' || entry.entity_type === 'session')) {
-      return String(entry.entity_id);
-    }
+    if (typeof v === 'string' && v.trim()) return v.trim();
     return '—';
   }
 
@@ -334,7 +331,7 @@ export class ChangeLogComponent implements OnInit {
 
   formatUidForDisplay(uid: string | null | undefined): string {
     if (!uid) return '—';
-    return uid.length <= 12 ? uid : uid.slice(0, 8) + '…';
+    return uid;
   }
 
   copyUidToClipboard(uid: string | null | undefined, event?: Event): void {

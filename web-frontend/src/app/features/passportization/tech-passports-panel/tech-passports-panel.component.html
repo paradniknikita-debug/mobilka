@@ -1,0 +1,148 @@
+<div class="tech-passports">
+  <div class="tech-passports__grid">
+    <mat-card class="tech-passports__form" *ngIf="canEditPassports()">
+      <mat-card-title>Новый паспорт</mat-card-title>
+      <mat-card-subtitle>Снимок данных из БД на момент формирования; можно указать ссылку на СТП и текстовые дополнения.</mat-card-subtitle>
+      <mat-card-content>
+        <div class="field-row">
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Тип объекта</mat-label>
+            <mat-select [(ngModel)]="objectType" (selectionChange)="onObjectTypeChange()">
+              <mat-option value="power_line">Линия электропередачи</mat-option>
+              <mat-option value="pole">Опора</mat-option>
+              <mat-option value="substation">Подстанция</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <ng-container *ngIf="objectType === 'power_line'">
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>ЛЭП</mat-label>
+            <mat-select [(ngModel)]="selectedLineId">
+              <mat-option [value]="null">—</mat-option>
+              <mat-option *ngFor="let l of lines" [value]="l.id">{{ l.name }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
+
+        <ng-container *ngIf="objectType === 'pole'">
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>ЛЭП</mat-label>
+            <mat-select [(ngModel)]="selectedLineId" (selectionChange)="onLineSelectedForPole()">
+              <mat-option [value]="null">—</mat-option>
+              <mat-option *ngFor="let l of lines" [value]="l.id">{{ l.name }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Опора</mat-label>
+            <mat-select [(ngModel)]="selectedPoleId" [disabled]="!selectedLineId">
+              <mat-option [value]="null">—</mat-option>
+              <mat-option *ngFor="let p of poles" [value]="p.id">№ {{ p.pole_number }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
+
+        <ng-container *ngIf="objectType === 'substation'">
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Подстанция</mat-label>
+            <mat-select [(ngModel)]="selectedSubstationId">
+              <mat-option [value]="null">—</mat-option>
+              <mat-option *ngFor="let s of substations" [value]="s.id">{{ s.name }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </ng-container>
+
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Заголовок паспорта (необязательно)</mat-label>
+          <input matInput [(ngModel)]="title" placeholder="По умолчанию — из наименования объекта" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Ссылка на СТП / норматив</mat-label>
+          <input matInput [(ngModel)]="stpReference" placeholder="Например: СТП 45-4-190-85, редакция…" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Дополнения вручную</mat-label>
+          <textarea matInput rows="3" [(ngModel)]="manualNotes" placeholder="Произвольный текст (сохраняется в блоке «Вручную»)"></textarea>
+        </mat-form-field>
+
+        <button mat-raised-button color="primary" (click)="createPassport()" [disabled]="saving">
+          Сформировать паспорт
+        </button>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="tech-passports__list" *ngIf="detail">
+      <mat-card-title>Просмотр</mat-card-title>
+      <mat-card-content>
+        <button mat-button type="button" (click)="closeDetail()">Закрыть</button>
+        <pre class="json-preview">{{ detail | json }}</pre>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <mat-card class="tech-passports__table-card">
+    <mat-card-title>Сохранённые паспорта</mat-card-title>
+    <mat-card-subtitle>Всего: {{ total }}</mat-card-subtitle>
+    <mat-card-content>
+      <div class="table-wrap" *ngIf="!loading; else loadingTpl">
+        <table mat-table [dataSource]="items" class="mat-elevation-z0 passports-table">
+          <ng-container matColumnDef="title">
+            <th mat-header-cell *matHeaderCellDef>Заголовок</th>
+            <td mat-cell *matCellDef="let row">{{ row.title }}</td>
+          </ng-container>
+          <ng-container matColumnDef="object_type">
+            <th mat-header-cell *matHeaderCellDef>Объект</th>
+            <td mat-cell *matCellDef="let row">{{ objectTypeLabel(row.object_type) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="object_mrid">
+            <th mat-header-cell *matHeaderCellDef>mRID</th>
+            <td mat-cell *matCellDef="let row" class="mono">{{ row.object_mrid }}</td>
+          </ng-container>
+          <ng-container matColumnDef="created_at">
+            <th mat-header-cell *matHeaderCellDef>Создан</th>
+            <td mat-cell *matCellDef="let row">{{ row.created_at | date: 'short' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Действия</th>
+            <td mat-cell *matCellDef="let row">
+              <button mat-icon-button matTooltip="Просмотр JSON" (click)="showDetail(row)">
+                <mat-icon>visibility</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="PDF" (click)="download(row, 'pdf')">
+                <mat-icon>picture_as_pdf</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="Word (DOCX)" (click)="download(row, 'docx')">
+                <mat-icon>description</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="Excel (XLSX)" (click)="download(row, 'xlsx')">
+                <mat-icon>table_chart</mat-icon>
+              </button>
+              <button
+                *ngIf="canEditPassports()"
+                mat-icon-button
+                matTooltip="Удалить"
+                color="warn"
+                (click)="deletePassport(row)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+        <p *ngIf="items.length === 0" class="empty-hint">
+          <ng-container *ngIf="canEditPassports(); else emptyReadOnly">Паспортов пока нет — сформируйте первый слева.</ng-container>
+          <ng-template #emptyReadOnly>Паспортов пока нет.</ng-template>
+        </p>
+      </div>
+      <ng-template #loadingTpl>
+        <div class="loading-row">
+          <mat-progress-spinner diameter="36" mode="indeterminate"></mat-progress-spinner>
+        </div>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+</div>
