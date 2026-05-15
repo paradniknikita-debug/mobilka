@@ -20,6 +20,7 @@ from .sync_client_mapping import SyncClientMapping
 from .equipment_catalog import EquipmentCatalogItem
 from .line_conductor_catalog import LineConductorCatalogItem
 from .tech_passport import TechPassport
+from .map_overlay_route import MapOverlayRoute, MapOverlayRoutePoint
 # Временно закомментировано до применения миграции
 # from .base_voltage import BaseVoltage
 # from .wire_info import WireInfo
@@ -53,6 +54,8 @@ __all__ = [
     "EquipmentCatalogItem",
     "LineConductorCatalogItem",
     "TechPassport",
+    "MapOverlayRoute",
+    "MapOverlayRoutePoint",
     # "BaseVoltage",  # Временно закомментировано
     # "WireInfo"  # Временно закомментировано
 ]

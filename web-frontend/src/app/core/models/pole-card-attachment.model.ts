@@ -5,6 +5,8 @@ export interface PoleCardAttachmentItem {
   thumbnail?: string;
   thumbnail_url?: string;
   filename?: string;
+  /** Имя файла с устройства пользователя (для отображения и скачивания); ключ в URL остаётся uuid. */
+  original_filename?: string | null;
   added_at?: string;
   added_by_id?: number;
   added_by_name?: string;

@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.power_line import PowerLine, Pole, Tap, Span, Equipment
 from app.models.substation import Substation
 from app.models.location import Location, PositionPoint
+from app.models.map_overlay_route import MapOverlayRoute, MapOverlayRoutePoint
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 import logging
 
@@ -92,18 +93,7 @@ def _criticality_rank(value: Optional[str]) -> int:
         return 1
     return 0
 
-@router.get("/tiles/{z}/{x}/{y}")
-async def get_tile(
-    z: int,
-    x: int,
-    y: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Получение tile для карты (упрощенная версия)"""
-    # В реальном приложении здесь должен быть tile server (например, с использованием PostGIS)
-    # Пока возвращаем пустой tile
-    return {"type": "FeatureCollection", "features": []}
+# Растровые тайлы подложки: GET /api/v1/map/tiles/{z}/{x}/{y}.png — см. map_tile_cache.py
 
 @router.get("/power-lines/geojson")
 async def get_power_lines_geojson(
@@ -1056,3 +1046,47 @@ async def get_spans_geojson(
         "type": "FeatureCollection",
         "features": features
     }
+
+
+@router.get("/overlay-routes/geojson")
+async def get_overlay_routes_geojson(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полилинии маршрутов поверх карты (не ЛЭП CIM), из таблиц map_overlay_route*."""
+    try:
+        result = await db.execute(
+            select(MapOverlayRoute)
+            .options(selectinload(MapOverlayRoute.points))
+            .order_by(MapOverlayRoute.id)
+        )
+        routes = result.scalars().unique().all()
+        features: List[Dict[str, Any]] = []
+        for route in routes:
+            pts = sorted(route.points, key=lambda p: p.sequence_number)
+            if len(pts) < 2:
+                continue
+            coordinates = [[float(p.longitude), float(p.latitude)] for p in pts]
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": filter_none_properties(
+                        {
+                            "id": int(route.id),
+                            "slug": str(route.slug),
+                            "title": str(route.title),
+                        }
+                    ),
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": coordinates,
+                    },
+                }
+            )
+        return {"type": "FeatureCollection", "features": features}
+    except Exception as e:
+        logger.exception("map/overlay-routes/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/overlay-routes/geojson: {type(e).__name__}: {e}",
+        ) from e

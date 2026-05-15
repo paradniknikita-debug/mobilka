@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     S3_REGION: str = "us-east-1"
 
     TILE_CACHE_DIR: str = "tile_cache"
+    # Прокси OSM + кэш PNG в Redis (отдельное соединение decode_responses=False)
+    TILE_CACHE_ENABLED: bool = True
+    TILE_CACHE_REDIS_TTL_SECONDS: int = 604800  # 7 суток
+    OSM_TILE_UPSTREAM_TEMPLATE: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    OSM_TILE_USER_AGENT: str = "LEPM/1.0 (tile cache proxy; diploma project)"
+
     TRUSTED_PROXIES: List[str] = ["127.0.0.1", "host.docker.internal", "nginx"]
     ALLOWED_HOSTS: List[str] = [
         "localhost",

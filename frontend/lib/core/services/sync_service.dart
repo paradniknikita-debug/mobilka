@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
 import '../config/app_config.dart';
 import '../database/database.dart';
 import '../models/power_line.dart' show PoleCreate;
@@ -401,13 +403,16 @@ class SyncService extends StateNotifier<SyncState> {
               try {
                 final bytes = await readAttachmentBytes(path);
                 if (bytes.isEmpty) continue;
-                final ext = path.contains('.') ? path.split('.').last : 'jpg';
-                final filename = 'upload.$ext';
-                final result = await _apiService.uploadPoleAttachment(pole.id, type, bytes, filename);
+                final uploadName = p.basename(path);
+                final result = await _apiService.uploadPoleAttachment(pole.id, type, bytes, uploadName);
                 final url = result['url'] as String?;
                 if (url != null) {
                   final entry = <String, dynamic>{'t': type, 'url': url};
                   if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+                  if (result['filename'] != null) entry['filename'] = result['filename'];
+                  if (result['original_filename'] != null) {
+                    entry['original_filename'] = result['original_filename'];
+                  }
                   resolved.add(entry);
                 } else {
                   unresolvedForExisting.add(m);
@@ -492,13 +497,16 @@ class SyncService extends StateNotifier<SyncState> {
               try {
                 final bytes = await readAttachmentBytes(path);
                 if (bytes.isEmpty) continue;
-                final ext = path.contains('.') ? path.split('.').last : 'jpg';
-                final filename = 'upload.$ext';
-                final result = await _apiService.uploadEquipmentAttachment(eq.id, type, bytes, filename);
+                final uploadName = p.basename(path);
+                final result = await _apiService.uploadEquipmentAttachment(eq.id, type, bytes, uploadName);
                 final url = result['url'] as String?;
                 if (url != null) {
                   final entry = <String, dynamic>{'t': type, 'url': url};
                   if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+                  if (result['filename'] != null) entry['filename'] = result['filename'];
+                  if (result['original_filename'] != null) {
+                    entry['original_filename'] = result['original_filename'];
+                  }
                   resolved.add(entry);
                 } else {
                   unresolvedForExisting.add(m);
@@ -605,12 +613,16 @@ class SyncService extends StateNotifier<SyncState> {
           try {
             final bytes = await readAttachmentBytes(path);
             if (bytes.isEmpty) continue;
-            final ext = path.contains('.') ? path.split('.').last : 'jpg';
-            final result = await _apiService.uploadPoleAttachment(serverPoleId, type, bytes, 'upload.$ext');
+            final uploadName = p.basename(path);
+            final result = await _apiService.uploadPoleAttachment(serverPoleId, type, bytes, uploadName);
             final url = result['url'] as String?;
             if (url != null) {
               final entry = <String, dynamic>{'t': type, 'url': url};
               if (result['thumbnail_url'] != null) entry['thumbnail_url'] = result['thumbnail_url'];
+              if (result['filename'] != null) entry['filename'] = result['filename'];
+              if (result['original_filename'] != null) {
+                entry['original_filename'] = result['original_filename'];
+              }
               resolved.add(entry);
             } else {
               unresolved.add(m);

@@ -54,20 +54,27 @@ class BaseUrlManager {
           currentPort != 80 && currentPort != 443 && currentPort != 8000;
       if (isLocalDevServer) {
         final port = _protocol == 'https' ? 443 : 8000;
-        return '$_protocol://localhost:$port';
+        final h = Uri.base.host;
+        final apiHost =
+            (h == 'localhost' || h == '127.0.0.1') ? h : 'localhost';
+        return '$_protocol://$apiHost:$port';
       }
       // Production за nginx: относительный путь
       return '';
     }
 
-    // Development: абсолютный путь с портом
+    // Development: абсолютный путь с портом (хост страницы = хост API, иначе 127.0.0.1 vs localhost — разные origin).
     final port = _protocol == 'https' ? 443 : 8000;
     final hostname = Uri.base.host;
-    final baseUrl = (hostname == 'localhost' ||
-            hostname == '127.0.0.1' ||
-            hostname.isEmpty)
-        ? '$_protocol://localhost:$port'
-        : '$_protocol://$hostname:$port';
+    final String apiHost;
+    if (hostname == 'localhost' ||
+        hostname == '127.0.0.1' ||
+        hostname.isEmpty) {
+      apiHost = hostname.isEmpty ? 'localhost' : hostname;
+    } else {
+      apiHost = hostname;
+    }
+    final baseUrl = '$_protocol://$apiHost:$port';
 
     if (kDebugMode && (_fallbackOccurred)) {
       final flutterProtocol = Uri.base.scheme;

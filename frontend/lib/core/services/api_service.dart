@@ -164,6 +164,9 @@ abstract class LepmRetrofit {
   @GET('/map/spans/geojson')
   Future<JsonDict> getSpansGeoJSON();
 
+  @GET('/map/overlay-routes/geojson')
+  Future<JsonDict> getOverlayRoutesGeoJSON();
+
   // Substations
   @POST('/substations')
   Future<Substation> createSubstation(@Body() SubstationCreate substationData);

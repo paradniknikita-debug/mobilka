@@ -2,12 +2,17 @@
 API загрузки и отдачи вложений карточки опоры: фото, схемы, голосовые заметки, видео.
 Хранилище: MinIO (S3) при заданных S3_* или локальный диск uploads/pole_attachments/ и uploads/equipment_attachments/.
 Для фото создаётся миниатюра (до 150px) и возвращается thumbnail_url для хранения в истории комментариев.
+На диске/S3 ключ остаётся уникальным (uuid); оригинальное имя — в S3 Metadata / файле .orig и в поле original_filename ответа API.
 """
 import io
+import os.path
 import uuid
 from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import Response
+from urllib.parse import quote
 
 from app.core.security import get_current_active_user
 from app.core.media_storage import media_put, media_get, media_put_for, media_get_for
@@ -37,6 +42,34 @@ ALLOWED_VOICE = {
 ALLOWED_SCHEMA = {"image/svg+xml", "image/png", "application/pdf"}
 ALLOWED_VIDEO = {"video/mp4", "video/webm", "video/quicktime"}
 MAX_SIZE_MB = 25
+
+
+def _sanitize_original_filename(name: Optional[str]) -> Optional[str]:
+    """Безопасное имя для отображения и метаданных (только basename, без path traversal)."""
+    if not name or not str(name).strip():
+        return None
+    base = os.path.basename(str(name).strip())
+    if not base or base in (".", ".."):
+        return None
+    base = base.replace("\x00", "").replace("\r", "").replace("\n", "")
+    if ".." in base:
+        base = os.path.basename(base.replace("\\", "/"))
+    base = base.strip()
+    if not base:
+        return None
+    if len(base) > 200:
+        base = base[:200]
+    return base
+
+
+def _content_disposition_header(stored_url_name: str, original: Optional[str]) -> str:
+    """Имя при скачивании: оригинал или ключ хранения; UTF-8 через filename* (RFC 5987)."""
+    name = ((original or "").strip() or stored_url_name).replace('"', "'")
+    ascii_fallback = (
+        name.encode("ascii", "replace").decode("ascii").replace("?", "_").strip() or "file"
+    )
+    star = quote(name, safe="")
+    return f'inline; filename="{ascii_fallback}"; filename*=UTF-8\'\'{star}'
 
 
 def _guess_content_type_from_name(name: str) -> str:
@@ -168,8 +201,16 @@ async def upload_pole_attachment(
             detail=f"Размер файла не более {MAX_SIZE_MB} МБ",
         )
 
+    original_display = _sanitize_original_filename(file.filename)
+
     try:
-        media_put(pole_id, name, content, content_type or "application/octet-stream")
+        media_put(
+            pole_id,
+            name,
+            content,
+            content_type or "application/octet-stream",
+            original_filename=original_display,
+        )
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Ошибка сохранения вложения опоры")
@@ -183,6 +224,7 @@ async def upload_pole_attachment(
         "url": url,
         "type": attachment_type,
         "filename": name,
+        "original_filename": original_display,
         "added_at": datetime.utcnow().isoformat() + "Z",
         "added_by_id": current_user.id,
         "added_by_name": (getattr(current_user, "full_name", None) or getattr(current_user, "username", None) or "").strip() or None,
@@ -223,7 +265,7 @@ async def get_pole_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Опора не найдена")
 
     try:
-        content, media_type = media_get(pole_id, filename)
+        content, media_type, original_download = media_get(pole_id, filename)
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Ошибка чтения вложения")
@@ -246,20 +288,21 @@ async def get_pole_attachment(
                         continue
                     alt_name = f"{stem}{alt_ext}"
                     try:
-                        alt_content, alt_media_type = media_get(pole_id, alt_name)
+                        alt_content, alt_media_type, alt_orig = media_get(pole_id, alt_name)
                     except Exception:
-                        alt_content, alt_media_type = None, None
+                        alt_content, alt_media_type, alt_orig = None, None, None
                     if alt_content is not None:
-                        content, media_type = alt_content, alt_media_type
+                        content, media_type, original_download = alt_content, alt_media_type, alt_orig
                         filename = alt_name
                         break
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
 
+    disp = _content_disposition_header(filename, original_download)
     return Response(
         content=content,
         media_type=media_type or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={"Content-Disposition": disp},
     )
 
 
@@ -326,8 +369,17 @@ async def upload_equipment_attachment(
             detail=f"Размер файла не более {MAX_SIZE_MB} МБ",
         )
 
+    original_display = _sanitize_original_filename(file.filename)
+
     try:
-        media_put_for("equipment", equipment_id, name, content, content_type or "application/octet-stream")
+        media_put_for(
+            "equipment",
+            equipment_id,
+            name,
+            content,
+            content_type or "application/octet-stream",
+            original_filename=original_display,
+        )
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Ошибка сохранения вложения оборудования")
@@ -341,6 +393,7 @@ async def upload_equipment_attachment(
         "url": url,
         "type": attachment_type,
         "filename": name,
+        "original_filename": original_display,
         "added_at": datetime.utcnow().isoformat() + "Z",
         "added_by_id": current_user.id,
         "added_by_name": (getattr(current_user, "full_name", None) or getattr(current_user, "username", None) or "").strip() or None,
@@ -379,7 +432,7 @@ async def get_equipment_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оборудование не найдено")
 
     try:
-        content, media_type = media_get_for("equipment", equipment_id, filename)
+        content, media_type, original_download = media_get_for("equipment", equipment_id, filename)
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Ошибка чтения вложения оборудования")
@@ -399,18 +452,21 @@ async def get_equipment_attachment(
                         continue
                     alt_name = f"{stem}{alt_ext}"
                     try:
-                        alt_content, alt_media_type = media_get_for("equipment", equipment_id, alt_name)
+                        alt_content, alt_media_type, alt_orig = media_get_for(
+                            "equipment", equipment_id, alt_name
+                        )
                     except Exception:
-                        alt_content, alt_media_type = None, None
+                        alt_content, alt_media_type, alt_orig = None, None, None
                     if alt_content is not None:
-                        content, media_type = alt_content, alt_media_type
+                        content, media_type, original_download = alt_content, alt_media_type, alt_orig
                         filename = alt_name
                         break
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
 
+    disp = _content_disposition_header(filename, original_download)
     return Response(
         content=content,
         media_type=media_type or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={"Content-Disposition": disp},
     )

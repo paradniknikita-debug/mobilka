@@ -53,11 +53,25 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
     this.dataSource.data = this.localItems;
   }
 
+  get dialogTitle(): string {
+    return this._entity === 'equipment' ? 'Вложения карточки оборудования' : 'Вложения карточки опоры';
+  }
+
+  get hintText(): string {
+    const save =
+      this._entity === 'equipment'
+        ? 'После добавления или удаления нажмите «Готово» и сохраните оборудование.'
+        : 'После добавления или удаления нажмите «Готово» и сохраните опору.';
+    return `Двойной клик по строке или кнопка со значком загрузки — скачать файл. ${save}`;
+  }
+
   typeLabel(t: string): string {
     return 'Вложение';
   }
 
   displayName(row: PoleCardAttachmentItem): string {
+    const orig = row.original_filename?.trim();
+    if (orig) return orig;
     const fn = row.filename?.trim();
     if (fn) return fn;
     return this.basename(row.url);
@@ -123,6 +137,7 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
           t: res.type || this.pendingType,
           url: res.url,
           filename: res.filename,
+          original_filename: (res as any).original_filename ?? undefined,
           thumbnail: (res as any).thumbnail_url,
           thumbnail_url: (res as any).thumbnail_url,
           added_at: (res as any).added_at,

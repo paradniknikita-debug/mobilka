@@ -6,6 +6,7 @@
 import logging
 from pathlib import Path
 from typing import Optional, Tuple
+from urllib.parse import quote, unquote
 
 from app.core.config import settings
 
@@ -113,27 +114,72 @@ def _local_dir_for_prefix(prefix: str) -> Path:
     raise ValueError(f"Неизвестный префикс вложений: {prefix}")
 
 
+def _original_sidecar_path(prefix: str, entity_id: int, storage_filename: str) -> Path:
+    return _local_dir_for_prefix(prefix) / str(entity_id) / f"{storage_filename}.orig"
+
+
+def _write_original_sidecar(prefix: str, entity_id: int, storage_filename: str, original: str) -> None:
+    try:
+        p = _original_sidecar_path(prefix, entity_id, storage_filename)
+        p.write_text(original, encoding="utf-8")
+    except OSError as e:
+        logger.warning("Не удалось записать .orig для %s: %s", storage_filename, e)
+
+
+def _read_original_sidecar(prefix: str, entity_id: int, storage_filename: str) -> Optional[str]:
+    p = _original_sidecar_path(prefix, entity_id, storage_filename)
+    if not p.is_file():
+        return None
+    try:
+        t = p.read_text(encoding="utf-8").strip()
+        return t or None
+    except OSError:
+        return None
+
+
+def _s3_metadata_original(original: str) -> dict:
+    """S3 user metadata — только ASCII; имя кодируем percent-encoding."""
+    return {"original-filename": quote(original.strip(), safe="")}
+
+
+def _parse_s3_original_metadata(meta: dict) -> Optional[str]:
+    if not meta:
+        return None
+    raw = meta.get("original-filename") or meta.get("original_filename")
+    if not raw:
+        return None
+    try:
+        return unquote(str(raw))
+    except Exception:
+        return None
+
+
 def media_put_for(
     prefix: str,
     entity_id: int,
     filename: str,
     content: bytes,
     content_type: str,
+    original_filename: Optional[str] = None,
 ) -> None:
-    """Сохранить файл (S3 key: {prefix}/{entity_id}/{filename})."""
+    """Сохранить файл (S3 key: {prefix}/{entity_id}/{filename}). Опционально — оригинальное имя для скачивания."""
     key = f"{prefix}/{entity_id}/{filename}"
+    orig = (original_filename or "").strip() or None
     try:
         client, bucket = _get_s3_client()
     except Exception as e:
         logger.warning("S3 недоступен, локальный диск: %s", e)
         client, bucket = None, None
     if client and bucket:
-        client.put_object(
+        put_kw = dict(
             Bucket=bucket,
             Key=key,
             Body=content,
             ContentType=content_type or "application/octet-stream",
         )
+        if orig:
+            put_kw["Metadata"] = _s3_metadata_original(orig)
+        client.put_object(**put_kw)
         return
     d = _local_dir_for_prefix(prefix) / str(entity_id)
     try:
@@ -145,11 +191,19 @@ def media_put_for(
         target.write_bytes(content)
     except OSError as e:
         raise RuntimeError(f"Не удалось записать файл {target}: {e}") from e
+    if orig:
+        _write_original_sidecar(prefix, entity_id, filename, orig)
 
 
-def media_put(pole_id: int, filename: str, content: bytes, content_type: str) -> None:
+def media_put(
+    pole_id: int,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    original_filename: Optional[str] = None,
+) -> None:
     """Сохранить вложение карточки опоры."""
-    media_put_for("poles", pole_id, filename, content, content_type)
+    media_put_for("poles", pole_id, filename, content, content_type, original_filename)
 
 
 def _read_local_prefixed(prefix: str, entity_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
@@ -184,7 +238,10 @@ def _read_local(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[
     return _read_local_prefixed("poles", pole_id, filename)
 
 
-def media_get_for(prefix: str, entity_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
+def media_get_for(
+    prefix: str, entity_id: int, filename: str
+) -> Tuple[Optional[bytes], Optional[str], Optional[str]]:
+    """Тело, Content-Type, оригинальное имя файла (если было при загрузке)."""
     key = f"{prefix}/{entity_id}/{filename}"
     try:
         client, bucket = _get_s3_client()
@@ -196,16 +253,19 @@ def media_get_for(prefix: str, entity_id: int, filename: str) -> Tuple[Optional[
             resp = client.get_object(Bucket=bucket, Key=key)
             body = resp["Body"].read()
             content_type = resp.get("ContentType") or "application/octet-stream"
-            return body, content_type
+            meta = resp.get("Metadata") or {}
+            orig = _parse_s3_original_metadata(meta)
+            return body, content_type, orig
         except Exception:
             pass
     content, ct = _read_local_prefixed(prefix, entity_id, filename)
     if content is not None:
-        return content, ct
-    return None, None
+        orig = _read_original_sidecar(prefix, entity_id, filename)
+        return content, ct, orig
+    return None, None, None
 
 
-def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str]]:
+def media_get(pole_id: int, filename: str) -> Tuple[Optional[bytes], Optional[str], Optional[str]]:
     return media_get_for("poles", pole_id, filename)
 
 

@@ -21,6 +21,8 @@ export interface Equipment {
   defect?: string | null;
   /** Критичность: low | medium | high */
   criticality?: string | null;
+  /** Вложения к описанию дефекта (JSON с url, как card_comment_attachment) */
+  defect_attachment?: string | null;
   /** Координаты оборудования как отдельного объекта (CIM: x_position = longitude, y_position = latitude) */
   x_position?: number;
   y_position?: number;
@@ -71,6 +73,7 @@ export interface EquipmentCreate {
   notes?: string;
   defect?: string | null;
   criticality?: string | null;
+  defect_attachment?: string | null;
   x_position?: number;
   y_position?: number;
   catalog_item_id?: number;

@@ -1,3 +1,4 @@
+import httpx
 import redis.asyncio as redis
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,10 +11,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.database import init_db
-from app.api.v1 import admin, auth, power_lines, poles, equipment, map_tiles, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments, reports, equipment_catalog, line_conductor_catalog, base_voltage, wire_info, tech_passports
+from app.api.v1 import admin, auth, power_lines, poles, equipment, map_tiles, map_tile_cache, sync, substations, excel_import, cim_line_structure, pole_sequence, cim_export, patrol_sessions, change_log, attachments, reports, equipment_catalog, line_conductor_catalog, base_voltage, wire_info, tech_passports
 from app.core.config import settings
 from app.core.media_storage import log_media_storage_mode
-from app.core.redis_client import set_redis_client, get_redis_client
+from app.core.redis_client import (
+    set_redis_client,
+    get_redis_client,
+    set_redis_binary_client,
+)
 
 # Импортируем модели, чтобы они зарегистрировались в Base.metadata
 # Это необходимо для создания таблиц через Base.metadata.create_all
@@ -26,20 +31,40 @@ from app.models import (
     TechPassport,
 )
 redis_client = None
+redis_binary_client = None
 security = HTTPBearer()
 @asynccontextmanager # lifespan - управление жизненным циклом приложения
 async def lifespan(app: FastAPI):
     # Инициализация базы данных при запуске. Всё что внутри этой функции будет выполнено при запуске приложения.
-    global redis_client
+    global redis_client, redis_binary_client
+    redis_binary_client = None
     try:
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5)
         await redis_client.ping()
         set_redis_client(redis_client)
-        print("OK: Redis подключен")
+
+        redis_binary_client = redis.from_url(
+            settings.REDIS_URL, decode_responses=False, socket_connect_timeout=5
+        )
+        await redis_binary_client.ping()
+        set_redis_binary_client(redis_binary_client)
+        print("OK: Redis подключен (строки + бинарный кэш тайлов)")
     except Exception as e:
         print(f"WARNING: Redis недоступен: {e}. Продолжаем без Redis.")
-        redis_client = None
         set_redis_client(None)
+        set_redis_binary_client(None)
+        if redis_binary_client is not None:
+            try:
+                await redis_binary_client.close()
+            except Exception:
+                pass
+            redis_binary_client = None
+        if redis_client is not None:
+            try:
+                await redis_client.close()
+            except Exception:
+                pass
+            redis_client = None
     try:
         await init_db()
     except Exception as e:
@@ -49,9 +74,27 @@ async def lifespan(app: FastAPI):
     log_media_storage_mode()
     # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
+    # Один пул HTTP к OSM на всё приложение (иначе на каждый тайл — новый TCP/TLS).
+    app.state.osm_tile_http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(20.0),
+        follow_redirects=True,
+        limits=httpx.Limits(max_keepalive_connections=32, max_connections=64),
+    )
     yield
     # Закрытие соединений при остановке
+    http_osm = getattr(app.state, "osm_tile_http_client", None)
+    if http_osm is not None:
+        try:
+            await http_osm.aclose()
+        except Exception:
+            pass
     set_redis_client(None)
+    set_redis_binary_client(None)
+    if redis_binary_client:
+        try:
+            await redis_binary_client.close()
+        except Exception:
+            pass
     if redis_client:
         try:
             await redis_client.close()
@@ -153,6 +196,8 @@ app.include_router(poles.router, prefix="/api/v1/poles", tags=["poles"])
 app.include_router(equipment.router, prefix="/api/v1/equipment", tags=["equipment"])
 app.include_router(equipment_catalog.router, prefix="/api/v1/equipment-catalog", tags=["equipment-catalog"])
 app.include_router(line_conductor_catalog.router, prefix="/api/v1/line-conductor-catalog", tags=["line-conductor-catalog"])
+# Сначала растровые тайлы (.png), чтобы не пересекаться с прежними путями /tiles/{z}/{x}/{y}
+app.include_router(map_tile_cache.router, prefix="/api/v1/map", tags=["map-tiles"])
 app.include_router(map_tiles.router, prefix="/api/v1/map", tags=["map"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(substations.router, prefix="/api/v1/substations", tags=["substations"])

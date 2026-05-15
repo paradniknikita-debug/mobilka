@@ -14,6 +14,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:open_file/open_file.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' as drift;
@@ -38,6 +39,7 @@ import '../../../../core/models/power_line.dart';
 import '../../../../core/models/substation.dart';
 import '../../../../core/map/voltage_level_colors.dart';
 import '../../../../core/utils/map_load_error_message.dart';
+import '../../../../core/utils/pole_card_attachment_codec.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
 import '../../../home/presentation/pages/home_page.dart'
     show activeSessionProvider, recentPatrolsProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
@@ -1553,7 +1555,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate: '${AppConfig.apiBaseUrl}/map/tiles/{z}/{x}/{y}.png',
                       // Если OSM недоступен (сеть, политика, web), подхватываем запасной CDN.
                       fallbackUrl:
                           'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
@@ -1859,6 +1861,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       onAutoCreateSpans: _selectedObjectType == ObjectType.pole ? _handleAutoCreateSpans : null,
                       onShowHistory: _showSelectedObjectHistory,
                       onDelete: _handleDeleteObject,
+                      onAddCardAttachment: _onAddCardAttachmentForSelection(),
                     ),
                   ),
               ],
@@ -5143,6 +5146,172 @@ class _MapPageState extends ConsumerState<MapPage> {
         _selectedObjectProperties?['card_comment_attachment'] = pole.cardCommentAttachment;
       });
     } catch (_) {}
+  }
+
+  PoleCreate _poleCreateFromPole(Pole p, {String? cardCommentAttachment}) {
+    return PoleCreate(
+      poleNumber: p.poleNumber,
+      xPosition: p.xPosition,
+      yPosition: p.yPosition,
+      poleType: p.poleType,
+      height: p.height,
+      foundationType: p.foundationType,
+      material: p.material,
+      yearInstalled: p.yearInstalled,
+      condition: p.condition,
+      notes: p.notes,
+      structuralDefect: p.structuralDefect,
+      structuralDefectCriticality: p.structuralDefectCriticality,
+      isTap: p.isTapPole,
+      conductorType: p.conductorType,
+      conductorMaterial: p.conductorMaterial,
+      conductorSection: p.conductorSection,
+      cardComment: p.cardComment,
+      cardCommentAttachment: cardCommentAttachment ?? p.cardCommentAttachment,
+      tapPoleId: p.tapPoleId,
+      branchType: p.branchType,
+      tapBranchIndex: p.tapBranchIndex,
+      startNewTap: false,
+    );
+  }
+
+  String? _mergeCardAttachmentJson(String? existing, Map<String, dynamic> uploaded) {
+    final items = PoleCardAttachmentCodec.parseItemsJson(existing);
+    final url = uploaded['url']?.toString();
+    if (url == null || url.isEmpty) return existing;
+    final t = (uploaded['type'] ?? uploaded['t'] ?? 'file').toString();
+    items.add({
+      't': t,
+      'url': url,
+      if (uploaded['thumbnail_url'] != null) 'thumbnail_url': uploaded['thumbnail_url'],
+      if (uploaded['filename'] != null) 'filename': uploaded['filename'],
+      if (uploaded['original_filename'] != null) 'original_filename': uploaded['original_filename'],
+      if (uploaded['added_at'] != null) 'added_at': uploaded['added_at'],
+      if (uploaded['added_by_id'] != null) 'added_by_id': uploaded['added_by_id'],
+      if (uploaded['added_by_name'] != null) 'added_by_name': uploaded['added_by_name'],
+    });
+    return jsonEncode(items);
+  }
+
+  String _guessAttachmentTypeFromName(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.bmp')) {
+      return 'photo';
+    }
+    if (lower.endsWith('.svg') || lower.endsWith('.pdf')) {
+      return 'schema';
+    }
+    if (lower.endsWith('.mp4') || lower.endsWith('.mov')) {
+      return 'video';
+    }
+    if (lower.endsWith('.webm') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.wav')) {
+      return 'voice';
+    }
+    return 'file';
+  }
+
+  Future<void> Function()? _onAddCardAttachmentForSelection() {
+    final props = _selectedObjectProperties;
+    final t = _selectedObjectType;
+    if (props == null || t == null) return null;
+    if (t == ObjectType.pole) {
+      final poleId = _toInt(props['id']);
+      final lineId = _toInt(props['line_id']);
+      if (poleId == null || lineId == null) return null;
+      return () => _pickAndUploadCardAttachment();
+    }
+    if (t == ObjectType.equipment) {
+      final eqId = _toInt(props['equipment_id']) ?? _toInt(props['id']);
+      if (eqId == null) return null;
+      return () => _pickAndUploadCardAttachment();
+    }
+    return null;
+  }
+
+  Future<void> _pickAndUploadCardAttachment() async {
+    final props = _selectedObjectProperties;
+    final t = _selectedObjectType;
+    if (props == null || t == null) return;
+
+    final pick = await FilePicker.platform.pickFiles(withData: true);
+    if (pick == null || pick.files.isEmpty) return;
+    final f = pick.files.first;
+    final bytes = f.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Файл пуст или не прочитан')),
+        );
+      }
+      return;
+    }
+    final name = f.name.isNotEmpty ? f.name : 'attachment.bin';
+    final attType = _guessAttachmentTypeFromName(name);
+    final api = ref.read(apiServiceProvider);
+    final dio = ref.read(dioProvider);
+
+    try {
+      if (t == ObjectType.pole) {
+        final poleId = _toInt(props['id']);
+        final lineId = _toInt(props['line_id']);
+        if (poleId == null || lineId == null) return;
+        final uploaded = await api.uploadPoleAttachment(poleId, attType, bytes.toList(), name);
+        final pole = await api.getPole(poleId);
+        final merged = _mergeCardAttachmentJson(pole.cardCommentAttachment, uploaded);
+        final body = _poleCreateFromPole(pole, cardCommentAttachment: merged);
+        await api.updatePole(lineId, poleId, body);
+        if (!mounted) return;
+        setState(() {
+          _selectedObjectProperties?['card_comment_attachment'] = merged;
+        });
+      } else if (t == ObjectType.equipment) {
+        final eqId = _toInt(props['equipment_id']) ?? _toInt(props['id']);
+        if (eqId == null) return;
+        final uploaded = await api.uploadEquipmentAttachment(eqId, attType, bytes.toList(), name);
+        final raw = await dio.get<Map<String, dynamic>>('/equipment/$eqId');
+        final map = Map<String, dynamic>.from(raw.data ?? {});
+        map['card_comment_attachment'] = _mergeCardAttachmentJson(
+          map['card_comment_attachment']?.toString(),
+          uploaded,
+        );
+        map.remove('id');
+        map.remove('pole_id');
+        map.remove('mrid');
+        map.remove('created_by');
+        map.remove('created_at');
+        map.remove('updated_at');
+        final create = EquipmentCreate.fromJson(map);
+        final updated = await api.updateEquipment(eqId, create);
+        if (!mounted) return;
+        setState(() {
+          _selectedObjectProperties?['card_comment_attachment'] = updated.cardCommentAttachment;
+        });
+      } else {
+        return;
+      }
+
+      await _loadMapData(forceFromServer: true, skipAutoCenter: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Вложение добавлено'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось добавить вложение: $e')),
+        );
+      }
+    }
   }
 
   String? _historyEntityTypeForSelection() {

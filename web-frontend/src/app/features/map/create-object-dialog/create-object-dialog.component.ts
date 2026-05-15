@@ -1217,6 +1217,7 @@ export class CreateObjectDialogComponent implements OnInit {
           thumbnail: item.thumbnail || item.thumbnail_url,
           thumbnail_url: item.thumbnail_url || item.thumbnail,
           filename: item.filename,
+          original_filename: item.original_filename,
           added_at: item.added_at,
           added_by_id: item.added_by_id ?? item.added_by,
           added_by_name: item.added_by_name

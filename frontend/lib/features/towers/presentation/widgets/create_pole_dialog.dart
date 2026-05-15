@@ -540,7 +540,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                 'id': const Uuid().v4(),
                 't': 'photo',
                 'url': url,
-                'filename': fileName,
+                if (uploaded['filename'] != null) 'filename': uploaded['filename'],
+                if (uploaded['original_filename'] != null)
+                  'original_filename': uploaded['original_filename'],
                 'added_by': uid,
                 'added_at': DateTime.now().toUtc().toIso8601String(),
                 if (uploaded['thumbnail_url'] != null)
@@ -623,7 +625,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           if ((m['added_by_name'] as String?)?.isNotEmpty ?? false) {
             entry['added_by_name'] = m['added_by_name'];
           }
-          if ((m['filename'] as String?)?.isNotEmpty ?? false) entry['filename'] = m['filename'];
+          if (result['filename'] != null) entry['filename'] = result['filename'];
+          if (result['original_filename'] != null) {
+            entry['original_filename'] = result['original_filename'];
+          }
           resolved.add(entry);
         }
       } on DioException catch (e) {
@@ -664,13 +669,19 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           final bytes = await readAttachmentBytes(path);
           if (bytes.isEmpty) continue;
           final ext = path.contains('.') ? path.split('.').last : 'jpg';
-          final uploaded = await api.uploadPoleAttachment(poleId, type, bytes, 'defect.$ext');
+          final bn = path.replaceAll('\\', '/').split('/').last;
+          final uploadName = bn.trim().isEmpty ? 'defect.$ext' : bn;
+          final uploaded = await api.uploadPoleAttachment(poleId, type, bytes, uploadName);
           final url = uploaded['url']?.toString();
           if (url == null || url.isEmpty) continue;
           final entry = <String, dynamic>{'t': type, 'url': url};
           final thumb = uploaded['thumbnail_url']?.toString();
           if (thumb != null && thumb.isNotEmpty) {
             entry['thumbnail_url'] = thumb;
+          }
+          if (uploaded['filename'] != null) entry['filename'] = uploaded['filename'];
+          if (uploaded['original_filename'] != null) {
+            entry['original_filename'] = uploaded['original_filename'];
           }
           resolved.add(entry);
         } catch (_) {}

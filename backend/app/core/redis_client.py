@@ -8,6 +8,8 @@ from fastapi import Request
 
 # Глобальный клиент (выставляется в main.lifespan)
 _redis = None
+# Отдельное соединение для бинарных значений (PNG тайлов), decode_responses=False
+_redis_binary = None
 
 
 def set_redis_client(client):
@@ -19,6 +21,17 @@ def set_redis_client(client):
 def get_redis_client():
     """Вернуть глобальный клиент Redis или None."""
     return _redis
+
+
+def set_redis_binary_client(client):
+    """Клиент Redis для байтов (тайлы карты)."""
+    global _redis_binary
+    _redis_binary = client
+
+
+def get_redis_binary_client():
+    """Вернуть бинарный Redis-клиент или None."""
+    return _redis_binary
 
 
 async def get_redis(request: Request):

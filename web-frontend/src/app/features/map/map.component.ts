@@ -5,8 +5,8 @@ import { SidebarService } from '../../core/services/sidebar.service';
 import { GeoJSONCollection, GeoJSONFeature } from '../../core/models/geojson.model';
 import { environment } from '../../../environments/environment';
 import * as L from 'leaflet';
-import { Subject } from 'rxjs';
-import { takeUntil, switchMap } from 'rxjs/operators';
+import { forkJoin, Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -112,6 +112,8 @@ export class MapComponent implements OnInit, OnDestroy {
   }
   
   private destroy$ = new Subject<void>();
+  /** Откладывает перерисовку линейного оборудования после зума (избегаем полного renderMapData на каждом шаге). */
+  private zoomEndLayersTimer: ReturnType<typeof setTimeout> | null = null;
   private layers: L.Layer[] = [];
 
   // Маркеры для разных типов объектов
@@ -354,6 +356,10 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.zoomEndLayersTimer != null) {
+      clearTimeout(this.zoomEndLayersTimer);
+      this.zoomEndLayersTimer = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
     if (this.map) {
@@ -374,34 +380,34 @@ export class MapComponent implements OnInit, OnDestroy {
     });
 
     // Добавляем тайлы OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer(`${environment.apiUrl}/map/tiles/{z}/{x}/{y}.png`, {
       attribution: '',
-      maxZoom: 19
+      maxZoom: 19,
+      /** Меньше буфера вне экрана — меньше одновременных запросов тайлов. */
+      keepBuffer: 1
     }).addTo(this.map);
 
     // Подписываемся на изменение зума
     this.map.on('zoomend', () => {
       if (this.map) {
         this.currentZoom = this.map.getZoom();
-        // Обновляем зум в сервисе для доступа из других компонентов
         this.mapService.setCurrentZoom(this.currentZoom);
-        // Важно: терминалы оборудования считаются в пикселях.
-        // При изменении зума пересобираем геометрию, чтобы стыки "опора -> полюс -> опора"
-        // оставались точными и без разрыва на любом масштабе.
-        if (this.mapData) {
-          this.renderMapData(this.mapData);
+        // Угол линейного оборудования зависит от проекции пикселей — перерисовываем только эти слои,
+        // без полного clearLayers (ЛЭП, опоры, подстанции не трогаем).
+        if (this.zoomEndLayersTimer != null) {
+          clearTimeout(this.zoomEndLayersTimer);
         }
-        this.updatePoleLabels();
-        this.updateEquipmentVisibility();
+        this.zoomEndLayersTimer = setTimeout(() => {
+          this.zoomEndLayersTimer = null;
+          this.refreshZoomDependentLayers();
+        }, 100);
       }
     });
     
-    // Также обновляем при изменении зума (zoom) - для более быстрой синхронизации
+    // Локальный зум для UI (масштабная линейка) — без спама в сервис на каждом кадре pinch-zoom.
     this.map.on('zoom', () => {
       if (this.map) {
-        const newZoom = this.map.getZoom();
-        this.currentZoom = newZoom;
-        this.mapService.setCurrentZoom(newZoom);
+        this.currentZoom = this.map.getZoom();
       }
     });
 
@@ -419,12 +425,17 @@ export class MapComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.errorMessage = null;
 
-    this.apiService.getAllEquipment()
-      .pipe(
-        switchMap((eqList) => {
-          this.allEquipment = Array.isArray(eqList) ? eqList : [];
+    forkJoin({
+      eqList: this.apiService.getAllEquipment(),
+      mapData: this.mapService.loadAllMapData()
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: ({ eqList, mapData }) => {
+          const list = Array.isArray(eqList) ? eqList : [];
+          this.allEquipment = list;
           this.equipmentByPoleId.clear();
-          this.allEquipment.forEach((eq) => {
+          list.forEach((eq) => {
             if (!eq || eq.pole_id == null) return;
             const pid = Number(eq.pole_id);
             if (!this.equipmentByPoleId.has(pid)) {
@@ -432,16 +443,9 @@ export class MapComponent implements OnInit, OnDestroy {
             }
             this.equipmentByPoleId.get(pid)!.push(eq);
           });
-          return this.mapService.loadAllMapData();
-        }),
-        takeUntil(this.destroy$)
-      )
-      .subscribe({
-        next: (data) => {
-          this.mapData = data;
-          this.renderMapData(data);
+          this.mapData = mapData;
+          this.renderMapData(mapData);
           this.isLoading = false;
-          console.log('✅ Данные карты загружены');
         },
         error: (error) => {
           console.error('❌ Ошибка загрузки данных карты:', error);
@@ -512,6 +516,22 @@ export class MapComponent implements OnInit, OnDestroy {
       this.renderSegmentHighlight();
     }
     this.updateEquipmentVisibility();
+  }
+
+  /**
+   * После изменения зума: только линейное оборудование и подписи (угол зависит от пиксельной проекции).
+   * Полный renderMapData не вызываем — иначе пересоздаются все ЛЭП, опоры и тайлы «мигают».
+   */
+  private refreshZoomDependentLayers(): void {
+    if (!this.map || !this.mapData) return;
+    const data = this.mapData;
+    this.equipmentGeoJsonMarkers.forEach((m) => this.map?.removeLayer(m));
+    this.equipmentGeoJsonMarkers = [];
+    this.equipmentLabels.forEach((l) => this.map?.removeLayer(l));
+    this.equipmentLabels = [];
+    this.renderEquipmentBetweenPoles(data.poles?.features ?? [], data.powerLinesList ?? []);
+    this.updateEquipmentVisibility();
+    this.updatePoleLabels();
   }
 
   /**
@@ -2458,7 +2478,12 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   /** Разбор JSON вложений карточки. Возвращает массив с url и опционально thumbnail. */
-  parseCardAttachments(json: string | null | undefined): { t: string; url: string; thumbnail?: string }[] {
+  parseCardAttachments(json: string | null | undefined): {
+    t: string;
+    url: string;
+    thumbnail?: string;
+    original_filename?: string;
+  }[] {
     if (!json || !json.trim()) return [];
     try {
       const parsed = JSON.parse(json) as any;
@@ -2471,6 +2496,7 @@ export class MapComponent implements OnInit, OnDestroy {
           t: item.t || 'photo',
           url: item.url,
           thumbnail: item.thumbnail || item.thumbnail_url,
+          original_filename: item.original_filename,
         }));
     } catch {
       return [];
@@ -2478,8 +2504,30 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   /** Вложения из MinIO (поле card_comment_attachment) — одна таблица для фото, видео, голоса и файлов. */
-  get poleCardAttachments(): { t: string; url: string; thumbnail?: string }[] {
+  get poleCardAttachments(): { t: string; url: string; thumbnail?: string; original_filename?: string }[] {
     return this.parseCardAttachments((this.selectedPole as any)?.card_comment_attachment);
+  }
+
+  /** Вложения карточки оборудования + вложения к дефекту (без дубликатов по url). */
+  get equipmentCardAttachments(): { t: string; url: string; thumbnail?: string; original_filename?: string }[] {
+    const eq = this.selectedEquipment as any;
+    if (!eq) return [];
+    const fromCard = this.parseCardAttachments(eq.card_comment_attachment);
+    const fromDefect = this.parseCardAttachments(eq.defect_attachment);
+    const seen = new Set<string>();
+    const out: { t: string; url: string; thumbnail?: string; original_filename?: string }[] = [];
+    for (const att of [...fromCard, ...fromDefect]) {
+      const u = (att?.url || '').trim();
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      out.push(att);
+    }
+    return out;
+  }
+
+  /** История комментариев карточки оборудования (поле card_comment). */
+  get equipmentCardCommentThread(): CardCommentMessage[] {
+    return parseCardCommentMessages(this.selectedEquipment?.card_comment);
   }
 
   attachmentTypeLabel(t: string): string {
@@ -2503,9 +2551,16 @@ export class MapComponent implements OnInit, OnDestroy {
     return segment || 'attachment';
   }
 
+  /** Подпись файла: оригинальное имя из карточки или сегмент URL. */
+  getAttachmentDisplayName(att: { url: string; original_filename?: string | null }): string {
+    const o = (att as any)?.original_filename?.toString?.()?.trim?.();
+    if (o) return o;
+    return this.getAttachmentFilename(att.url);
+  }
+
   /** Скачать вложение на диск. */
-  downloadAttachment(att: { t: string; url: string }): void {
-    const filename = this.getAttachmentFilename(att.url);
+  downloadAttachment(att: { t: string; url: string; original_filename?: string | null }): void {
+    const filename = this.getAttachmentDisplayName(att);
     this.apiService.getAttachmentBlob(att.url).subscribe({
       next: (blob) => {
         const url = URL.createObjectURL(blob);

@@ -785,6 +785,33 @@ class _LepmRetrofit implements LepmRetrofit {
   }
 
   @override
+  Future<JsonDict> getOverlayRoutesGeoJSON() async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    const Map<String, dynamic>? _data = null;
+    final _options = _setStreamType<JsonDict>(
+      Options(method: 'GET', headers: _headers, extra: _extra)
+          .compose(
+            _dio.options,
+            '/map/overlay-routes/geojson',
+            queryParameters: queryParameters,
+            data: _data,
+          )
+          .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
+    );
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    late JsonDict _value;
+    try {
+      _value = JsonDict.fromJson(_result.data!);
+    } on Object catch (e, s) {
+      errorLogger?.logError(e, s, _options, response: _result);
+      rethrow;
+    }
+    return _value;
+  }
+
+  @override
   Future<Substation> createSubstation(SubstationCreate substationData) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};

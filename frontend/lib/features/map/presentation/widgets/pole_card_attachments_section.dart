@@ -13,6 +13,8 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
 import '../../../../core/utils/attachment_urls.dart';
 import '../../../../core/utils/pole_card_comment_codec.dart';
+import '../pages/file_download_stub.dart'
+    if (dart.library.html) '../pages/file_download_web.dart' as file_download;
 import 'package:url_launcher/url_launcher.dart';
 
 String _attachmentTypeRu(String? raw) {
@@ -32,13 +34,90 @@ String _attachmentTypeRu(String? raw) {
   }
 }
 
+String _basenameFromUrl(String rel) {
+  final t = rel.trim();
+  if (t.isEmpty) return 'attachment.bin';
+  final seg = t.replaceAll(RegExp(r'/+$'), '').split('/');
+  return seg.isNotEmpty ? seg.last : 'attachment.bin';
+}
+
+String _displayNameForAttachment(Map<String, dynamic> m, String url) {
+  final o = m['original_filename']?.toString().trim();
+  if (o != null && o.isNotEmpty) return o;
+  final fn = m['filename']?.toString().trim();
+  if (fn != null && fn.isNotEmpty) return fn;
+  return _basenameFromUrl(url);
+}
+
+/// Относительный URL вложения → путь для [Dio] (baseUrl уже `/api/v1`).
+String _attachmentPathForDio(String rel) {
+  var apiPath = rel.trim();
+  if (apiPath.startsWith('/api/${AppConfig.apiVersion}/')) {
+    apiPath = apiPath.substring('/api/${AppConfig.apiVersion}'.length);
+  } else if (apiPath.startsWith('api/${AppConfig.apiVersion}/')) {
+    apiPath = '/${apiPath.substring('api/${AppConfig.apiVersion}'.length)}';
+  }
+  if (!apiPath.startsWith('/')) apiPath = '/$apiPath';
+  return apiPath;
+}
+
+Future<void> _downloadAttachmentFile({
+  required BuildContext context,
+  required Dio dio,
+  required Map<String, String> authHeaders,
+  required String relativeUrl,
+  String? suggestedDownloadName,
+}) async {
+  final apiPath = _attachmentPathForDio(relativeUrl);
+  try {
+    final resp = await dio.get<List<int>>(
+      apiPath,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = resp.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw Exception('Пустой ответ');
+    }
+    final name = (suggestedDownloadName != null && suggestedDownloadName.trim().isNotEmpty)
+        ? suggestedDownloadName.trim()
+        : _basenameFromUrl(relativeUrl);
+    final u8 = Uint8List.fromList(bytes);
+    if (kIsWeb) {
+      await file_download.saveFileBytes(name, u8);
+    } else {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/$name';
+      final f = File(path);
+      await f.writeAsBytes(u8, flush: true);
+      await OpenFile.open(path);
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(kIsWeb ? 'Файл загружен браузером' : 'Файл открыт'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось скачать: $e')),
+      );
+    }
+  }
+}
+
 /// Блок «Комментарий карточки» и превью вложений (с Bearer для API).
 class PoleCardAttachmentsSection extends ConsumerWidget {
   final Map<String, dynamic> objectProperties;
+  /// Добавить файл на сервер и в карточку (опора / оборудование с id).
+  final Future<void> Function()? onAddAttachment;
 
   const PoleCardAttachmentsSection({
     super.key,
     required this.objectProperties,
+    this.onAddAttachment,
   });
 
   @override
@@ -56,7 +135,7 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
         ? <Map<String, dynamic>>[]
         : PoleCardAttachmentCodec.parseItemsJson(raw);
 
-    if (commentThread.isEmpty && items.isEmpty) {
+    if (commentThread.isEmpty && items.isEmpty && onAddAttachment == null) {
       return const SizedBox.shrink();
     }
 
@@ -64,18 +143,22 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
+    final hasAuth = headers.isNotEmpty;
 
     final rows = <DataRow>[];
+    var rowNum = 0;
     for (var i = 0; i < items.length; i++) {
       final m = items[i];
       final t = m['t']?.toString() ?? '';
       final url = m['url']?.toString();
       if (url == null || url.isEmpty) continue;
+      rowNum++;
       final thumb = m['thumbnail_url']?.toString();
+      final displayName = _displayNameForAttachment(m, url);
       rows.add(
         DataRow(
           cells: [
-            DataCell(Text('${i + 1}', style: const TextStyle(fontSize: 13))),
+            DataCell(Text('$rowNum', style: const TextStyle(fontSize: 13))),
             DataCell(
               Text(
                 _attachmentTypeRu(t),
@@ -86,13 +169,33 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 140, maxWidth: 280),
-                  child: _AttachmentRow(
-                    type: t,
-                    relativeUrl: url,
-                    thumbnailUrl: thumb,
-                    authHeaders: headers,
-                    dio: dio,
+                  constraints: const BoxConstraints(minWidth: 160, maxWidth: 320),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: _AttachmentRow(
+                          type: t,
+                          relativeUrl: url,
+                          displayFilename: displayName,
+                          thumbnailUrl: thumb,
+                          authHeaders: headers,
+                          dio: dio,
+                        ),
+                      ),
+                      if (hasAuth)
+                        IconButton(
+                          tooltip: 'Скачать',
+                          icon: const Icon(Icons.download, size: 20),
+                          onPressed: () => _downloadAttachmentFile(
+                            context: context,
+                            dio: dio,
+                            authHeaders: headers,
+                            relativeUrl: url,
+                            suggestedDownloadName: displayName,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -114,6 +217,27 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 10),
+        if (onAddAttachment != null) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                try {
+                  await onAddAttachment!();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Ошибка: $e')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.attach_file, size: 18),
+              label: const Text('Добавить вложение'),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         if (commentThread.isNotEmpty) ...[
           Text(
             'Сообщения (текст и голос)',
@@ -264,6 +388,7 @@ class _CardCommentBubble extends StatelessWidget {
 class _AttachmentRow extends StatelessWidget {
   final String type;
   final String relativeUrl;
+  final String displayFilename;
   final String? thumbnailUrl;
   final Map<String, String> authHeaders;
   final Dio dio;
@@ -271,6 +396,7 @@ class _AttachmentRow extends StatelessWidget {
   const _AttachmentRow({
     required this.type,
     required this.relativeUrl,
+    required this.displayFilename,
     this.thumbnailUrl,
     required this.authHeaders,
     required this.dio,
@@ -322,7 +448,18 @@ class _AttachmentRow extends StatelessWidget {
           label: Text(type == 'voice' ? 'Воспроизвести запись' : 'Открыть видео'),
         );
       default:
-        return _fallbackChip(context, type.isEmpty ? 'Вложение' : type);
+        return Row(
+          children: [
+            Expanded(
+              child: Text(
+                displayFilename,
+                style: const TextStyle(fontSize: 13),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
     }
   }
 
@@ -334,43 +471,12 @@ class _AttachmentRow extends StatelessWidget {
   }
 
   Future<void> _openMediaFile(BuildContext context, String rel) async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Скачивание медиа в браузере пока не поддерживается')),
-      );
-      return;
-    }
-    try {
-      // Относительный путь API: baseUrl уже содержит /api/v1
-      var apiPath = rel.trim();
-      if (apiPath.startsWith('/api/${AppConfig.apiVersion}/')) {
-        apiPath = apiPath.substring('/api/${AppConfig.apiVersion}'.length);
-      } else if (apiPath.startsWith('api/${AppConfig.apiVersion}/')) {
-        apiPath = '/${apiPath.substring('api/${AppConfig.apiVersion}'.length)}';
-      }
-      if (!apiPath.startsWith('/')) apiPath = '/$apiPath';
-
-      final resp = await dio.get<List<int>>(
-        apiPath,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final bytes = resp.data;
-      if (bytes == null || bytes.isEmpty) {
-        throw Exception('Пустой ответ');
-      }
-      final parts = rel.split('/');
-      final name = parts.isNotEmpty ? parts.last : 'attachment.bin';
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/$name';
-      final f = File(path);
-      await f.writeAsBytes(bytes, flush: true);
-      await OpenFile.open(path);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось открыть файл: $e')),
-        );
-      }
-    }
+    await _downloadAttachmentFile(
+      context: context,
+      dio: dio,
+      authHeaders: authHeaders,
+      relativeUrl: rel,
+      suggestedDownloadName: displayFilename,
+    );
   }
 }
