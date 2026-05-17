@@ -794,13 +794,13 @@ export class CreateObjectDialogComponent implements OnInit {
       `Якорь: ${anchor} (id ${tapPoleId}), индекс ветки ${branchIndex}. ` +
       (chain ? `Все опоры ветки: ${chain}.` : 'На ветке пока нет учтённых опор.');
     if (names.length === 0) {
-      return { label: `${anchor} · ветка ${branchIndex} — (пока без опор)`, tooltip };
+      return { label: `${anchor} · отпайка ${branchIndex} — (пока без опор)`, tooltip };
     }
     if (names.length === 1) {
-      return { label: `${anchor} · ветка ${branchIndex} — к ${first}`, tooltip };
+      return { label: `${anchor} · отпайка ${branchIndex} — к ${first}`, tooltip };
     }
     return {
-      label: `${anchor} · ветка ${branchIndex}: ${first} → ${last} (${names.length} оп.)`,
+      label: `${anchor} · отпайка ${branchIndex}: ${first} → ${last} (${names.length} оп.)`,
       tooltip
     };
   }
@@ -2034,14 +2034,14 @@ export class CreateObjectDialogComponent implements OnInit {
     return null;
   }
 
-  /** Подпись поля «ветка»: что выбрано — Магистраль или Отпайка от опоры X — ветка N */
+  /** Подпись поля «отпайка»: Магистраль или отпайка от опоры X — отпайка N */
   get newTapBranchOptionLabel(): string {
     const id = this.data?.tapPoleId;
     if (id == null) {
-      return 'Новая ветка';
+      return 'Новая отпайка';
     }
     const p = this.tapPolesInLine.find(x => x.id === id);
-    return `Новая ветка от ${p?.pole_number ?? 'опора ' + id}`;
+    return `Новая отпайка от ${p?.pole_number ?? 'опора ' + id}`;
   }
 
   get tapBranchLabel(): string {
@@ -2053,7 +2053,7 @@ export class CreateObjectDialogComponent implements OnInit {
       return this.newTapBranchOptionLabel;
     }
     const tb = this.tapBranchesInLine.find(b => b.value === sel);
-    return tb ? tb.label : 'Ветка';
+    return tb ? tb.label : 'Отпайка';
   }
 
   // Валидатор для стандартных значений напряжения

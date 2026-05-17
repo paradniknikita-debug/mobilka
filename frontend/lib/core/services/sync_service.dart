@@ -45,6 +45,20 @@ Map<String, dynamic> _toSnakeCaseMap(Map<String, dynamic> map) {
   return result;
 }
 
+Future<List<int>> _attachmentBytesFromEntry(Map<String, dynamic> m) async {
+  final bytesB64 = m['bytes_b64'] as String?;
+  if (bytesB64 != null && bytesB64.toString().trim().isNotEmpty) {
+    try {
+      return base64Decode(bytesB64);
+    } catch (_) {}
+  }
+  final path = m['p'] as String?;
+  if (path != null && path.isNotEmpty) {
+    return await readAttachmentBytes(path);
+  }
+  return [];
+}
+
 List<Map<String, dynamic>> _mergePoleAttachmentItems(
   String? primaryJson,
   String? secondaryJson,
@@ -397,13 +411,16 @@ class SyncService extends StateNotifier<SyncState> {
               continue;
             }
             final path = m['p'] as String?;
-            if (path == null || path.isEmpty) continue;
+            final hasB64 = (m['bytes_b64'] as String?)?.trim().isNotEmpty == true;
+            if ((path == null || path.isEmpty) && !hasB64) continue;
             final type = m['t'] as String? ?? 'photo';
             if (pole.id > 0) {
               try {
-                final bytes = await readAttachmentBytes(path);
+                final bytes = await _attachmentBytesFromEntry(m);
                 if (bytes.isEmpty) continue;
-                final uploadName = p.basename(path);
+                final uploadName = (m['filename'] as String?)?.trim().isNotEmpty == true
+                    ? (m['filename'] as String).trim()
+                    : (path != null && path.isNotEmpty ? p.basename(path) : 'upload.bin');
                 final result = await _apiService.uploadPoleAttachment(pole.id, type, bytes, uploadName);
                 final url = result['url'] as String?;
                 if (url != null) {
@@ -491,13 +508,16 @@ class SyncService extends StateNotifier<SyncState> {
               continue;
             }
             final path = m['p'] as String?;
-            if (path == null || path.isEmpty) continue;
+            final hasB64 = (m['bytes_b64'] as String?)?.trim().isNotEmpty == true;
+            if ((path == null || path.isEmpty) && !hasB64) continue;
             final type = m['t'] as String? ?? 'photo';
             if (eq.id > 0) {
               try {
-                final bytes = await readAttachmentBytes(path);
+                final bytes = await _attachmentBytesFromEntry(m);
                 if (bytes.isEmpty) continue;
-                final uploadName = p.basename(path);
+                final uploadName = (m['filename'] as String?)?.trim().isNotEmpty == true
+                    ? (m['filename'] as String).trim()
+                    : (path != null && path.isNotEmpty ? p.basename(path) : 'upload.bin');
                 final result = await _apiService.uploadEquipmentAttachment(eq.id, type, bytes, uploadName);
                 final url = result['url'] as String?;
                 if (url != null) {
@@ -608,12 +628,17 @@ class SyncService extends StateNotifier<SyncState> {
         final unresolved = <Map<String, dynamic>>[];
         for (final m in item.pending) {
           final path = m['p'] as String?;
-          if (path == null || path.isEmpty) continue;
+          final hasB64 = (m['bytes_b64'] as String?)?.trim().isNotEmpty == true;
+          if ((path == null || path.isEmpty) && !hasB64) continue;
           final type = m['t'] as String? ?? 'photo';
           try {
-            final bytes = await readAttachmentBytes(path);
+            final bytes = await _attachmentBytesFromEntry(m);
             if (bytes.isEmpty) continue;
-            final uploadName = p.basename(path);
+            final uploadName = (m['filename'] as String?)?.trim().isNotEmpty == true
+                ? (m['filename'] as String).trim()
+                : (path != null && path.isNotEmpty && path.contains('.')
+                    ? p.basename(path)
+                    : 'upload.bin');
             final result = await _apiService.uploadPoleAttachment(serverPoleId, type, bytes, uploadName);
             final url = result['url'] as String?;
             if (url != null) {

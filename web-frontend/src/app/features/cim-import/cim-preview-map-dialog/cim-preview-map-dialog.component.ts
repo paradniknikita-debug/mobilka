@@ -45,7 +45,7 @@ export class CimPreviewMapDialogComponent implements AfterViewInit, OnDestroy {
       ...this.points.map((p) => [p.lat, p.lng] as [number, number]),
       ...this.polylines.flatMap((l) => [l.from, l.to]),
     ];
-    const center: L.LatLngExpression = allCoords.length ? allCoords[0] : [55.75, 37.62];
+    const center: L.LatLngExpression = allCoords.length ? allCoords[0] : [53.9045, 27.5615];
     const map = L.map('cim-preview-map', {
       center,
       zoom: 12,

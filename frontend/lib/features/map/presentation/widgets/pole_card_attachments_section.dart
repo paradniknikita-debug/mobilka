@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -59,6 +60,49 @@ String _attachmentPathForDio(String rel) {
   }
   if (!apiPath.startsWith('/')) apiPath = '/$apiPath';
   return apiPath;
+}
+
+Future<void> _downloadLocalAttachmentFile({
+  required BuildContext context,
+  required String localPath,
+  String? suggestedDownloadName,
+}) async {
+  try {
+    final f = File(localPath);
+    if (!await f.exists()) {
+      throw Exception('Локальный файл не найден');
+    }
+    final bytes = await f.readAsBytes();
+    if (bytes.isEmpty) throw Exception('Пустой файл');
+    final name = (suggestedDownloadName != null && suggestedDownloadName.trim().isNotEmpty)
+        ? suggestedDownloadName.trim()
+        : localPath.split(RegExp(r'[\\/]')).last;
+    final u8 = Uint8List.fromList(bytes);
+    if (kIsWeb) {
+      await file_download.saveFileBytes(name, u8);
+    } else {
+      final saved = await file_download.saveFileBytes(name, u8);
+      if (saved != null && saved.isNotEmpty) {
+        await OpenFile.open(saved);
+      } else {
+        await OpenFile.open(localPath);
+      }
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(kIsWeb ? 'Файл загружен браузером' : 'Файл сохранён'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть файл: $e')),
+      );
+    }
+  }
 }
 
 Future<void> _downloadAttachmentFile({
@@ -151,10 +195,14 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
       final m = items[i];
       final t = m['t']?.toString() ?? '';
       final url = m['url']?.toString();
-      if (url == null || url.isEmpty) continue;
+      final localPath = m['p']?.toString();
+      final hasUrl = url != null && url.isNotEmpty;
+      final hasLocal = !kIsWeb && localPath != null && localPath.isNotEmpty;
+      if (!hasUrl && !hasLocal) continue;
       rowNum++;
       final thumb = m['thumbnail_url']?.toString();
-      final displayName = _displayNameForAttachment(m, url);
+      final ref = hasUrl ? url! : localPath!;
+      final displayName = _displayNameForAttachment(m, ref);
       rows.add(
         DataRow(
           cells: [
@@ -174,27 +222,42 @@ class PoleCardAttachmentsSection extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: _AttachmentRow(
-                          type: t,
-                          relativeUrl: url,
-                          displayFilename: displayName,
-                          thumbnailUrl: thumb,
-                          authHeaders: headers,
-                          dio: dio,
-                        ),
+                        child: hasUrl
+                            ? _AttachmentRow(
+                                type: t,
+                                relativeUrl: url!,
+                                displayFilename: displayName,
+                                thumbnailUrl: thumb,
+                                authHeaders: headers,
+                                dio: dio,
+                              )
+                            : Text(
+                                displayName,
+                                style: const TextStyle(fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                       ),
-                      if (hasAuth)
-                        IconButton(
-                          tooltip: 'Скачать',
-                          icon: const Icon(Icons.download, size: 20),
-                          onPressed: () => _downloadAttachmentFile(
-                            context: context,
-                            dio: dio,
-                            authHeaders: headers,
-                            relativeUrl: url,
-                            suggestedDownloadName: displayName,
-                          ),
-                        ),
+                      IconButton(
+                        tooltip: hasUrl ? 'Скачать' : 'Открыть файл',
+                        icon: const Icon(Icons.download, size: 20),
+                        onPressed: () {
+                          if (hasUrl && hasAuth) {
+                            _downloadAttachmentFile(
+                              context: context,
+                              dio: dio,
+                              authHeaders: headers,
+                              relativeUrl: url!,
+                              suggestedDownloadName: displayName,
+                            );
+                          } else if (hasLocal) {
+                            _downloadLocalAttachmentFile(
+                              context: context,
+                              localPath: localPath!,
+                              suggestedDownloadName: displayName,
+                            );
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ),

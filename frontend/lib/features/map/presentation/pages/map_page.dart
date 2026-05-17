@@ -40,6 +40,7 @@ import '../../../../core/models/substation.dart';
 import '../../../../core/map/voltage_level_colors.dart';
 import '../../../../core/utils/map_load_error_message.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
+import '../../../../core/utils/card_attachment_store.dart';
 import '../../../towers/presentation/widgets/create_pole_dialog.dart';
 import '../../../home/presentation/pages/home_page.dart'
     show activeSessionProvider, recentPatrolsProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
@@ -1385,9 +1386,28 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   void _centerOnObjects() {
-    LatLng? center;
     final prefs = ref.read(prefsProvider);
     final sessionLineId = prefs?.getInt(AppConfig.activeSessionPowerLineIdKey);
+
+    if (sessionLineId == null) {
+      final loc = _currentLocation;
+      if (loc != null && _mapReady) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _mapReady) {
+            try {
+              _mapController.move(loc, AppConfig.defaultZoom);
+            } catch (e) {
+              print('Ошибка центрирования на местоположении: $e');
+            }
+          }
+        });
+      } else if (loc != null) {
+        _pendingCenterOnLocation = loc;
+      }
+      return;
+    }
+
+    LatLng? center;
 
     if (_polesData != null) {
       final features = _polesData!['features'] as List<dynamic>?;
@@ -3434,8 +3454,11 @@ class _MapPageState extends ConsumerState<MapPage> {
                 padding: EdgeInsets.zero,
                 children: [
                   if (_powerLinesList != null && _powerLinesList!.isNotEmpty)
-                    ..._powerLinesList!.map<Widget>((powerLine) =>
-                        _buildPowerLineTreeItem(powerLine)),
+                    ..._powerLinesList!
+                        .where((pl) =>
+                            _currentLineId == null || pl.id == _currentLineId)
+                        .map<Widget>((powerLine) =>
+                            _buildPowerLineTreeItem(powerLine)),
                   if (_substationsData != null) ..._buildSubstationsList(),
                 ],
               ),
@@ -5237,6 +5260,81 @@ class _MapPageState extends ConsumerState<MapPage> {
     return null;
   }
 
+  int _currentUserIdForAttachment() {
+    final auth = ref.read(authStateProvider);
+    if (auth is AuthStateAuthenticated) return auth.user.id;
+    return 0;
+  }
+
+  String? _currentUserNameForAttachment() {
+    final auth = ref.read(authStateProvider);
+    if (auth is AuthStateAuthenticated) {
+      final n = auth.user.fullName.trim();
+      if (n.isNotEmpty) return n;
+      return auth.user.username;
+    }
+    return null;
+  }
+
+  Future<void> _appendLocalCardAttachment({
+    required int poleId,
+    required String localPath,
+    required String fileName,
+    required String attType,
+  }) async {
+    final db = ref.read(drift_db.databaseProvider);
+    final pole = await db.getPole(poleId);
+    final items = PoleCardAttachmentCodec.parseItemsJson(pole?.cardCommentAttachment);
+    items.add({
+      ...PoleCardAttachmentCodec.newPhotoAttachment(
+        localPath,
+        userId: _currentUserIdForAttachment(),
+        userName: _currentUserNameForAttachment(),
+      ),
+      't': attType,
+      'filename': fileName,
+      'original_filename': fileName,
+    });
+    final enc = jsonEncode(items);
+    await db.setPoleCardCommentAttachment(poleId, enc);
+    await db.setPoleNeedsSync(poleId, true);
+    if (!mounted) return;
+    setState(() {
+      _selectedObjectProperties?['card_comment_attachment'] = enc;
+    });
+    await _loadMapDataFromLocal(skipAutoCenter: true);
+  }
+
+  Future<void> _appendLocalEquipmentCardAttachment({
+    required int equipmentId,
+    required String localPath,
+    required String fileName,
+    required String attType,
+  }) async {
+    final db = ref.read(drift_db.databaseProvider);
+    final eq = await db.getEquipment(equipmentId);
+    if (eq == null) return;
+    final items = PoleCardAttachmentCodec.parseItemsJson(eq.cardCommentAttachment);
+    items.add({
+      ...PoleCardAttachmentCodec.newPhotoAttachment(
+        localPath,
+        userId: _currentUserIdForAttachment(),
+        userName: _currentUserNameForAttachment(),
+      ),
+      't': attType,
+      'filename': fileName,
+      'original_filename': fileName,
+    });
+    final enc = jsonEncode(items);
+    await db.setEquipmentCardCommentAttachment(equipmentId, enc);
+    await db.setEquipmentNeedsSync(equipmentId, true);
+    if (!mounted) return;
+    setState(() {
+      _selectedObjectProperties?['card_comment_attachment'] = enc;
+    });
+    await _loadMapDataFromLocal(skipAutoCenter: true);
+  }
+
   Future<void> _pickAndUploadCardAttachment() async {
     final props = _selectedObjectProperties;
     final t = _selectedObjectType;
@@ -5258,43 +5356,86 @@ class _MapPageState extends ConsumerState<MapPage> {
     final attType = _guessAttachmentTypeFromName(name);
     final api = ref.read(apiServiceProvider);
     final dio = ref.read(dioProvider);
+    final byteList = bytes.toList();
 
     try {
       if (t == ObjectType.pole) {
         final poleId = _toInt(props['id']);
         final lineId = _toInt(props['line_id']);
         if (poleId == null || lineId == null) return;
-        final uploaded = await api.uploadPoleAttachment(poleId, attType, bytes.toList(), name);
-        final pole = await api.getPole(poleId);
-        final merged = _mergeCardAttachmentJson(pole.cardCommentAttachment, uploaded);
-        final body = _poleCreateFromPole(pole, cardCommentAttachment: merged);
-        await api.updatePole(lineId, poleId, body);
-        if (!mounted) return;
-        setState(() {
-          _selectedObjectProperties?['card_comment_attachment'] = merged;
-        });
+        try {
+          final uploaded = await api.uploadPoleAttachment(poleId, attType, byteList, name);
+          final pole = await api.getPole(poleId);
+          final merged = _mergeCardAttachmentJson(pole.cardCommentAttachment, uploaded);
+          final body = _poleCreateFromPole(pole, cardCommentAttachment: merged);
+          await api.updatePole(lineId, poleId, body);
+          if (!mounted) return;
+          setState(() {
+            _selectedObjectProperties?['card_comment_attachment'] = merged;
+          });
+        } catch (_) {
+          if (kIsWeb) rethrow;
+          final path = await persistCardAttachmentBytes(byteList, name);
+          if (path == null) rethrow;
+          await _appendLocalCardAttachment(
+            poleId: poleId,
+            localPath: path,
+            fileName: name,
+            attType: attType,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Вложение сохранено локально. Загрузится при синхронизации.'),
+                backgroundColor: Colors.blue,
+              ),
+            );
+          }
+          return;
+        }
       } else if (t == ObjectType.equipment) {
         final eqId = _toInt(props['equipment_id']) ?? _toInt(props['id']);
         if (eqId == null) return;
-        final uploaded = await api.uploadEquipmentAttachment(eqId, attType, bytes.toList(), name);
-        final raw = await dio.get<Map<String, dynamic>>('/equipment/$eqId');
-        final map = Map<String, dynamic>.from(raw.data ?? {});
-        map['card_comment_attachment'] = _mergeCardAttachmentJson(
-          map['card_comment_attachment']?.toString(),
-          uploaded,
-        );
-        map.remove('id');
-        map.remove('pole_id');
-        map.remove('mrid');
-        map.remove('created_by');
-        map.remove('created_at');
-        map.remove('updated_at');
-        final create = EquipmentCreate.fromJson(map);
-        final updated = await api.updateEquipment(eqId, create);
-        if (!mounted) return;
-        setState(() {
-          _selectedObjectProperties?['card_comment_attachment'] = updated.cardCommentAttachment;
-        });
+        try {
+          final uploaded = await api.uploadEquipmentAttachment(eqId, attType, byteList, name);
+          final raw = await dio.get<Map<String, dynamic>>('/equipment/$eqId');
+          final map = Map<String, dynamic>.from(raw.data ?? {});
+          map['card_comment_attachment'] = _mergeCardAttachmentJson(
+            map['card_comment_attachment']?.toString(),
+            uploaded,
+          );
+          map.remove('id');
+          map.remove('pole_id');
+          map.remove('mrid');
+          map.remove('created_by');
+          map.remove('created_at');
+          map.remove('updated_at');
+          final create = EquipmentCreate.fromJson(map);
+          final updated = await api.updateEquipment(eqId, create);
+          if (!mounted) return;
+          setState(() {
+            _selectedObjectProperties?['card_comment_attachment'] = updated.cardCommentAttachment;
+          });
+        } catch (_) {
+          if (kIsWeb) rethrow;
+          final path = await persistCardAttachmentBytes(byteList, name);
+          if (path == null) rethrow;
+          await _appendLocalEquipmentCardAttachment(
+            equipmentId: eqId,
+            localPath: path,
+            fileName: name,
+            attType: attType,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Вложение сохранено локально. Загрузится при синхронизации.'),
+                backgroundColor: Colors.blue,
+              ),
+            );
+          }
+          return;
+        }
       } else {
         return;
       }
@@ -5368,8 +5509,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       'y_position': 'Широта (y_position)',
       'quantity': 'Количество',
       'nameplate': 'Марка (табличка)',
-      'identified_object_description': 'Номер единицы оборудования',
-      'installation_display_name': 'Название электроустановки',
+      'identified_object_description': 'Примечание',
       'rated_current': 'Номинальный ток, А',
       'i_th': 'Ток термической стойкости (I_th), А',
       'ip_max': 'Максимальный пиковый ток КЗ (i_p max), А',

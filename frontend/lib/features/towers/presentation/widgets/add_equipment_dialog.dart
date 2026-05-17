@@ -1009,6 +1009,55 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     ));
   }
 
+  Widget _buildBrandCatalogDropdown({
+    required String labelText,
+    required String hintText,
+  }) {
+    final brands = List<String>.from(_brandSuggestions);
+    final current = _brandController.text.trim();
+    if (current.isNotEmpty && !brands.contains(current)) {
+      brands.insert(0, current);
+    }
+    final value = current.isNotEmpty && brands.contains(current) ? current : null;
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: InputDecoration(
+        labelText: labelText,
+        hintText: hintText,
+        filled: true,
+        fillColor: PatrolColors.surfaceCard,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: brands
+          .map(
+            (s) => DropdownMenuItem(
+              value: s,
+              child: Text(s, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: (v) {
+        if (v == null) return;
+        setState(() {
+          if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
+              v.trim().toLowerCase() == 'другое') {
+            _brandController.text = _noBrandLabel;
+            _clearElectricalCharacteristics();
+            return;
+          }
+          _brandController.text = v;
+        });
+        if (v.trim().toLowerCase() != _noBrandLabel.toLowerCase() &&
+            v.trim().toLowerCase() != 'другое') {
+          final applied = _applyCatalogPresetByLabel(v);
+          if (!applied) {
+            _applyKnownSwitchBrandPresetByInput(v);
+          }
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -1109,87 +1158,18 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _brandController,
-                  decoration: InputDecoration(
-                    labelText: _isGroundingSwitch
-                        ? 'Марка (табличка, nameplate)'
-                        : 'Марка (табличка, nameplate) *',
-                    hintText: _isGroundingSwitch
-                        ? 'Например: ЗН-10'
-                        : 'Например: GW4-12D(W)1250',
-                    filled: true,
-                    fillColor: PatrolColors.surfaceCard,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  style: const TextStyle(color: PatrolColors.textPrimary),
-                  onChanged: (v) {
-                    setState(() {
-                      if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
-                          v.trim().toLowerCase() == 'другое') {
-                        _clearElectricalCharacteristics();
-                      }
-                    });
-                    _tryApplyCatalogPresetByInput(v);
-                  },
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: _brandSuggestions.map((s) {
-                    final selected = _brandController.text.trim() == s;
-                    return FilterChip(
-                      label: Text(s),
-                      selected: selected,
-                      onSelected: (v) {
-                        setState(() {
-                          if (!v) {
-                            _brandController.text = '';
-                            _clearElectricalCharacteristics();
-                            return;
-                          }
-                          if (s.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
-                              s.trim().toLowerCase() == 'другое') {
-                            _brandController.text = _noBrandLabel;
-                            _clearElectricalCharacteristics();
-                            return;
-                          }
-                          _brandController.text = s;
-                        });
-                        if (v &&
-                            s.trim().toLowerCase() != _noBrandLabel.toLowerCase() &&
-                            s.trim().toLowerCase() != 'другое') {
-                          final applied = _applyCatalogPresetByLabel(s);
-                          if (!applied) {
-                            _applyKnownSwitchBrandPresetByInput(s);
-                          }
-                        }
-                      },
-                      selectedColor: PatrolColors.accentBlue.withOpacity(0.3),
-                    );
-                  }).toList(),
+                _buildBrandCatalogDropdown(
+                  labelText: _isGroundingSwitch
+                      ? 'Марка (табличка, nameplate)'
+                      : 'Марка (табличка, nameplate) *',
+                  hintText: _isGroundingSwitch ? 'Например: ЗН-10' : 'Например: GW4-12D(W)1250',
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _unitNumberController,
                   decoration: InputDecoration(
-                    labelText: _isGroundingSwitch
-                        ? 'Номер единицы оборудования (CIM description)'
-                        : 'Номер единицы (CIM description)',
-                    hintText: 'Учётный номер (необязательно)',
-                    filled: true,
-                    fillColor: PatrolColors.surfaceCard,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  style: const TextStyle(color: PatrolColors.textPrimary),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _installationNameController,
-                  decoration: InputDecoration(
-                    labelText: 'Название электроустановки',
-                    hintText: 'По умолчанию — имя ЛЭП при экспорте',
+                    labelText: 'Примечание',
+                    hintText: 'Текст примечания (необязательно)',
                     filled: true,
                     fillColor: PatrolColors.surfaceCard,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1347,64 +1327,9 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                   const SizedBox(height: 12),
                 ],
               ] else ...[
-                TextField(
-                  controller: _brandController,
-                  decoration: InputDecoration(
-                    labelText: 'Марка оборудования *',
-                    hintText: 'Введите марку',
-                    helperText: 'Выберите из справочника или введите вручную',
-                    helperStyle: TextStyle(fontSize: 11, color: PatrolColors.textSecondary),
-                    filled: true,
-                    fillColor: PatrolColors.surfaceCard,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  style: const TextStyle(color: PatrolColors.textPrimary),
-                  onChanged: (v) {
-                    setState(() {
-                      if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
-                          v.trim().toLowerCase() == 'другое') {
-                        _clearElectricalCharacteristics();
-                      }
-                    });
-                    _tryApplyCatalogPresetByInput(v);
-                  },
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: _brandSuggestions.map((s) {
-                    final selected = _brandController.text.trim() == s;
-                    return FilterChip(
-                      label: Text(s),
-                      selected: selected,
-                      onSelected: (v) {
-                        setState(() {
-                          if (!v) {
-                            _brandController.text = '';
-                            _clearElectricalCharacteristics();
-                            return;
-                          }
-                          if (s.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
-                              s.trim().toLowerCase() == 'другое') {
-                            _brandController.text = _noBrandLabel;
-                            _clearElectricalCharacteristics();
-                            return;
-                          }
-                          _brandController.text = s;
-                        });
-                        if (v &&
-                            s.trim().toLowerCase() != _noBrandLabel.toLowerCase() &&
-                            s.trim().toLowerCase() != 'другое') {
-                          final applied = _applyCatalogPresetByLabel(s);
-                          if (!applied) {
-                            _applyKnownSwitchBrandPresetByInput(s);
-                          }
-                        }
-                      },
-                      selectedColor: PatrolColors.accentBlue.withOpacity(0.3),
-                    );
-                  }).toList(),
+                _buildBrandCatalogDropdown(
+                  labelText: 'Марка оборудования *',
+                  hintText: 'Выберите марку из справочника',
                 ),
               ],
               const SizedBox(height: 16),

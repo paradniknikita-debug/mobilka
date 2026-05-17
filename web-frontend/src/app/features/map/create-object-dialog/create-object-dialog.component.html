@@ -66,12 +66,12 @@
           <div class="row-2">
             <mat-form-field appearance="outline" class="half-width">
               <mat-label>Широта</mat-label>
-              <input matInput type="text" formControlName="latitude" placeholder="55.755800">
+              <input matInput type="text" formControlName="latitude" placeholder="53.904500">
               <mat-error>{{ getFieldError('latitude') }}</mat-error>
             </mat-form-field>
             <mat-form-field appearance="outline" class="half-width">
               <mat-label>Долгота</mat-label>
-              <input matInput type="text" formControlName="longitude" placeholder="37.617300">
+              <input matInput type="text" formControlName="longitude" placeholder="27.561500">
               <mat-error>{{ getFieldError('longitude') }}</mat-error>
             </mat-form-field>
           </div>
@@ -558,7 +558,7 @@
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Тип оборудования</mat-label>
           <mat-select formControlName="equipment_type">
-            <mat-option value="breaker">Выключатель</mat-option>
+            <!-- <mat-option value="breaker">Выключатель</mat-option> -->
             <mat-option value="disconnector">Разъединитель</mat-option>
             <mat-option value="recloser">Реклозер</mat-option>
             <mat-option value="grounding_switch">Заземляющий нож</mat-option>
@@ -621,14 +621,8 @@
 
         <ng-container *ngIf="equipmentForm.get('equipment_type')?.value === 'disconnector' || equipmentForm.get('equipment_type')?.value === 'grounding_switch'">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>
-              {{
-                equipmentForm.get('equipment_type')?.value === 'grounding_switch'
-                  ? 'Номер единицы оборудования по типу энергообъекта'
-                  : 'Номер единицы оборудования'
-              }}
-            </mat-label>
-            <input matInput formControlName="identified_object_description" placeholder="Учётный / инвентарный номер">
+            <mat-label>Примечание</mat-label>
+            <input matInput formControlName="identified_object_description" placeholder="Текст примечания">
           </mat-form-field>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Родительский объект в базовом дереве</mat-label>
@@ -647,11 +641,7 @@
               </ng-template>
             </mat-select>
           </mat-form-field>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Название электроустановки</mat-label>
-            <input matInput formControlName="installation_display_name" placeholder="По умолчанию — имя ЛЭП при экспорте">
-            <mat-hint>Обычно совпадает с родителем (ЛЭП); можно задать явно</mat-hint>
-          </mat-form-field>
+          <!-- Название электроустановки упразднено в UI -->
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Направление к соседней опоре</mat-label>
             <mat-select formControlName="parent_main_equipment_pole_ref">
@@ -675,8 +665,8 @@
         </ng-container>
         <ng-container *ngIf="equipmentForm.get('equipment_type')?.value === 'surge_arrester'">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Номер единицы оборудования</mat-label>
-            <input matInput formControlName="identified_object_description" placeholder="Учётный / инвентарный номер">
+            <mat-label>Примечание</mat-label>
+            <input matInput formControlName="identified_object_description" placeholder="Текст примечания">
           </mat-form-field>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Полюс основного оборудования</mat-label>
@@ -694,17 +684,14 @@
         </ng-container>
         <ng-container *ngIf="equipmentForm.get('equipment_type')?.value === 'breaker' || equipmentForm.get('equipment_type')?.value === 'recloser'">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Номер единицы оборудования</mat-label>
-            <input matInput formControlName="identified_object_description" placeholder="Учётный / инвентарный номер">
+            <mat-label>Примечание</mat-label>
+            <input matInput formControlName="identified_object_description" placeholder="Текст примечания">
           </mat-form-field>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Подтип энергообъекта</mat-label>
             <input matInput formControlName="object_subtype" placeholder="вакуумный выключатель, выкатной и т.д.">
           </mat-form-field>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Название электроустановки</mat-label>
-            <input matInput formControlName="installation_display_name">
-          </mat-form-field>
+          <!-- Название электроустановки упразднено в UI -->
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Родительский объект в базовом дереве</mat-label>
             <input matInput [value]="equipmentPoleDisplayName || '—'" disabled>

@@ -59,7 +59,7 @@ const List<_EquipmentCategory> _equipmentCategories = [
   _EquipmentCategory('Грозоотвод', Icons.flash_on),
   _EquipmentCategory('Разрядники', Icons.shield_outlined),
   _EquipmentCategory('Разъединители', Icons.power),
-  _EquipmentCategory('Выключатели', Icons.toggle_on),
+  // _EquipmentCategory('Выключатели', Icons.toggle_on), // временно отключено
   _EquipmentCategory('Реклоузеры', Icons.settings_input_component),
   _EquipmentCategory('ЗН', Icons.electrical_services),
 ];
@@ -1316,20 +1316,20 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     if (names.isEmpty) {
       return _TapBranchOption(
         value: valueKey,
-        label: '$anchor · ветка $branchIndex — (пока без опор)',
+        label: '$anchor · отпайка $branchIndex — (пока без опор)',
         tooltip: tooltip,
       );
     }
     if (names.length == 1) {
       return _TapBranchOption(
         value: valueKey,
-        label: '$anchor · ветка $branchIndex — к $first',
+        label: '$anchor · отпайка $branchIndex — к $first',
         tooltip: tooltip,
       );
     }
     return _TapBranchOption(
       value: valueKey,
-      label: '$anchor · ветка $branchIndex: $first → $last (${names.length} оп.)',
+      label: '$anchor · отпайка $branchIndex: $first → $last (${names.length} оп.)',
       tooltip: tooltip,
     );
   }
@@ -2408,11 +2408,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
 
   String _labelNewTapBranch() {
     final id = widget.tapPoleId;
-    if (id == null) return 'Новая ветка';
+    if (id == null) return 'Новая отпайка';
     for (final e in _tapPolesInLine) {
-      if (e.key == id) return 'Новая ветка от ${e.value}';
+      if (e.key == id) return 'Новая отпайка от ${e.value}';
     }
-    return 'Новая ветка от опоры $id';
+    return 'Новая отпайка от опоры $id';
   }
 
   /// Поля ветки для JSON: выбор в списке → `branch_type` / `tap_pole_id` / `tap_branch_index` / `start_new_tap`.
@@ -3233,9 +3233,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Ветка: новая от якоря / магистраль / существующие ветки (JSON = выбор).
+                      // Отпайка: новая от якоря / магистраль / существующие отпайки (JSON = выбор).
                       if (_showBranchChoice) ...[
-                        Text('Ветка', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),
+                        Text('Отпайка', style: TextStyle(fontSize: 12, color: PatrolColors.textSecondary)),
                         const SizedBox(height: 6),
                         Builder(
                           builder: (context) {
@@ -3293,11 +3293,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                   isExpanded: true,
                                   hint: const Text('Магистраль'),
                                   items: dropdownItems,
-                                  onChanged: (widget.tapPoleId != null &&
-                                          widget.tapBranchIndex != null &&
-                                          !widget.startNewTap)
-                                      ? null
-                                      : (v) => setState(() => _branchSelection = v),
+                                  onChanged: (v) => setState(() => _branchSelection = v),
                                 ),
                               ),
                             );
@@ -3362,82 +3358,91 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       _buildStructuralCriticalityRow(),
                       const SizedBox(height: 8),
 
-                      // Марка опоры
-                      TextFormField(
-                        controller: _materialController,
-                        decoration: InputDecoration(
-                          labelText: 'Марка опоры',
-                          hintText: 'Например: СВ95-2',
-                          prefixIcon: const Icon(Icons.search, size: 20, color: PatrolColors.textSecondary),
-                          filled: true,
-                          fillColor: PatrolColors.surfaceCard,
-                        ),
-                        style: const TextStyle(color: PatrolColors.textPrimary),
-                        onChanged: (v) => _material = v.trim().isEmpty ? null : v.trim(),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: PoleReferenceData.poleBrandsCis.map((brand) {
-                            final selected = (_materialController.text.trim() == brand);
-                            return ChoiceChip(
-                              label: Text(brand),
-                              selected: selected,
-                              onSelected: (_) {
-                                setState(() {
-                                  _materialController.text = brand;
-                                  _material = brand;
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final poleBrands = List<String>.from(PoleReferenceData.poleBrandsCis);
+                          final curMaterial = _materialController.text.trim();
+                          if (curMaterial.isNotEmpty && !poleBrands.contains(curMaterial)) {
+                            poleBrands.insert(0, curMaterial);
+                          }
+                          final materialValue =
+                              curMaterial.isNotEmpty && poleBrands.contains(curMaterial)
+                                  ? curMaterial
+                                  : null;
+                          return DropdownButtonFormField<String>(
+                            value: materialValue,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'Марка опоры',
+                              hintText: 'Например: СВ95-2',
+                              prefixIcon: const Icon(Icons.search, size: 20, color: PatrolColors.textSecondary),
+                              filled: true,
+                              fillColor: PatrolColors.surfaceCard,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            items: poleBrands
+                                .map((brand) => DropdownMenuItem(
+                                      value: brand,
+                                      child: Text(brand, overflow: TextOverflow.ellipsis),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() {
+                                _materialController.text = v;
+                                _material = v;
+                              });
+                            },
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
 
-                      TextFormField(
-                        controller: _conductorTypeController,
-                        decoration: InputDecoration(
-                          labelText: 'Марка провода ЛЭП',
-                          hintText: 'Например: СИП-3 1х70',
-                          helperText: _expectedLineVoltageKv == null
-                              ? 'Справочник марок из БД, можно ввести вручную'
-                              : 'Показаны марки для ${_expectedLineVoltageKv!.toStringAsFixed(_expectedLineVoltageKv!.truncateToDouble() == _expectedLineVoltageKv ? 0 : 1)} кВ',
-                          helperStyle: TextStyle(fontSize: 11, color: PatrolColors.textSecondary),
-                          prefixIcon: const Icon(Icons.cable, size: 20, color: PatrolColors.textSecondary),
-                          filled: true,
-                          fillColor: PatrolColors.surfaceCard,
-                        ),
-                        style: const TextStyle(color: PatrolColors.textPrimary),
-                        onChanged: (v) => _conductorType = v.trim().isEmpty ? null : v.trim(),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: (_conductorSuggestions.isNotEmpty
+                      Builder(
+                        builder: (context) {
+                          final conductorOpts = (_conductorSuggestions.isNotEmpty
                                   ? _conductorSuggestions
                                   : PoleReferenceData.conductorTypes)
-                              .take(30)
-                              .map((mark) {
-                            final selected = (_conductorTypeController.text.trim() == mark);
-                            return ChoiceChip(
-                              label: Text(mark),
-                              selected: selected,
-                              onSelected: (_) {
-                                setState(() {
-                                  _conductorTypeController.text = mark;
-                                  _conductorType = mark;
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
+                              .take(60)
+                              .toList();
+                          final curConductor = _conductorTypeController.text.trim();
+                          if (curConductor.isNotEmpty && !conductorOpts.contains(curConductor)) {
+                            conductorOpts.insert(0, curConductor);
+                          }
+                          final conductorValue =
+                              curConductor.isNotEmpty && conductorOpts.contains(curConductor)
+                                  ? curConductor
+                                  : null;
+                          return DropdownButtonFormField<String>(
+                            value: conductorValue,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'Марка провода ЛЭП',
+                              hintText: 'Например: СИП-3 1х70',
+                              helperText: _expectedLineVoltageKv == null
+                                  ? 'Справочник марок из БД'
+                                  : 'Показаны марки для ${_expectedLineVoltageKv!.toStringAsFixed(_expectedLineVoltageKv!.truncateToDouble() == _expectedLineVoltageKv ? 0 : 1)} кВ',
+                              helperStyle: TextStyle(fontSize: 11, color: PatrolColors.textSecondary),
+                              prefixIcon: const Icon(Icons.cable, size: 20, color: PatrolColors.textSecondary),
+                              filled: true,
+                              fillColor: PatrolColors.surfaceCard,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            items: conductorOpts
+                                .map((mark) => DropdownMenuItem(
+                                      value: mark,
+                                      child: Text(mark, overflow: TextOverflow.ellipsis),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() {
+                                _conductorTypeController.text = v;
+                                _conductorType = v;
+                              });
+                            },
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
 

@@ -360,6 +360,16 @@ async def init_db():
                         THEN
                             ALTER TABLE equipment ADD COLUMN defect_attachment TEXT;
                         END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'equipment' AND column_name = 'card_comment')
+                        THEN
+                            ALTER TABLE equipment ADD COLUMN card_comment TEXT;
+                        END IF;
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipment')
+                           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'equipment' AND column_name = 'card_comment_attachment')
+                        THEN
+                            ALTER TABLE equipment ADD COLUMN card_comment_attachment TEXT;
+                        END IF;
                         -- pole: дефект конструкции (миграция 20260410_140000)
                         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pole')
                            AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pole' AND column_name = 'structural_defect')

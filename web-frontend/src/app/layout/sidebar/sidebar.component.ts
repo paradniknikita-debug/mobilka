@@ -343,18 +343,38 @@ export class SidebarComponent implements OnInit, OnDestroy {
   private powerLineToTreeFeature(pl: PowerLine): GeoJSONFeature {
     const fromGeo = this.powerLinesFeatures.find(f => f.properties['id'] === pl.id);
     if (fromGeo?.geometry?.coordinates) {
-      return fromGeo;
+      const props = { ...(fromGeo.properties || {}) };
+      if (!props['mrid'] && pl.mrid) {
+        props['mrid'] = pl.mrid;
+      }
+      return { ...fromGeo, properties: props };
     }
     return {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [0, 0] },
       properties: {
         id: pl.id,
+        mrid: pl.mrid ?? '',
         name: pl.name ?? '',
         voltage_level: pl.voltage_level ?? 0,
         status: pl.status ?? 'active'
       }
     };
+  }
+
+  private normalizeUidForSearch(value: string | null | undefined): string {
+    return (value ?? '').toString().trim().toLowerCase().replace(/-/g, '');
+  }
+
+  private matchesTreeSearch(haystack: string | null | undefined, query: string): boolean {
+    if (!haystack || !query) return false;
+    const h = haystack.toString().toLowerCase();
+    const q = query.trim().toLowerCase();
+    if (!q) return false;
+    if (h.includes(q)) return true;
+    const nq = this.normalizeUidForSearch(q);
+    if (nq.length >= 4 && this.normalizeUidForSearch(h).includes(nq)) return true;
+    return false;
   }
 
   // Получение всех ЛЭП с сегментами и опорами (по списку GET /power-lines, как во Flutter)
@@ -727,41 +747,48 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const items = this.getPowerLinesWithSegmentsAndPoles();
     const out: TreeSearchSuggestion[] = [];
     const limit = 15;
+    const qLower = q.trim().toLowerCase();
     for (const item of items) {
       const plId = item.powerLine.properties['id'];
-      const name = (item.powerLine.properties['name'] || '').toString().toLowerCase();
-      const mrid = (item.powerLine.properties['mrid'] || '').toString().toLowerCase();
-      if (name.includes(q) || mrid.includes(q)) {
+      const name = (item.powerLine.properties['name'] || '').toString();
+      const mrid = (item.powerLine.properties['mrid'] || '').toString();
+      const plModel = this.powerLineModelById(Number(plId));
+      const modelMrid = plModel?.mrid ?? '';
+      if (
+        this.matchesTreeSearch(name, qLower) ||
+        this.matchesTreeSearch(mrid, qLower) ||
+        this.matchesTreeSearch(modelMrid, qLower)
+      ) {
         out.push({ type: 'power_line', label: (item.powerLine.properties['name'] || 'ЛЭП') + ` (${item.powerLine.properties['voltage_level']} кВ)`, item });
         if (out.length >= limit) return out;
       }
       for (const seg of item.segments) {
-        const segName = (seg.segmentName || '').toString().toLowerCase();
-        if (segName.includes(q)) {
+        const segName = (seg.segmentName || '').toString();
+        if (this.matchesTreeSearch(segName, qLower)) {
           out.push({ type: 'segment', label: seg.segmentName || `Участок ${seg.segmentId}`, item, segment: seg });
           if (out.length >= limit) return out;
         }
         for (const pole of seg.poles) {
-          const pName = (pole.properties['pole_number'] || '').toString().toLowerCase();
-          const pMrid = (pole.properties['mrid'] || '').toString().toLowerCase();
-          if (pName.includes(q) || pMrid.includes(q)) {
+          const pName = (pole.properties['pole_number'] || '').toString();
+          const pMrid = (pole.properties['mrid'] || '').toString();
+          if (this.matchesTreeSearch(pName, qLower) || this.matchesTreeSearch(pMrid, qLower)) {
             out.push({ type: 'pole', label: (pole.properties['pole_number'] || 'Опора') + (pMrid ? ` · ${pole.properties['mrid']}` : ''), item, segment: seg, pole });
             if (out.length >= limit) return out;
           }
         }
         for (const span of seg.spans) {
-          const sName = (span.properties['span_number'] || '').toString().toLowerCase();
-          const sMrid = (span.properties['mrid'] || '').toString().toLowerCase();
-          if (sName.includes(q) || sMrid.includes(q)) {
+          const sName = (span.properties['span_number'] || '').toString();
+          const sMrid = (span.properties['mrid'] || '').toString();
+          if (this.matchesTreeSearch(sName, qLower) || this.matchesTreeSearch(sMrid, qLower)) {
             out.push({ type: 'span', label: (span.properties['span_number'] || 'Пролёт') + (sMrid ? ` · ${span.properties['mrid']}` : ''), item, segment: seg, span });
             if (out.length >= limit) return out;
           }
         }
       }
       for (const pole of item.allPoles) {
-        const pName = (pole.properties['pole_number'] || '').toString().toLowerCase();
-        const pMrid = (pole.properties['mrid'] || '').toString().toLowerCase();
-        if (pName.includes(q) || pMrid.includes(q)) {
+        const pName = (pole.properties['pole_number'] || '').toString();
+        const pMrid = (pole.properties['mrid'] || '').toString();
+        if (this.matchesTreeSearch(pName, qLower) || this.matchesTreeSearch(pMrid, qLower)) {
           out.push({ type: 'pole', label: (pole.properties['pole_number'] || 'Опора') + (pMrid ? ` · ${pole.properties['mrid']}` : ''), item, pole });
           if (out.length >= limit) return out;
         }
@@ -770,26 +797,30 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const firstItem = items[0];
     if (firstItem) {
       for (const tap of this.tapsFeatures) {
-        const tName = (tap.properties['tap_number'] || tap.properties['name'] || '').toString().toLowerCase();
-        const tMrid = (tap.properties['mrid'] || '').toString().toLowerCase();
-        if (tName.includes(q) || tMrid.includes(q)) {
+        const tName = (tap.properties['tap_number'] || tap.properties['name'] || '').toString();
+        const tMrid = (tap.properties['mrid'] || '').toString();
+        if (this.matchesTreeSearch(tName, qLower) || this.matchesTreeSearch(tMrid, qLower)) {
           out.push({ type: 'pole', label: `Отпайка: ${tap.properties['tap_number'] || tap.properties['name'] || 'не указано'}${tMrid ? ` · ${tap.properties['mrid']}` : ''}`, item: firstItem });
           if (out.length >= limit) return out;
         }
       }
       for (const sub of this.substationsFeatures) {
-        const sName = (sub.properties['name'] || '').toString().toLowerCase();
-        const sDisp = (sub.properties['dispatcher_name'] || '').toString().toLowerCase();
-        const sMrid = (sub.properties['mrid'] || '').toString().toLowerCase();
-        if (sName.includes(q) || sDisp.includes(q) || sMrid.includes(q)) {
+        const sName = (sub.properties['name'] || '').toString();
+        const sDisp = (sub.properties['dispatcher_name'] || '').toString();
+        const sMrid = (sub.properties['mrid'] || '').toString();
+        if (
+          this.matchesTreeSearch(sName, qLower) ||
+          this.matchesTreeSearch(sDisp, qLower) ||
+          this.matchesTreeSearch(sMrid, qLower)
+        ) {
           out.push({ type: 'pole', label: `ПС: ${sub.properties['name'] || 'Подстанция'}${sMrid ? ` · ${sub.properties['mrid']}` : ''}`, item: firstItem });
           if (out.length >= limit) return out;
         }
       }
       for (const eq of this.allEquipment) {
-        const eName = (eq.name || '').toLowerCase();
-        const eMrid = ((eq as any).mrid || '').toLowerCase();
-        if (eName.includes(q) || eMrid.includes(q)) {
+        const eName = (eq.name || '').toString();
+        const eMrid = ((eq as any).mrid || (eq as any).uid || '').toString();
+        if (this.matchesTreeSearch(eName, qLower) || this.matchesTreeSearch(eMrid, qLower)) {
           out.push({ type: 'pole', label: `Оборудование: ${eq.name || 'не указано'}${eMrid ? ` · ${(eq as any).mrid}` : ''}`, item: firstItem });
           if (out.length >= limit) return out;
         }
