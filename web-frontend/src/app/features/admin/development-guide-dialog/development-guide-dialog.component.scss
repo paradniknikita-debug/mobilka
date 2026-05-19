@@ -1,0 +1,20 @@
+.guide-body {
+  min-width: min(92vw, 800px);
+  max-height: 75vh;
+}
+
+.guide-pre {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}

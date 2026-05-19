@@ -17,6 +17,7 @@ export class CreateSegmentDialogComponent implements OnInit {
   isSubmitting = false;
   poles: Pole[] = [];
   isLoading = false;
+  conductorMarks: string[] = [];
   
   /** Показывать выбор «По магистрали» / «По отпайке», если начальная опора — отпаечная */
   showBranchChoice = false;
@@ -77,6 +78,7 @@ export class CreateSegmentDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadPoles();
+    this.loadConductorCatalog();
     this.segmentForm.get('from_pole_id')?.valueChanges.subscribe((fromId: number) => {
       this.fromPoleForBranch = fromId ? (this.poles.find(p => p.id === fromId) ?? null) : null;
       this.showBranchChoice = !!(this.fromPoleForBranch && (this.fromPoleForBranch as any).is_tap_pole);
@@ -86,6 +88,33 @@ export class CreateSegmentDialogComponent implements OnInit {
     });
   }
   
+  loadConductorCatalog(): void {
+    this.apiService.getLineConductorCatalog({ is_active: true, limit: 500 }).subscribe({
+      next: (items) => {
+        const marks = new Set<string>();
+        for (const it of items || []) {
+          const m = (it.mark || '').trim();
+          if (m) marks.add(m);
+        }
+        this.conductorMarks = Array.from(marks).sort((a, b) => a.localeCompare(b, 'ru'));
+      },
+      error: () => {
+        this.conductorMarks = [];
+      }
+    });
+  }
+
+  get filteredConductorMarks(): string[] {
+    const q = (this.segmentForm.get('conductor_type')?.value ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+    const fallback = ['AC-70', 'AC-95', 'AC-120', 'AC-150', 'AC-185', 'AC-240'];
+    const source = this.conductorMarks.length ? this.conductorMarks : fallback;
+    if (!q) return source.slice(0, 30);
+    return source.filter((m) => m.toLowerCase().includes(q)).slice(0, 30);
+  }
+
   loadSegment(): void {
     if (!this.segmentId) return;
     

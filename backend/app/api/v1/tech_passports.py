@@ -13,15 +13,31 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passport_export import export_passport_file
+from app.core.passport_sections import build_passport_sections
 from app.core.passport_snapshot import build_snapshot_for_object
 from app.core.roles import require_user_can_export
 from app.core.security import get_current_active_user
 from app.database import get_db
 from app.models.tech_passport import TechPassport
 from app.models.user import User
-from app.schemas.tech_passport import TechPassportCreate, TechPassportDetail, TechPassportListItem, TechPassportListResponse
+from app.schemas.tech_passport import (
+    PassportSection,
+    TechPassportCreate,
+    TechPassportDetail,
+    TechPassportListItem,
+    TechPassportListResponse,
+)
 
 router = APIRouter()
+
+
+def _detail_from_row(row) -> TechPassportDetail:
+    env = row.snapshot_json if isinstance(row.snapshot_json, dict) else {}
+    manual = row.manual_sections if isinstance(row.manual_sections, dict) else None
+    raw_sections = build_passport_sections(env, manual)
+    sections = [PassportSection.model_validate(s) for s in raw_sections]
+    base = TechPassportDetail.model_validate(row)
+    return base.model_copy(update={"sections": sections})
 
 
 def _default_title(object_type: str, data: Dict[str, Any]) -> str:
@@ -119,7 +135,7 @@ async def create_tech_passport(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return TechPassportDetail.model_validate(row)
+    return _detail_from_row(row)
 
 
 @router.get("/{passport_id}", response_model=TechPassportDetail)
@@ -131,7 +147,7 @@ async def get_tech_passport(
     row = await db.get(TechPassport, passport_id)
     if not row:
         raise HTTPException(status_code=404, detail="Паспорт не найден")
-    return TechPassportDetail.model_validate(row)
+    return _detail_from_row(row)
 
 
 @router.delete("/{passport_id}", status_code=status.HTTP_204_NO_CONTENT)

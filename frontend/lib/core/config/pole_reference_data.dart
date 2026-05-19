@@ -213,53 +213,52 @@ class DefectReferenceData {
   /// Например, «повреждение фундамента» только у Фундамента, «повреждение изолятора» только у Изоляторов.
   static const List<DefectItem> defectItems = [
     // Фундамент
-    DefectItem('трещины бетона', 'high', allowedCategoryTitles: ['Фундамент']),
-    DefectItem('разрушение бетона', 'high', allowedCategoryTitles: ['Фундамент']),
-    DefectItem('просадка фундамента', 'medium', allowedCategoryTitles: ['Фундамент']),
-    DefectItem('оголение арматуры', 'medium', allowedCategoryTitles: ['Фундамент']),
+    DefectItem('Трещины бетона', 'high', allowedCategoryTitles: ['Фундамент']),
+    DefectItem('Разрушение бетона', 'high', allowedCategoryTitles: ['Фундамент']),
+    DefectItem('Просадка фундамента', 'medium', allowedCategoryTitles: ['Фундамент']),
+    DefectItem('Оголение арматуры', 'medium', allowedCategoryTitles: ['Фундамент']),
 
     // Изоляторы
-    DefectItem('трещина изолятора', 'high', allowedCategoryTitles: ['Изоляторы']),
-    DefectItem('сколы изолятора', 'medium', allowedCategoryTitles: ['Изоляторы']),
-    DefectItem('загрязнение изолятора', 'medium', allowedCategoryTitles: ['Изоляторы']),
+    DefectItem('Трещина изолятора', 'high', allowedCategoryTitles: ['Изоляторы']),
+    DefectItem('Сколы изолятора', 'medium', allowedCategoryTitles: ['Изоляторы']),
+    DefectItem('Загрязнение изолятора', 'medium', allowedCategoryTitles: ['Изоляторы']),
+    DefectItem('Пробой изолятора', 'high', allowedCategoryTitles: ['Изоляторы']),
 
     // Траверсы
-    DefectItem('коррозия траверсы', 'medium', allowedCategoryTitles: ['Траверсы']),
-    DefectItem('деформация траверсы', 'medium', allowedCategoryTitles: ['Траверсы']),
-    DefectItem('ослабление креплений траверсы', 'medium', allowedCategoryTitles: ['Траверсы']),
+    DefectItem('Коррозия траверсы', 'medium', allowedCategoryTitles: ['Траверсы']),
+    DefectItem('Деформация траверсы', 'medium', allowedCategoryTitles: ['Траверсы']),
+    DefectItem('Ослабление креплений траверсы', 'medium', allowedCategoryTitles: ['Траверсы']),
 
     // Заземление / грозоотвод
-    DefectItem('коррозия заземляющего проводника', 'medium', allowedCategoryTitles: ['Заземление']),
-    DefectItem('обрыв заземляющего проводника', 'high', allowedCategoryTitles: ['Заземление']),
-    DefectItem('нет соединения с контуром', 'high', allowedCategoryTitles: ['Заземление']),
-    DefectItem('обрыв грозотроса', 'high', allowedCategoryTitles: ['Грозоотвод']),
-    DefectItem('коррозия грозотроса', 'medium', allowedCategoryTitles: ['Грозоотвод']),
+    DefectItem('Коррозия заземляющего проводника', 'medium', allowedCategoryTitles: ['Заземление', 'ЗН']),
+    DefectItem('Обрыв заземляющего проводника', 'high', allowedCategoryTitles: ['Заземление', 'ЗН']),
+    DefectItem('Нет соединения с контуром', 'high', allowedCategoryTitles: ['Заземление', 'ЗН']),
+    DefectItem('Обрыв грозотроса', 'high', allowedCategoryTitles: ['Грозоотвод']),
+    DefectItem('Коррозия грозотроса', 'medium', allowedCategoryTitles: ['Грозоотвод']),
 
     // Разрядники
-    DefectItem('следы срабатывания разрядника', 'medium', allowedCategoryTitles: ['Разрядники']),
-    DefectItem('трещины фарфора разрядника', 'high', allowedCategoryTitles: ['Разрядники']),
-    DefectItem('разрушение корпуса разрядника', 'high', allowedCategoryTitles: ['Разрядники']),
+    DefectItem('Следы срабатывания разрядника', 'medium', allowedCategoryTitles: ['Разрядники']),
+    DefectItem('Трещины фарфора разрядника', 'high', allowedCategoryTitles: ['Разрядники']),
+    DefectItem('Разрушение корпуса разрядника', 'high', allowedCategoryTitles: ['Разрядники']),
 
     // Разъединители / ЗН
-    DefectItem('подгорание контактов', 'medium', allowedCategoryTitles: ['Разъединители', 'ЗН']),
-    DefectItem('неполное размыкание контактов', 'high', allowedCategoryTitles: ['Разъединители', 'ЗН']),
-    DefectItem('заедание привода', 'medium', allowedCategoryTitles: ['Разъединители', 'ЗН']),
-
-    // Выключатели
-    DefectItem('повышенное сопротивление контактов', 'medium', allowedCategoryTitles: ['Выключатели']),
-    DefectItem('течь масла/изоляционной жидкости', 'high', allowedCategoryTitles: ['Выключатели']),
-    DefectItem('отказ включения/отключения', 'high', allowedCategoryTitles: ['Выключатели']),
+    DefectItem('Подгорание контактов', 'medium', allowedCategoryTitles: ['Разъединители', 'ЗН']),
+    DefectItem('Неполное размыкание контактов', 'high', allowedCategoryTitles: ['Разъединители', 'ЗН']),
+    DefectItem('Заедание привода', 'medium', allowedCategoryTitles: ['Разъединители', 'ЗН']),
 
     // Реклоузеры
-    DefectItem('некорректная работа автоматики реклоузера', 'high', allowedCategoryTitles: ['Реклоузеры']),
-    DefectItem('подгорание контактов реклоузера', 'medium', allowedCategoryTitles: ['Реклоузеры']),
-    DefectItem('повреждение корпуса реклоузера', 'medium', allowedCategoryTitles: ['Реклоузеры']),
+    DefectItem('Некорректная работа автоматики реклоузера', 'high', allowedCategoryTitles: ['Реклоузеры']),
+    DefectItem('Подгорание контактов реклоузера', 'medium', allowedCategoryTitles: ['Реклоузеры']),
+    DefectItem('Повреждение корпуса реклоузера', 'medium', allowedCategoryTitles: ['Реклоузеры']),
 
     // Общие дефекты / прочее
-    DefectItem('коррозия металлических элементов', 'medium'),
-    DefectItem('отклонение опоры от вертикали', 'medium'),
-    DefectItem('отсутствует маркировка', 'low'),
-    DefectItem('другое', 'low'),
+    DefectItem('Коррозия металлических элементов', 'medium'),
+    DefectItem('Отклонение опоры от вертикали', 'medium'),
+    DefectItem('Отсутствует маркировка', 'low'),
+    DefectItem('Нарушение габаритов', 'low'),
+    DefectItem('Повреждение лестницы/площадки', 'medium'),
+    DefectItem('Недостаточная высота подвеса провода', 'medium'),
+    DefectItem('Скопление посторонних предметов', 'low'),
   ];
 
   /// Список дефектов для данной категории оборудования (фильтр по allowedCategoryTitles).

@@ -1,0 +1,68 @@
+.wire-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 24px;
+}
+
+.read-only-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--app-text-muted);
+  font-size: 0.9rem;
+}
+
+.toolbar-row,
+.toolbar-search,
+.form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.form-grid mat-form-field {
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.file-label input {
+  display: none;
+}
+
+.file-label span {
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--app-primary, #3949ab);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.num {
+  text-align: right;
+}
+
+.actions {
+  white-space: nowrap;
+}
+
+.loading,
+.empty {
+  color: var(--app-text-muted);
+  padding: 12px 0;
+}

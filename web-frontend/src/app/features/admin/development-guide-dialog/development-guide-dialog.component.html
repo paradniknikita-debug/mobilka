@@ -1,0 +1,11 @@
+<h2 mat-dialog-title>Руководство разработчика</h2>
+<mat-dialog-content class="guide-body">
+  <div *ngIf="loading" class="loading-row">
+    <mat-spinner diameter="32"></mat-spinner>
+    <span>Загрузка…</span>
+  </div>
+  <pre *ngIf="!loading" class="guide-pre">{{ text }}</pre>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Закрыть</button>
+</mat-dialog-actions>

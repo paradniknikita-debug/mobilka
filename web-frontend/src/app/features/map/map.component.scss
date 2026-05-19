@@ -11,11 +11,6 @@
   height: 100%;
 }
 
-// Убираем "клетку" (швы между тайлами) на некоторых масштабах/дисплеях.
-::ng-deep .leaflet-container .leaflet-tile {
-  outline: 1px solid transparent;
-}
-
 .map-controls {
   position: absolute;
   top: 56px;

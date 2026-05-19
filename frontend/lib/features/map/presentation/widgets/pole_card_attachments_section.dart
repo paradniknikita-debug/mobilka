@@ -13,6 +13,7 @@ import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
 import '../../../../core/utils/attachment_urls.dart';
+import '../../../../core/utils/content_disposition.dart';
 import '../../../../core/utils/pole_card_comment_codec.dart';
 import '../pages/file_download_stub.dart'
     if (dart.library.html) '../pages/file_download_web.dart' as file_download;
@@ -122,9 +123,14 @@ Future<void> _downloadAttachmentFile({
     if (bytes == null || bytes.isEmpty) {
       throw Exception('Пустой ответ');
     }
-    final name = (suggestedDownloadName != null && suggestedDownloadName.trim().isNotEmpty)
-        ? suggestedDownloadName.trim()
-        : _basenameFromUrl(relativeUrl);
+    final fromHeader = filenameFromContentDisposition(
+      resp.headers.value('content-disposition'),
+    );
+    final name = (fromHeader != null && fromHeader.trim().isNotEmpty)
+        ? fromHeader.trim()
+        : (suggestedDownloadName != null && suggestedDownloadName.trim().isNotEmpty)
+            ? suggestedDownloadName.trim()
+            : _basenameFromUrl(relativeUrl);
     final u8 = Uint8List.fromList(bytes);
     if (kIsWeb) {
       await file_download.saveFileBytes(name, u8);

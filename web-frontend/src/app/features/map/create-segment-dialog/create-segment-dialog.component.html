@@ -55,8 +55,9 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Длина, м</mat-label>
-        <input matInput type="number" formControlName="length" min="0">
+        <mat-label>Длина участка, км</mat-label>
+        <input matInput type="number" formControlName="length" min="0" step="0.001">
+        <mat-hint>Суммарная длина участка (при автосборке пересчитывается по пролётам)</mat-hint>
       </mat-form-field>
 
       <mat-checkbox formControlName="is_tap">Отпайка</mat-checkbox>
@@ -76,7 +77,15 @@
       <div class="form-row">
         <mat-form-field appearance="outline" class="half-width">
           <mat-label>Марка провода</mat-label>
-          <input matInput formControlName="conductor_type" placeholder="Например: АС-70">
+          <input
+            matInput
+            formControlName="conductor_type"
+            placeholder="Например: АС-70"
+            [matAutocomplete]="segmentConductorAuto">
+          <mat-autocomplete #segmentConductorAuto="matAutocomplete">
+            <mat-option *ngFor="let mark of filteredConductorMarks" [value]="mark">{{ mark }}</mat-option>
+          </mat-autocomplete>
+          <mat-hint>Справочник марок; параметры r/x/g подставятся при сохранении</mat-hint>
         </mat-form-field>
         <mat-form-field appearance="outline" class="half-width">
           <mat-label>Материал</mat-label>

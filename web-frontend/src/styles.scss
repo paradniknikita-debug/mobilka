@@ -43,6 +43,25 @@ body {
   width: 100%;
 }
 
+/*
+ * Глобальный border-box ломает размеры тайлов Leaflet → белая «сетка» между квадратами.
+ * Внутри карты возвращаем content-box (рекомендация Leaflet).
+ */
+.leaflet-container,
+.leaflet-container * {
+  box-sizing: content-box;
+}
+
+.leaflet-container {
+  background: #dcd9d4;
+}
+
+.leaflet-tile {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 /* Кастомные стили для Material */
 .mat-toolbar {
   position: sticky;

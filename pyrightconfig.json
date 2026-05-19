@@ -1,0 +1,31 @@
+{
+  "include": [
+    "backend/app",
+    "backend/alembic",
+    "backend/scripts"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "**/.venv",
+    "**/venv",
+    "flutter",
+    "frontend",
+    "web-frontend",
+    "backend/static",
+    "backend/uploads",
+    "backend/tile_cache",
+    "frontend/build",
+    "frontend/.dart_tool",
+    "web-frontend/dist",
+    "web-frontend/.angular",
+    ".git"
+  ],
+  "venvPath": "backend",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}

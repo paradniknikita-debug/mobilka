@@ -48,7 +48,7 @@
             <mat-error>{{ getFieldError('line_id') }}</mat-error>
           </mat-form-field>
 
-          <!-- Ветка: магистраль или отпайка (несколько веток от одной опоры с разными подписями) -->
+          <!-- Отпайка: магистраль или ответвление от опоры -->
           <mat-form-field *ngIf="showBranchChoice && (tapBranchesInLine.length || tapPolesInLine.length)" appearance="outline" class="full-width field-tap">
             <mat-label>{{ tapBranchLabel }}</mat-label>
             <mat-select formControlName="branch_selection" placeholder="Магистраль или отпайка">
@@ -92,7 +92,7 @@
                 placeholder="Например: СВ95-2"
                 [matAutocomplete]="poleBrandAuto">
               <mat-autocomplete #poleBrandAuto="matAutocomplete">
-                <mat-option *ngFor="let brand of poleBrandsCis" [value]="brand">{{ brand }}</mat-option>
+                <mat-option *ngFor="let brand of filteredPoleBrands" [value]="brand">{{ brand }}</mat-option>
               </mat-autocomplete>
             </mat-form-field>
           </div>
@@ -121,10 +121,15 @@
           </mat-expansion-panel-header>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Марка провода</mat-label>
-            <mat-select formControlName="conductor_type">
-              <mat-option value="">— не указана</mat-option>
-              <mat-option *ngFor="let t of conductorTypes" [value]="t">{{ t }}</mat-option>
-            </mat-select>
+            <input
+              matInput
+              formControlName="conductor_type"
+              placeholder="Например: АС-70"
+              [matAutocomplete]="poleConductorAuto">
+            <mat-autocomplete #poleConductorAuto="matAutocomplete">
+              <mat-option *ngFor="let mark of filteredPoleConductorMarks" [value]="mark">{{ mark }}</mat-option>
+            </mat-autocomplete>
+            <mat-hint>Справочник марок; можно ввести вручную</mat-hint>
           </mat-form-field>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Материал</mat-label>
@@ -199,6 +204,17 @@
               <mat-option value="high">Высокая</mat-option>
             </mat-select>
           </mat-form-field>
+        </mat-expansion-panel>
+
+        <mat-expansion-panel class="expansion-section" *ngIf="selectedObjectType === 'pole'">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Оборудование на опоре</mat-panel-title>
+          </mat-expansion-panel-header>
+          <app-pole-equipment-panel
+            #poleEquipmentPanel
+            [poleId]="poleId ?? null"
+            [lineVoltageKv]="poleEquipmentLineVoltageKv"
+          ></app-pole-equipment-panel>
         </mat-expansion-panel>
 
         <mat-expansion-panel class="expansion-section" *ngIf="selectedObjectType === 'pole'">
@@ -614,7 +630,7 @@
           </mat-hint>
         </mat-form-field>
         <mat-autocomplete #catalogNameplateAuto="matAutocomplete" (optionSelected)="applyCatalogByNameplate()">
-          <mat-option *ngFor="let item of equipmentCatalogItems" [value]="item.full_name || (item.brand + ' ' + item.model)">
+          <mat-option *ngFor="let item of filteredEquipmentCatalog" [value]="item.full_name || (item.brand + ' ' + item.model)">
             {{ item.full_name || (item.brand + ' ' + item.model) }}
           </mat-option>
         </mat-autocomplete>
@@ -749,24 +765,6 @@
               <mat-hint>Допустимое время термической стойкости в секундах</mat-hint>
             </mat-form-field>
           </div>
-          <div class="row-2">
-            <mat-form-field appearance="outline" class="half-width">
-              <mat-label>Нормально открыт</mat-label>
-              <mat-select formControlName="normal_open">
-                <mat-option [value]="null">Не задано</mat-option>
-                <mat-option [value]="true">Да (нормально открыт)</mat-option>
-                <mat-option [value]="false">Нет (нормально закрыт)</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="half-width">
-              <mat-label>Фиксируемое состояние</mat-label>
-              <mat-select formControlName="retained">
-                <mat-option [value]="null">Не задано</mat-option>
-                <mat-option [value]="true">Да</mat-option>
-                <mat-option [value]="false">Нет</mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
         </ng-container>
         <ng-template #nonElectricalHint>
           <p class="equipment-hint">
@@ -810,6 +808,20 @@
             </mat-select>
           </mat-form-field>
         </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Дефект оборудования</mat-label>
+          <textarea matInput formControlName="defect" rows="2" placeholder="Описание дефекта"></textarea>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Критичность дефекта</mat-label>
+          <mat-select formControlName="criticality">
+            <mat-option [value]="null">Не указана</mat-option>
+            <mat-option value="low">Низкая</mat-option>
+            <mat-option value="medium">Средняя</mat-option>
+            <mat-option value="high">Высокая</mat-option>
+          </mat-select>
+        </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Описание / примечания</mat-label>

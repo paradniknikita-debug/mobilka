@@ -11,28 +11,179 @@
 
   <mat-card class="block admin-card">
     <mat-card-header class="admin-card__header">
+      <mat-card-title>Инфраструктура и разработка</mat-card-title>
+      <mat-card-subtitle>
+        Быстрый доступ к MinIO, документации API, руководству проекта и логам контейнеров Docker.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="infra-actions">
+        <button
+          mat-stroked-button
+          type="button"
+          class="infra-btn"
+          (click)="openExternal(infrastructure?.minio_console_url)"
+          [disabled]="!infrastructure?.minio_console_url"
+        >
+          <mat-icon>storage</mat-icon>
+          MinIO
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          class="infra-btn"
+          (click)="openExternal(infrastructure?.swagger_url)"
+          [disabled]="!infrastructure?.swagger_url"
+        >
+          <mat-icon>api</mat-icon>
+          Swagger
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          class="infra-btn"
+          (click)="openExternal(infrastructure?.redoc_url)"
+          [disabled]="!infrastructure?.redoc_url"
+        >
+          <mat-icon>menu_book</mat-icon>
+          ReDoc
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          class="infra-btn"
+          (click)="openExternal(infrastructure?.api_home_url)"
+          [disabled]="!infrastructure?.api_home_url"
+        >
+          <mat-icon>home</mat-icon>
+          API
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          class="infra-btn"
+          (click)="openDevelopmentGuide()"
+          [disabled]="infrastructure != null && !infrastructure.development_guide_available"
+        >
+          <mat-icon>description</mat-icon>
+          Руководство
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          class="infra-btn"
+          color="primary"
+          (click)="openDockerLogs()"
+          [disabled]="infrastructure != null && !infrastructure.docker_logs_available"
+          matTooltip="Доступно при ENVIRONMENT=development и установленном Docker CLI"
+        >
+          <mat-icon>terminal</mat-icon>
+          Логи Docker
+        </button>
+      </div>
+      <p class="infra-hint" *ngIf="infrastructure">
+        MinIO: {{ infrastructure.minio_console_url }} · Swagger: {{ infrastructure.swagger_url }}
+      </p>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="block admin-card">
+    <mat-card-header class="admin-card__header">
       <mat-card-title>Сводка и состояние сервисов</mat-card-title>
-      <mat-card-subtitle>Счётчики сущностей, пинг БД и Redis (кэш/очереди).</mat-card-subtitle>
+      <mat-card-subtitle>Ключевые счётчики и доступность сервисов.</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <div class="metrics" *ngIf="stats as s; else statsLoading">
-        <div class="metric"><span class="label">Пользователей (всего)</span><span class="val">{{ s['users'] }}</span></div>
-        <div class="metric"><span class="label">Активных</span><span class="val">{{ s['users_active'] }}</span></div>
-        <div class="metric"><span class="label">Админов</span><span class="val">{{ s['users_admins'] }}</span></div>
+        <div class="metric"><span class="label">Пользователи</span><span class="val">{{ s['users'] }} <span class="metric-sub">/ {{ s['users_active'] }} акт.</span></span></div>
+        <div class="metric"><span class="label">Сейчас онлайн</span><span class="val">{{ s['users_online'] ?? '—' }}</span></div>
         <div class="metric"><span class="label">ЛЭП</span><span class="val">{{ s['power_lines'] }}</span></div>
-        <div class="metric"><span class="label">Сегменты ЛЭП</span><span class="val">{{ s['acline_segments'] }}</span></div>
         <div class="metric"><span class="label">Опоры</span><span class="val">{{ s['poles'] }}</span></div>
-        <div class="metric"><span class="label">Оборудование</span><span class="val">{{ s['equipment'] }}</span></div>
         <div class="metric"><span class="label">Подстанции</span><span class="val">{{ s['substations'] }}</span></div>
         <div class="metric"><span class="label">Техпаспорта</span><span class="val">{{ s['tech_passports'] }}</span></div>
-        <div class="metric"><span class="label">Журнал изменений</span><span class="val">{{ s['change_log_entries'] }}</span></div>
         <div class="metric"><span class="label">Сессии обходов</span><span class="val">{{ s['patrol_sessions'] }}</span></div>
-        <div class="metric"><span class="label">База данных</span><span class="val">{{ s['database'] }} <ng-container *ngIf="s['database_ping_ms'] != null">({{ s['database_ping_ms'] }} ms)</ng-container></span></div>
-        <div class="metric"><span class="label">Redis</span><span class="val">{{ s['redis'] }} <ng-container *ngIf="s['redis_ping_ms'] != null">({{ s['redis_ping_ms'] }} ms)</ng-container></span></div>
+        <div class="metric metric--status"><span class="label">База данных</span><span class="val" [class.val--ok]="s['database'] === 'connected'">{{ s['database'] }}<ng-container *ngIf="s['database_ping_ms'] != null"> ({{ s['database_ping_ms'] }} ms)</ng-container></span></div>
+        <div class="metric metric--status"><span class="label">Redis</span><span class="val" [class.val--ok]="s['redis'] === 'connected'">{{ s['redis'] }}<ng-container *ngIf="s['redis_ping_ms'] != null"> ({{ s['redis_ping_ms'] }} ms)</ng-container></span></div>
       </div>
       <ng-template #statsLoading>
         <mat-progress-spinner *ngIf="loading" diameter="36" mode="indeterminate"></mat-progress-spinner>
         <p *ngIf="!loading && !stats" class="stats-fallback">Не удалось загрузить сводку.</p>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="block admin-card">
+    <mat-card-header class="admin-card__header load-card-header">
+      <mat-card-title>Нагрузка на приложение</mat-card-title>
+      <mat-card-subtitle>
+        Синие столбцы — HTTP-запросы к API; оранжевые — записи в БД (commit). Для накопления нужен Redis.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="load-toolbar">
+        <mat-button-toggle-group [value]="loadMinutes" (change)="onLoadPeriodChange($event.value)">
+          <mat-button-toggle *ngFor="let p of loadPeriodPresets" [value]="p.minutes">{{ p.label }}</mat-button-toggle>
+        </mat-button-toggle-group>
+        <mat-form-field appearance="outline" class="load-bucket-field" subscriptSizing="dynamic">
+          <mat-label>Шаг</mat-label>
+          <mat-select [(ngModel)]="loadBucketMinutes" (ngModelChange)="loadLoadMetrics()">
+            <mat-option *ngFor="let o of loadBucketOptions" [value]="o.value">{{ o.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-stroked-button type="button" (click)="loadLoadMetrics()">
+          <mat-icon>refresh</mat-icon>
+          Обновить
+        </button>
+      </div>
+      <p class="load-hint" *ngIf="loadMetrics && !loadMetrics.redis_available">
+        Redis недоступен — график пустой. Запустите Redis или проверьте REDIS_URL.
+      </p>
+      <div class="load-totals" *ngIf="loadMetrics as lm">
+        <span>За период: <strong>{{ lm.totals.http_requests }}</strong> запросов API</span>
+        <span><strong>{{ lm.totals.db_writes }}</strong> записей в БД</span>
+        <span class="load-totals__meta" *ngIf="loadPeriodCaption()">{{ loadPeriodCaption() }}</span>
+      </div>
+      <div class="load-chart-v2" *ngIf="loadChartBars.length; else loadChartEmpty">
+        <div class="load-chart-v2__legend">
+          <span class="load-chart-v2__legend-item load-chart-v2__legend-item--http">HTTP (API)</span>
+          <span class="load-chart-v2__legend-item load-chart-v2__legend-item--db">Запись в БД</span>
+        </div>
+        <div class="load-chart-v2__body">
+          <div class="load-chart-v2__y-wrap">
+            <span class="load-chart-v2__y-title">Кол-во</span>
+            <div class="load-chart-v2__y-axis" aria-hidden="true">
+              <span *ngFor="let tick of displayYTicks()" class="load-chart-v2__y-tick">{{ formatYTick(tick) }}</span>
+            </div>
+            <span class="load-chart-v2__y-origin" aria-hidden="true">0</span>
+          </div>
+          <div class="load-chart-v2__plot-wrap">
+            <div
+              class="load-chart-v2__grid-line"
+              *ngFor="let tick of loadYTicks"
+              [style.bottom.%]="gridLineBottomPct(tick)"
+            ></div>
+            <div class="load-chart-v2__plot">
+              <div class="load-chart-v2__col" *ngFor="let b of loadChartBars" [attr.title]="b.title">
+                <div class="load-chart-v2__bars">
+                  <div class="load-chart-v2__bar load-chart-v2__bar--http" [style.height.px]="b.httpHeight"></div>
+                  <div class="load-chart-v2__bar load-chart-v2__bar--db" [style.height.px]="b.dbHeight"></div>
+                </div>
+              </div>
+            </div>
+            <div class="load-chart-v2__x-axis">
+              <span
+                *ngFor="let xl of loadXLabels"
+                class="load-chart-v2__x-label"
+                [class.load-chart-v2__x-label--first]="isFirstXLabel(xl.index)"
+                [class.load-chart-v2__x-label--last]="isLastXLabel(xl.index)"
+                [style.left.%]="xLabelLeftPct(xl.index, loadChartBars.length)"
+              >{{ xl.label }}</span>
+            </div>
+          </div>
+        </div>
+        <p class="load-chart-v2__axis-caption">Ось X — время (локальное), ось Y — количество за интервал</p>
+      </div>
+      <ng-template #loadChartEmpty>
+        <p class="load-hint">Нет данных за выбранный период. Выполните действия в системе или дождитесь накопления метрик.</p>
       </ng-template>
     </mat-card-content>
   </mat-card>
@@ -73,66 +224,114 @@
   </mat-card>
 
   <mat-card class="block admin-card">
-    <mat-card-header class="admin-card__header">
+    <mat-card-header class="admin-card__header users-card-header">
       <mat-card-title>Пользователи</mat-card-title>
+      <button mat-stroked-button type="button" class="users-refresh-btn" (click)="loadUsers()">
+        <mat-icon>refresh</mat-icon>
+        Обновить
+      </button>
     </mat-card-header>
     <mat-card-content>
+      <p class="users-hint">
+        «Онлайн» — активность за последние ~5&nbsp;мин (веб или мобильное приложение с авторизацией). Список обновляется автоматически.
+        Фильтры — по иконке в заголовке столбца.
+        <button mat-button type="button" class="users-clear-filters" *ngIf="hasUsersFilters()" (click)="clearUsersFilter()">Сбросить все фильтры</button>
+      </p>
       <div class="table-scroll">
-      <table mat-table [dataSource]="users" class="users-table">
+      <table mat-table [dataSource]="usersDataSource" matSort class="users-table">
         <ng-container matColumnDef="id">
-          <th mat-header-cell *matHeaderCellDef>ID</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="id">
+            <div class="th-filter">
+              <span class="th-filter__label">ID</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('id')" [matMenuTriggerFor]="filterMenuId" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
           <td mat-cell *matCellDef="let u">{{ u.id }}</td>
         </ng-container>
         <ng-container matColumnDef="username">
-          <th mat-header-cell *matHeaderCellDef>Логин</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="username">
+            <div class="th-filter">
+              <span class="th-filter__label">Логин</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('username')" [matMenuTriggerFor]="filterMenuUsername" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
           <td mat-cell *matCellDef="let u">{{ u.username }}</td>
         </ng-container>
-        <ng-container matColumnDef="password_plain">
-          <th mat-header-cell *matHeaderCellDef>Пароль (учётная копия)</th>
-          <td mat-cell *matCellDef="let u" class="cell-password">{{ u.password_plain || '—' }}</td>
-        </ng-container>
         <ng-container matColumnDef="full_name">
-          <th mat-header-cell *matHeaderCellDef>ФИО</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="full_name">
+            <div class="th-filter">
+              <span class="th-filter__label">ФИО</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('full_name')" [matMenuTriggerFor]="filterMenuFullName" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
           <td mat-cell *matCellDef="let u">{{ u.full_name }}</td>
         </ng-container>
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="email">
+            <div class="th-filter">
+              <span class="th-filter__label">Email</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('email')" [matMenuTriggerFor]="filterMenuEmail" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
+          <td mat-cell *matCellDef="let u" class="cell-email">{{ u.email }}</td>
+        </ng-container>
+        <ng-container matColumnDef="online">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="online">
+            <div class="th-filter">
+              <span class="th-filter__label">Онлайн</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('online')" [matMenuTriggerFor]="filterMenuOnline" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
+          <td mat-cell *matCellDef="let u" class="cell-online">
+            <span class="online-badge" [class.online-badge--on]="u.is_online" [class.online-badge--off]="!u.is_online">
+              <span class="online-badge__dot" aria-hidden="true"></span>
+              {{ u.is_online ? 'Онлайн' : 'Офлайн' }}
+            </span>
+            <span class="online-seen" *ngIf="u.last_seen_at">{{ formatLastSeen(u) }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="password_plain">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="password_plain">
+            <div class="th-filter">
+              <span class="th-filter__label">Пароль</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('password_plain')" [matMenuTriggerFor]="filterMenuPassword" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
+          <td mat-cell *matCellDef="let u" class="cell-password">{{ u.password_plain || '—' }}</td>
+        </ng-container>
         <ng-container matColumnDef="role">
-          <th mat-header-cell *matHeaderCellDef>Роль</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="role">
+            <div class="th-filter">
+              <span class="th-filter__label">Роль</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('role')" [matMenuTriggerFor]="filterMenuRole" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
           <td mat-cell *matCellDef="let u">
             <mat-form-field appearance="outline" class="dense-field" subscriptSizing="dynamic">
-              <mat-select
-                [value]="normalizeRole(u.role)"
-                (selectionChange)="onRoleChange(u, $event.value)"
-              >
+              <mat-select [value]="normalizeRole(u.role)" (selectionChange)="onRoleChange(u, $event.value)">
                 <mat-option *ngFor="let r of roleOptions" [value]="r.value">{{ r.label }}</mat-option>
               </mat-select>
             </mat-form-field>
           </td>
         </ng-container>
         <ng-container matColumnDef="active">
-          <th mat-header-cell *matHeaderCellDef>Активен</th>
-          <td mat-cell *matCellDef="let u">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="active">
+            <div class="th-filter">
+              <span class="th-filter__label">Активен</span>
+              <button mat-icon-button type="button" class="th-filter__btn" [class.th-filter__btn--active]="isColumnFilterActive('active')" [matMenuTriggerFor]="filterMenuActive" (click)="$event.stopPropagation()"><mat-icon>filter_list</mat-icon></button>
+            </div>
+          </th>
+          <td mat-cell *matCellDef="let u" class="cell-active">
             <mat-checkbox color="primary" [checked]="u.is_active" (change)="onActiveChange(u, $event.checked)"></mat-checkbox>
           </td>
         </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let u">
-            <button
-              mat-icon-button
-              type="button"
-              matTooltip="Сменить пароль"
-              (click)="changePassword(u)"
-            >
+            <button mat-icon-button type="button" matTooltip="Сменить пароль" (click)="changePassword(u)">
               <mat-icon>vpn_key</mat-icon>
             </button>
-            <button
-              mat-icon-button
-              type="button"
-              color="warn"
-              matTooltip="Удалить пользователя"
-              [disabled]="currentUserId != null && u.id === currentUserId"
-              (click)="deleteUser(u)"
-            >
+            <button mat-icon-button type="button" color="warn" matTooltip="Удалить пользователя" [disabled]="currentUserId != null && u.id === currentUserId" (click)="deleteUser(u)">
               <mat-icon>delete_forever</mat-icon>
             </button>
           </td>
@@ -140,9 +339,94 @@
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        <tr class="mat-row users-empty-row" *matNoDataRow>
+          <td class="mat-cell" [attr.colspan]="displayedColumns.length">
+            Нет пользователей по выбранным фильтрам
+          </td>
+        </tr>
       </table>
       </div>
     </mat-card-content>
   </mat-card>
+
+  <mat-menu #filterMenuId="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>ID содержит</mat-label>
+        <input matInput [(ngModel)]="filterId" (ngModelChange)="applyUsersFilter()" />
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('id')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuUsername="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Логин содержит</mat-label>
+        <input matInput [(ngModel)]="filterUsername" (ngModelChange)="applyUsersFilter()" />
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('username')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuFullName="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>ФИО содержит</mat-label>
+        <input matInput [(ngModel)]="filterFullName" (ngModelChange)="applyUsersFilter()" />
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('full_name')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuEmail="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Email содержит</mat-label>
+        <input matInput [(ngModel)]="filterEmail" (ngModelChange)="applyUsersFilter()" />
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('email')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuOnline="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Статус</mat-label>
+        <mat-select [(ngModel)]="filterOnline" (ngModelChange)="applyUsersFilter()">
+          <mat-option *ngFor="let o of onlineFilterOptions" [value]="o.value">{{ o.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('online')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuPassword="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Пароль содержит</mat-label>
+        <input matInput [(ngModel)]="filterPassword" (ngModelChange)="applyUsersFilter()" />
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('password_plain')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuRole="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Роль</mat-label>
+        <mat-select [(ngModel)]="filterRole" (ngModelChange)="applyUsersFilter()">
+          <mat-option value="">Все</mat-option>
+          <mat-option *ngFor="let r of roleOptions" [value]="r.value">{{ r.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('role')">Сбросить</button>
+    </div>
+  </mat-menu>
+  <mat-menu #filterMenuActive="matMenu" class="column-filter-menu">
+    <div class="column-filter-menu__body" (click)="$event.stopPropagation()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Активность</mat-label>
+        <mat-select [(ngModel)]="filterActive" (ngModelChange)="applyUsersFilter()">
+          <mat-option *ngFor="let a of activeFilterOptions" [value]="a.value">{{ a.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-button type="button" (click)="clearColumnFilter('active')">Сбросить</button>
+    </div>
+  </mat-menu>
   </div>
 </div>

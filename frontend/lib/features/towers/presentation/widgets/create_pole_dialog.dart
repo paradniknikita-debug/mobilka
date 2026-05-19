@@ -146,6 +146,22 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   String? _conductorSection = PoleReferenceData.defaultConductorSection;
   final _conductorTypeController = TextEditingController();
   List<String> _conductorSuggestions = const [];
+  List<String> get _filteredConductorSuggestions {
+    final q = _conductorTypeController.text.trim().toLowerCase();
+    final source = _conductorSuggestions.isNotEmpty
+        ? _conductorSuggestions
+        : PoleReferenceData.conductorTypes;
+    if (q.isEmpty) return source.take(30).toList();
+    return source.where((s) => s.toLowerCase().contains(q)).take(30).toList();
+  }
+
+  List<String> get _filteredPoleBrandSuggestions {
+    final q = _materialController.text.trim().toLowerCase();
+    final source = PoleReferenceData.poleBrandsCis;
+    if (q.isEmpty) return source.take(30).toList();
+    return source.where((s) => s.toLowerCase().contains(q)).take(30).toList();
+  }
+
   double? _expectedLineVoltageKv;
   bool _isTap = false;
 
@@ -722,10 +738,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         withData: true,
         type: FileType.custom,
         allowedExtensions: const [
-          'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp',
+          'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic',
           'm4a', 'mp3', 'wav', 'aac', 'ogg',
           'mp4', 'webm', 'mov',
-          'pdf', 'dwg',
+          'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods',
+          'zip', 'rar', '7z',
+          'dwg',
         ],
       );
       if (r == null || r.files.isEmpty || !mounted) return;
@@ -1311,8 +1329,8 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     final first = names.isNotEmpty ? names.first : '—';
     final last = names.isNotEmpty ? names.last : '—';
     final tooltip =
-        'Якорь: $anchor (id $tapPoleId), индекс ветки $branchIndex. '
-        '${chain.isNotEmpty ? 'Все опоры ветки: $chain.' : 'На ветке пока нет учтённых опор.'}';
+        'Якорь: $anchor (id $tapPoleId), индекс отпайки $branchIndex. '
+        '${chain.isNotEmpty ? 'Все опоры отпайки: $chain.' : 'На отпайке пока нет учтённых опор.'}';
     if (names.isEmpty) {
       return _TapBranchOption(
         value: valueKey,

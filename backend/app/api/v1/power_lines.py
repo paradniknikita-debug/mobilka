@@ -2142,6 +2142,8 @@ async def auto_create_spans_service(
         from app.models.cim_line_structure import LineSection
         segment_ids_subq = select(AClineSegment.id).where(AClineSegment.line_id == power_line_id)
         line_section_ids_subq = select(LineSection.id).where(LineSection.acline_segment_id.in_(segment_ids_subq))
+        # Терминалы сегментов ссылаются на acline_segment — удаляем до участков.
+        await db.execute(delete(Terminal).where(Terminal.acline_segment_id.in_(segment_ids_subq)))
         await db.execute(delete(Span).where(Span.line_section_id.in_(line_section_ids_subq)))
         await db.execute(delete(LineSection).where(LineSection.acline_segment_id.in_(segment_ids_subq)))
         await db.execute(delete(AClineSegment).where(AClineSegment.line_id == power_line_id))
@@ -2417,6 +2419,9 @@ async def auto_create_spans_service(
             )
 
     await refresh_acline_and_line_section_names(db, power_line_id)
+    from app.core.wire_parameters import refresh_power_line_electrical_parameters
+
+    await refresh_power_line_electrical_parameters(db, power_line_id)
 
     await db.commit()
 

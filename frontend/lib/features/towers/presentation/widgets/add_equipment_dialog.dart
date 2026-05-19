@@ -460,6 +460,13 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     super.dispose();
   }
 
+  List<String> get _filteredBrandSuggestions {
+    final q = _brandController.text.trim().toLowerCase();
+    final all = _brandSuggestions;
+    if (q.isEmpty) return all;
+    return all.where((s) => s.toLowerCase().contains(q)).toList();
+  }
+
   List<String> get _brandSuggestions {
     final extra = widget.catalogExtraBrands ?? const <String>[];
     final seen = <String>{};
@@ -1442,44 +1449,6 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<bool?>(
-                          value: _normalOpen,
-                          onChanged: _canEditElectricalCharacteristics
-                              ? (v) => setState(() => _normalOpen = v)
-                              : null,
-                          decoration: const InputDecoration(
-                            labelText: 'Нормально открыт',
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: null, child: Text('Не задано')),
-                            DropdownMenuItem(value: true, child: Text('Да')),
-                            DropdownMenuItem(value: false, child: Text('Нет')),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<bool?>(
-                          value: _retained,
-                          onChanged: _canEditElectricalCharacteristics
-                              ? (v) => setState(() => _retained = v)
-                              : null,
-                          decoration: const InputDecoration(
-                            labelText: 'Фиксируемое состояние',
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: null, child: Text('Не задано')),
-                            DropdownMenuItem(value: true, child: Text('Да')),
-                            DropdownMenuItem(value: false, child: Text('Нет')),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                    const SizedBox(height: 8),
                   ],
                 ),
               const SizedBox(height: 8),

@@ -95,6 +95,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},)
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    from app.core.user_presence import touch_user_presence
+
+    await touch_user_presence(user.id)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )

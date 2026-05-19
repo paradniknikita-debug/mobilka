@@ -27,23 +27,9 @@ router = APIRouter()
 
 
 async def _find_wire_info(db: AsyncSession, marker: Optional[str]) -> Optional[WireInfo]:
-    marker_norm = (marker or "").strip()
-    if not marker_norm:
-        return None
-    result = await db.execute(
-        select(WireInfo).where(
-            func.lower(WireInfo.name) == marker_norm.lower()
-        )
-    )
-    wi = result.scalar_one_or_none()
-    if wi is not None:
-        return wi
-    result = await db.execute(
-        select(WireInfo).where(
-            func.lower(WireInfo.code) == marker_norm.lower()
-        )
-    )
-    return result.scalar_one_or_none()
+    from app.core.wire_info_catalog import find_wire_info
+
+    return await find_wire_info(db, marker)
 
 
 def _fill_segment_defaults_from_wire_info(data: dict, wire_info: Optional[WireInfo]) -> dict:

@@ -29,6 +29,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatBadgeModule } from '@angular/material/badge';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 
 // CDK Drag & Drop
 import { DragDropModule } from '@angular/cdk/drag-drop';
@@ -69,11 +70,16 @@ import { AttachmentImageViewComponent } from './features/map/attachment-image-vi
 import { AttachmentMediaViewComponent } from './features/map/attachment-media-view/attachment-media-view.component';
 import { ImagePreviewDialogComponent } from './features/map/image-preview-dialog/image-preview-dialog.component';
 import { PoleAttachmentsManagerDialogComponent } from './features/map/pole-attachments-manager-dialog/pole-attachments-manager-dialog.component';
+import { AddEquipmentDialogComponent } from './features/map/add-equipment-dialog/add-equipment-dialog.component';
+import { PoleEquipmentPanelComponent } from './features/map/pole-equipment-panel/pole-equipment-panel.component';
 import { ResizableDialogDirective } from './core/directives/resizable-dialog.directive';
 import { EquipmentCatalogComponent } from './features/equipment-catalog/equipment-catalog.component';
 import { AdminComponent } from './features/admin/admin.component';
+import { DockerLogsDialogComponent } from './features/admin/docker-logs-dialog/docker-logs-dialog.component';
+import { DevelopmentGuideDialogComponent } from './features/admin/development-guide-dialog/development-guide-dialog.component';
 import { PassportizationComponent } from './features/passportization/passportization.component';
 import { LineConductorCatalogPanelComponent } from './features/passportization/line-conductor-catalog-panel/line-conductor-catalog-panel.component';
+import { WireInfoCatalogPanelComponent } from './features/passportization/wire-info-catalog-panel/wire-info-catalog-panel.component';
 import { TechPassportsPanelComponent } from './features/passportization/tech-passports-panel/tech-passports-panel.component';
 
 @NgModule({
@@ -100,14 +106,19 @@ import { TechPassportsPanelComponent } from './features/passportization/tech-pas
     CimExportSettingsDialogComponent,
     EquipmentCatalogComponent,
     AdminComponent,
+    DockerLogsDialogComponent,
+    DevelopmentGuideDialogComponent,
     PassportizationComponent,
     LineConductorCatalogPanelComponent,
+    WireInfoCatalogPanelComponent,
     TechPassportsPanelComponent,
     CimPreviewMapDialogComponent,
     AttachmentImageViewComponent,
     AttachmentMediaViewComponent,
     ImagePreviewDialogComponent,
-    PoleAttachmentsManagerDialogComponent
+    PoleAttachmentsManagerDialogComponent,
+    AddEquipmentDialogComponent,
+    PoleEquipmentPanelComponent
   ],
   imports: [
     BrowserModule,
@@ -142,6 +153,7 @@ import { TechPassportsPanelComponent } from './features/passportization/tech-pas
     MatDividerModule,
     MatTabsModule,
     MatBadgeModule,
+    MatButtonToggleModule,
 
     // CDK
     DragDropModule,

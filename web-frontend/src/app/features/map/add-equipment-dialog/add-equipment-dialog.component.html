@@ -1,0 +1,76 @@
+<h2 mat-dialog-title>{{ dialogTitle }}</h2>
+
+<mat-dialog-content [formGroup]="form" class="add-equipment-dialog">
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Марка / наименование</mat-label>
+    <input matInput formControlName="name" [matAutocomplete]="brandAuto" />
+    <mat-autocomplete #brandAuto="matAutocomplete">
+      <mat-option *ngFor="let b of catalogBrands" [value]="b">{{ b }}</mat-option>
+    </mat-autocomplete>
+    <mat-error *ngIf="form.get('name')?.hasError('required')">Укажите марку или наименование</mat-error>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width" *ngIf="!data.category.singleInstance">
+    <mat-label>Количество</mat-label>
+    <input matInput type="number" formControlName="quantity" min="1" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Дефект</mat-label>
+    <mat-select formControlName="defectSelect">
+      <mat-option value="">Нет дефекта</mat-option>
+      <mat-option *ngFor="let d of defectOptions" [value]="d.name">{{ d.name }}</mat-option>
+      <mat-option [value]="otherDefectKey">{{ otherDefectKey }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width" *ngIf="form.get('defectSelect')?.value === otherDefectKey">
+    <mat-label>Описание иного дефекта</mat-label>
+    <textarea matInput formControlName="otherDefect" rows="2"></textarea>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Критичность</mat-label>
+    <mat-select formControlName="criticality">
+      <mat-option [value]="null">Не указана</mat-option>
+      <mat-option value="low">{{ criticalityLabels['low'] }}</mat-option>
+      <mat-option value="medium">{{ criticalityLabels['medium'] }}</mat-option>
+      <mat-option value="high">{{ criticalityLabels['high'] }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <ng-container *ngIf="isElectrical">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Табличка / шильд</mat-label>
+      <input matInput formControlName="nameplate" />
+    </mat-form-field>
+    <div class="row-2">
+      <mat-form-field appearance="outline" class="half-width">
+        <mat-label>Iном, А</mat-label>
+        <input matInput type="number" formControlName="ratedCurrent" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="half-width">
+        <mat-label>Iт.д., А</mat-label>
+        <input matInput type="number" formControlName="iTh" />
+      </mat-form-field>
+    </div>
+    <div class="row-2">
+      <mat-form-field appearance="outline" class="half-width">
+        <mat-label>Iп.к., кА</mat-label>
+        <input matInput type="number" formControlName="ipMax" step="0.1" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="half-width">
+        <mat-label>tтер, с</mat-label>
+        <input matInput type="number" formControlName="tTh" step="0.01" />
+      </mat-form-field>
+    </div>
+    <p class="voltage-hint" *ngIf="data.lineVoltageKv != null">
+      Класс напряжения линии: {{ data.lineVoltageKv }} кВ
+    </p>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Отмена</button>
+  <button mat-flat-button color="primary" type="button" (click)="save()">Сохранить</button>
+</mat-dialog-actions>

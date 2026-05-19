@@ -71,11 +71,22 @@ class WireInfo(Base):
     
     # Номинальный ток, А
     nominal_current = Column(Float, nullable=True)
-    
+
+    # Термическая стойкость (как у оборудования в паспорте)
+    i_th = Column(Float, nullable=True)  # термический ток, А
+    ip_max = Column(Float, nullable=True)  # ударный ток, А
+    t_th = Column(Float, nullable=True)  # время терм. стойкости, с
+
+    # Номинальное напряжение линии, кВ (для привязки к справочнику марок ЛЭП)
+    voltage_kv = Column(Float, nullable=True)
+
     # Описание
     description = Column(Text, nullable=True)
-    
-    # Активность (можно отключить устаревшие марки)
+
+    # В эксплуатации (паспортист «выводит из эксплуатации»; не путать с удалением)
+    in_service = Column(Boolean, default=True, nullable=False, server_default="true")
+
+    # Устаревшее: оставлено для совместимости API; синхронизируется с in_service
     is_active = Column(Boolean, default=True)
     
     # Временные метки

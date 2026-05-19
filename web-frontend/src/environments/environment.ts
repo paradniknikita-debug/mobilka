@@ -12,21 +12,24 @@ export const environment = {
   apiVersion: 'v1',
   
   get apiUrl(): string {
-    const protocol = this.useHttps ? 'https' : 'http';
-    // Определяем IP адрес сервера динамически
-    // Если запущено на localhost (компьютер), используем localhost
-    // Если доступно с других устройств, используем IP адрес компьютера
-    const hostname = window.location.hostname;
+    // На проде — только относительный HTTPS-путь через nginx (см. environment.prod.ts).
+    // В dev: тот же протокол, что у страницы (https-страница → https API, без mixed content).
+    const protocol =
+      typeof window !== 'undefined' && window.location.protocol === 'https:'
+        ? 'https'
+        : this.useHttps
+          ? 'https'
+          : 'http';
+    const hostname =
+      typeof window !== 'undefined' ? window.location.hostname : 'localhost';
     let backendHost: string;
-    
+
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      // Запущено локально на компьютере
       backendHost = 'localhost:8000';
     } else {
-      // Доступно с других устройств - используем тот же хост, но порт 8000
       backendHost = `${hostname}:8000`;
     }
-    
+
     return `${protocol}://${backendHost}/api/${this.apiVersion}`;
   },
   

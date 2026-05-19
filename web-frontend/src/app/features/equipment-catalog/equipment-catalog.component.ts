@@ -4,7 +4,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { EquipmentCatalogCreate, EquipmentCatalogItem } from '../../core/models/equipment-catalog.model';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
-import { canManageCatalog } from '../../core/utils/role-utils';
+import { canManageCatalog, isAdminUser } from '../../core/utils/role-utils';
 
 /** Код типа (латиница) → подпись для пользователя */
 const EQUIPMENT_TYPE_LABELS: Record<string, string> = {
@@ -19,6 +19,19 @@ const EQUIPMENT_TYPE_LABELS: Record<string, string> = {
   fuse: 'Предохранитель',
   insulator: 'Изолятор',
 };
+
+/** Доп. паспортные поля справочника (attrs_json). */
+interface EquipmentCatalogAttrsForm {
+  i_th: number | null;
+  ip_max: number | null;
+  t_th: number | null;
+  nominal_breaking_current_ka: number | null;
+  own_trip_time_sec: number | null;
+  object_subtype: string | null;
+  arrester_type: string | null;
+  tm_code: string | null;
+  pole_count: number | null;
+}
 
 @Component({
   selector: 'app-equipment-catalog',
@@ -54,8 +67,19 @@ export class EquipmentCatalogComponent implements OnInit {
     manufacturer: '',
     country: '',
     description: '',
-    attrs_json: '',
     is_active: true,
+  };
+
+  attrs: EquipmentCatalogAttrsForm = {
+    i_th: null,
+    ip_max: null,
+    t_th: null,
+    nominal_breaking_current_ka: null,
+    own_trip_time_sec: null,
+    object_subtype: null,
+    arrester_type: null,
+    tm_code: null,
+    pole_count: null,
   };
 
   constructor(
@@ -67,6 +91,19 @@ export class EquipmentCatalogComponent implements OnInit {
   /** Паспортист и администратор — полное редактирование и выгрузки справочника. */
   canManageCatalog(): boolean {
     return canManageCatalog(this.auth.getCurrentUser());
+  }
+
+  isAdmin(): boolean {
+    return isAdminUser(this.auth.getCurrentUser());
+  }
+
+  private buildAttrsJson(): string | null {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(this.attrs)) {
+      if (v === null || v === undefined || v === '') continue;
+      out[k] = v;
+    }
+    return Object.keys(out).length ? JSON.stringify(out) : null;
   }
 
   ngOnInit(): void {
@@ -102,7 +139,11 @@ export class EquipmentCatalogComponent implements OnInit {
       this.snackBar.open('Укажите тип (код), марку и модель', 'Закрыть', { duration: 2500 });
       return;
     }
-    this.api.createEquipmentCatalogItem(this.form).subscribe({
+    const payload: EquipmentCatalogCreate = {
+      ...this.form,
+      attrs_json: this.buildAttrsJson(),
+    };
+    this.api.createEquipmentCatalogItem(payload).subscribe({
       next: () => {
         this.snackBar.open('Позиция добавлена', 'Закрыть', { duration: 2000 });
         this.form = { ...this.form, brand: '', model: '', full_name: '' };
@@ -111,16 +152,6 @@ export class EquipmentCatalogComponent implements OnInit {
       error: (err) => {
         this.snackBar.open(err?.error?.detail || 'Ошибка добавления', 'Закрыть', { duration: 3500 });
       }
-    });
-  }
-
-  seedDefaults(): void {
-    this.api.seedEquipmentCatalogDefaults().subscribe({
-      next: (res) => {
-        this.snackBar.open(`Добавлено по умолчанию: ${res?.inserted ?? 0}`, 'Закрыть', { duration: 2500 });
-        this.loadItems();
-      },
-      error: () => this.snackBar.open('Ошибка инициализации справочника', 'Закрыть', { duration: 3000 }),
     });
   }
 
@@ -158,13 +189,28 @@ export class EquipmentCatalogComponent implements OnInit {
     });
   }
 
-  deactivate(item: EquipmentCatalogItem): void {
-    this.api.deleteEquipmentCatalogItem(item.id, false).subscribe({
+  withdraw(item: EquipmentCatalogItem): void {
+    this.api.withdrawEquipmentCatalogItem(item.id).subscribe({
       next: () => {
-        this.snackBar.open('Позиция деактивирована', 'Закрыть', { duration: 2000 });
+        this.snackBar.open('Позиция выведена из эксплуатации', 'Закрыть', { duration: 2500 });
         this.loadItems();
       },
-      error: () => this.snackBar.open('Ошибка деактивации', 'Закрыть', { duration: 3000 }),
+      error: () => this.snackBar.open('Ошибка', 'Закрыть', { duration: 3000 }),
+    });
+  }
+
+  deleteItem(item: EquipmentCatalogItem): void {
+    if (!confirm(`Удалить «${item.brand} ${item.model}» безвозвратно?`)) {
+      return;
+    }
+    this.api.deleteEquipmentCatalogItem(item.id).subscribe({
+      next: () => {
+        this.snackBar.open('Позиция удалена', 'Закрыть', { duration: 2000 });
+        this.loadItems();
+      },
+      error: (err) => {
+        this.snackBar.open(err?.error?.detail || 'Ошибка удаления', 'Закрыть', { duration: 4000 });
+      },
     });
   }
 

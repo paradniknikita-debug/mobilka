@@ -14,6 +14,7 @@ from app.models.substation import Substation
 from app.models.location import Location, PositionPoint
 from app.models.map_overlay_route import MapOverlayRoute, MapOverlayRoutePoint
 from app.models.cim_line_structure import ConnectivityNode, LineSection
+from app.core.map_uid_search import find_map_entity_by_uid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1046,6 +1047,19 @@ async def get_spans_geojson(
         "type": "FeatureCollection",
         "features": features
     }
+
+
+@router.get("/find-uid")
+async def find_uid_on_map(
+    q: str = Query(..., min_length=8, description="mRID / UID объекта (из журнала или карточки)"),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Найти объект по UID для перехода на карте (в т.ч. ConnectivityNode, сегменты CIM)."""
+    hit = await find_map_entity_by_uid(db, q)
+    if not hit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Объект с таким UID не найден")
+    return hit
 
 
 @router.get("/overlay-routes/geojson")

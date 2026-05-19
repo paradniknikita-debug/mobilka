@@ -10,7 +10,12 @@ from fastapi.responses import Response
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.roles import require_catalog_manager
+from app.core.equipment_catalog_attrs import (
+    FLAT_ATTR_COLUMNS,
+    attrs_from_flat_row,
+    flat_from_attrs_json,
+)
+from app.core.roles import require_admin_user, require_catalog_manager
 from app.core.security import get_current_active_user
 from app.database import get_db
 from app.models.equipment_catalog import EquipmentCatalogItem
@@ -269,23 +274,35 @@ async def update_catalog_item(
     return item
 
 
-@router.delete("/{item_id}", status_code=status.HTTP_200_OK)
-async def delete_catalog_item(
+@router.post("/{item_id}/withdraw", status_code=status.HTTP_200_OK)
+async def withdraw_catalog_item(
     item_id: int,
-    hard: bool = Query(default=False, description="hard=true удаляет запись физически"),
     current_user: User = Depends(require_catalog_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    """Вывод позиции из эксплуатации (паспортист / администратор)."""
     _ = current_user
     item = await db.get(EquipmentCatalogItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Catalog item not found")
-    if hard:
-        await db.delete(item)
-    else:
-        item.is_active = False
+    item.is_active = False
     await db.commit()
-    return {"message": "ok"}
+    return {"message": "Позиция выведена из эксплуатации"}
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_200_OK)
+async def delete_catalog_item(
+    item_id: int,
+    current_user: User = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Физическое удаление — только администратор."""
+    item = await db.get(EquipmentCatalogItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Catalog item not found")
+    await db.delete(item)
+    await db.commit()
+    return {"message": "Позиция удалена"}
 
 
 @router.get("/template")
@@ -303,8 +320,8 @@ async def download_catalog_template(
         "manufacturer",
         "country",
         "description",
-        "attrs_json",
-        "is_active",
+        *FLAT_ATTR_COLUMNS,
+        "in_service",
     ]
     sample_rows = [
         {
@@ -317,8 +334,12 @@ async def download_catalog_template(
             "manufacturer": "Энергомаш",
             "country": "BY",
             "description": "Пример для разъединителя",
-            "attrs_json": json.dumps({"i_th": 16000, "ip_max": 40000, "t_th": 3, "normal_open": False}, ensure_ascii=False),
-            "is_active": True,
+            "i_th": 16000,
+            "ip_max": 40000,
+            "t_th": 3,
+            "normal_open": False,
+            "retained": False,
+            "in_service": True,
         },
         {
             "type_code": "breaker",
@@ -330,47 +351,31 @@ async def download_catalog_template(
             "manufacturer": "Таврида Электрик",
             "country": "RU",
             "description": "Пример для выключателя",
-            "attrs_json": json.dumps({"object_subtype": "vacuum_breaker", "nominal_breaking_current_ka": 20, "own_trip_time_sec": 0.06}, ensure_ascii=False),
-            "is_active": True,
-        },
-        {
-            "type_code": "zn",
-            "brand": "ЗН",
-            "model": "ЗН-10",
-            "full_name": "Заземляющий нож ЗН-10",
-            "voltage_kv": 10,
-            "current_a": None,
-            "manufacturer": "Н/Д",
-            "country": "BY",
-            "description": "Пример для ЗН",
-            "attrs_json": json.dumps({"psr_subtype": "short_circuiter", "pole_count": 1}, ensure_ascii=False),
-            "is_active": True,
+            "i_th": 20000,
+            "ip_max": 51000,
+            "t_th": 3,
+            "nominal_breaking_current_ka": 20,
+            "own_trip_time_sec": 0.06,
+            "object_subtype": "vacuum_breaker",
+            "in_service": True,
         },
         {
             "type_code": "arrester",
             "brand": "ОПН",
             "model": "ОПН-10",
-            "full_name": "Ограничитель перенапряжения ОПН-10",
+            "full_name": "ОПН-10",
             "voltage_kv": 10,
             "current_a": None,
             "manufacturer": "Н/Д",
             "country": "BY",
-            "description": "Пример для разрядника",
-            "attrs_json": json.dumps({"arrester_type": "opn", "tm_code": "AR-OPN-10", "pole_count": 0}, ensure_ascii=False),
-            "is_active": True,
-        },
-        {
-            "type_code": "recloser",
-            "brand": "NOJA",
-            "model": "OSM15",
-            "full_name": "Реклоузер NOJA OSM15",
-            "voltage_kv": 15,
-            "current_a": 630,
-            "manufacturer": "NOJA Power",
-            "country": "AU",
-            "description": "Пример для реклоузера",
-            "attrs_json": json.dumps({"tm_code": "REC-OSM15", "nominal_breaking_current_ka": 16, "own_trip_time_sec": 0.04, "pole_count": 2}, ensure_ascii=False),
-            "is_active": True,
+            "description": "Пример для ОПН",
+            "arrester_type": "opn",
+            "tm_code": "AR-OPN-10",
+            "nominal_discharge_current_a": 10000,
+            "continuous_current_a": 550,
+            "emergency_current_a": 20000,
+            "pole_count": 0,
+            "in_service": True,
         },
     ]
     df = pd.DataFrame(sample_rows, columns=columns)
@@ -385,22 +390,16 @@ async def download_catalog_template(
     )
     fields_df = pd.DataFrame(
         [
-            {"column": "type_code", "required": "yes", "note": "Код типа, см. reference_types"},
-            {"column": "brand", "required": "yes", "note": "Марка/линейка оборудования"},
-            {"column": "model", "required": "yes", "note": "Модель оборудования"},
-            {
-                "column": "attrs_json",
-                "required": "no",
-                "note": (
-                    "JSON характеристик (ключи как в API оборудования / Flutter add_equipment_dialog): "
-                    "rated_current, i_th, ip_max, t_th, normal_open, retained, nominal_voltage_kv, "
-                    "nominal_breaking_current_ka, own_trip_time_sec, emergency_current_a, continuous_current_a, "
-                    "nominal_discharge_current_a (ОПН), tm_code, object_subtype, psr_subtype, arrester_type, "
-                    "pole_count, parent_object_ref, parent_main_equipment_pole_ref, installation_display_name, "
-                    "nameplate, identified_object_description"
-                ),
-            },
-            {"column": "is_active", "required": "no", "note": "true/false, по умолчанию true"},
+            {"column": "type_code", "required": "да", "note": "disconnector, breaker, zn, arrester, recloser"},
+            {"column": "brand", "required": "да", "note": "Марка / линейка"},
+            {"column": "model", "required": "да", "note": "Модель (типоразмер)"},
+            {"column": "current_a", "required": "нет", "note": "Номинальный ток, А"},
+            {"column": "i_th", "required": "нет", "note": "Ток термической стойкости, А"},
+            {"column": "ip_max", "required": "нет", "note": "Ударный ток, А"},
+            {"column": "t_th", "required": "нет", "note": "Время терм. стойкости, с"},
+            {"column": "nominal_breaking_current_ka", "required": "нет", "note": "Отключающая способность, кА"},
+            {"column": "own_trip_time_sec", "required": "нет", "note": "Собственное время отключения, с"},
+            {"column": "in_service", "required": "нет", "note": "да/нет — в эксплуатации"},
         ]
     )
     output = io.BytesIO()
@@ -510,6 +509,11 @@ async def import_catalog(
         raw_fn = None if pd.isna(row.get("full_name")) else str(row.get("full_name")).strip()
         if not raw_fn:
             raw_fn = _catalog_full_name(brand, model)
+        in_svc = _to_bool(
+            row.get("in_service") if "in_service" in df.columns else row.get("is_active"),
+            True,
+        )
+        attrs_json = attrs_from_flat_row(row.to_dict())
         payload = {
             "type_code": type_code,
             "brand": brand,
@@ -520,8 +524,8 @@ async def import_catalog(
             "manufacturer": None if pd.isna(row.get("manufacturer")) else str(row.get("manufacturer")),
             "country": None if pd.isna(row.get("country")) else str(row.get("country")),
             "description": None if pd.isna(row.get("description")) else str(row.get("description")),
-            "attrs_json": None if pd.isna(row.get("attrs_json")) else str(row.get("attrs_json")),
-            "is_active": _to_bool(row.get("is_active"), True),
+            "attrs_json": attrs_json,
+            "is_active": in_svc,
         }
         if existing:
             if mode == "insert_only":

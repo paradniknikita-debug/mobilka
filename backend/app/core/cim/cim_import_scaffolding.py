@@ -35,8 +35,8 @@ def normalize_cim_mrid(raw: Optional[str]) -> str:
     return s
 
 
-# Нормализованные идентификаторы пяти служебных Description из build_export_tree
-_LEPM_IMPORT_FOLDER_SCAFFOLD_MRIDS = frozenset(
+# Пять служебных Description из build_export_tree (подмножество lepm_scaffolding_mrids).
+_LEPM_EXPORT_TREE_DESCRIPTION_MRIDS = frozenset(
     {
         normalize_cim_mrid(EXTERNAL_ROOT_RESOURCE),
         FIXED_GEO_REGION_MRID,
@@ -56,9 +56,11 @@ def is_lepm_import_folder_scaffolding(obj: Dict[str, Any]) -> bool:
     if cls not in ("Description", "Unknown"):
         return False
     m = normalize_cim_mrid(obj.get("mRID") or obj.get("mrid"))
-    return bool(m) and m in _LEPM_IMPORT_FOLDER_SCAFFOLD_MRIDS
+    return bool(m) and m in _LEPM_EXPORT_TREE_DESCRIPTION_MRIDS
 
 
 def filter_lepm_import_folder_scaffolding(objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Убрать служебные узлы профиля LEPM из списка разобранных CIM-объектов."""
-    return [o for o in objects if not is_lepm_import_folder_scaffolding(o)]
+    from .cim_diff_normalize import filter_diff_scaffolding_objects
+
+    return filter_diff_scaffolding_objects(objects)

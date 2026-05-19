@@ -2,7 +2,10 @@
   <div class="tech-passports__grid">
     <mat-card class="tech-passports__form" *ngIf="canEditPassports()">
       <mat-card-title>Новый паспорт</mat-card-title>
-      <mat-card-subtitle>Снимок данных из БД на момент формирования; можно указать ссылку на СТП и текстовые дополнения.</mat-card-subtitle>
+      <mat-card-subtitle>
+        Снимок данных объекта на момент формирования (как в системах паспортизации: титул, параметры, состав, дефекты).
+        Укажите ссылку на СТП и текстовые дополнения.
+      </mat-card-subtitle>
       <mat-card-content>
         <div class="field-row">
           <mat-form-field appearance="outline" class="full">
@@ -64,7 +67,7 @@
 
         <mat-form-field appearance="outline" class="full">
           <mat-label>Дополнения вручную</mat-label>
-          <textarea matInput rows="3" [(ngModel)]="manualNotes" placeholder="Произвольный текст (сохраняется в блоке «Вручную»)"></textarea>
+          <textarea matInput rows="3" [(ngModel)]="manualNotes" placeholder="Произвольный текст (раздел «Дополнения»)"></textarea>
         </mat-form-field>
 
         <button mat-raised-button color="primary" (click)="createPassport()" [disabled]="saving">
@@ -73,11 +76,55 @@
       </mat-card-content>
     </mat-card>
 
-    <mat-card class="tech-passports__list" *ngIf="detail">
-      <mat-card-title>Просмотр</mat-card-title>
+    <mat-card class="tech-passports__detail" *ngIf="detail">
+      <mat-card-title>{{ detail.title }}</mat-card-title>
+      <mat-card-subtitle>
+        {{ objectTypeLabel(detail.object_type) }} · mRID {{ detail.object_mrid }}
+        <span *ngIf="detail.stp_reference"> · {{ detail.stp_reference }}</span>
+      </mat-card-subtitle>
       <mat-card-content>
-        <button mat-button type="button" (click)="closeDetail()">Закрыть</button>
-        <pre class="json-preview">{{ detail | json }}</pre>
+        <div class="detail-actions">
+          <button mat-button type="button" (click)="closeDetail()">Закрыть</button>
+          <button mat-button type="button" (click)="showRawJson = !showRawJson">
+            {{ showRawJson ? 'Разделы' : 'JSON' }}
+          </button>
+        </div>
+
+        <ng-container *ngIf="!showRawJson && detail.sections?.length; else rawJsonBlock">
+          <mat-accordion class="passport-sections" multi>
+            <mat-expansion-panel *ngFor="let sec of detail.sections" [expanded]="sec.id === 'general' || sec.id === 'title'">
+              <mat-expansion-panel-header>
+                <mat-panel-title>{{ sec.title }}</mat-panel-title>
+              </mat-expansion-panel-header>
+              <dl class="passport-dl" *ngIf="sec.rows?.length">
+                <ng-container *ngFor="let r of sec.rows">
+                  <dt>{{ r.label }}</dt>
+                  <dd>{{ r.value }}</dd>
+                </ng-container>
+              </dl>
+              <div class="passport-table-block" *ngFor="let tbl of sectionTables(sec)">
+                <h4 class="passport-table-title">{{ tbl.title }}</h4>
+                <div class="table-wrap-inner">
+                  <table class="passport-mini-table">
+                    <thead>
+                      <tr>
+                        <th *ngFor="let c of tbl.columns">{{ c }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let row of tbl.rows">
+                        <td *ngFor="let c of tbl.columns; let ci = index">{{ tableCellAt(row, ci) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </mat-expansion-panel>
+          </mat-accordion>
+        </ng-container>
+        <ng-template #rawJsonBlock>
+          <pre class="json-preview">{{ detail | json }}</pre>
+        </ng-template>
       </mat-card-content>
     </mat-card>
   </div>
@@ -86,8 +133,17 @@
     <mat-card-title>Сохранённые паспорта</mat-card-title>
     <mat-card-subtitle>Всего: {{ total }}</mat-card-subtitle>
     <mat-card-content>
+      <mat-form-field appearance="outline" class="filter-type" subscriptSizing="dynamic">
+        <mat-label>Тип объекта</mat-label>
+        <mat-select [(ngModel)]="filterObjectType">
+          <mat-option value="">Все</mat-option>
+          <mat-option value="power_line">ЛЭП</mat-option>
+          <mat-option value="pole">Опора</mat-option>
+          <mat-option value="substation">Подстанция</mat-option>
+        </mat-select>
+      </mat-form-field>
       <div class="table-wrap" *ngIf="!loading; else loadingTpl">
-        <table mat-table [dataSource]="items" class="mat-elevation-z0 passports-table">
+        <table mat-table [dataSource]="filteredItems" class="mat-elevation-z0 passports-table">
           <ng-container matColumnDef="title">
             <th mat-header-cell *matHeaderCellDef>Заголовок</th>
             <td mat-cell *matCellDef="let row">{{ row.title }}</td>
@@ -100,6 +156,10 @@
             <th mat-header-cell *matHeaderCellDef>mRID</th>
             <td mat-cell *matCellDef="let row" class="mono">{{ row.object_mrid }}</td>
           </ng-container>
+          <ng-container matColumnDef="stp_reference">
+            <th mat-header-cell *matHeaderCellDef>СТП</th>
+            <td mat-cell *matCellDef="let row">{{ row.stp_reference || '—' }}</td>
+          </ng-container>
           <ng-container matColumnDef="created_at">
             <th mat-header-cell *matHeaderCellDef>Создан</th>
             <td mat-cell *matCellDef="let row">{{ row.created_at | date: 'short' }}</td>
@@ -107,17 +167,17 @@
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef>Действия</th>
             <td mat-cell *matCellDef="let row">
-              <button mat-icon-button matTooltip="Просмотр JSON" (click)="showDetail(row)">
+              <button mat-icon-button matTooltip="Просмотр разделов" (click)="showDetail(row)">
                 <mat-icon>visibility</mat-icon>
               </button>
-              <button mat-icon-button matTooltip="PDF" (click)="download(row, 'pdf')">
-                <mat-icon>picture_as_pdf</mat-icon>
+              <button mat-icon-button matTooltip="PDF" [disabled]="!!exportInProgress" (click)="download(row, 'pdf')">
+                <mat-icon>{{ isExporting(row, 'pdf') ? 'hourglass_empty' : 'picture_as_pdf' }}</mat-icon>
               </button>
-              <button mat-icon-button matTooltip="Word (DOCX)" (click)="download(row, 'docx')">
-                <mat-icon>description</mat-icon>
+              <button mat-icon-button matTooltip="Word (DOCX)" [disabled]="!!exportInProgress" (click)="download(row, 'docx')">
+                <mat-icon>{{ isExporting(row, 'docx') ? 'hourglass_empty' : 'description' }}</mat-icon>
               </button>
-              <button mat-icon-button matTooltip="Excel (XLSX)" (click)="download(row, 'xlsx')">
-                <mat-icon>table_chart</mat-icon>
+              <button mat-icon-button matTooltip="Excel (XLSX)" [disabled]="!!exportInProgress" (click)="download(row, 'xlsx')">
+                <mat-icon>{{ isExporting(row, 'xlsx') ? 'hourglass_empty' : 'table_chart' }}</mat-icon>
               </button>
               <button
                 *ngIf="canEditPassports()"
@@ -133,7 +193,7 @@
           <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
         </table>
-        <p *ngIf="items.length === 0" class="empty-hint">
+        <p *ngIf="filteredItems.length === 0" class="empty-hint">
           <ng-container *ngIf="canEditPassports(); else emptyReadOnly">Паспортов пока нет — сформируйте первый слева.</ng-container>
           <ng-template #emptyReadOnly>Паспортов пока нет.</ng-template>
         </p>

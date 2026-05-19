@@ -11,6 +11,9 @@ export interface User {
   updated_at?: string;
   /** Учётная копия пароля (только ответ /admin/users). Пусто для старых записей до смены пароля. */
   password_plain?: string | null;
+  /** Активность за последние ~5 мин (Redis). */
+  is_online?: boolean;
+  last_seen_at?: string | null;
 }
 
 export interface UserCreate {

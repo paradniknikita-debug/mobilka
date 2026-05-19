@@ -63,6 +63,27 @@ AsyncSessionLocal = sessionmaker(
     expire_on_commit=False
 )
 
+
+def _register_db_metrics_listeners() -> None:
+    """Учёт commit'ов (записей в БД) для графика нагрузки в админ-панели."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    from app.core.app_metrics import record_db_write
+
+    @event.listens_for(Session, "after_commit")
+    def _after_commit(_session) -> None:
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(record_db_write())
+        except RuntimeError:
+            pass
+
+
+_register_db_metrics_listeners()
+
 # Базовый класс для моделей
 Base = declarative_base()
 
@@ -192,6 +213,17 @@ async def seed_default_line_conductor_catalog():
         updated,
         len(defaults),
     )
+
+
+async def seed_default_wire_info_catalog():
+    """Идемпотентно заполняет wire_info типовыми марками АС (r/x/b на 1 км)."""
+    from app.core.wire_info_catalog import ensure_wire_info_catalog_seeded
+
+    async with AsyncSessionLocal() as db:
+        inserted = await ensure_wire_info_catalog_seeded(db)
+        await db.commit()
+    logger.info("Seed wire_info completed: inserted=%s", inserted)
+
 
 async def init_db():
     """Инициализация базы данных с обработкой ошибок"""
@@ -584,10 +616,33 @@ async def init_db():
                         END IF;
                     END $$;
                 """))
+                await conn.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'wire_info') THEN
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'wire_info' AND column_name = 'i_th') THEN
+                                ALTER TABLE wire_info ADD COLUMN i_th DOUBLE PRECISION;
+                            END IF;
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'wire_info' AND column_name = 'ip_max') THEN
+                                ALTER TABLE wire_info ADD COLUMN ip_max DOUBLE PRECISION;
+                            END IF;
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'wire_info' AND column_name = 't_th') THEN
+                                ALTER TABLE wire_info ADD COLUMN t_th DOUBLE PRECISION;
+                            END IF;
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'wire_info' AND column_name = 'voltage_kv') THEN
+                                ALTER TABLE wire_info ADD COLUMN voltage_kv DOUBLE PRECISION;
+                            END IF;
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'wire_info' AND column_name = 'in_service') THEN
+                                ALTER TABLE wire_info ADD COLUMN in_service BOOLEAN NOT NULL DEFAULT true;
+                            END IF;
+                        END IF;
+                    END $$;
+                """))
             
             logger.info("База данных успешно инициализирована")
             await seed_default_equipment_catalog()
             await seed_default_line_conductor_catalog()
+            await seed_default_wire_info_catalog()
             return
             
         except Exception as e:

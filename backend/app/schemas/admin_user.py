@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -12,6 +13,8 @@ class AdminUserResponse(UserResponse):
     """Ответ админ-API: включает учётную копию пароля (если задавалась при создании/смене)."""
 
     password_plain: Optional[str] = None
+    is_online: bool = False
+    last_seen_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

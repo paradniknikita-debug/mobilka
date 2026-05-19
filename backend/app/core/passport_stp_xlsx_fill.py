@@ -177,6 +177,41 @@ def build_stp_line_passport_xlsx(
             ]
         )
 
+    # Оборудование на опорах (реестр для паспорта)
+    eq_name = "Оборудование"
+    if eq_name in wb.sheetnames:
+        del wb[eq_name]
+    weq = wb.create_sheet(eq_name)
+    weq.append(
+        [
+            "№ опоры",
+            "Тип",
+            "Наименование",
+            "Марка",
+            "Производитель",
+            "Модель",
+            "Состояние",
+            "Дефект",
+            "Критичность",
+        ]
+    )
+    for p in poles:
+        pnum = p.get("pole_number") or "—"
+        for eq in p.get("equipment") or []:
+            weq.append(
+                [
+                    pnum,
+                    eq.get("equipment_type"),
+                    eq.get("name"),
+                    eq.get("nameplate"),
+                    eq.get("manufacturer"),
+                    eq.get("model"),
+                    eq.get("condition"),
+                    eq.get("defect") or "",
+                    eq.get("criticality") or "",
+                ]
+            )
+
     # Сегменты / провода — кратко
     seg_name = "Сегменты_ЛЭП"
     if seg_name in wb.sheetnames:

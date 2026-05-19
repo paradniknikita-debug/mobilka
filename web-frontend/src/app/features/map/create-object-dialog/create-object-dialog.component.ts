@@ -1,4 +1,4 @@
-import { Component, OnInit, Inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, Inject, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
 import { PoleAttachmentsManagerDialogComponent } from '../pole-attachments-manager-dialog/pole-attachments-manager-dialog.component';
@@ -21,6 +21,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, forkJoin, of } from 'rxjs';
 import { map, startWith, switchMap, catchError } from 'rxjs/operators';
 import { EquipmentCatalogItem } from '../../../core/models/equipment-catalog.model';
+import { PoleEquipmentPanelComponent } from '../pole-equipment-panel/pole-equipment-panel.component';
 
 export type ObjectType = 'substation' | 'pole' | 'equipment' | 'powerline';
 
@@ -89,6 +90,26 @@ export class CreateObjectDialogComponent implements OnInit {
     'ПБ110-1'
   ];
 
+  /** Марки опор в автодополнении с фильтром по вводу. */
+  get filteredPoleBrands(): string[] {
+    const q = (this.poleForm?.get('construction')?.value ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (!q) return this.poleBrandsCis;
+    return this.poleBrandsCis.filter((b) => b.toLowerCase().includes(q));
+  }
+
+  get filteredPoleConductorMarks(): string[] {
+    const q = (this.poleForm?.get('conductor_type')?.value ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+    const source = this.lineConductorMarks.length ? this.lineConductorMarks : this.conductorTypes;
+    if (!q) return source.slice(0, 30);
+    return source.filter((m) => m.toLowerCase().includes(q)).slice(0, 30);
+  }
+
   // Состояния опоры
   conditions = [
     'good',
@@ -96,10 +117,12 @@ export class CreateObjectDialogComponent implements OnInit {
     'poor'
   ];
 
-  // Марки провода для автосоздания пролёта
+  // Марки провода для автосоздания пролёта (fallback, если справочник недоступен)
   conductorTypes = ['AC-70', 'AC-95', 'AC-120', 'AC-150', 'AC-185', 'AC-240', 'AC-300', 'AC-400', 'СИП-2', 'СИП-4', 'А'];
   // Материал провода
   conductorMaterials = ['алюминий', 'медь', 'сталь', 'алмаг'];
+  /** Марки провода из справочника line-conductor-catalog */
+  lineConductorMarks: string[] = [];
 
   /** Последняя опора в выбранной линии (по sequence_number); если отпаечная — показываем выбор направления */
   lastPoleInLine: { id: number; is_tap_pole?: boolean } | null = null;
@@ -139,6 +162,9 @@ export class CreateObjectDialogComponent implements OnInit {
 
   /** Класс напряжения ЛЭП опоры, кВ — номинал коммутационного оборудования совпадает с ним. */
   equipmentLineVoltageKv: number | null = null;
+  poleEquipmentLineVoltageKv: number | null = null;
+
+  @ViewChild('poleEquipmentPanel') poleEquipmentPanel?: PoleEquipmentPanelComponent;
 
   readonly formatCardCommentAt = formatCardCommentDateTime;
 
@@ -287,13 +313,15 @@ export class CreateObjectDialogComponent implements OnInit {
       year_manufactured: [null],
       installation_date: [''],
       condition: ['good'],
+      defect: [''],
+      criticality: [null as string | null],
       notes: [''],
       rated_current: [null],
       i_th: [null],
       ip_max: [null],
       t_th: [null],
-      normal_open: [null as boolean | null],
-      retained: [null as boolean | null]
+      normal_open: [true],
+      retained: [true]
     });
     // Если пришёл poleId из контекстного меню, фиксируем его и не даём менять
     if (data?.poleId) {
@@ -303,6 +331,7 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.loadLineConductorCatalog();
     console.log('CreateObjectDialogComponent ngOnInit, data:', this.data);
     console.log('selectedObjectType в ngOnInit:', this.selectedObjectType);
     
@@ -377,6 +406,7 @@ export class CreateObjectDialogComponent implements OnInit {
         this.showBranchChoice = false;
         this.cdr.detectChanges();
       }
+      this.refreshPoleEquipmentLineVoltage();
     });
 
     this.equipmentForm.get('equipment_type')?.valueChanges.subscribe((value) => {
@@ -505,9 +535,41 @@ export class CreateObjectDialogComponent implements OnInit {
       });
   }
 
+  private refreshPoleEquipmentLineVoltage(): void {
+    const lineVal = this.poleForm?.get('line_id')?.value;
+    const lineId =
+      typeof lineVal === 'object' && lineVal !== null && 'id' in lineVal
+        ? (lineVal as { id: number }).id
+        : this.lineId ?? null;
+    if (!lineId) {
+      this.poleEquipmentLineVoltageKv = null;
+      return;
+    }
+    const line = this.powerLines.find((l) => l.id === lineId);
+    const v = line?.voltage_level != null ? Number(line.voltage_level) : NaN;
+    this.poleEquipmentLineVoltageKv = Number.isFinite(v) ? v : null;
+  }
+
   isSwitchLikeEquipmentType(type?: string | null): boolean {
     const v = this.normalizeCatalogText(type ?? this.equipmentForm.get('equipment_type')?.value);
     return v === 'disconnector' || v === 'grounding_switch' || v === 'зн' || v === 'разъединитель';
+  }
+
+  /** Марки из каталога с фильтрацией по вводу в поле «Марка (табличка)». */
+  get filteredEquipmentCatalog(): EquipmentCatalogItem[] {
+    const q = this.normalizeCatalogText(this.equipmentForm.get('nameplate')?.value);
+    if (!q) return this.equipmentCatalogItems;
+    return this.equipmentCatalogItems.filter((item) => {
+      const label = this.normalizeCatalogText(this.catalogLabel(item));
+      const brand = this.normalizeCatalogText(item.brand);
+      const model = this.normalizeCatalogText(item.model);
+      return (
+        label.includes(q) ||
+        brand.includes(q) ||
+        model.includes(q) ||
+        `${brand} ${model}`.trim().includes(q)
+      );
+    });
   }
 
   private catalogLabel(item: EquipmentCatalogItem): string {
@@ -602,6 +664,23 @@ export class CreateObjectDialogComponent implements OnInit {
     });
   }
 
+  private loadLineConductorCatalog(): void {
+    this.apiService.getLineConductorCatalog({ is_active: true, limit: 500 }).subscribe({
+      next: (items) => {
+        const marks = new Set<string>();
+        for (const it of items || []) {
+          const m = (it.mark || '').trim();
+          if (m) marks.add(m);
+        }
+        this.lineConductorMarks = Array.from(marks).sort((a, b) => a.localeCompare(b, 'ru'));
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.lineConductorMarks = [];
+      }
+    });
+  }
+
   applyCatalogByNameplate(): void {
     const nameplate = String(this.equipmentForm.get('nameplate')?.value || '').trim();
     if (!nameplate) return;
@@ -690,6 +769,8 @@ export class CreateObjectDialogComponent implements OnInit {
           year_manufactured: eq.year_manufactured ?? null,
           installation_date: eq.installation_date ? (eq.installation_date as any).toString().slice(0, 10) : '',
           condition: eq.condition || 'good',
+          defect: (eq as any).defect || '',
+          criticality: (eq as any).criticality ?? null,
           notes: eq.notes || '',
           rated_current: (eq as any).rated_current ?? null,
           i_th: (eq as any).i_th ?? null,
@@ -791,8 +872,8 @@ export class CreateObjectDialogComponent implements OnInit {
     const first = names[0] ?? '—';
     const last = names.length > 0 ? names[names.length - 1] : '—';
     const tooltip =
-      `Якорь: ${anchor} (id ${tapPoleId}), индекс ветки ${branchIndex}. ` +
-      (chain ? `Все опоры ветки: ${chain}.` : 'На ветке пока нет учтённых опор.');
+      `Якорь: ${anchor} (id ${tapPoleId}), индекс отпайки ${branchIndex}. ` +
+      (chain ? `Все опоры отпайки: ${chain}.` : 'На отпайке пока нет учтённых опор.');
     if (names.length === 0) {
       return { label: `${anchor} · отпайка ${branchIndex} — (пока без опор)`, tooltip };
     }
@@ -934,6 +1015,7 @@ export class CreateObjectDialogComponent implements OnInit {
 
         // Для карточки подстанции пересчитываем связи «подстанция ↔ линии/отпайки»
         this.recomputeSubstationLinks();
+        this.refreshPoleEquipmentLineVoltage();
 
         this.cdr.detectChanges();
       },
@@ -1408,20 +1490,22 @@ export class CreateObjectDialogComponent implements OnInit {
       year_manufactured: formValue.year_manufactured != null && formValue.year_manufactured !== '' ? Number(formValue.year_manufactured) : undefined,
       installation_date: formValue.installation_date || undefined,
       condition: formValue.condition || undefined,
+      defect: (formValue.defect || '').trim() || null,
+      criticality: (formValue.defect || '').trim() && formValue.criticality ? formValue.criticality : null,
       notes: notes || undefined,
       rated_current: isElectricalType && formValue.rated_current != null && formValue.rated_current !== '' ? Number(formValue.rated_current) : undefined,
       i_th: isElectricalType && formValue.i_th != null && formValue.i_th !== '' ? Number(formValue.i_th) : undefined,
       ip_max: isElectricalType && formValue.ip_max != null && formValue.ip_max !== '' ? Number(formValue.ip_max) : undefined,
       t_th: isElectricalType && formValue.t_th != null && formValue.t_th !== '' ? Number(formValue.t_th) : undefined,
-      normal_open: isElectricalType ? formValue.normal_open : undefined,
-      retained: isElectricalType ? formValue.retained : undefined,
+      normal_open: isElectricalType ? true : undefined,
+      retained: isElectricalType ? true : undefined,
       identified_object_description: (formValue.identified_object_description || '').trim() || undefined,
       nameplate: (formValue.nameplate || '').trim() || undefined,
       psr_subtype:
         formValue.equipment_type === 'disconnector' || formValue.equipment_type === 'grounding_switch'
           ? (formValue.psr_subtype || undefined)
           : undefined,
-      installation_display_name: (formValue.installation_display_name || '').trim() || undefined,
+      installation_display_name: isElectricalType ? 'ЛЭП' : undefined,
       tm_code: (formValue.tm_code || '').trim() || undefined,
       object_subtype: (formValue.object_subtype || '').trim() || undefined,
       pole_count:
@@ -1631,20 +1715,22 @@ export class CreateObjectDialogComponent implements OnInit {
       year_manufactured: formValue.year_manufactured != null && formValue.year_manufactured !== '' ? Number(formValue.year_manufactured) : undefined,
       installation_date: formValue.installation_date || undefined,
       condition: formValue.condition || undefined,
+      defect: (formValue.defect || '').trim() || null,
+      criticality: (formValue.defect || '').trim() && formValue.criticality ? formValue.criticality : null,
       notes: notes || undefined,
       rated_current: isElectricalType && formValue.rated_current != null && formValue.rated_current !== '' ? Number(formValue.rated_current) : undefined,
       i_th: isElectricalType && formValue.i_th != null && formValue.i_th !== '' ? Number(formValue.i_th) : undefined,
       ip_max: isElectricalType && formValue.ip_max != null && formValue.ip_max !== '' ? Number(formValue.ip_max) : undefined,
       t_th: isElectricalType && formValue.t_th != null && formValue.t_th !== '' ? Number(formValue.t_th) : undefined,
-      normal_open: isElectricalType ? formValue.normal_open : undefined,
-      retained: isElectricalType ? formValue.retained : undefined,
+      normal_open: isElectricalType ? true : undefined,
+      retained: isElectricalType ? true : undefined,
       identified_object_description: (formValue.identified_object_description || '').trim() || undefined,
       nameplate: (formValue.nameplate || '').trim() || undefined,
       psr_subtype:
         formValue.equipment_type === 'disconnector' || formValue.equipment_type === 'grounding_switch'
           ? (formValue.psr_subtype || undefined)
           : undefined,
-      installation_display_name: (formValue.installation_display_name || '').trim() || undefined,
+      installation_display_name: isElectricalType ? 'ЛЭП' : undefined,
       tm_code: (formValue.tm_code || '').trim() || undefined,
       object_subtype: (formValue.object_subtype || '').trim() || undefined,
       pole_count:
@@ -1702,6 +1788,24 @@ export class CreateObjectDialogComponent implements OnInit {
         this.snackBar.open(errorMessage, 'Закрыть', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     });
+  }
+
+  private finishPoleSave(pole: Pole, message: string, hint: string): void {
+    this.isSubmitting = false;
+    this.snackBar.open(message + hint, 'Закрыть', {
+      duration: this.isEditMode && this.showBranchChoice ? 6000 : 3000,
+    });
+    this.mapService.refreshData();
+    this.apiService
+      .createChangeLogEntry({
+        source: 'web',
+        action: this.isEditMode ? 'update' : 'create',
+        entity_type: 'pole',
+        entity_id: pole.id,
+        payload: { name: pole.pole_number, mrid: pole.mrid },
+      })
+      .subscribe({ error: () => {} });
+    this.dialogRef.close({ success: true, pole });
   }
 
   createPole(): void {
@@ -1848,18 +1952,19 @@ export class CreateObjectDialogComponent implements OnInit {
           ? ' При смене направления выполните «Пересборка топологии» по ЛЭП (ПКМ по линии в дереве).'
           : '';
         console.log(message + ':', pole);
-        this.snackBar.open(message + hint, 'Закрыть', {
-          duration: this.isEditMode && this.showBranchChoice ? 6000 : 3000
+        const panel = this.poleEquipmentPanel;
+        const afterEquipment$ = panel ? panel.persistAll(pole.id) : of(void 0);
+        afterEquipment$.subscribe({
+          next: () => this.finishPoleSave(pole, message, hint),
+          error: () => {
+            this.snackBar.open(
+              message + ', но не всё оборудование удалось сохранить',
+              'Закрыть',
+              { duration: 5000 },
+            );
+            this.finishPoleSave(pole, message, hint);
+          },
         });
-        this.mapService.refreshData();
-        this.apiService.createChangeLogEntry({
-          source: 'web',
-          action: this.isEditMode ? 'update' : 'create',
-          entity_type: 'pole',
-          entity_id: pole.id,
-          payload: { name: pole.pole_number, mrid: pole.mrid }
-        }).subscribe({ error: () => {} });
-        this.dialogRef.close({ success: true, pole });
       },
       error: (error) => {
         const action = this.isEditMode ? 'обновления' : 'создания';

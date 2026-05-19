@@ -44,7 +44,8 @@
       </ng-template>
       <div class="tab-panel">
         <p class="tab-hint">
-          Формирование паспорта вручную по объекту, перечень сохранённых паспортов и выгрузка в PDF, DOCX или XLSX (роли с правом выгрузки).
+          Формирование технического паспорта по объекту (снимок из БД + разделы по СТП). Выгрузка: PDF и Word — по разделам;
+          Excel для ЛЭП — по шаблону СТП (<code>stp_passport_vl.xlsx</code>), для опоры и ПС — листы по разделам.
         </p>
         <app-tech-passports-panel></app-tech-passports-panel>
       </div>
@@ -78,11 +79,11 @@
       <div class="tab-panel tab-panel--conductors">
         <p class="tab-hint">
           <ng-container *ngIf="canManagePassportization(); else conductorsReadOnlyHint">
-            Номинальные марки проводников по напряжению — для сегментов и учёта линии.
+            Справочник марок с расчётными параметрами (r/x/b, токи), импорт из Excel, вывод из эксплуатации.
           </ng-container>
           <ng-template #conductorsReadOnlyHint>Номинальные марки проводников по напряжению (только просмотр).</ng-template>
         </p>
-        <app-line-conductor-catalog-panel></app-line-conductor-catalog-panel>
+        <app-wire-info-catalog-panel></app-wire-info-catalog-panel>
       </div>
     </mat-tab>
   </mat-tab-group>

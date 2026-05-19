@@ -164,6 +164,9 @@ abstract class LepmRetrofit {
   @GET('/map/spans/geojson')
   Future<JsonDict> getSpansGeoJSON();
 
+  @GET('/map/find-uid')
+  Future<JsonDict> findMapUid(@Query('q') String q);
+
   @GET('/map/overlay-routes/geojson')
   Future<JsonDict> getOverlayRoutesGeoJSON();
 
@@ -279,6 +282,9 @@ abstract class ApiServiceWithExport {
   Future<Map<String, dynamic>> getTapsGeoJSON();
   Future<Map<String, dynamic>> getSubstationsGeoJSON();
   Future<Map<String, dynamic>> getSpansGeoJSON();
+
+  /// Поиск на карте по mRID/UID (журнал, CIM). null — не найдено.
+  Future<Map<String, dynamic>?> findMapUid(String q);
 
   Future<Substation> createSubstation(SubstationCreate substationData);
   Future<void> deleteSubstation(int id);
@@ -816,6 +822,19 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<Map<String, dynamic>> getSpansGeoJSON() => _rest.getSpansGeoJSON().then((j) => j.data);
+
+  @override
+  Future<Map<String, dynamic>?> findMapUid(String q) async {
+    try {
+      final j = await _rest.findMapUid(q.trim());
+      return j.data;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
+  }
 
   @override
   Future<Map<String, dynamic>> getAclineSegment(int segmentId) =>

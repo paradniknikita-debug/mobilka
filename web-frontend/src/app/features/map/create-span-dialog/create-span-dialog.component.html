@@ -77,7 +77,15 @@
       
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Марка провода</mat-label>
-        <input matInput formControlName="conductor_type" placeholder="Например: AC-70">
+        <input
+          matInput
+          formControlName="conductor_type"
+          placeholder="Например: АС-70"
+          [matAutocomplete]="spanConductorAuto">
+        <mat-autocomplete #spanConductorAuto="matAutocomplete">
+          <mat-option *ngFor="let mark of filteredConductorMarks" [value]="mark">{{ mark }}</mat-option>
+        </mat-autocomplete>
+        <mat-hint>Справочник марок; можно ввести вручную</mat-hint>
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="full-width">

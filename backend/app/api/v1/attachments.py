@@ -101,6 +101,26 @@ def _guess_content_type_from_name(name: str) -> str:
         return "video/webm"
     if lower.endswith(".mp4"):
         return "video/mp4"
+    if lower.endswith(".doc"):
+        return "application/msword"
+    if lower.endswith(".docx"):
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if lower.endswith(".xls"):
+        return "application/vnd.ms-excel"
+    if lower.endswith(".xlsx"):
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if lower.endswith(".ppt"):
+        return "application/vnd.ms-powerpoint"
+    if lower.endswith(".pptx"):
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    if lower.endswith(".txt"):
+        return "text/plain"
+    if lower.endswith(".zip"):
+        return "application/zip"
+    if lower.endswith(".rar"):
+        return "application/vnd.rar"
+    if lower.endswith(".7z"):
+        return "application/x-7z-compressed"
     return ""
 
 

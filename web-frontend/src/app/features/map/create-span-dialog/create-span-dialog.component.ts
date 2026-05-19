@@ -31,6 +31,7 @@ export class CreateSpanDialogComponent implements OnInit {
   isCreating = false;
   showFromPoleSelect = false;
   showToPoleSelect = false;
+  conductorMarks: string[] = [];
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { 
@@ -76,6 +77,7 @@ export class CreateSpanDialogComponent implements OnInit {
   ngOnInit(): void {
     this.loadPoles();
     this.loadLineSections();
+    this.loadConductorCatalog();
     
     // Если режим редактирования, загружаем данные пролёта после загрузки опор
     if (this.isEditMode && this.spanId) {
@@ -185,6 +187,33 @@ export class CreateSpanDialogComponent implements OnInit {
   loadLineSections(): void {
     // LineSection создаётся автоматически при создании пролёта через API
     // Пока не требуется загрузка секций
+  }
+
+  loadConductorCatalog(): void {
+    this.apiService.getLineConductorCatalog({ is_active: true, limit: 500 }).subscribe({
+      next: (items) => {
+        const marks = new Set<string>();
+        for (const it of items || []) {
+          const m = (it.mark || '').trim();
+          if (m) marks.add(m);
+        }
+        this.conductorMarks = Array.from(marks).sort((a, b) => a.localeCompare(b, 'ru'));
+      },
+      error: () => {
+        this.conductorMarks = [];
+      }
+    });
+  }
+
+  get filteredConductorMarks(): string[] {
+    const q = (this.spanForm.get('conductor_type')?.value ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+    const fallback = ['AC-70', 'AC-95', 'AC-120', 'AC-150', 'AC-185', 'AC-240'];
+    const source = this.conductorMarks.length ? this.conductorMarks : fallback;
+    if (!q) return source.slice(0, 30);
+    return source.filter((m) => m.toLowerCase().includes(q)).slice(0, 30);
   }
 
   positiveNumberValidator(control: any): { [key: string]: any } | null {

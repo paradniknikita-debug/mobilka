@@ -72,6 +72,9 @@ async def lifespan(app: FastAPI):
         print(f"Приложение не может быть запущено без подключения к БД.")
         raise
     log_media_storage_mode()
+    from app.core.export_deps import log_passport_export_dependencies
+
+    log_passport_export_dependencies()
     # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
     # Один пул HTTP к OSM на всё приложение (иначе на каждый тайл — новый TCP/TLS).
@@ -161,6 +164,17 @@ else:
     cors_kw["allow_origins"] = cors_origins if cors_origins else ["*"]
 
 app.add_middleware(CORSMiddleware, **cors_kw)
+
+
+@app.middleware("http")
+async def app_metrics_middleware(request: Request, call_next):
+    """Поминутный счётчик HTTP-запросов к API (для графика в админ-панели)."""
+    path = request.url.path or ""
+    if path.startswith("/api/"):
+        from app.core.app_metrics import record_http_request
+
+        await record_http_request()
+    return await call_next(request)
 
 
 # Тестовый endpoint (определяем ДО роутеров)

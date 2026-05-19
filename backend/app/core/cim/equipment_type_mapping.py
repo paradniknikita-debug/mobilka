@@ -61,6 +61,20 @@ def normalize_equipment_type(equipment_type: Optional[str]) -> str:
     return "conducting_equipment"
 
 
+def effective_equipment_pole_count(
+    equipment_type: Optional[str],
+    pole_count: Optional[int] = None,
+) -> int:
+    """
+    Число полюсов для CIM (me:ConductingEquipment.poleCount) и синтетических терминалов.
+    Для разъединителя/выключателя/реклозера — минимум 2, даже если в БД указано 1 или null.
+    """
+    profile = map_equipment_type_to_cim_profile(equipment_type)
+    if pole_count is not None and pole_count >= profile.terminal_count:
+        return int(pole_count)
+    return profile.terminal_count
+
+
 def map_equipment_type_to_cim_profile(equipment_type: Optional[str]) -> EquipmentProfile:
     normalized = normalize_equipment_type(equipment_type)
     if normalized == "ground_disconnector":

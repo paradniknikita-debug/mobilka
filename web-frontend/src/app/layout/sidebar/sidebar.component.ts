@@ -15,7 +15,7 @@ import { CreateSegmentDialogComponent } from '../../features/map/create-segment-
 import { SegmentCardDialogComponent, SegmentCardDialogData } from '../../features/map/segment-card-dialog/segment-card-dialog.component';
 import { EditPowerLineDialogComponent } from '../../features/map/edit-power-line-dialog/edit-power-line-dialog.component';
 import { RebuildTopologyDialogComponent } from '../../features/map/rebuild-topology-dialog/rebuild-topology-dialog.component';
-import { ApiService } from '../../core/services/api.service';
+import { ApiService, MapUidSearchHit } from '../../core/services/api.service';
 import { PowerLine } from '../../core/models/power-line.model';
 import { Equipment } from '../../core/models/equipment.model';
 
@@ -732,9 +732,84 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const suggestions = this.collectSearchSuggestions(q);
     if (suggestions.length > 0) {
       this.applySearchResult(suggestions[0]);
-    } else {
-      this.snackBar.open('Ничего не найдено', 'Закрыть', { duration: 2000 });
+      return;
     }
+    const raw = (this.treeSearchQuery || '').trim();
+    if (raw.replace(/[\s\-{}]/g, '').length >= 8) {
+      this.apiService.findMapUid(raw).subscribe({
+        next: (hit: MapUidSearchHit | null) => {
+          if (hit) {
+            this.applyMapUidHit(hit);
+          } else {
+            this.snackBar.open('Ничего не найдено', 'Закрыть', { duration: 2500 });
+          }
+        },
+        error: () => {
+          this.snackBar.open('Ошибка поиска по UID', 'Закрыть', { duration: 3000 });
+        },
+      });
+      return;
+    }
+    this.snackBar.open('Ничего не найдено', 'Закрыть', { duration: 2000 });
+  }
+
+  private queryMatchesField(value: unknown, q: string): boolean {
+    if (value == null) return false;
+    const s = String(value).toLowerCase();
+    if (s.includes(q)) return true;
+    const compactQ = q.replace(/[\s\-{}]/g, '');
+    if (compactQ.length >= 8) {
+      const compactS = s.replace(/[\s\-{}]/g, '');
+      return compactS.includes(compactQ);
+    }
+    return false;
+  }
+
+  applyMapUidHit(hit: MapUidSearchHit): void {
+    const lineId = hit.line_id != null ? Number(hit.line_id) : null;
+    const poleId = hit.pole_id != null ? Number(hit.pole_id) : null;
+    const subId = hit.substation_id != null ? Number(hit.substation_id) : null;
+    const zoom = 16;
+
+    if (lineId != null && Number.isFinite(lineId)) {
+      this.expandedPowerLines.add(lineId);
+      this.expandedPolesFolders.add(`${lineId}-all-poles`);
+    }
+    if (poleId != null && Number.isFinite(poleId)) {
+      this.selectedPoleIdFromMap = poleId;
+    }
+    if (subId != null && Number.isFinite(subId)) {
+      this.selectedPoleIdFromMap = null;
+    }
+
+    if (hit.latitude != null && hit.longitude != null) {
+      this.mapService.requestCenterOnFeature('pole', [Number(hit.latitude), Number(hit.longitude)], zoom);
+    } else if (poleId != null) {
+      const items = this.getPowerLinesWithSegmentsAndPoles();
+      for (const item of items) {
+        const pole = item.allPoles.find(p => Number(p.properties['id']) === poleId);
+        if (pole) {
+          const coords = this.getPointCoordinates(pole);
+          if (coords) {
+            this.mapService.requestCenterOnFeature('pole', [coords.lat, coords.lng], zoom);
+          }
+          break;
+        }
+      }
+    } else if (lineId != null) {
+      const items = this.getPowerLinesWithSegmentsAndPoles();
+      const item = items.find(i => Number(i.powerLine.properties['id']) === lineId);
+      if (item) {
+        const bounds = this.getBoundsFromFeatures([item.powerLine, ...item.allPoles]);
+        if (bounds) {
+          this.mapService.requestCenterOnFeature('power_line', bounds[0], undefined, undefined, bounds);
+        }
+      }
+    }
+
+    this.treeSearchSuggestions = [];
+    this.snackBar.open(`Найдено: ${hit.label}`, 'Закрыть', { duration: 2500 });
+    this.cdr.detectChanges();
   }
 
   onSearchInput(): void {
@@ -754,10 +829,12 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const mrid = (item.powerLine.properties['mrid'] || '').toString();
       const plModel = this.powerLineModelById(Number(plId));
       const modelMrid = plModel?.mrid ?? '';
+      const plIdStr = plId != null ? String(plId) : '';
       if (
         this.matchesTreeSearch(name, qLower) ||
         this.matchesTreeSearch(mrid, qLower) ||
-        this.matchesTreeSearch(modelMrid, qLower)
+        this.matchesTreeSearch(modelMrid, qLower) ||
+        plIdStr.toLowerCase().includes(qLower)
       ) {
         out.push({ type: 'power_line', label: (item.powerLine.properties['name'] || 'ЛЭП') + ` (${item.powerLine.properties['voltage_level']} кВ)`, item });
         if (out.length >= limit) return out;
@@ -771,7 +848,12 @@ export class SidebarComponent implements OnInit, OnDestroy {
         for (const pole of seg.poles) {
           const pName = (pole.properties['pole_number'] || '').toString();
           const pMrid = (pole.properties['mrid'] || '').toString();
-          if (this.matchesTreeSearch(pName, qLower) || this.matchesTreeSearch(pMrid, qLower)) {
+          const pIdStr = pole.properties['id'] != null ? String(pole.properties['id']) : '';
+          if (
+            this.matchesTreeSearch(pName, qLower) ||
+            this.matchesTreeSearch(pMrid, qLower) ||
+            pIdStr.toLowerCase().includes(qLower)
+          ) {
             out.push({ type: 'pole', label: (pole.properties['pole_number'] || 'Опора') + (pMrid ? ` · ${pole.properties['mrid']}` : ''), item, segment: seg, pole });
             if (out.length >= limit) return out;
           }
@@ -820,8 +902,29 @@ export class SidebarComponent implements OnInit, OnDestroy {
       for (const eq of this.allEquipment) {
         const eName = (eq.name || '').toString();
         const eMrid = ((eq as any).mrid || (eq as any).uid || '').toString();
-        if (this.matchesTreeSearch(eName, qLower) || this.matchesTreeSearch(eMrid, qLower)) {
-          out.push({ type: 'pole', label: `Оборудование: ${eq.name || 'не указано'}${eMrid ? ` · ${(eq as any).mrid}` : ''}`, item: firstItem });
+        const eIdStr = eq.id != null ? String(eq.id) : '';
+        const poleRef = eq.pole_id != null ? String(eq.pole_id) : '';
+        if (
+          this.matchesTreeSearch(eName, qLower) ||
+          this.matchesTreeSearch(eMrid, qLower) ||
+          eIdStr.toLowerCase().includes(qLower) ||
+          poleRef.toLowerCase().includes(qLower)
+        ) {
+          let lineItem = firstItem;
+          if (eq.pole_id != null) {
+            for (const it of items) {
+              const hit = it.allPoles.some(p => Number(p.properties['id']) === Number(eq.pole_id));
+              if (hit) {
+                lineItem = it;
+                break;
+              }
+            }
+          }
+          out.push({
+            type: 'pole',
+            label: `Оборудование: ${eq.name || 'не указано'}${eMrid ? ` · ${(eq as any).mrid}` : ''}`,
+            item: lineItem,
+          });
           if (out.length >= limit) return out;
         }
       }

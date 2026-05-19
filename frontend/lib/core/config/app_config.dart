@@ -34,9 +34,13 @@ class AppConfig {
   static bool get isUsingHttp => _urlManager.isUsingHttp;
   
   // Map Configuration (minZoom 3 — не отдалять до дублирования континентов)
+  /// Центр карты по умолчанию — Минск (не привязываемся к GPS/Москве при старте).
+  static const double defaultMapLatitude = 53.9045;
+  static const double defaultMapLongitude = 27.5615;
   static const double defaultZoom = 10.0;
-  static const double minZoom = 3.0;
-  static const double maxZoom = 20.0;
+  /// Не уходить ниже 4 — на малых z тайлы OSM нестабильны и «рвёт» подложку.
+  static const double minZoom = 4.0;
+  static const double maxZoom = 19.0;
 
   /// Как на Angular: линейное оборудование при зуме ≤ этого значения скрыто;
   /// показывать только после достаточного зума (иначе значки «теряются»).
@@ -49,9 +53,10 @@ class AppConfig {
   static const double belarusEast = 32.78;
   /// Уровни зума для офлайн-карты (OSM не рекомендует bulk после 13)
   static const int offlineMinZoom = 4;
-  static const int offlineMaxZoom = 13;
-  /// Имя хранилища тайлов FMTC
-  static const String mapStoreName = 'osm_belarus';
+  /// До 14 — плавный зум по Беларуси без смены стиля подложки в офлайне.
+  static const int offlineMaxZoom = 14;
+  /// Имя хранилища FMTC (v2 — единый URL с API, не прямой tile.openstreetmap.org).
+  static const String mapStoreName = 'lepm_map_tiles_v2';
   
   // Sync Configuration
   static const int syncIntervalMinutes = 5;

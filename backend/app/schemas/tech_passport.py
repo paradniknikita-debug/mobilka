@@ -40,6 +40,24 @@ class TechPassportListItem(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class PassportSectionRow(BaseModel):
+    label: str
+    value: Any = None
+
+
+class PassportSectionTable(BaseModel):
+    title: str
+    columns: List[str] = Field(default_factory=list)
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PassportSection(BaseModel):
+    id: str
+    title: str
+    rows: List[PassportSectionRow] = Field(default_factory=list)
+    tables: List[PassportSectionTable] = Field(default_factory=list)
+
+
 class TechPassportDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,6 +70,7 @@ class TechPassportDetail(BaseModel):
     stp_reference: Optional[str] = None
     snapshot_json: Dict[str, Any]
     manual_sections: Optional[Dict[str, Any]] = None
+    sections: List[PassportSection] = Field(default_factory=list)
     created_at: Optional[datetime] = None
 
 

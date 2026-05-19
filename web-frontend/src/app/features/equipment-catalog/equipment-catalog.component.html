@@ -44,15 +44,6 @@
         </mat-form-field>
         <div class="toolbar-actions">
           <button mat-raised-button color="primary" (click)="loadItems()">Найти</button>
-          <button
-            *ngIf="canManageCatalog()"
-            mat-stroked-button
-            (click)="seedDefaults()"
-            matTooltip="Добавляет в справочник типовые позиции (коды типов на английском; в таблице отображаются по-русски)"
-            matTooltipShowDelay="250"
-          >
-            Заполнить типовыми
-          </button>
         </div>
       </div>
 
@@ -105,7 +96,8 @@
               <td class="num">{{ item.voltage_kv ?? '—' }}</td>
               <td class="num">{{ item.current_a ?? '—' }}</td>
               <td class="col-actions">
-                <button *ngIf="canManageCatalog()" mat-stroked-button color="warn" (click)="deactivate(item)">Деактивировать</button>
+                <button *ngIf="canManageCatalog()" mat-stroked-button (click)="withdraw(item)">Вывести из эксплуатации</button>
+                <button *ngIf="isAdmin()" mat-stroked-button color="warn" (click)="deleteItem(item)">Удалить</button>
               </td>
             </tr>
           </tbody>
@@ -195,21 +187,45 @@
         <mat-label>Описание</mat-label>
         <textarea matInput rows="2" [(ngModel)]="form.description"></textarea>
       </mat-form-field>
-      <mat-form-field
-        class="full-width"
-        appearance="outline"
-        matTooltip="Необязательно. Дополнительные структурированные поля в формате JSON (для интеграций и расширений). Пример: {&quot;pole_material&quot;:&quot;сталь&quot;}. Оставьте пустым, если не нужно."
-        matTooltipShowDelay="250"
-      >
-        <mat-label>Доп. атрибуты (JSON)</mat-label>
-        <textarea
-          matInput
-          rows="2"
-          [(ngModel)]="form.attrs_json"
-          placeholder='{} или {"ключ":"значение"}'
-          class="font-mono"
-        ></textarea>
-      </mat-form-field>
+      <p class="attrs-section-title">Термическая стойкость и паспортные параметры</p>
+      <div class="form-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>Iтх, А</mat-label>
+          <input matInput type="number" [(ngModel)]="attrs.i_th" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Iуд, А</mat-label>
+          <input matInput type="number" [(ngModel)]="attrs.ip_max" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>tтх, с</mat-label>
+          <input matInput type="number" step="0.1" [(ngModel)]="attrs.t_th" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Откл. способность, кА</mat-label>
+          <input matInput type="number" step="0.1" [(ngModel)]="attrs.nominal_breaking_current_ka" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Собств. время откл., с</mat-label>
+          <input matInput type="number" step="0.001" [(ngModel)]="attrs.own_trip_time_sec" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Подтип (object_subtype)</mat-label>
+          <input matInput [(ngModel)]="attrs.object_subtype" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Тип ОПН</mat-label>
+          <input matInput [(ngModel)]="attrs.arrester_type" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Код ТМ</mat-label>
+          <input matInput [(ngModel)]="attrs.tm_code" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Число опор</mat-label>
+          <input matInput type="number" [(ngModel)]="attrs.pole_count" />
+        </mat-form-field>
+      </div>
       <div class="form-actions">
         <button mat-raised-button color="primary" (click)="addItem()">Добавить</button>
       </div>

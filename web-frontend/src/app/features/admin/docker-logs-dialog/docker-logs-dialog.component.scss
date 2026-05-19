@@ -1,0 +1,49 @@
+.docker-logs-body {
+  min-width: min(92vw, 720px);
+  max-height: 70vh;
+}
+
+.hint {
+  font-size: 0.8125rem;
+  color: var(--app-text-muted);
+  line-height: 1.45;
+  margin: 0 0 12px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tail-field {
+  width: 100px;
+}
+
+.log-wrap {
+  max-height: 50vh;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #1e1e1e;
+}
+
+.log-pre {
+  margin: 0;
+  padding: 12px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #e8e8e8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}

@@ -1,6 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ApiService, TechPassportDetail, TechPassportListItem } from '../../../core/services/api.service';
+import {
+  ApiService,
+  PassportSection,
+  PassportSectionTable,
+  TechPassportDetail,
+  TechPassportListItem,
+} from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { canUseExports } from '../../../core/utils/role-utils';
 
@@ -14,6 +20,7 @@ type ObjectType = 'power_line' | 'pole' | 'substation';
 export class TechPassportsPanelComponent implements OnInit {
   loading = false;
   saving = false;
+  exportInProgress: { id: number; format: string } | null = null;
   items: TechPassportListItem[] = [];
   total = 0;
 
@@ -32,7 +39,11 @@ export class TechPassportsPanelComponent implements OnInit {
 
   detail: TechPassportDetail | null = null;
 
-  displayedColumns = ['title', 'object_type', 'object_mrid', 'created_at', 'actions'];
+  displayedColumns = ['title', 'object_type', 'object_mrid', 'stp_reference', 'created_at', 'actions'];
+
+  filterObjectType = '';
+
+  showRawJson = false;
 
   constructor(
     private readonly api: ApiService,
@@ -183,6 +194,27 @@ export class TechPassportsPanelComponent implements OnInit {
 
   closeDetail(): void {
     this.detail = null;
+    this.showRawJson = false;
+  }
+
+  get filteredItems(): TechPassportListItem[] {
+    if (!this.filterObjectType) {
+      return this.items;
+    }
+    return this.items.filter((i) => i.object_type === this.filterObjectType);
+  }
+
+  tableCellAt(row: Record<string, unknown>, index: number): string {
+    const vals = Object.values(row);
+    const v = vals[index];
+    if (v == null || v === '') {
+      return '—';
+    }
+    return String(v);
+  }
+
+  sectionTables(section: PassportSection): PassportSectionTable[] {
+    return section.tables ?? [];
   }
 
   deletePassport(row: TechPassportListItem): void {
@@ -204,32 +236,53 @@ export class TechPassportsPanelComponent implements OnInit {
   }
 
   download(row: TechPassportListItem, format: 'pdf' | 'docx' | 'xlsx'): void {
+    if (this.exportInProgress) {
+      return;
+    }
+    this.exportInProgress = { id: row.id, format };
     this.api.downloadTechPassportExport(row.id, format).subscribe({
       next: (blob) => {
         const ext = format === 'docx' ? 'docx' : format;
+        const mime =
+          format === 'pdf'
+            ? 'application/pdf'
+            : format === 'docx'
+              ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+              : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
         const name = `passport_${row.id}.${ext}`;
-        this.saveBlob(blob, name);
+        this.saveBlob(blob, name, mime);
+        this.snackBar.open(`Файл ${name} загружен`, 'Закрыть', { duration: 3000 });
       },
       error: (e: unknown) => {
-        const err = e as { message?: string; error?: { detail?: string } };
-        const d = err?.error?.detail;
-        const msg =
-          typeof err?.message === 'string'
-            ? err.message
-            : typeof d === 'string'
-              ? d
-              : 'Ошибка выгрузки';
-        this.snackBar.open(msg, 'Закрыть', { duration: 7000 });
+        const err = e as Error;
+        const msg = err?.message?.trim() || 'Ошибка выгрузки';
+        this.snackBar.open(msg, 'Закрыть', { duration: 9000 });
+      },
+      complete: () => {
+        this.exportInProgress = null;
       },
     });
   }
 
-  private saveBlob(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob);
+  isExporting(row: TechPassportListItem, format: string): boolean {
+    return (
+      this.exportInProgress?.id === row.id && this.exportInProgress?.format === format
+    );
+  }
+
+  private saveBlob(blob: Blob, filename: string, mime: string): void {
+    const file =
+      blob.type && blob.type !== 'application/octet-stream'
+        ? blob
+        : new Blob([blob], { type: mime });
+    const url = URL.createObjectURL(file);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 200);
   }
 }

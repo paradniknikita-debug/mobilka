@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     REDIS_URL: str = "redis://localhost:6379"
+    # Считаем пользователя «онлайн», если был авторизованный запрос за последние N секунд
+    USER_PRESENCE_TTL_SECONDS: int = 300
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
 
@@ -48,6 +50,10 @@ class Settings(BaseSettings):
     SSL_CERTFILE: str = "/app/nginx/ssl/crt.pem"
     ENVIRONMENT: str = "development"
     RECREATE_DB: bool = False
+
+    # Ссылки для панели администратора (пусто — подставляются из запроса / localhost)
+    ADMIN_BACKEND_PUBLIC_URL: str = "http://localhost:8000"
+    ADMIN_MINIO_CONSOLE_URL: str = "http://localhost:9001"
 
     model_config = SettingsConfigDict(
         env_file=".env",

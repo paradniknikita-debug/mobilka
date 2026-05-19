@@ -614,6 +614,8 @@ class LineSectionCIMObject(CIMObject):
         b0ch: Optional[float] = None,
         gch: Optional[float] = None,
         g0ch: Optional[float] = None,
+        g0: Optional[float] = None,
+        b0: Optional[float] = None,
         is_cable: Optional[bool] = None,
         short_circuit_end_temperature: Optional[str] = None,
         t_th: Optional[str] = None,
@@ -638,6 +640,8 @@ class LineSectionCIMObject(CIMObject):
         self.b0ch = b0ch
         self.gch = gch
         self.g0ch = g0ch
+        self.g0 = g0 if g0 is not None else g0ch
+        self.b0 = b0 if b0 is not None else b0ch
         self.is_cable = is_cable
         self.short_circuit_end_temperature = short_circuit_end_temperature
         self.t_th = t_th
@@ -659,30 +663,27 @@ class LineSectionCIMObject(CIMObject):
         if self.conductor_material:
             result["conductorMaterial"] = self.conductor_material
         if self.conductor_section:
-            result["conductorSection"] = self.conductor_section
-        if self.r is not None:
-            result["r"] = self.r
-        if self.x is not None:
-            result["x"] = self.x
-        if self.r0 is not None:
-            result["r0"] = self.r0
-        if self.x0 is not None:
-            result["x0"] = self.x0
-        if self.b is not None:
-            result["b"] = self.b
-        if self.bch is not None:
-            result["bch"] = self.bch
-        if self.b0ch is not None:
-            result["b0ch"] = self.b0ch
-        if self.g is not None:
-            result["g"] = self.g
-        if self.gch is not None:
-            result["gch"] = self.gch
-        if self.g0ch is not None:
-            result["g0ch"] = self.g0ch
+            result["rf:conductorSection"] = self.conductor_section
+        # Полные (на длину секции) параметры — namespace rf, как в профиле FromPlatform.
+        for rf_key, val in (
+            ("r", self.r),
+            ("x", self.x),
+            ("g", self.g),
+            ("r0", self.r0),
+            ("x0", self.x0),
+            ("g0", self.g0),
+            ("b", self.b),
+            ("b0", self.b0),
+            ("bch", self.bch),
+            ("b0ch", self.b0ch),
+            ("gch", self.gch),
+            ("g0ch", self.g0ch),
+        ):
+            if val is not None:
+                result[f"rf:{rf_key}"] = val
         if self.total_length is not None:
-            result["length"] = self.total_length
-            result["distance"] = self.total_length
+            result["rf:length"] = self.total_length
+            result["rf:distance"] = self.total_length
         if self.section_number is not None:
             result["sectionNumber"] = self.section_number
         if self.is_cable is not None:

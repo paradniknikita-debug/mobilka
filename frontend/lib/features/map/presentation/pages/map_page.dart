@@ -33,6 +33,7 @@ import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/offline_map_service.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/config/map_tile_config.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
@@ -58,7 +59,15 @@ class _MapPageState extends ConsumerState<MapPage> {
   static const double _equipmentBaseTFarPole = 0.8;
   static const double _equipmentSpreadStep = 0.05;
   late MapController _mapController;
+  /// Позиция для маркера GPS (не центрирует карту при старте).
   LatLng? _currentLocation;
+  /// Стартовый центр карты (до геолокации — Минск; после — позиция пользователя).
+  LatLng _mapCenter = const LatLng(
+    AppConfig.defaultMapLatitude,
+    AppConfig.defaultMapLongitude,
+  );
+  /// Успешно получили GPS при запуске — не смещать карту на первую опору из данных.
+  bool _userLocationObtained = false;
   bool _isLoading = true;
   Map<String, dynamic>? _powerLinesData;
   Map<String, dynamic>? _polesData;
@@ -163,6 +172,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// ID ЛЭП, раскрытых в дереве объектов (при клике на опору на карте)
   final Set<int> _expandedPowerLineIds = {};
+  final TextEditingController _treeSearchController = TextEditingController();
   /// Обновили ли карту после завершения синхронизации (чтобы не дергать при каждом build)
   bool _hasRefreshedAfterSyncCompleted = false;
   /// Карта готова к использованию MapController (вызван onMapReady).
@@ -177,6 +187,14 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (_currentLineId == null || _powerLinesList == null) return 'ЛЭП';
     final match = _powerLinesList!.where((pl) => pl.id == _currentLineId);
     return match.isEmpty ? 'ЛЭП' : match.first.name;
+  }
+
+  /// В дереве объектов при активном обходе — только ЛЭП текущей сессии.
+  List<PowerLine> _treePowerLinesForDisplay() {
+    final list = _powerLinesList ?? const <PowerLine>[];
+    if (_currentLineId == null) return list;
+    final filtered = list.where((pl) => pl.id == _currentLineId).toList();
+    return filtered.isEmpty ? list : filtered;
   }
 
   /// Можно ли начать отпайку от текущей выбранной опоры:
@@ -210,7 +228,134 @@ class _MapPageState extends ConsumerState<MapPage> {
   void dispose() {
     _positionSubscription?.cancel();
     _patrolGpsSubscription?.cancel();
+    _treeSearchController.dispose();
     super.dispose();
+  }
+
+  bool _treeQueryMatches(dynamic value, String q) {
+    if (value == null) return false;
+    final s = value.toString().toLowerCase();
+    if (s.contains(q)) return true;
+    final compactQ = q.replaceAll(RegExp(r'[\s\-{}]'), '');
+    if (compactQ.length >= 8) {
+      final compactS = s.replaceAll(RegExp(r'[\s\-{}]'), '');
+      if (compactS.contains(compactQ)) return true;
+    }
+    return false;
+  }
+
+  Future<void> _applyMapUidHit(Map<String, dynamic> hit) async {
+    final lineId = (hit['line_id'] as num?)?.toInt();
+    final poleId = (hit['pole_id'] as num?)?.toInt();
+    final subId = (hit['substation_id'] as num?)?.toInt();
+    final lat = (hit['latitude'] as num?)?.toDouble();
+    final lon = (hit['longitude'] as num?)?.toDouble();
+    final label = hit['label']?.toString() ?? 'Объект';
+
+    setState(() {
+      if (lineId != null) {
+        _expandedPowerLineIds.add(lineId);
+      }
+      if (poleId != null) {
+        _selectedPoleIdFromMap = poleId;
+        _selectedSubstationIdFromMap = null;
+      }
+      if (subId != null) {
+        _selectedSubstationIdFromMap = subId;
+        _selectedPoleIdFromMap = null;
+      }
+    });
+
+    if (lat != null && lon != null && lat.abs() <= 90 && lon.abs() <= 180) {
+      try {
+        _mapController.move(LatLng(lat, lon), _mapController.camera.zoom < 15 ? 15 : _mapController.camera.zoom);
+      } catch (_) {}
+    }
+
+    _showTopRightToast('Найдено: $label');
+  }
+
+  Future<void> _runTreeSearch() async {
+    final q = _treeSearchController.text.trim().toLowerCase();
+    if (q.isEmpty) return;
+
+    for (final pl in _treePowerLinesForDisplay()) {
+      if (_treeQueryMatches(pl.name, q) ||
+          _treeQueryMatches(pl.mrid, q) ||
+          _treeQueryMatches(pl.id, q)) {
+        setState(() => _expandedPowerLineIds.add(pl.id));
+        _showTopRightToast('Найдено: ${pl.name}');
+        return;
+      }
+      for (final pole in _getPoleFeaturesByLineId(pl.id)) {
+        final props = (pole['properties'] as Map<String, dynamic>?) ?? {};
+        if (_treeQueryMatches(props['pole_number'], q) ||
+            _treeQueryMatches(props['mrid'], q) ||
+            _treeQueryMatches(props['id'], q)) {
+          setState(() {
+            _expandedPowerLineIds.add(pl.id);
+            _selectedPoleIdFromMap = props['id'] as int?;
+          });
+          _showTopRightToast('Найдено: ${props['pole_number'] ?? 'Опора'}');
+          return;
+        }
+      }
+      for (final span in _getSpanFeaturesByLineId(pl.id)) {
+        final props = (span['properties'] as Map<String, dynamic>?) ?? {};
+        if (_treeQueryMatches(props['span_number'], q) ||
+            _treeQueryMatches(props['mrid'], q) ||
+            _treeQueryMatches(props['id'], q)) {
+          setState(() => _expandedPowerLineIds.add(pl.id));
+          _showTopRightToast('Найдено: ${props['span_number'] ?? 'Пролёт'}');
+          return;
+        }
+      }
+    }
+
+    final subs = _substationsData?['features'] as List<dynamic>? ?? [];
+    for (final f in subs) {
+      final props = (f['properties'] as Map<String, dynamic>?) ?? {};
+      if (_treeQueryMatches(props['name'], q) ||
+          _treeQueryMatches(props['dispatcher_name'], q) ||
+          _treeQueryMatches(props['mrid'], q) ||
+          _treeQueryMatches(props['id'], q)) {
+        setState(() => _selectedSubstationIdFromMap = props['id'] as int?);
+        _showTopRightToast('Найдено: ${props['name'] ?? 'Подстанция'}');
+        return;
+      }
+    }
+
+    final eqFeatures = _lineEquipmentData?['features'] as List<dynamic>? ?? [];
+    for (final f in eqFeatures) {
+      final props = (f['properties'] as Map<String, dynamic>?) ?? {};
+      if (_treeQueryMatches(props['name'], q) ||
+          _treeQueryMatches(props['mrid'], q) ||
+          _treeQueryMatches(props['id'], q)) {
+        final lineId = props['line_id'] as int?;
+        if (lineId != null) {
+          setState(() => _expandedPowerLineIds.add(lineId));
+        }
+        _showTopRightToast('Найдено: ${props['name'] ?? 'Оборудование'}');
+        return;
+      }
+    }
+
+    if (q.replaceAll(RegExp(r'[\s\-{}]'), '').length >= 8) {
+      try {
+        final apiService = ref.read(apiServiceProvider);
+        final hit = await apiService.findMapUid(_treeSearchController.text.trim());
+        if (hit != null && mounted) {
+          await _applyMapUidHit(hit);
+          return;
+        }
+      } catch (e) {
+        debugPrint('findMapUid: $e');
+      }
+    }
+
+    if (mounted) {
+      _showTopRightToast('Ничего не найдено', backgroundColor: Colors.orange.shade800);
+    }
   }
 
   Future<void> _initializeMap() async {
@@ -225,7 +370,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Загружаем местоположение и данные параллельно для ускорения
       await Future.wait([
         _getCurrentLocation(),
-        _loadMapData(),
+        _loadMapData(skipAutoCenter: true),
       ]);
       // Страховка от гонки первого входа (auth/map ready/web):
       // если после первой загрузки карта пустая, повторяем загрузку один раз.
@@ -238,6 +383,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Если всё ещё пусто — хотя бы локальные данные.
       if (mounted && !_hasAnyRenderableMapData()) {
         await _loadMapDataFromLocal(skipAutoCenter: true);
+      }
+      if (mounted) {
+        _applyInitialMapCenter();
       }
       await _syncPatrolGpsTracking();
       
@@ -280,13 +428,44 @@ class _MapPageState extends ConsumerState<MapPage> {
         len(_tapsData) > 0;
   }
 
-  Future<void> _getCurrentLocation() async {
+  static const LatLng _defaultMapCenter = LatLng(
+    AppConfig.defaultMapLatitude,
+    AppConfig.defaultMapLongitude,
+  );
+
+  bool _isDefaultMapCenter(LatLng loc) {
+    return (loc.latitude - _defaultMapCenter.latitude).abs() < 1e-6 &&
+        (loc.longitude - _defaultMapCenter.longitude).abs() < 1e-6;
+  }
+
+  /// После загрузки данных: GPS при старте, иначе — на объекты линии.
+  void _applyInitialMapCenter() {
+    if (_userLocationObtained &&
+        _currentLocation != null &&
+        !_isDefaultMapCenter(_currentLocation!)) {
+      final loc = _currentLocation!;
+      if (_mapReady) {
+        try {
+          _mapController.move(loc, AppConfig.defaultZoom);
+        } catch (e) {
+          print('Ошибка центрирования на GPS: $e');
+        }
+      } else {
+        _pendingCenterOnLocation = loc;
+      }
+      return;
+    }
+    if (_hasAnyRenderableMapData()) {
+      _centerOnObjects();
+    }
+  }
+
+  /// Обновить маркер GPS. [moveMap] — по кнопке «Моё местоположение».
+  Future<void> _getCurrentLocation({bool moveMap = false}) async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (mounted) setState(() {
-          _currentLocation = const LatLng(53.9045, 27.5615); // Минск по умолчанию
-        });
+        if (mounted) setState(() => _currentLocation = _defaultMapCenter);
         return;
       }
 
@@ -294,48 +473,47 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          if (mounted) setState(() {
-            _currentLocation = const LatLng(53.9045, 27.5615);
-          });
+          if (mounted) setState(() => _currentLocation = _defaultMapCenter);
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        if (mounted) setState(() {
-          _currentLocation = const LatLng(53.9045, 27.5615);
-        });
+        if (mounted) setState(() => _currentLocation = _defaultMapCenter);
         return;
       }
 
-      Position position = await Geolocator.getCurrentPosition(
+      final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+      final loc = LatLng(position.latitude, position.longitude);
 
       if (mounted) {
         setState(() {
-          _currentLocation = LatLng(position.latitude, position.longitude);
+          _currentLocation = loc;
+          _mapCenter = loc;
+          _userLocationObtained = true;
         });
       }
 
+      if (!moveMap) return;
+
       if (_mapReady) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _currentLocation != null) {
+          if (mounted) {
             try {
-              _mapController.move(_currentLocation!, AppConfig.defaultZoom);
+              _mapController.move(loc, AppConfig.defaultZoom);
             } catch (e) {
               print('Ошибка центрирования карты: $e');
             }
           }
         });
       } else {
-        _pendingCenterOnLocation = _currentLocation;
+        _pendingCenterOnLocation = loc;
       }
     } catch (e) {
       print('Ошибка получения местоположения: $e');
-      if (mounted) setState(() {
-        _currentLocation = const LatLng(53.9045, 27.5615);
-      });
+      if (mounted) setState(() => _currentLocation = _defaultMapCenter);
     }
   }
 
@@ -1522,10 +1700,15 @@ class _MapPageState extends ConsumerState<MapPage> {
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    initialCenter: _currentLocation ?? const LatLng(53.9045, 27.5615),
+                    initialCenter: _mapCenter,
                     initialZoom: AppConfig.defaultZoom,
                     minZoom: AppConfig.minZoom,
                     maxZoom: AppConfig.maxZoom,
+                    interactionOptions: const InteractionOptions(
+                      enableMultiFingerGestureRace: true,
+                      pinchZoomThreshold: 0.35,
+                      scrollWheelVelocity: 0.004,
+                    ),
                     cameraConstraint: CameraConstraint.contain(
                       bounds: LatLngBounds(
                         const LatLng(-85, -180),
@@ -1539,7 +1722,13 @@ class _MapPageState extends ConsumerState<MapPage> {
                         if (mounted) {
                           setState(() => _equipmentZoom = z);
                         }
-                        final target = _pendingCenterOnObjects ?? _pendingCenterOnLocation ?? _currentLocation;
+                        final target = _pendingCenterOnObjects ??
+                            _pendingCenterOnLocation ??
+                            (_userLocationObtained &&
+                                    _currentLocation != null &&
+                                    !_isDefaultMapCenter(_currentLocation!)
+                                ? _currentLocation
+                                : null);
                         final zoom = _pendingCenterZoom ?? AppConfig.defaultZoom;
                         if (target != null) {
                           _mapController.move(target, zoom);
@@ -1552,7 +1741,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                       }
                     },
                     onPositionChanged: (camera, hasGesture) {
-                      final z = camera.zoom;
+                      final z = camera.zoom.clamp(
+                        AppConfig.minZoom,
+                        AppConfig.maxZoom,
+                      );
                       final prev = _equipmentZoom;
                       final prevVisible = _isEquipmentVisibleAtZoom(
                         prev,
@@ -1564,8 +1756,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                       );
                       final crossedEquipmentThreshold =
                           prevVisible != nextVisible;
-                      final prevBucket = prev.floor();
-                      final nextBucket = z.floor();
+                      // Пересчёт маркеров/оборудования — реже, чем каждый кадр зума.
+                      final prevBucket = (prev * 2).floor();
+                      final nextBucket = (z * 2).floor();
                       if (crossedEquipmentThreshold || prevBucket != nextBucket) {
                         if (mounted) {
                           setState(() => _equipmentZoom = z);
@@ -1574,30 +1767,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                     },
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate: '${AppConfig.apiBaseUrl}/map/tiles/{z}/{x}/{y}.png',
-                      // Если OSM недоступен (сеть, политика, web), подхватываем запасной CDN.
-                      fallbackUrl:
-                          'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                      tileProvider: OfflineMapService.instance.getTileProvider(),
-                      keepBuffer: 1,
-                      panBuffer: 1,
-                      errorTileCallback: (tile, error, stackTrace) {
-                        final errorStr = error.toString().toLowerCase();
-                        if (errorStr.contains('aborttrigger') ||
-                            errorStr.contains('requestabortedexception') ||
-                            errorStr.contains('request aborted') ||
-                            errorStr.contains('fmctbrowsingerror') ||
-                            errorStr.contains('noconnectionduringfetch')) {
-                          return; // Ожидаемо при офлайне или отмене — не логируем
-                        }
-                        if (kDebugMode) {
-                          print('⚠️ Ошибка загрузки тайла: $error');
-                        }
-                      },
-                      maxNativeZoom: 19,
-                      maxZoom: 20,
-                      userAgentPackageName: 'com.lepm.mobile',
+                    _buildMapTileLayer(
+                      ref.watch(connectivityStatusProvider) ==
+                          ConnectionStatus.offline,
                     ),
                     
                     if (_powerLinesData != null)
@@ -3446,6 +3618,25 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: TextField(
+              controller: _treeSearchController,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'UID или наименование',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.arrow_forward, size: 20),
+                  tooltip: 'Найти',
+                  onPressed: _runTreeSearch,
+                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _runTreeSearch(),
+            ),
+          ),
           // Дерево объектов: только ЛЭП и подстанции (без блока «Обход»)
           Expanded(
             child: GestureDetector(
@@ -4570,20 +4761,35 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   void _centerOnCurrentLocation() {
-    if (_currentLocation != null && mounted) {
-      try {
-        _mapController.move(_currentLocation!, AppConfig.defaultZoom);
-      } catch (e) {
-        print('Ошибка центрирования карты: $e');
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Местоположение не определено'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
+    _getCurrentLocation(moveMap: true);
+  }
+
+  /// Подложка: один стиль OSM (API → fallback OSM). FMTC — тот же URL, в офлайне только кэш.
+  Widget _buildMapTileLayer(bool isOffline) {
+    return TileLayer(
+      key: ValueKey<bool>(isOffline),
+      urlTemplate: MapTileConfig.primaryUrlTemplate,
+      fallbackUrl: MapTileConfig.fallbackUrlTemplate,
+      tileProvider: OfflineMapService.instance.getTileProvider(offline: isOffline),
+      keepBuffer: MapTileConfig.keepBuffer,
+      panBuffer: MapTileConfig.panBuffer,
+      maxNativeZoom: 19,
+      maxZoom: 19,
+      userAgentPackageName: MapTileConfig.userAgentPackageName,
+      errorTileCallback: (tile, error, stackTrace) {
+        final errorStr = error.toString().toLowerCase();
+        if (errorStr.contains('aborttrigger') ||
+            errorStr.contains('requestabortedexception') ||
+            errorStr.contains('request aborted') ||
+            errorStr.contains('fmctbrowsingerror') ||
+            errorStr.contains('noconnectionduringfetch')) {
+          return;
+        }
+        if (kDebugMode) {
+          print('⚠️ Ошибка загрузки тайла: $error');
+        }
+      },
+    );
   }
 
   void _zoomIn() {
@@ -5340,7 +5546,16 @@ class _MapPageState extends ConsumerState<MapPage> {
     final t = _selectedObjectType;
     if (props == null || t == null) return;
 
-    final pick = await FilePicker.platform.pickFiles(withData: true);
+    final pick = await FilePicker.platform.pickFiles(
+      withData: true,
+      type: FileType.custom,
+      allowedExtensions: const [
+        'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic',
+        'm4a', 'mp3', 'wav', 'aac', 'ogg', 'mp4', 'webm', 'mov',
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods',
+        'zip', 'rar', '7z', 'dwg',
+      ],
+    );
     if (pick == null || pick.files.isEmpty) return;
     final f = pick.files.first;
     final bytes = f.bytes;

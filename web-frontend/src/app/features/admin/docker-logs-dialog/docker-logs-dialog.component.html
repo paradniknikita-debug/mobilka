@@ -1,0 +1,34 @@
+<h2 mat-dialog-title>Логи Docker</h2>
+<mat-dialog-content class="docker-logs-body">
+  <p class="hint">
+    Вывод <code>docker logs</code> с хоста, где запущен backend (режим development).
+    Если пусто — выполните в каталоге проекта:
+    <code>docker compose logs -f {{ service }}</code>
+  </p>
+  <div class="toolbar">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Сервис</mat-label>
+      <mat-select [(ngModel)]="service" (selectionChange)="load()">
+        <mat-option *ngFor="let s of data.services" [value]="s.id">{{ s.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="tail-field" subscriptSizing="dynamic">
+      <mat-label>Строк</mat-label>
+      <input matInput type="number" min="50" max="3000" [(ngModel)]="tail" (change)="load()" />
+    </mat-form-field>
+    <button mat-stroked-button type="button" (click)="load()" [disabled]="loading">Обновить</button>
+    <button mat-stroked-button type="button" (click)="copy()" [disabled]="!logText">Копировать</button>
+  </div>
+  <div class="log-wrap" *ngIf="!loading; else loadingTpl">
+    <pre class="log-pre">{{ logText || '— нет данных —' }}</pre>
+  </div>
+  <ng-template #loadingTpl>
+    <div class="loading-row">
+      <mat-spinner diameter="32"></mat-spinner>
+      <span>Загрузка логов…</span>
+    </div>
+  </ng-template>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Закрыть</button>
+</mat-dialog-actions>

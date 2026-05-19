@@ -7,11 +7,12 @@ from datetime import datetime
 import tempfile
 import os
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, attributes as orm_attributes
 from io import BytesIO
 from collections import Counter, defaultdict
 
@@ -27,9 +28,14 @@ from app.models.cim_line_structure import ConnectivityNode, LineSection, Termina
 from app.models.base_voltage import BaseVoltage
 from app.models.wire_info import WireInfo
 from app.core.cim.cim_xml import CIMXMLExporter, CIMXMLImporter
-from app.core.cim.cim_import_scaffolding import (
-    filter_lepm_import_folder_scaffolding,
-    is_lepm_import_folder_scaffolding,
+from app.core.cim.cim_import_scaffolding import filter_lepm_import_folder_scaffolding
+from app.core.cim.cim_diff_normalize import (
+    is_diff_scaffolding_object,
+    mrid_from_ref,
+    normalize_objects_for_apply,
+    resolve_line_mrid_for_pole,
+    resolve_parent_object_ref_for_line,
+    resolve_region_uid_for_line,
 )
 from app.core.cim.cim_json import CIMJSONExporter
 from app.core.cim.cim_552_protocol import CIM552Service, MessagePurpose
@@ -71,11 +77,111 @@ from app.core.cim.base_voltage_profile import base_voltage_resource_by_kv
 from app.core.cim.equipment_type_mapping import (
     disconnector_psr_type_external_ref,
     is_cim_exportable_equipment,
+    effective_equipment_pole_count,
     map_equipment_type_to_cim_profile,
     normalize_equipment_type,
 )
+from app.core.cim_topology import cn_is_cim_exportable
 
 router = APIRouter()
+
+
+def _endpoint_degree_for_power_line(power_line: PowerLine) -> Dict[int, int]:
+    """Число концов ACLineSegment на каждом ConnectivityNode."""
+    degree: Dict[int, int] = defaultdict(int)
+    for segment in getattr(power_line, "acline_segments", None) or []:
+        fid = getattr(segment, "from_connectivity_node_id", None)
+        tid = getattr(segment, "to_connectivity_node_id", None)
+        if fid is not None:
+            degree[int(fid)] += 1
+        if tid is not None:
+            degree[int(tid)] += 1
+    return degree
+
+
+def _terminal_count_for_power_line(power_line: PowerLine) -> Dict[int, int]:
+    """
+    Число Terminal на CN (стык в CIM — когда ≥3).
+    Только уже загруженные связи (без lazy load poles — async MissingGreenlet).
+    """
+    counts: Dict[int, int] = defaultdict(int)
+
+    def _add_cn_terms(cn: Optional[ConnectivityNode]) -> None:
+        if cn is None:
+            return
+        cn_state = orm_attributes.instance_state(cn)
+        if "terminals" in cn_state.unloaded:
+            return
+        for term in getattr(cn, "terminals", None) or []:
+            cid = getattr(term, "connectivity_node_id", None) or getattr(cn, "id", None)
+            if cid is not None:
+                counts[int(cid)] += 1
+
+    for segment in getattr(power_line, "acline_segments", None) or []:
+        for term in getattr(segment, "terminals", None) or []:
+            cid = getattr(term, "connectivity_node_id", None)
+            if cid is not None:
+                counts[int(cid)] += 1
+        _add_cn_terms(getattr(segment, "from_node", None))
+        _add_cn_terms(getattr(segment, "to_node", None))
+    return dict(counts)
+
+
+def _section_length_km(line_section: LineSection) -> float:
+    """Длина секции в км (total_length в БД — км после автосборки; иначе сумма пролётов в м)."""
+    raw = float(getattr(line_section, "total_length", 0.0) or 0.0)
+    if raw > 0:
+        # Значения > 20 трактуем как метры (исторические записи в line_section).
+        return raw / 1000.0 if raw > 20.0 else raw
+    spans = list(getattr(line_section, "spans", None) or [])
+    if spans:
+        return sum(float(getattr(s, "length", 0.0) or 0.0) for s in spans) / 1000.0
+    return 0.0
+
+
+def _line_section_series_electrical(line_section: LineSection) -> Dict[str, Optional[float]]:
+    """
+    Параметры rf:ACLineSeriesSection: длина в км и полные r/x/g/r0/x0/g0 (удельные Ом/См·км × длина).
+    """
+    length_km = _section_length_km(line_section)
+
+    def _total(per_km: Optional[float]) -> Optional[float]:
+        if per_km is None:
+            return None
+        if length_km <= 0:
+            return float(per_km)
+        return float(per_km) * length_km
+
+    r_km = getattr(line_section, "r", None)
+    x_km = getattr(line_section, "x", None)
+    b_km = getattr(line_section, "b", None)
+    g_km = getattr(line_section, "g", None)
+    r_t = _total(r_km)
+    x_t = _total(x_km)
+    b_t = _total(b_km)
+    g_t = _total(g_km)
+    b0_t = 0.0 if b_t is not None else None
+    g0_t = 0.0 if g_t is not None else None
+    return {
+        "length_km": length_km if length_km > 0 else None,
+        "r": r_t,
+        "x": x_t,
+        "b": b_t,
+        "g": g_t,
+        "r0": r_t,
+        "x0": x_t,
+        "g0": g0_t,
+        "bch": b_t,
+        "b0ch": b0_t,
+        "gch": g_t,
+        "g0ch": g0_t,
+        "b0": b0_t,
+    }
+
+
+def _stable_poles_folder_mrid(line_mrid: str) -> str:
+    """Стабильный mRID папки опор — без дублей в diff при повторной выгрузке одной ЛЭП."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"poles-folder:{line_mrid}"))
 
 
 def _apply_export_preset(
@@ -370,6 +476,9 @@ def _pole_ref_from_connectivity_node(cn) -> Optional[Dict[str, str]]:
     """Ссылка на cim:Pole (опора) для its:LineSpan.StartTower / EndTower."""
     if cn is None:
         return None
+    cn_state = orm_attributes.instance_state(cn)
+    if "pole" in cn_state.unloaded:
+        return None
     pole = getattr(cn, "pole", None)
     if pole is not None and getattr(pole, "mrid", None):
         return cim_ref(pole.mrid)
@@ -389,7 +498,7 @@ def _power_line_to_cim_geometry_only(
     Требует загруженный relationship PowerLine.poles (+ Pole.location при include_gps).
     """
     cim_objects: List[CIMObject] = []
-    folder_mrid = generate_mrid()
+    folder_mrid = _stable_poles_folder_mrid(power_line.mrid)
     folder_ref = cim_ref(folder_mrid)
     pole_child_refs: List[Dict[str, str]] = []
     poles = sorted(
@@ -474,6 +583,28 @@ def _power_line_to_cim(
     connectivity_node_terminal_refs: Dict[str, List[Dict[str, str]]] = defaultdict(list)
     shared_registry: Dict[tuple[str, str], Dict[str, str]] = {}
     exported_equipment_refs: List[Dict[str, str]] = []
+    endpoint_degree = _endpoint_degree_for_power_line(power_line)
+    terminal_counts = _terminal_count_for_power_line(power_line)
+    connectivity_nodes_dict: Dict[str, ConnectivityNodeCIMObject] = {}
+
+    def _ensure_cn_exported(cn) -> Optional[Dict[str, str]]:
+        """CN в контейнере Line; на опоре не создаём дочерних CN."""
+        if cn is None or not getattr(cn, "mrid", None):
+            return None
+        if not cn_is_cim_exportable(cn, endpoint_degree, terminal_counts):
+            return None
+        mrid = cn.mrid
+        if mrid not in connectivity_nodes_dict:
+            cn_obj = ConnectivityNodeCIMObject(
+                mrid=mrid,
+                name=getattr(cn, "name", None) or f"Узел {mrid}",
+                location=None,
+                parent_object=cn_line_parent,
+                connectivity_node_container=cim_ref(power_line.mrid),
+            )
+            connectivity_nodes_dict[mrid] = cn_obj
+            cim_objects.append(cn_obj)
+        return cim_ref(mrid)
 
     def _ensure_named_shared_object(cim_class: str, name: str) -> Dict[str, str]:
         key = (cim_class, name)
@@ -492,59 +623,12 @@ def _power_line_to_cim(
 
     line_psr_type_ref = None
     
-    # 2. Создаём ConnectivityNode для «реальных» узлов (подстанции и отпаечные опоры).
-    # Узлы, связанные только с обычными опорами (промежуточные точки линии), считаем
-    # виртуальными для CIM и не экспортируем их.
-    connectivity_nodes_dict = {}  # mrid -> ConnectivityNodeCIMObject
-    
-    # 3. Обрабатываем ACLineSegment с полной структурой
+    # 2–3. ACLineSegment, LineSection, CN в контейнере Line (ветвления/отпайки/ПС).
     acline_segments_list = []
     
     for segment in power_line.acline_segments:
-        # Создаём ConnectivityNode для from_node и to_node
-        from_node_ref = None
-        to_node_ref = None
-        
-        if segment.from_node:
-            # Экспортируем только реальные CN (не виртуальные): подстанция, отпаечная опора, оборудование
-            from_pole = getattr(segment.from_node, "pole", None)
-            is_real_cn = bool(getattr(segment.from_node, "substation_id", None))
-            if from_pole is not None:
-                is_real_cn = is_real_cn or bool(getattr(from_pole, "is_tap_pole", False))
-            is_real_cn = is_real_cn and not getattr(segment.from_node, "is_virtual", False)
-            if is_real_cn and segment.from_node.mrid not in connectivity_nodes_dict:
-                # Создаём Location и PositionPoint для опоры
-                cn = ConnectivityNodeCIMObject(
-                    mrid=segment.from_node.mrid,
-                    name=segment.from_node.name or f"Узел {segment.from_node.mrid}",
-                    location=None,
-                    parent_object=cn_line_parent,
-                    connectivity_node_container=cim_ref(power_line.mrid),
-                )
-                connectivity_nodes_dict[segment.from_node.mrid] = cn
-                cim_objects.append(cn)
-            
-            from_node_ref = cim_ref(segment.from_node.mrid) if is_real_cn else None
-        
-        if segment.to_node:
-            to_pole = getattr(segment.to_node, "pole", None)
-            is_real_cn = bool(getattr(segment.to_node, "substation_id", None))
-            if to_pole is not None:
-                is_real_cn = is_real_cn or bool(getattr(to_pole, "is_tap_pole", False))
-            is_real_cn = is_real_cn and not getattr(segment.to_node, "is_virtual", False)
-            if is_real_cn and segment.to_node.mrid not in connectivity_nodes_dict:
-                # Создаём Location и PositionPoint для опоры
-                cn = ConnectivityNodeCIMObject(
-                    mrid=segment.to_node.mrid,
-                    name=segment.to_node.name or f"Узел {segment.to_node.mrid}",
-                    location=None,
-                    parent_object=cn_line_parent,
-                    connectivity_node_container=cim_ref(power_line.mrid),
-                )
-                connectivity_nodes_dict[segment.to_node.mrid] = cn
-                cim_objects.append(cn)
-            
-            to_node_ref = cim_ref(segment.to_node.mrid) if is_real_cn else None
+        from_node_ref = _ensure_cn_exported(getattr(segment, "from_node", None))
+        to_node_ref = _ensure_cn_exported(getattr(segment, "to_node", None))
         
         # Обрабатываем LineSection с Span
         line_sections_list = []
@@ -569,48 +653,8 @@ def _power_line_to_cim(
             # Обрабатываем Span
             spans_list = []
             for span in line_section.spans:
-                # Создаём ConnectivityNode для опор пролёта (если ещё не созданы).
-                # Аналогично выше, экспортируем только реальные узлы (ПС и отпаечные опоры).
-                span_from_node_ref = None
-                span_to_node_ref = None
-                
-                if span.from_connectivity_node:
-                    from_pole = getattr(span.from_connectivity_node, "pole", None)
-                    is_real_cn = bool(getattr(span.from_connectivity_node, "substation_id", None))
-                    if from_pole is not None:
-                        is_real_cn = is_real_cn or bool(getattr(from_pole, "is_tap_pole", False))
-                    is_real_cn = is_real_cn and not getattr(span.from_connectivity_node, "is_virtual", False)
-                    if is_real_cn and span.from_connectivity_node.mrid not in connectivity_nodes_dict:
-                        cn = ConnectivityNodeCIMObject(
-                            mrid=span.from_connectivity_node.mrid,
-                            name=span.from_connectivity_node.name or f"Узел {span.from_connectivity_node.mrid}",
-                            location=None,
-                            parent_object=cn_line_parent,
-                            connectivity_node_container=cim_ref(power_line.mrid),
-                        )
-                        connectivity_nodes_dict[span.from_connectivity_node.mrid] = cn
-                        cim_objects.append(cn)
-                    
-                    span_from_node_ref = cim_ref(span.from_connectivity_node.mrid) if is_real_cn else None
-                
-                if span.to_connectivity_node:
-                    to_pole = getattr(span.to_connectivity_node, "pole", None)
-                    is_real_cn = bool(getattr(span.to_connectivity_node, "substation_id", None))
-                    if to_pole is not None:
-                        is_real_cn = is_real_cn or bool(getattr(to_pole, "is_tap_pole", False))
-                    is_real_cn = is_real_cn and not getattr(span.to_connectivity_node, "is_virtual", False)
-                    if is_real_cn and span.to_connectivity_node.mrid not in connectivity_nodes_dict:
-                        cn = ConnectivityNodeCIMObject(
-                            mrid=span.to_connectivity_node.mrid,
-                            name=span.to_connectivity_node.name or f"Узел {span.to_connectivity_node.mrid}",
-                            location=None,
-                            parent_object=cn_line_parent,
-                            connectivity_node_container=cim_ref(power_line.mrid),
-                        )
-                        connectivity_nodes_dict[span.to_connectivity_node.mrid] = cn
-                        cim_objects.append(cn)
-                    
-                    span_to_node_ref = cim_ref(span.to_connectivity_node.mrid) if is_real_cn else None
+                span_from_node_ref = _ensure_cn_exported(getattr(span, "from_connectivity_node", None))
+                span_to_node_ref = _ensure_cn_exported(getattr(span, "to_connectivity_node", None))
                 
                 # its:LineSpan — пролёт под ACLineSegment (см. профиль intechs)
                 wire_type = (span.conductor_type or line_section.conductor_type or "").strip() or None
@@ -637,28 +681,30 @@ def _power_line_to_cim(
                 segment_span_objs.append(span_obj)
                 cim_objects.append(span_obj)
             
-            # Создаём LineSection объект
+            sec_elec = _line_section_series_electrical(line_section)
             line_section_obj = LineSectionCIMObject(
                 mrid=line_section.mrid,
                 name=line_section.name,
                 conductor_type=line_section.conductor_type,
                 conductor_material=line_section.conductor_material,
                 conductor_section=line_section.conductor_section,
-                r=line_section.r,
-                x=line_section.x,
-                b=line_section.b,
-                g=line_section.g,
-                total_length=line_section.total_length,
+                r=sec_elec["r"],
+                x=sec_elec["x"],
+                b=sec_elec["b"],
+                g=sec_elec["g"],
+                total_length=sec_elec["length_km"] or line_section.total_length,
                 wire_info=wire_info_ref,
                 spans=[cim_ref(s.mrid) for s in spans_list],
                 parent_object=cim_ref(segment.mrid),
                 section_number=getattr(line_section, "sequence_number", None),
-                r0=line_section.r,
-                x0=line_section.x,
-                bch=line_section.b,
-                b0ch=0.0,
-                gch=line_section.g,
-                g0ch=0.0,
+                r0=sec_elec["r0"],
+                x0=sec_elec["x0"],
+                g0=sec_elec["g0"],
+                bch=sec_elec["bch"],
+                b0ch=sec_elec["b0ch"],
+                b0=sec_elec["b0"],
+                gch=sec_elec["gch"],
+                g0ch=sec_elec["g0ch"],
                 is_cable=False,
                 short_circuit_end_temperature=None,
                 t_th=None,
@@ -667,24 +713,13 @@ def _power_line_to_cim(
             line_sections_list.append(line_section_obj)
             cim_objects.append(line_section_obj)
         
-        # Создаём Terminal для сегмента (если есть)
+        # Терминалы ACLineSegment: начало и конец участка (минимум 2).
         terminals_list = []
         for terminal in segment.terminals:
             terminal_cn_ref = None
+            terminal_cn_ref = None
             if terminal.connectivity_node:
-                if terminal.connectivity_node.mrid not in connectivity_nodes_dict:
-                    # Создаём ConnectivityNode для терминала
-                    cn = ConnectivityNodeCIMObject(
-                        mrid=terminal.connectivity_node.mrid,
-                        name=terminal.connectivity_node.name or f"Узел {terminal.connectivity_node.mrid}",
-                        location=None,
-                        parent_object=cn_line_parent,
-                        connectivity_node_container=cim_ref(power_line.mrid),
-                    )
-                    connectivity_nodes_dict[terminal.connectivity_node.mrid] = cn
-                    cim_objects.append(cn)
-                
-                terminal_cn_ref = cim_ref(terminal.connectivity_node.mrid)
+                terminal_cn_ref = _ensure_cn_exported(terminal.connectivity_node)
             
             terminal_obj = TerminalCIMObject(
                 mrid=terminal.mrid,
@@ -698,6 +733,31 @@ def _power_line_to_cim(
             cim_objects.append(terminal_obj)
             if terminal.connectivity_node and getattr(terminal.connectivity_node, "mrid", None):
                 connectivity_node_terminal_refs[terminal.connectivity_node.mrid].append(cim_ref(terminal.mrid))
+
+        if len(terminals_list) < 2:
+            synth_seq = len(terminals_list) + 1
+            for cn, direction in (
+                (getattr(segment, "from_node", None), "from"),
+                (getattr(segment, "to_node", None), "to"),
+            ):
+                cn_ref = _ensure_cn_exported(cn)
+                if cn_ref is None:
+                    continue
+                cn_mrid = cn_ref["mRID"]
+                term_mrid = generate_mrid()
+                label = "Начало" if direction == "from" else "Конец"
+                term_obj = TerminalCIMObject(
+                    mrid=term_mrid,
+                    name=label,
+                    connectivity_node=cn_ref,
+                    conducting_equipment=cim_ref(segment.mrid),
+                    sequence_number=synth_seq,
+                    parent_object=cim_ref(segment.mrid),
+                )
+                terminals_list.append(term_obj)
+                cim_objects.append(term_obj)
+                connectivity_node_terminal_refs[cn_mrid].append(cim_ref(term_mrid))
+                synth_seq += 1
         
         series_refs = [cim_ref(ls.mrid) for ls in line_sections_list]
         term_refs = [cim_ref(t.mrid) for t in terminals_list]
@@ -709,6 +769,8 @@ def _power_line_to_cim(
 
         # Если точные электрические параметры сегмента не заданы вручную,
         # берём усреднённые значения из секций и рассчитываем по длине.
+        from app.core.wire_parameters import _weighted_per_km
+
         seg_r_per_km = segment.r
         seg_x_per_km = segment.x
         seg_b_per_km = segment.b
@@ -716,10 +778,10 @@ def _power_line_to_cim(
         if line_sections_list:
             sec_len_sum = sum(float(getattr(ls, "total_length", 0.0) or 0.0) for ls in segment.line_sections)
             if sec_len_sum > 0:
-                seg_r_per_km = sum((float(getattr(ls, "r", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
-                seg_x_per_km = sum((float(getattr(ls, "x", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
-                seg_b_per_km = sum((float(getattr(ls, "b", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
-                seg_g_per_km = sum((float(getattr(ls, "g", 0.0) or 0.0) * float(getattr(ls, "total_length", 0.0) or 0.0)) for ls in segment.line_sections) / sec_len_sum
+                seg_r_per_km = _weighted_per_km(segment.line_sections, "r") or seg_r_per_km
+                seg_x_per_km = _weighted_per_km(segment.line_sections, "x") or seg_x_per_km
+                seg_b_per_km = _weighted_per_km(segment.line_sections, "b") or seg_b_per_km
+                seg_g_per_km = _weighted_per_km(segment.line_sections, "g") or seg_g_per_km
 
         seg_nameplate: Optional[str] = None
         lss = getattr(segment, "line_sections", None) or []
@@ -829,18 +891,7 @@ def _power_line_to_cim(
                     equipment_cn_map[int(eq_id)].append(cn)
 
             def _ensure_connectivity_node_exported(cn: ConnectivityNode) -> None:
-                cn_mrid = getattr(cn, "mrid", None)
-                if not cn_mrid or cn_mrid in connectivity_nodes_dict:
-                    return
-                cn_obj = ConnectivityNodeCIMObject(
-                    mrid=cn_mrid,
-                    name=getattr(cn, "name", None) or f"Узел {cn_mrid}",
-                    location=None,
-                    parent_object=cn_line_parent,
-                    connectivity_node_container=cim_ref(power_line.mrid),
-                )
-                connectivity_nodes_dict[cn_mrid] = cn_obj
-                cim_objects.append(cn_obj)
+                _ensure_cn_exported(cn)
 
             def _ensure_equipment_exported(eq_id: int) -> None:
                 if eq_id in exported_equipment_ids:
@@ -880,7 +931,10 @@ def _power_line_to_cim(
                     nameplate=getattr(eq, "nameplate", None),
                     tm_code=getattr(eq, "tm_code", None),
                     object_subtype=getattr(eq, "object_subtype", None),
-                    pole_count=getattr(eq, "pole_count", None),
+                    pole_count=effective_equipment_pole_count(
+                        getattr(eq, "equipment_type", None),
+                        getattr(eq, "pole_count", None),
+                    ),
                     parent_object_ref=getattr(eq, "parent_object_ref", None),
                     parent_main_equipment_pole_ref=(
                         None
@@ -941,9 +995,13 @@ def _power_line_to_cim(
 
             for eq_id, eq in equipment_by_id.items():
                 eq_obj = equipment_objects_by_id.get(eq_id)
-                if eq_obj is None or eq_obj.terminal_refs:
+                if eq_obj is None:
                     continue
                 profile = map_equipment_type_to_cim_profile(getattr(eq, "equipment_type", None))
+                need_terms = profile.terminal_count
+                have_terms = len(eq_obj.terminal_refs)
+                if have_terms >= need_terms:
+                    continue
                 candidate_cns = equipment_cn_map.get(eq_id, [])
                 unique_cns: List[ConnectivityNode] = []
                 seen_cn_ids: set[int] = set()
@@ -953,9 +1011,12 @@ def _power_line_to_cim(
                         continue
                     seen_cn_ids.add(int(cn_id))
                     unique_cns.append(cn)
-
-                for index, cn in enumerate(unique_cns[: profile.terminal_count], start=1):
-                    _ensure_connectivity_node_exported(cn)
+                if not unique_cns:
+                    continue
+                # T1/T2 разъединителя на одной опоре — оба терминала на том же ConnectivityNode.
+                cn = unique_cns[0]
+                _ensure_connectivity_node_exported(cn)
+                for index in range(have_terms + 1, need_terms + 1):
                     term_mrid = generate_mrid()
                     term_ref = cim_ref(term_mrid)
                     term_obj = TerminalCIMObject(
@@ -971,6 +1032,10 @@ def _power_line_to_cim(
                     eq_obj.child_object_refs.append(term_ref)
                     connectivity_node_terminal_refs[cn.mrid].append(term_ref)
                     exported_terminals_mrids.add(term_mrid)
+                eq_obj.pole_count = effective_equipment_pole_count(
+                    getattr(eq, "equipment_type", None),
+                    getattr(eq, "pole_count", None),
+                )
         except Exception as _equip_ex:
             import logging
             logging.getLogger(__name__).exception(
@@ -979,50 +1044,57 @@ def _power_line_to_cim(
                 str(_equip_ex),
             )
 
-    # 4. Экспорт папки опор и самих опор (Monitel extension me:Folder/me:Pole)
+    # 4. Экспорт папки опор (CN — только в контейнере Line, не под опорами)
     poles_by_id: Dict[int, Pole] = {}
-    # На одной опоре может быть один CN, но он встречается в нескольких сегментах/пролётах — только уникальные mRID.
-    pole_cn_mrids: Dict[int, set] = defaultdict(set)
+    def _pole_from_cn(cn) -> Optional[Pole]:
+        if cn is None:
+            return None
+        cn_state = orm_attributes.instance_state(cn)
+        if "pole" in cn_state.unloaded:
+            return None
+        return getattr(cn, "pole", None)
+
     for segment in power_line.acline_segments:
         for cn in (getattr(segment, "from_node", None), getattr(segment, "to_node", None)):
-            p = getattr(cn, "pole", None)
+            p = _pole_from_cn(cn)
             p_id = getattr(p, "id", None)
             if p is not None and p_id is not None:
                 poles_by_id[int(p_id)] = p
-                m = getattr(cn, "mrid", None)
-                if m:
-                    pole_cn_mrids[int(p_id)].add(m)
         for line_section in getattr(segment, "line_sections", None) or []:
             for span in getattr(line_section, "spans", None) or []:
-                fcn = getattr(span, "from_connectivity_node", None)
-                tcn = getattr(span, "to_connectivity_node", None)
-                fp = getattr(fcn, "pole", None)
-                tp = getattr(tcn, "pole", None)
-                fp_id = getattr(fp, "id", None)
-                tp_id = getattr(tp, "id", None)
-                if fp is not None and fp_id is not None:
-                    poles_by_id[int(fp_id)] = fp
-                    m = getattr(fcn, "mrid", None)
-                    if m:
-                        pole_cn_mrids[int(fp_id)].add(m)
-                if tp is not None and tp_id is not None:
-                    poles_by_id[int(tp_id)] = tp
-                    m = getattr(tcn, "mrid", None)
-                    if m:
-                        pole_cn_mrids[int(tp_id)].add(m)
+                for cn in (
+                    getattr(span, "from_connectivity_node", None),
+                    getattr(span, "to_connectivity_node", None),
+                ):
+                    p = _pole_from_cn(cn)
+                    p_id = getattr(p, "id", None)
+                    if p is not None and p_id is not None:
+                        poles_by_id[int(p_id)] = p
+    pl_state = orm_attributes.instance_state(power_line)
+    if "poles" not in pl_state.unloaded:
+        for pole in power_line.poles or []:
+            if getattr(pole, "id", None) is not None:
+                poles_by_id[int(pole.id)] = pole
 
-    folder_mrid = generate_mrid()
+    folder_mrid = _stable_poles_folder_mrid(power_line.mrid)
     folder_ref = cim_ref(folder_mrid)
     pole_child_refs: List[Dict[str, str]] = []
+    seen_pole_mrids: set[str] = set()
 
     # Добавляем объекты опор перед объектом папки.
     for pole in sorted(poles_by_id.values(), key=lambda p: (getattr(p, "sequence_number", 0) or 0, getattr(p, "id", 0))):
+        pole_mrid = getattr(pole, "mrid", None)
+        if pole_mrid and pole_mrid in seen_pole_mrids:
+            continue
+        if pole_mrid:
+            seen_pole_mrids.add(pole_mrid)
+
         pole_name = (getattr(pole, "pole_number", None) or f"Опора {pole.id}").strip()
         if not pole_name.lower().startswith(("опора", "оп.")):
             pole_name = f"Опора {pole_name}"
 
-        # ChildObjects опоры: уникальные ConnectivityNode этой опоры на линии.
-        child_refs = [cim_ref(m) for m in sorted(pole_cn_mrids.get(int(pole.id), set()))]
+        # ConnectivityNode — в контейнере Line, не как дочерние объекты опоры.
+        child_refs: List[Dict[str, str]] = []
 
         loc_objs, location_ref = _pole_gps_cim_objects(pole, pole_name, include_gps=include_gps)
         cim_objects.extend(loc_objs)
@@ -1164,7 +1236,6 @@ async def export_cim_xml(
 
                 await auto_create_spans_service(db, line_id, current_user, mode="preserve")
                 cim_topology_ensure = "rebuilt"
-                # После commit внутри автосборки сбрасываем кэш сессии, чтобы выборка ЛЭП подтянула новые сегменты.
                 await db.expire_all()
             except HTTPException as ex:
                 if ex.status_code == status.HTTP_400_BAD_REQUEST:
@@ -1188,6 +1259,24 @@ async def export_cim_xml(
     
     # Загружаем ЛЭП с полной структурой (LineSection, Span, ConnectivityNode, Location)
     if include_power_lines:
+        pl_id_query = select(PowerLine.id)
+        if line_id is not None:
+            pl_id_query = pl_id_query.where(PowerLine.id == line_id)
+        pl_ids = [int(x) for x in (await db.execute(pl_id_query)).scalars().all()]
+        if include_electrical_model and pl_ids:
+            from app.core.wire_parameters import refresh_power_line_electrical_parameters
+
+            for pid in pl_ids:
+                try:
+                    await refresh_power_line_electrical_parameters(db, pid)
+                except Exception as wire_ex:
+                    logging.getLogger(__name__).exception(
+                        "CIM export: topology/params refresh failed for line_id=%s: %s",
+                        pid,
+                        wire_ex,
+                    )
+            await db.commit()
+
         power_line_query = select(PowerLine)
         if line_id is not None:
             power_line_query = power_line_query.where(PowerLine.id == line_id)
@@ -1202,6 +1291,9 @@ async def export_cim_xml(
         else:
             result = await db.execute(
                 power_line_query.options(
+                selectinload(PowerLine.poles)
+                .selectinload(Pole.location)
+                .selectinload(Location.position_points),
                 selectinload(PowerLine.acline_segments)
                 .selectinload(AClineSegment.from_node)
                 .selectinload(ConnectivityNode.terminals),
@@ -1261,7 +1353,7 @@ async def export_cim_xml(
                 .selectinload(Terminal.connectivity_node)
             )
             )
-        power_lines_list = result.scalars().all()
+        power_lines_list = list(result.scalars().all())
 
     # Если экспортируем только одну ЛЭП — подстанции по связям с этой линией (не только substation_start/end в карточке ЛЭП).
     if line_id is not None and include_substations and include_power_lines:
@@ -1558,19 +1650,10 @@ async def apply_cim_552_diff(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Ошибка разбора XML: {str(e)}",
         )
-    objects_by_mrid: Dict[str, dict] = {}
-    for o in objects:
-        m = (o.get("mRID") or o.get("mrid") or "").strip()
-        if m:
-            objects_by_mrid[m] = o
-
-    # Безопасное применение 552 diff:
-    # в БД применяем только forwardDifferences, reverse используем только для диагностики.
-    # Служебные rdf:Description с фиксированными MRID (дерево папок LEPM) пропускаем — их мы сами генерируем при экспорте.
-    forward_objects = [o for o in objects if o.get("_diff_section") != "reverse"]
+    # Безопасное применение 552 diff: только forward; служебное дерево LEPM не пишем в БД.
     reverse_only_count = sum(1 for o in objects if o.get("_diff_section") == "reverse")
-    apply_objects = [o for o in forward_objects if not is_lepm_import_folder_scaffolding(o)]
-    scaffolding_skipped = len(forward_objects) - len(apply_objects)
+    apply_objects, scaffolding_skipped, objects_by_mrid = normalize_objects_for_apply(objects)
+    forward_objects = [o for o in objects if o.get("_diff_section") != "reverse"]
 
     class_counts = Counter()
     for o in apply_objects:
@@ -1742,6 +1825,14 @@ async def apply_cim_552_diff(
         existing = await db.execute(select(PowerLine).where(PowerLine.mrid == mrid))
         line = existing.scalar_one_or_none()
         name = _text(obj.get("name"), "ЛЭП")
+        parent_ref = resolve_parent_object_ref_for_line(
+            _mrid_of(obj.get("ParentObject")) or mrid_from_ref(obj.get("ParentObject"))
+        )
+        region_uid = resolve_region_uid_for_line(
+            _mrid_of(obj.get("Region"))
+            or mrid_from_ref(obj.get("Region"))
+            or _text(obj.get("regionUid"))
+        )
         if line is None:
             line = PowerLine(
                 mrid=mrid,
@@ -1749,7 +1840,8 @@ async def apply_cim_552_diff(
                 voltage_level=float(obj.get("nominalVoltage") or 10.0),
                 status="active",
                 created_by=current_user.id,
-                region_uid=_text(obj.get("regionUid"), "c3d4e5f6-7890-1234-cdef-345678901234"),
+                region_uid=region_uid,
+                parent_object_ref=parent_ref,
                 dispatcher_name=_text(obj.get("dispatcherName")),
             )
             db.add(line)
@@ -1757,8 +1849,9 @@ async def apply_cim_552_diff(
             created_lines += 1
         else:
             line.name = name[:100]
-            if obj.get("regionUid") is not None:
-                line.region_uid = _text(obj.get("regionUid"))
+            line.region_uid = region_uid
+            if parent_ref:
+                line.parent_object_ref = parent_ref
             if obj.get("dispatcherName") is not None:
                 line.dispatcher_name = _text(obj.get("dispatcherName"))
         line_id_by_mrid[mrid] = line.id
@@ -1771,7 +1864,11 @@ async def apply_cim_552_diff(
         if cls != "Pole":
             continue
         mrid = (obj.get("mRID") or obj.get("mrid") or "").strip() or generate_mrid()
-        line_mrid = _mrid_of(obj.get("PowerSystemResources"))
+        line_mrid = resolve_line_mrid_for_pole(
+            obj,
+            objects_by_mrid,
+            known_line_mrids=set(line_id_by_mrid.keys()),
+        )
         if not line_mrid:
             continue
         line_id = line_id_by_mrid.get(line_mrid)
@@ -1975,18 +2072,20 @@ async def apply_cim_552_diff(
             sec.conductor_material = _text(obj.get("conductorMaterial")) or sec.conductor_material
             sec.conductor_section = _text(obj.get("conductorSection")) or sec.conductor_section
             sec.sequence_number = int(obj.get("sectionNumber") or sec.sequence_number or 1)
-            if obj.get("length") is not None:
-                sec.total_length = float(obj.get("length") or 0.0)
-            if _float(obj.get("r")) is not None:
-                sec.r = _float(obj.get("r"))
-            if _float(obj.get("x")) is not None:
-                sec.x = _float(obj.get("x"))
-            b_val = _float(obj.get("b") if obj.get("b") is not None else obj.get("bch"))
-            if b_val is not None:
-                sec.b = b_val
-            g_val = _float(obj.get("g") if obj.get("g") is not None else obj.get("gch"))
-            if g_val is not None:
-                sec.g = g_val
+            if length_km:
+                sec.total_length = float(length_km)
+            r_pk = _per_km_from_total("r")
+            if r_pk is not None:
+                sec.r = r_pk
+            x_pk = _per_km_from_total("x")
+            if x_pk is not None:
+                sec.x = x_pk
+            b_pk = _per_km_from_total("b", ("bch",))
+            if b_pk is not None:
+                sec.b = b_pk
+            g_pk = _per_km_from_total("g", ("gch",))
+            if g_pk is not None:
+                sec.g = g_pk
         section_id_by_mrid[mrid] = sec.id
 
     # 6) LineSpan

@@ -61,6 +61,9 @@ async def get_current_user(
     user = await get_user_by_username(db, username=username)
     if user is None:
         raise credentials_exception
+    from app.core.user_presence import touch_user_presence
+
+    await touch_user_presence(user.id)
     return user
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
@@ -92,4 +95,7 @@ async def get_current_user_optional(
     user = await get_user_by_username(db, username=username)
     if user is None or not user.is_active:
         return None
+    from app.core.user_presence import touch_user_presence
+
+    await touch_user_presence(user.id)
     return user

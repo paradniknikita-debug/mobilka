@@ -5,9 +5,10 @@ import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../config/app_config.dart';
+import '../config/map_tile_config.dart';
 
-/// Сервис офлайн-карты: инициализация FMTC, загрузка тайлов Беларуси при старте.
-/// На web (и других платформах без FFI) FMTC не поддерживается — используется только сетевой слой тайлов.
+/// Офлайн-карта (мобильные платформы): FMTC с тем же URL, что и [MapTileConfig.primaryUrlTemplate].
+/// На web FMTC недоступен — тайлы кэшируются браузером по Cache-Control от API.
 class OfflineMapService {
   OfflineMapService._();
   static final OfflineMapService _instance = OfflineMapService._();
@@ -16,20 +17,23 @@ class OfflineMapService {
   bool _initialized = false;
   bool _downloadStarted = false;
 
-  static final TileLayer _osmTileLayer = TileLayer(
-    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    userAgentPackageName: 'com.lepm.mobile',
-    maxNativeZoom: 19,
-    maxZoom: 18,
-  );
+  static TileLayer _tileLayerForStore(String apiBaseUrl) => TileLayer(
+        urlTemplate: MapTileConfig.urlTemplate(apiBaseUrl),
+        userAgentPackageName: MapTileConfig.userAgentPackageName,
+        maxNativeZoom: 19,
+        maxZoom: 19,
+      );
 
-  /// Вызвать при старте приложения (main). Инициализирует FMTC и при первом запуске
-  /// создаёт хранилище и запускает фоновую загрузку тайлов Беларуси.
-  /// На web FMTC не инициализируется (нет FFI) — карта работает только по сети.
+  /// FMTC поддерживается только на iOS/Android/desktop (не web).
+  static bool get supportsFmtc => !kIsWeb;
+
+  /// Вызвать при старте приложения (main).
   static Future<void> init() async {
-    if (kIsWeb) {
+    if (!supportsFmtc) {
       if (kDebugMode) {
-        print('OfflineMapService: на web FMTC недоступен, используется только сетевой слой тайлов.');
+        print(
+          'OfflineMapService: web — FMTC недоступен, тайлы по сети + HTTP-кэш браузера.',
+        );
       }
       return;
     }
@@ -49,20 +53,23 @@ class OfflineMapService {
 
   bool get isInitialized => _initialized;
 
-  /// Слой тайлов с кэшем (сначала кэш, при отсутствии — сеть).
-  /// Возвращает null до инициализации или при ошибке.
-  TileProvider? getTileProvider() {
+  /// Слой тайлов: кэш FMTC + при онлайне догрузка с API.
+  /// [offline] — только чтение кэша, без сетевых запросов (нет зависаний).
+  TileProvider? getTileProvider({bool offline = false}) {
     if (!_initialized) return null;
     try {
       return FMTCTileProvider(
-        stores: const {'osm_belarus': BrowseStoreStrategy.readUpdateCreate},
+        stores: {
+          AppConfig.mapStoreName: offline
+              ? BrowseStoreStrategy.read
+              : BrowseStoreStrategy.readUpdateCreate,
+        },
       );
     } catch (_) {
       return null;
     }
   }
 
-  /// Создаёт хранилище при необходимости и запускает загрузку региона Беларуси.
   Future<void> _ensureStoreAndDownloadBelarus() async {
     if (!_initialized || _downloadStarted) return;
     try {
@@ -83,29 +90,33 @@ class OfflineMapService {
     }
   }
 
-  /// Загрузка тайлов для территории Беларуси (в фоне).
+  /// Предзагрузка тайлов Беларуси (тот же URL, что на карте).
   Future<void> _downloadBelarusRegion(FMTCStore store) async {
     try {
       final bounds = LatLngBounds(
         const LatLng(AppConfig.belarusSouth, AppConfig.belarusWest),
         const LatLng(AppConfig.belarusNorth, AppConfig.belarusEast),
       );
+      final apiBase = AppConfig.apiBaseUrl;
       final region = RectangleRegion(bounds).toDownloadable(
         minZoom: AppConfig.offlineMinZoom,
         maxZoom: AppConfig.offlineMaxZoom,
-        options: _osmTileLayer,
+        options: _tileLayerForStore(apiBase),
       );
 
       final result = store.download.startForeground(region: region);
       if (kDebugMode) {
-        print('OfflineMapService: загрузка тайлов Беларуси запущена (зум ${AppConfig.offlineMinZoom}-${AppConfig.offlineMaxZoom})');
+        print(
+          'OfflineMapService: загрузка тайлов ($apiBase) зум '
+          '${AppConfig.offlineMinZoom}-${AppConfig.offlineMaxZoom}',
+        );
       }
       await result.downloadProgress.last;
       if (kDebugMode) {
-        print('OfflineMapService: загрузка тайлов Беларуси завершена');
+        print('OfflineMapService: предзагрузка тайлов Беларуси завершена');
       }
     } catch (e) {
-      if (kDebugMode) print('OfflineMapService: ошибка _downloadBelarusRegion $e');
+      if (kDebugMode) print('OfflineMapService: _downloadBelarusRegion $e');
     } finally {
       _downloadStarted = false;
     }

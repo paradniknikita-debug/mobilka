@@ -66,7 +66,20 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
   }
 
   typeLabel(t: string): string {
-    return 'Вложение';
+    switch ((t || '').toLowerCase()) {
+      case 'photo':
+        return 'Фото';
+      case 'schema':
+        return 'Схема';
+      case 'voice':
+        return 'Голос';
+      case 'video':
+        return 'Видео';
+      case 'file':
+        return 'Файл';
+      default:
+        return 'Вложение';
+    }
   }
 
   displayName(row: PoleCardAttachmentItem): string {
@@ -117,6 +130,15 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
     return '*/*';
   }
 
+  private inferAttachmentType(filename: string): 'photo' | 'voice' | 'schema' | 'video' | 'file' {
+    const lower = (filename || '').toLowerCase();
+    if (/\.(jpe?g|png|gif|webp|bmp|heic|tif|tiff)$/.test(lower)) return 'photo';
+    if (/\.(svg|pdf)$/.test(lower)) return 'schema';
+    if (/\.(mp4|mov)$/.test(lower)) return 'video';
+    if (/\.(m4a|mp3|wav|ogg|aac|webm)$/.test(lower)) return 'voice';
+    return 'file';
+  }
+
   onFileSelected(ev: Event): void {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -126,6 +148,7 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
       this.snackBar.open('Не задан идентификатор объекта для загрузки', 'Закрыть', { duration: 3000 });
       return;
     }
+    this.pendingType = this.inferAttachmentType(file.name);
     this.uploading = true;
     const upload$ =
       this._entity === 'equipment'
@@ -166,13 +189,13 @@ export class PoleAttachmentsManagerDialogComponent implements OnInit {
   }
 
   download(row: PoleCardAttachmentItem): void {
-    const name = this.displayName(row);
-    this.apiService.getAttachmentBlob(row.url).subscribe({
-      next: (blob) => {
+    const fallback = this.displayName(row);
+    this.apiService.downloadAttachmentFile(row.url, fallback !== '—' ? fallback : 'attachment').subscribe({
+      next: ({ blob, filename }) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = name !== '—' ? name : 'attachment';
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
         this.snackBar.open('Файл сохранён', 'Закрыть', { duration: 2000 });

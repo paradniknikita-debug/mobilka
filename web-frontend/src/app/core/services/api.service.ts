@@ -20,6 +20,8 @@ import {
 import { ChangeLogEntry, ChangeLogFilters, ModelIssue } from '../models/change-log.model';
 import { EquipmentCatalogCreate, EquipmentCatalogItem } from '../models/equipment-catalog.model';
 import { LineConductorCatalogCreate, LineConductorCatalogItem } from '../models/line-conductor-catalog.model';
+import { WireInfoCreate, WireInfoItem } from '../models/wire-info.model';
+import { filenameFromContentDisposition } from '../utils/content-disposition';
 
 /** Технические паспорта (паспортизация) */
 export interface TechPassportListItem {
@@ -38,9 +40,50 @@ export interface TechPassportListResponse {
   total: number;
 }
 
+export interface PassportSectionRow {
+  label: string;
+  value: unknown;
+}
+
+export interface PassportSectionTable {
+  title: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+export interface PassportSection {
+  id: string;
+  title: string;
+  rows: PassportSectionRow[];
+  tables: PassportSectionTable[];
+}
+
 export interface TechPassportDetail extends TechPassportListItem {
   snapshot_json: Record<string, unknown>;
   manual_sections?: Record<string, unknown> | null;
+  sections?: PassportSection[];
+}
+
+export interface MapUidSearchHit {
+  entity_type: string;
+  entity_id: number;
+  mrid: string;
+  label: string;
+  line_id?: number | null;
+  pole_id?: number | null;
+  substation_id?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface AdminLoadMetrics {
+  minutes: number;
+  bucket_minutes?: number;
+  from_ts: string | null;
+  to_ts: string | null;
+  redis_available: boolean;
+  totals: { http_requests: number; db_writes: number };
+  points: { ts: string; http_requests: number; db_writes: number }[];
 }
 
 /** Ответ POST /cim/apply/552-diff */
@@ -98,6 +141,54 @@ export class ApiService {
 
   getAdminStats(): Observable<Record<string, unknown>> {
     return this.http.get<Record<string, unknown>>(`${this.apiUrl}/admin/stats`);
+  }
+
+  getAdminLoadMetrics(
+    minutes = 60,
+    bucketMinutes?: number,
+    maxPoints = 96,
+  ): Observable<AdminLoadMetrics> {
+    let params = new HttpParams()
+      .set('minutes', String(minutes))
+      .set('max_points', String(maxPoints));
+    if (bucketMinutes != null && bucketMinutes > 0) {
+      params = params.set('bucket_minutes', String(bucketMinutes));
+    }
+    return this.http.get<AdminLoadMetrics>(`${this.apiUrl}/admin/metrics/load`, { params });
+  }
+
+  getAdminInfrastructure(): Observable<{
+    minio_console_url: string;
+    swagger_url: string;
+    redoc_url: string;
+    api_home_url: string;
+    openapi_url: string;
+    development_guide_available: boolean;
+    docker_logs_available: boolean;
+  }> {
+    return this.http.get<{
+      minio_console_url: string;
+      swagger_url: string;
+      redoc_url: string;
+      api_home_url: string;
+      openapi_url: string;
+      development_guide_available: boolean;
+      docker_logs_available: boolean;
+    }>(`${this.apiUrl}/admin/infrastructure`);
+  }
+
+  getAdminDevelopmentGuide(): Observable<string> {
+    return this.http.get(`${this.apiUrl}/admin/development-guide`, { responseType: 'text' });
+  }
+
+  getAdminDockerLogs(
+    service: string,
+    tail = 300,
+  ): Observable<{ service: string; container: string; tail: number; log: string }> {
+    return this.http.get<{ service: string; container: string; tail: number; log: string }>(
+      `${this.apiUrl}/admin/docker-logs/${encodeURIComponent(service)}`,
+      { params: { tail: String(tail) } },
+    );
   }
 
   getAdminUsers(): Observable<User[]> {
@@ -219,24 +310,50 @@ export class ApiService {
     return `${base}${normalized}`;
   }
 
-  /** Скачать вложение как Blob (для сохранения на диск с правильным именем). */
+  /** Скачать вложение как Blob (для превью в img/audio). */
   getAttachmentBlob(relativeUrl: string): Observable<Blob> {
+    return this.downloadAttachmentFile(relativeUrl, 'attachment').pipe(map((r) => r.blob));
+  }
+
+  /**
+   * Скачать вложение: Blob + имя из Content-Disposition или fallback.
+   */
+  downloadAttachmentFile(
+    relativeUrl: string,
+    fallbackName: string
+  ): Observable<{ blob: Blob; filename: string }> {
     const raw = (relativeUrl || '').trim();
     const candidates = this.buildAttachmentUrlCandidates(raw);
     if (!candidates.length) {
-      return this.http.get(this.getAttachmentUrl(raw), { responseType: 'blob' });
+      candidates.push(this.getAttachmentUrl(raw));
     }
 
-    const tryByIndex = (index: number): Observable<Blob> => {
+    const tryByIndex = (index: number): Observable<{ blob: Blob; filename: string }> => {
       const url = candidates[index];
-      return this.http.get(url, { responseType: 'blob' }).pipe(
-        catchError((err) => {
-          if (index + 1 < candidates.length) {
-            return tryByIndex(index + 1);
-          }
-          throw err;
-        })
-      );
+      return this.http
+        .get(url, { responseType: 'blob', observe: 'response' })
+        .pipe(
+          map((resp: HttpResponse<Blob>) => {
+            const body = resp.body;
+            if (!body) {
+              throw new Error('Пустой ответ');
+            }
+            const fromHeader = filenameFromContentDisposition(
+              resp.headers.get('Content-Disposition')
+            );
+            const filename =
+              (fromHeader && fromHeader.trim()) ||
+              (fallbackName && fallbackName.trim()) ||
+              'attachment';
+            return { blob: body, filename };
+          }),
+          catchError((err) => {
+            if (index + 1 < candidates.length) {
+              return tryByIndex(index + 1);
+            }
+            return throwError(() => err);
+          })
+        );
     };
 
     return tryByIndex(0);
@@ -283,28 +400,50 @@ export class ApiService {
   }
 
   /** Загрузить вложение к карточке опоры. Возвращает url для сохранения в card_comment_attachment. */
-  uploadPoleAttachment(poleId: number, attachmentType: 'photo' | 'voice' | 'schema' | 'video' | 'file', file: File): Observable<{ url: string; type: string; filename: string }> {
+  uploadPoleAttachment(
+    poleId: number,
+    attachmentType: 'photo' | 'voice' | 'schema' | 'video' | 'file',
+    file: File
+  ): Observable<{
+    url: string;
+    type: string;
+    filename: string;
+    original_filename?: string | null;
+    thumbnail_url?: string;
+  }> {
     const formData = new FormData();
     formData.append('attachment_type', attachmentType);
     formData.append('file', file);
-    return this.http.post<{ url: string; type: string; filename: string }>(
-      `${this.apiUrl}/attachments/poles/${poleId}/attachments`,
-      formData
-    );
+    return this.http.post<{
+      url: string;
+      type: string;
+      filename: string;
+      original_filename?: string | null;
+      thumbnail_url?: string;
+    }>(`${this.apiUrl}/attachments/poles/${poleId}/attachments`, formData);
   }
 
   uploadEquipmentAttachment(
     equipmentId: number,
     attachmentType: 'photo' | 'voice' | 'schema' | 'video' | 'file',
     file: File
-  ): Observable<{ url: string; type: string; filename: string }> {
+  ): Observable<{
+    url: string;
+    type: string;
+    filename: string;
+    original_filename?: string | null;
+    thumbnail_url?: string;
+  }> {
     const formData = new FormData();
     formData.append('attachment_type', attachmentType);
     formData.append('file', file);
-    return this.http.post<{ url: string; type: string; filename: string }>(
-      `${this.apiUrl}/attachments/equipment/${equipmentId}/attachments`,
-      formData
-    );
+    return this.http.post<{
+      url: string;
+      type: string;
+      filename: string;
+      original_filename?: string | null;
+      thumbnail_url?: string;
+    }>(`${this.apiUrl}/attachments/equipment/${equipmentId}/attachments`, formData);
   }
 
   // ========== Spans ==========
@@ -387,13 +526,12 @@ export class ApiService {
     return this.http.put<EquipmentCatalogItem>(`${this.apiUrl}/equipment-catalog/${id}`, payload);
   }
 
-  deleteEquipmentCatalogItem(id: number, hard: boolean = false): Observable<{ message: string }> {
-    const params = new HttpParams().set('hard', String(hard));
-    return this.http.delete<{ message: string }>(`${this.apiUrl}/equipment-catalog/${id}`, { params });
+  withdrawEquipmentCatalogItem(id: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/equipment-catalog/${id}/withdraw`, {});
   }
 
-  seedEquipmentCatalogDefaults(): Observable<{ inserted: number }> {
-    return this.http.post<{ inserted: number }>(`${this.apiUrl}/equipment-catalog/seed-defaults`, {});
+  deleteEquipmentCatalogItem(id: number): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.apiUrl}/equipment-catalog/${id}`);
   }
 
   importEquipmentCatalog(file: File, mode: 'upsert' | 'insert_only' = 'upsert'): Observable<{ inserted: number; updated: number; skipped: number; total: number }> {
@@ -437,6 +575,58 @@ export class ApiService {
     return this.http.post<LineConductorCatalogItem>(`${this.apiUrl}/line-conductor-catalog`, payload);
   }
 
+  // ========== Wire catalog (WireInfo) ==========
+  getWireInfoCatalog(params?: {
+    q?: string;
+    in_service?: boolean;
+    skip?: number;
+    limit?: number;
+  }): Observable<WireInfoItem[]> {
+    let httpParams = new HttpParams();
+    if (params?.q) httpParams = httpParams.set('q', params.q);
+    if (params?.in_service != null) httpParams = httpParams.set('in_service', String(params.in_service));
+    if (params?.skip != null) httpParams = httpParams.set('skip', String(params.skip));
+    if (params?.limit != null) httpParams = httpParams.set('limit', String(params.limit));
+    return this.http.get<WireInfoItem[]>(`${this.apiUrl}/cim/wire-info`, { params: httpParams });
+  }
+
+  createWireInfo(payload: WireInfoCreate): Observable<WireInfoItem> {
+    return this.http.post<WireInfoItem>(`${this.apiUrl}/cim/wire-info`, payload);
+  }
+
+  withdrawWireInfo(id: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/cim/wire-info/${id}/withdraw`, {});
+  }
+
+  deleteWireInfo(id: number): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.apiUrl}/cim/wire-info/${id}`);
+  }
+
+  downloadWireInfoTemplate(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/cim/wire-info/template`, { responseType: 'blob' });
+  }
+
+  exportWireInfoCatalog(format: 'xlsx' | 'csv' = 'xlsx'): Observable<Blob> {
+    const params = new HttpParams().set('fmt', format);
+    return this.http.get(`${this.apiUrl}/cim/wire-info/export`, { params, responseType: 'blob' });
+  }
+
+  importWireInfoCatalog(file: File, mode: 'upsert' | 'insert_only' = 'upsert'): Observable<{
+    inserted: number;
+    updated: number;
+    skipped: number;
+    total: number;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = new HttpParams().set('mode', mode);
+    return this.http.post<{ inserted: number; updated: number; skipped: number; total: number }>(
+      `${this.apiUrl}/cim/wire-info/import`,
+      formData,
+      { params },
+    );
+  }
+
   // ========== Substations ==========
   getSubstations(): Observable<Substation[]> {
     return this.http.get<Substation[]>(`${this.apiUrl}/substations`);
@@ -477,6 +667,23 @@ export class ApiService {
 
   getSpansGeoJSON(): Observable<GeoJSONCollection> {
     return this.http.get<GeoJSONCollection>(`${this.apiUrl}/map/spans/geojson`, { params: this.cacheBustParams() });
+  }
+
+  /** Поиск на карте по mRID/UID (журнал изменений, CIM-узлы). */
+  findMapUid(q: string): Observable<MapUidSearchHit | null> {
+    const trimmed = (q || '').trim();
+    return this.http
+      .get<MapUidSearchHit>(`${this.apiUrl}/map/find-uid`, {
+        params: new HttpParams().set('q', trimmed),
+      })
+      .pipe(
+        catchError((err: HttpErrorResponse) => {
+          if (err.status === 404) {
+            return from([null]);
+          }
+          return throwError(() => err);
+        }),
+      );
   }
 
   /** Оборудование на карте: точки между опорами с иконкой и углом (как во Flutter). */
@@ -882,11 +1089,31 @@ export class ApiService {
         responseType: 'blob',
       })
       .pipe(
-        map((resp: HttpResponse<Blob>) => {
+        switchMap((resp: HttpResponse<Blob>) => {
           if (!resp.body) {
-            throw new Error('Пустой ответ сервера');
+            return throwError(() => new Error('Пустой ответ сервера'));
           }
-          return resp.body;
+          const ct = (resp.headers.get('Content-Type') || '').toLowerCase();
+          if (ct.includes('json') || ct.includes('text/plain') || ct.includes('text/html')) {
+            return from(resp.body.text()).pipe(
+              switchMap((t) => throwError(() => new Error(this.parseExportErrorText(t, resp.status)))),
+            );
+          }
+          if (resp.body.size < 48) {
+            return from(resp.body.text()).pipe(
+              switchMap((t) => {
+                const trimmed = (t || '').trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                  return throwError(() => new Error(this.parseExportErrorText(trimmed, resp.status)));
+                }
+                if (!resp.body || resp.body.size === 0) {
+                  return throwError(() => new Error('Пустой файл от сервера'));
+                }
+                return from(Promise.resolve(resp.body!));
+              }),
+            );
+          }
+          return from(Promise.resolve(resp.body));
         }),
         catchError((err: HttpErrorResponse) => {
           const blob = err.error;
@@ -915,6 +1142,22 @@ export class ApiService {
           return throwError(() => new Error(err.message || `Ошибка ${err.status}`));
         }),
       );
+  }
+
+  private parseExportErrorText(text: string, status: number): string {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      return `Ошибка ${status}`;
+    }
+    try {
+      const j = JSON.parse(trimmed) as { detail?: unknown };
+      if (typeof j.detail === 'string') {
+        return j.detail;
+      }
+    } catch {
+      // not JSON
+    }
+    return trimmed;
   }
 }
 

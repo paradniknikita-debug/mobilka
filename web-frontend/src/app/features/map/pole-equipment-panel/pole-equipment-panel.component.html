@@ -1,0 +1,43 @@
+<div class="pole-equipment-panel">
+  <p class="hint" *ngIf="!poleId">
+    Оборудование можно добавить до сохранения опоры; на сервер оно отправится после нажатия «Сохранить».
+  </p>
+  <p class="hint" *ngIf="poleId && loading">Загрузка оборудования…</p>
+
+  <div class="category-chips">
+    <button
+      mat-stroked-button
+      type="button"
+      class="cat-btn"
+      *ngFor="let cat of categories"
+      [disabled]="cat.singleInstance && categoryHasItem(cat)"
+      (click)="addEquipment(cat)"
+    >
+      + {{ cat.title }}
+    </button>
+  </div>
+
+  <div class="equipment-list" *ngIf="visibleItems().length">
+    <div class="equipment-row" *ngFor="let item of visibleItems()">
+      <div class="equipment-main">
+        <span class="cat-label">{{ item.categoryTitle }}</span>
+        <span class="eq-name">{{ item.name }}</span>
+        <span class="eq-qty" *ngIf="item.quantity > 1">×{{ item.quantity }}</span>
+      </div>
+      <div class="equipment-meta" *ngIf="item.defect">
+        <span class="defect">{{ item.defect }}</span>
+        <span class="crit" *ngIf="item.criticality">({{ criticalityLabel(item.criticality) }})</span>
+      </div>
+      <div class="equipment-actions">
+        <button mat-icon-button type="button" matTooltip="Изменить" (click)="editItem(item)">
+          <mat-icon>edit</mat-icon>
+        </button>
+        <button mat-icon-button type="button" matTooltip="Удалить" color="warn" (click)="removeItem(item)">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <p class="empty" *ngIf="!visibleItems().length && !loading">Оборудование не добавлено</p>
+</div>

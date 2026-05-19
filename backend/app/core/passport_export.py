@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from io import BytesIO
 from pathlib import Path
@@ -246,7 +247,13 @@ def build_pdf_bytes(
     title: str,
     manual_sections: Optional[Dict[str, Any]] = None,
 ) -> bytes:
+    from app.core.passport_stp_document import build_pdf_from_sections
+
     errs: List[str] = []
+    try:
+        return build_pdf_from_sections(snapshot_envelope, title, manual_sections)
+    except Exception as e:
+        errs.append(f"sections: {e}")
     try:
         return _build_pdf_reportlab(snapshot_envelope, title, manual_sections)
     except Exception as e:
@@ -263,44 +270,14 @@ def build_docx_bytes(
     title: str,
     manual_sections: Optional[Dict[str, Any]] = None,
 ) -> bytes:
+    from app.core.passport_stp_document import build_docx_from_sections
+
     if Document is None:
         raise RuntimeError("python-docx не установлен (pip install python-docx)")
     try:
-        d = Document()
-        h = d.add_heading(title, level=0)
-        for run in h.runs:
-            run.font.size = Pt(16)
-
-        p = d.add_paragraph()
-        p.add_run(f"Дата формирования: {snapshot_envelope.get('formed_at', '—')}\n")
-        p.add_run(f"Тип объекта: {snapshot_envelope.get('object_type', '—')}\n")
-        p.add_run(f"СТП / норматив: {snapshot_envelope.get('stp_reference') or '—'}\n")
-
-        d.add_heading("Сводная таблица параметров", level=1)
-        table = d.add_table(rows=1, cols=2)
-        table.style = "Table Grid"
-        hdr = table.rows[0].cells
-        hdr[0].text = "Параметр"
-        hdr[1].text = "Значение"
-
-        flat = _flatten(snapshot_envelope.get("data") or {})
-        for k, v in flat[:500]:
-            row = table.add_row().cells
-            row[0].text = str(k)
-            if isinstance(v, (dict, list)):
-                row[1].text = json.dumps(v, ensure_ascii=False, default=str)[:2000]
-            else:
-                row[1].text = str(v)
-
-        if manual_sections:
-            d.add_heading("Дополнения (вручную)", level=1)
-            d.add_paragraph(json.dumps(manual_sections, ensure_ascii=False, indent=2))
-
-        bio = BytesIO()
-        d.save(bio)
-        return bio.getvalue()
+        return build_docx_from_sections(snapshot_envelope, title, manual_sections)
     except Exception as e:
-        raise RuntimeError(f"Ошибка python-docx: {e}") from e
+        raise RuntimeError(f"Ошибка формирования DOCX: {e}") from e
 
 
 def build_xlsx_bytes(
@@ -321,43 +298,18 @@ def build_xlsx_bytes(
                     snapshot_envelope.get("stp_reference"),
                     manual_sections,
                 )
-        except Exception:
-            pass
+            logging.getLogger(__name__).warning(
+                "Шаблон СТП не найден: %s — используется XLSX по разделам",
+                TEMPLATE_PATH,
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "Заполнение шаблона СТП не удалось, запасной XLSX: %s", e, exc_info=True
+            )
 
-    wb = Workbook()
-    ws0 = wb.active
-    ws0.title = "Титул"
-    ws0["A1"] = "Технический паспорт"
-    ws0["A1"].font = Font(bold=True, size=14)
-    ws0["A2"] = title
-    ws0["A4"] = "Дата формирования"
-    ws0["B4"] = str(snapshot_envelope.get("formed_at", ""))
-    ws0["A5"] = "Тип объекта"
-    ws0["B5"] = str(snapshot_envelope.get("object_type", ""))
-    ws0["A6"] = "СТП / норматив"
-    ws0["B6"] = str(snapshot_envelope.get("stp_reference") or "")
+    from app.core.passport_stp_document import build_xlsx_from_sections
 
-    ws = wb.create_sheet("Параметры")
-    ws.append(["Параметр", "Значение"])
-    for c in ws[1]:
-        c.font = Font(bold=True)
-    for k, v in _flatten(data):
-        if isinstance(v, (dict, list)):
-            ws.append([k, json.dumps(v, ensure_ascii=False, default=str)])
-        else:
-            ws.append([k, v])
-
-    if manual_sections:
-        wm = wb.create_sheet("Вручную")
-        wm.append(["Ключ", "Значение"])
-        for c in wm[1]:
-            c.font = Font(bold=True)
-        for k, v in _flatten(manual_sections):
-            wm.append([k, str(v)])
-
-    bio = BytesIO()
-    wb.save(bio)
-    return bio.getvalue()
+    return build_xlsx_from_sections(snapshot_envelope, title, manual_sections)
 
 
 def export_passport_file(

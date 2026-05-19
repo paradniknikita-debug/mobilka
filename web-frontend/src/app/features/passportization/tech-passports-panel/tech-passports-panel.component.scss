@@ -36,6 +36,71 @@
   margin-top: 0.5rem;
 }
 
+.tech-passports__detail {
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.passport-dl {
+  display: grid;
+  grid-template-columns: minmax(140px, 38%) 1fr;
+  gap: 6px 12px;
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+}
+
+.passport-dl dt {
+  margin: 0;
+  color: var(--app-text-muted, #64748b);
+}
+
+.passport-dl dd {
+  margin: 0;
+}
+
+.passport-table-block {
+  margin-top: 12px;
+}
+
+.passport-table-title {
+  margin: 0 0 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.table-wrap-inner {
+  overflow-x: auto;
+}
+
+.passport-mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.passport-mini-table th,
+.passport-mini-table td {
+  border: 1px solid var(--border-color, #e2e8f0);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.passport-mini-table th {
+  background: var(--surface-2, #f8fafc);
+  font-weight: 500;
+}
+
+.filter-type {
+  max-width: 220px;
+  margin-bottom: 12px;
+}
+
 .tech-passports__table-card {
   width: 100%;
 }

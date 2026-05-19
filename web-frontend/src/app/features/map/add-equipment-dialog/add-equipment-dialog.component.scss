@@ -1,0 +1,26 @@
+.add-equipment-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 360px;
+  max-width: 520px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.row-2 {
+  display: flex;
+  gap: 12px;
+}
+
+.half-width {
+  flex: 1;
+}
+
+.voltage-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+}

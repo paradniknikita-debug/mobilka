@@ -367,6 +367,29 @@ export class MapComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Центрировать карту на геопозиции пользователя при первом открытии (если браузер разрешил). */
+  private tryCenterOnUserLocation(): void {
+    if (!this.map || typeof navigator === 'undefined' || !navigator.geolocation) {
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!this.map) {
+          return;
+        }
+        const { latitude, longitude } = position.coords;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return;
+        }
+        this.map.setView([latitude, longitude], environment.map.defaultZoom, { animate: false });
+      },
+      () => {
+        /* остаёмся на defaultCenter (Минск) */
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60_000 }
+    );
+  }
+
   initMap(): void {
     const center = environment.map.defaultCenter;
     
@@ -380,12 +403,19 @@ export class MapComponent implements OnInit, OnDestroy {
     });
 
     // Добавляем тайлы OpenStreetMap
-    L.tileLayer(`${environment.apiUrl}/map/tiles/{z}/{x}/{y}.png`, {
+    const tilesUrl = `${environment.apiUrl}/map/tiles/{z}/{x}/{y}.png`;
+    L.tileLayer(tilesUrl, {
       attribution: '',
       maxZoom: 19,
-      /** Меньше буфера вне экрана — меньше одновременных запросов тайлов. */
-      keepBuffer: 1
+      tileSize: 256,
+      keepBuffer: 2,
+      detectRetina: false,
+      /** Не показывать «белые квадраты» при ошибке загрузки тайла. */
+      errorTileUrl:
+        'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
     }).addTo(this.map);
+
+    this.tryCenterOnUserLocation();
 
     // Подписываемся на изменение зума
     this.map.on('zoomend', () => {
@@ -2560,9 +2590,9 @@ export class MapComponent implements OnInit, OnDestroy {
 
   /** Скачать вложение на диск. */
   downloadAttachment(att: { t: string; url: string; original_filename?: string | null }): void {
-    const filename = this.getAttachmentDisplayName(att);
-    this.apiService.getAttachmentBlob(att.url).subscribe({
-      next: (blob) => {
+    const fallback = this.getAttachmentDisplayName(att);
+    this.apiService.downloadAttachmentFile(att.url, fallback).subscribe({
+      next: ({ blob, filename }) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
