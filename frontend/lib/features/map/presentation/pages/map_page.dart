@@ -11,7 +11,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
@@ -3187,7 +3186,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     : (criticality != null ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)] : null),
                           ),
                           child: Icon(
-                            MdiIcons.transmissionTower,
+                            Icons.cell_tower,
                             color: Colors.white,
                             size: 20,
                           ),
@@ -3565,7 +3564,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ],
             ),
             const SizedBox(height: 8),
-            _buildLegendItem(MdiIcons.transmissionTower, Colors.blue, 'Опоры'),
+            _buildLegendItem(Icons.cell_tower, Colors.blue, 'Опоры'),
             const Padding(
               padding: EdgeInsets.only(top: 4),
               child: Text(
@@ -3998,7 +3997,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             tileColor: (_selectedPoleIdFromMap != null && poleId == _selectedPoleIdFromMap)
                 ? Colors.blue.withOpacity(0.12)
                 : null,
-            leading: Icon(MdiIcons.transmissionTower, size: 14, color: Colors.blue.shade700),
+            leading: Icon(Icons.cell_tower, size: 14, color: Colors.blue.shade700),
             title: Row(
               children: [
                 Expanded(
@@ -4583,7 +4582,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     return ExpansionTile(
       controlAffinity: ListTileControlAffinity.leading,
-      leading: Icon(MdiIcons.transmissionTower, color: Colors.blue),
+      leading: Icon(Icons.cell_tower, color: Colors.blue),
       title: Text('Опоры (${features.length})'),
       children: features.map<Widget>((feature) {
         final props = feature['properties'] as Map<String, dynamic>;

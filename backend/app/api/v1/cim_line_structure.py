@@ -210,7 +210,15 @@ async def delete_connectivity_node(
         pole = await db.get(Pole, node.pole_id)
         if pole:
             pole.connectivity_node_id = None
-    
+
+    await db.execute(delete(Terminal).where(Terminal.connectivity_node_id == node_id))
+    await db.execute(delete(Terminal).where(Terminal.acline_segment_id.in_(
+        select(AClineSegment.id).where(
+            (AClineSegment.from_connectivity_node_id == node_id)
+            | (AClineSegment.to_connectivity_node_id == node_id)
+        )
+    )))
+
     await db.delete(node)
     await db.commit()
 

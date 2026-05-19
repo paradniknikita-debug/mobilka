@@ -356,7 +356,7 @@ async def delete_pole(
         print(f"DEBUG: Опора {pole_id} найдена: {pole.pole_number}")
         
         # Удаляем связанные объекты перед удалением опоры
-        from app.models.cim_line_structure import ConnectivityNode
+        from app.models.cim_line_structure import ConnectivityNode, Terminal
         from app.models.acline_segment import AClineSegment
         from app.models.power_line import Span, Equipment, Tap
         
@@ -377,8 +377,14 @@ async def delete_pole(
         connectivity_nodes_result = await db.execute(
             select(ConnectivityNode).where(ConnectivityNode.pole_id == pole_id)
         )
-        connectivity_nodes = connectivity_nodes_result.scalars().all()
-        
+        connectivity_nodes = list(connectivity_nodes_result.scalars().all())
+        cn_ids_set = {cn.id for cn in connectivity_nodes}
+        if pole.connectivity_node_id and pole.connectivity_node_id not in cn_ids_set:
+            extra_cn = await db.get(ConnectivityNode, pole.connectivity_node_id)
+            if extra_cn is not None:
+                connectivity_nodes.append(extra_cn)
+                cn_ids_set.add(extra_cn.id)
+
         print(f"DEBUG: Найдено ConnectivityNode для опоры: {len(connectivity_nodes)}")
         
         # Удаляем только Span и AClineSegment, которые напрямую связаны с удаляемой опорой
@@ -398,6 +404,9 @@ async def delete_pole(
             
             # Для каждого AClineSegment удаляем связанные объекты в правильном порядке
             for acline_seg in acline_segments_to_delete:
+                await db.execute(
+                    delete(Terminal).where(Terminal.acline_segment_id == acline_seg.id)
+                )
                 # Получаем все LineSection для этого AClineSegment
                 line_sections_result = await db.execute(
                     select(LineSection).where(LineSection.acline_segment_id == acline_seg.id)
@@ -457,9 +466,15 @@ async def delete_pole(
             await db.execute(pole_update_stmt)
             print(f"DEBUG: Обнулен connectivity_node_id в опорах, ссылающихся на ConnectivityNode {connectivity_node_id}")
         
+        # Терминалы CIM ссылаются на ConnectivityNode — удаляем до узлов
+        cn_ids = list(cn_ids_set)
+        if cn_ids:
+            await db.execute(delete(Terminal).where(Terminal.connectivity_node_id.in_(cn_ids)))
+            print(f"DEBUG: Удалены Terminal для ConnectivityNode опоры {pole_id}: {cn_ids}")
+
         # Теперь можно безопасно удалить ConnectivityNode
-        if connectivity_nodes:
-            connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.pole_id == pole_id)
+        if cn_ids:
+            connectivity_node_stmt = delete(ConnectivityNode).where(ConnectivityNode.id.in_(cn_ids))
             await db.execute(connectivity_node_stmt)
             print(f"DEBUG: Удалены ConnectivityNode для опоры {pole_id}")
         
