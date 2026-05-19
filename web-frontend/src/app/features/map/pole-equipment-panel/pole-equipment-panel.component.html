@@ -25,6 +25,7 @@
         <span class="eq-qty" *ngIf="item.quantity > 1">×{{ item.quantity }}</span>
       </div>
       <div class="equipment-meta" *ngIf="item.defect">
+        <span class="defect-label">Дефект:</span>
         <span class="defect">{{ item.defect }}</span>
         <span class="crit" *ngIf="item.criticality">({{ criticalityLabel(item.criticality) }})</span>
       </div>

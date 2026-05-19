@@ -326,18 +326,25 @@
       line-height: 1.25;
     }
 
-    // В форме оборудования подписи заметно длиннее, чем в карточке опоры.
-    // Держим их в одной строке с ellipsis, чтобы не было наложений между рядами.
-    ::ng-deep .mdc-floating-label {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: calc(100% - 8px);
+    .field-hint {
+      font-size: 12px;
+      line-height: 1.4;
+      color: rgba(0, 0, 0, 0.6);
+      margin: 2px 0 12px 4px;
     }
 
-    // Чуть компактнее подписи в полях оборудования.
-    ::ng-deep .mat-mdc-form-field .mdc-floating-label {
-      font-size: 11px;
+    .equipment-row {
+      align-items: flex-start;
+      gap: 12px;
+
+      .half-width {
+        flex: 1;
+        min-width: 0;
+      }
+    }
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      min-height: 0;
     }
   }
 

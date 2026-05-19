@@ -442,6 +442,10 @@ class Equipment {
   @JsonKey(fromJson: _stringFromJson, defaultValue: 'good')
   final String condition;
   final String? notes;
+  final String? defect;
+  final String? criticality;
+  @JsonKey(name: 'defect_attachment')
+  final String? defectAttachment;
   @JsonKey(name: 'catalog_item_id', fromJson: _intFromJsonNullable)
   final int? catalogItemId;
   @JsonKey(name: 'rated_current', fromJson: _doubleFromJsonNullable)
@@ -512,6 +516,9 @@ class Equipment {
     this.installationDate,
     required this.condition,
     this.notes,
+    this.defect,
+    this.criticality,
+    this.defectAttachment,
     this.catalogItemId,
     this.ratedCurrent,
     this.iTh,

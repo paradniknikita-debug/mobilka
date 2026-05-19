@@ -596,16 +596,16 @@
             <mat-label>Номинальный ток</mat-label>
             <input matInput formControlName="nominal_current" placeholder="Например: 400 А">
           </mat-form-field>
-          <mat-form-field appearance="outline" class="half-width">
-            <mat-label>Номинальное напряжение</mat-label>
-            <input matInput formControlName="nominal_voltage" placeholder="Например: 10 кВ">
-            <mat-hint *ngIf="isNominalVoltageLockedByLine()">
-              Совпадает с классом напряжения линии ({{ equipmentLineVoltageKv }} кВ)
-            </mat-hint>
+          <mat-form-field appearance="outline" class="half-width" subscriptSizing="dynamic">
+            <mat-label>Ном. напряжение, кВ</mat-label>
+            <input matInput formControlName="nominal_voltage" placeholder="10">
           </mat-form-field>
         </div>
+        <p class="field-hint" *ngIf="isNominalVoltageLockedByLine()">
+          Номинальное напряжение совпадает с классом линии: {{ equipmentLineVoltageKv }} кВ
+        </p>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
           <mat-label>Марка (табличка)</mat-label>
           <input
             matInput
@@ -621,14 +621,14 @@
             (click)="applyCatalogByNameplate()">
             <mat-icon>bolt</mat-icon>
           </button>
-          <mat-hint>
-            {{
-              equipmentForm.get('equipment_type')?.value === 'disconnector'
-                ? 'Для разъединителя поле обычно обязательное.'
-                : 'Поле можно не заполнять. При совпадении с каталогом значения подставятся автоматически.'
-            }}
-          </mat-hint>
         </mat-form-field>
+        <p class="field-hint">
+          {{
+            equipmentForm.get('equipment_type')?.value === 'disconnector'
+              ? 'Для разъединителя марка обычно обязательна. При совпадении с каталогом подставятся характеристики.'
+              : 'Необязательно. При совпадении с каталогом подставятся характеристики.'
+          }}
+        </p>
         <mat-autocomplete #catalogNameplateAuto="matAutocomplete" (optionSelected)="applyCatalogByNameplate()">
           <mat-option *ngFor="let item of filteredEquipmentCatalog" [value]="item.full_name || (item.brand + ' ' + item.model)">
             {{ item.full_name || (item.brand + ' ' + item.model) }}
@@ -759,12 +759,12 @@
               <mat-label>Максимальный пиковый ток КЗ, А</mat-label>
               <input matInput type="number" formControlName="ip_max">
             </mat-form-field>
-            <mat-form-field appearance="outline" class="half-width">
-              <mat-label>Время воздействия тока термической стойкости, с</mat-label>
+            <mat-form-field appearance="outline" class="half-width" subscriptSizing="dynamic">
+              <mat-label>tтер, с</mat-label>
               <input matInput type="number" formControlName="t_th">
-              <mat-hint>Допустимое время термической стойкости в секундах</mat-hint>
             </mat-form-field>
           </div>
+          <p class="field-hint">Допустимое время термической стойкости</p>
         </ng-container>
         <ng-template #nonElectricalHint>
           <p class="equipment-hint">
@@ -772,27 +772,22 @@
           </p>
         </ng-template>
 
-        <div class="row-2">
-          <mat-form-field appearance="outline" class="half-width">
-            <mat-label>Производитель</mat-label>
-            <input matInput formControlName="manufacturer">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="half-width">
-            <mat-label>Модель</mat-label>
-            <input matInput formControlName="model">
-          </mat-form-field>
-        </div>
-
-        <div class="row-2">
-          <mat-form-field appearance="outline" class="half-width">
-            <mat-label>Серийный номер</mat-label>
-            <input matInput formControlName="serial_number">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="half-width">
-            <mat-label>Год выпуска</mat-label>
-            <input matInput type="number" formControlName="year_manufactured">
-          </mat-form-field>
-        </div>
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+          <mat-label>Производитель</mat-label>
+          <input matInput formControlName="manufacturer">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+          <mat-label>Модель</mat-label>
+          <input matInput formControlName="model">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+          <mat-label>Серийный номер</mat-label>
+          <input matInput formControlName="serial_number">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+          <mat-label>Год выпуска</mat-label>
+          <input matInput type="number" formControlName="year_manufactured">
+        </mat-form-field>
 
         <div class="row-2">
           <mat-form-field appearance="outline" class="half-width">

@@ -1016,51 +1016,99 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     ));
   }
 
+  void _onBrandPicked(String value) {
+    setState(() {
+      if (value.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
+          value.trim().toLowerCase() == 'другое') {
+        _brandController.text = _noBrandLabel;
+        _clearElectricalCharacteristics();
+        return;
+      }
+      _brandController.text = value;
+    });
+    if (value.trim().toLowerCase() != _noBrandLabel.toLowerCase() &&
+        value.trim().toLowerCase() != 'другое') {
+      final applied = _applyCatalogPresetByLabel(value);
+      if (!applied) {
+        _applyKnownSwitchBrandPresetByInput(value);
+      }
+    }
+  }
+
+  /// Выпадающий список марок с фильтрацией по вводу (поиск по подстроке).
   Widget _buildBrandCatalogDropdown({
     required String labelText,
     required String hintText,
   }) {
-    final brands = List<String>.from(_brandSuggestions);
-    final current = _brandController.text.trim();
-    if (current.isNotEmpty && !brands.contains(current)) {
-      brands.insert(0, current);
-    }
-    final value = current.isNotEmpty && brands.contains(current) ? current : null;
-    return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        labelText: labelText,
-        hintText: hintText,
-        filled: true,
-        fillColor: PatrolColors.surfaceCard,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      items: brands
-          .map(
-            (s) => DropdownMenuItem(
-              value: s,
-              child: Text(s, overflow: TextOverflow.ellipsis),
-            ),
-          )
-          .toList(),
-      onChanged: (v) {
-        if (v == null) return;
-        setState(() {
-          if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
-              v.trim().toLowerCase() == 'другое') {
-            _brandController.text = _noBrandLabel;
-            _clearElectricalCharacteristics();
-            return;
-          }
-          _brandController.text = v;
-        });
-        if (v.trim().toLowerCase() != _noBrandLabel.toLowerCase() &&
-            v.trim().toLowerCase() != 'другое') {
-          final applied = _applyCatalogPresetByLabel(v);
-          if (!applied) {
-            _applyKnownSwitchBrandPresetByInput(v);
-          }
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: _brandController.text),
+      optionsBuilder: (textEditingValue) {
+        final q = textEditingValue.text.trim().toLowerCase();
+        if (q.isEmpty) return _brandSuggestions;
+        return _brandSuggestions.where((s) => s.toLowerCase().contains(q));
+      },
+      displayStringForOption: (o) => o,
+      onSelected: _onBrandPicked,
+      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+        if (textEditingController.text != _brandController.text) {
+          textEditingController.text = _brandController.text;
         }
+        return TextFormField(
+          controller: textEditingController,
+          focusNode: focusNode,
+          onFieldSubmitted: (v) => onFieldSubmitted(),
+          decoration: InputDecoration(
+            labelText: labelText,
+            hintText: hintText,
+            helperText: 'Начните ввод — список отфильтруется',
+            helperMaxLines: 2,
+            filled: true,
+            fillColor: PatrolColors.surfaceCard,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            suffixIcon: const Icon(Icons.arrow_drop_down, color: PatrolColors.textSecondary),
+          ),
+          style: const TextStyle(color: PatrolColors.textPrimary),
+          onChanged: (v) {
+            _brandController.text = v;
+            setState(() {
+              if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
+                  v.trim().toLowerCase() == 'другое') {
+                _clearElectricalCharacteristics();
+              }
+            });
+            _tryApplyCatalogPresetByInput(v);
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            color: PatrolColors.surfaceCard,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220, minWidth: 280),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options.elementAt(index);
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      option,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: PatrolColors.textPrimary),
+                    ),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
       },
     );
   }

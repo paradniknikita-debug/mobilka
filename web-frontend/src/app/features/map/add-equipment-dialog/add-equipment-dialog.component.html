@@ -1,9 +1,9 @@
 <h2 mat-dialog-title>{{ dialogTitle }}</h2>
 
 <mat-dialog-content [formGroup]="form" class="add-equipment-dialog">
-  <mat-form-field appearance="outline" class="full-width">
+  <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
     <mat-label>Марка / наименование</mat-label>
-    <input matInput formControlName="name" [matAutocomplete]="brandAuto" />
+    <input matInput formControlName="name" [matAutocomplete]="brandAuto" placeholder="Начните ввод для поиска" />
     <mat-autocomplete #brandAuto="matAutocomplete">
       <mat-option *ngFor="let b of catalogBrands" [value]="b">{{ b }}</mat-option>
     </mat-autocomplete>

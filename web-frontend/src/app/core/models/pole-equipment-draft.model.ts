@@ -19,17 +19,33 @@ export interface PoleEquipmentDraft {
   markedDelete?: boolean;
 }
 
+function parseLegacyFromNotes(notes?: string | null): { defect: string | null; nameplate: string | null } {
+  const text = (notes || '').trim();
+  if (!text) return { defect: null, nameplate: null };
+  let defect: string | null = null;
+  const defectMatch = text.match(/дефект:\s*([^;]+)/i);
+  if (defectMatch) defect = defectMatch[1].trim();
+  let nameplate: string | null = null;
+  const nameplateMatch = text.match(/марка\s*\(nameplate\):\s*([^;]+)/i);
+  if (nameplateMatch) nameplate = nameplateMatch[1].trim();
+  return { defect, nameplate };
+}
+
 export function equipmentToDraft(eq: Equipment, categoryTitle?: string): PoleEquipmentDraft {
+  const legacy = parseLegacyFromNotes(eq.notes);
+  const displayName =
+    (eq.nameplate || legacy.nameplate || eq.name || '').trim() ||
+    (eq.name || '').trim();
   return {
     localKey: `srv-${eq.id}`,
     serverId: eq.id,
     categoryTitle: categoryTitle || guessCategoryFromType(eq.equipment_type),
     equipmentType: eq.equipment_type,
-    name: eq.name,
+    name: displayName,
     quantity: 1,
-    defect: eq.defect ?? null,
+    defect: eq.defect?.trim() || legacy.defect,
     criticality: eq.criticality ?? null,
-    nameplate: eq.nameplate ?? null,
+    nameplate: eq.nameplate?.trim() || legacy.nameplate,
     ratedCurrent: eq.rated_current ?? null,
     iTh: eq.i_th ?? null,
     ipMax: eq.ip_max ?? null,

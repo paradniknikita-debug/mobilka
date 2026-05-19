@@ -146,20 +146,106 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
   String? _conductorSection = PoleReferenceData.defaultConductorSection;
   final _conductorTypeController = TextEditingController();
   List<String> _conductorSuggestions = const [];
-  List<String> get _filteredConductorSuggestions {
-    final q = _conductorTypeController.text.trim().toLowerCase();
-    final source = _conductorSuggestions.isNotEmpty
-        ? _conductorSuggestions
-        : PoleReferenceData.conductorTypes;
-    if (q.isEmpty) return source.take(30).toList();
-    return source.where((s) => s.toLowerCase().contains(q)).take(30).toList();
+  List<String> get _poleBrandOptions {
+    final list = List<String>.from(PoleReferenceData.poleBrandsCis);
+    final cur = _materialController.text.trim();
+    if (cur.isNotEmpty && !list.contains(cur)) {
+      list.insert(0, cur);
+    }
+    return list;
   }
 
-  List<String> get _filteredPoleBrandSuggestions {
-    final q = _materialController.text.trim().toLowerCase();
-    final source = PoleReferenceData.poleBrandsCis;
-    if (q.isEmpty) return source.take(30).toList();
-    return source.where((s) => s.toLowerCase().contains(q)).take(30).toList();
+  List<String> get _conductorMarkOptions {
+    final list = (_conductorSuggestions.isNotEmpty
+            ? _conductorSuggestions
+            : PoleReferenceData.conductorTypes)
+        .toList();
+    final cur = _conductorTypeController.text.trim();
+    if (cur.isNotEmpty && !list.contains(cur)) {
+      list.insert(0, cur);
+    }
+    return list;
+  }
+
+  /// Поле марки с выпадающим списком, отфильтрованным по вводу (как фильтр в Excel).
+  Widget _buildFilterableMarkField({
+    required TextEditingController controller,
+    required List<String> options,
+    required String labelText,
+    required String hintText,
+    required ValueChanged<String> onChanged,
+    String? helperText,
+    Widget? prefixIcon,
+  }) {
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: controller.text),
+      optionsBuilder: (textEditingValue) {
+        final q = textEditingValue.text.trim().toLowerCase();
+        if (q.isEmpty) return options;
+        return options.where((s) => s.toLowerCase().contains(q));
+      },
+      displayStringForOption: (o) => o,
+      onSelected: onChanged,
+      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+        if (textEditingController.text != controller.text) {
+          textEditingController.text = controller.text;
+        }
+        return TextFormField(
+          controller: textEditingController,
+          focusNode: focusNode,
+          onFieldSubmitted: (v) => onFieldSubmitted(),
+          decoration: InputDecoration(
+            labelText: labelText,
+            hintText: hintText,
+            helperText: helperText ?? 'Начните ввод — список отфильтруется',
+            helperMaxLines: 2,
+            helperStyle: helperText != null
+                ? const TextStyle(fontSize: 11, color: PatrolColors.textSecondary)
+                : null,
+            prefixIcon: prefixIcon,
+            filled: true,
+            fillColor: PatrolColors.surfaceCard,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            suffixIcon: const Icon(Icons.arrow_drop_down, color: PatrolColors.textSecondary),
+          ),
+          style: const TextStyle(color: PatrolColors.textPrimary),
+          onChanged: (v) {
+            controller.text = v;
+            onChanged(v);
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, optionItems) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            color: PatrolColors.surfaceCard,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240, minWidth: 280),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: optionItems.length,
+                itemBuilder: (context, index) {
+                  final option = optionItems.elementAt(index);
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      option,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: PatrolColors.textPrimary),
+                    ),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   double? _expectedLineVoltageKv;
@@ -242,16 +328,46 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     return null;
   }
 
+  String? _defectFromEquipmentNotes(String? notes) {
+    final text = notes ?? '';
+    final m = RegExp(r'дефект:\s*([^;]+)', caseSensitive: false).firstMatch(text);
+    return m?.group(1)?.trim();
+  }
+
+  String? _criticalityFromEquipmentNotes(String? notes) {
+    final text = notes ?? '';
+    final m = RegExp(r'критичность:\s*(\w+)', caseSensitive: false).firstMatch(text);
+    return m?.group(1)?.trim();
+  }
+
+  String? _categoryTitleForEquipmentType(String equipmentType) {
+    final t = equipmentType.trim().toLowerCase();
+    for (final cat in _equipmentCategories) {
+      final catType =
+          EquipmentReferenceData.categoryToEquipmentType[cat.title]?.trim().toLowerCase();
+      if (catType != null &&
+          (t == catType || t.contains(catType) || catType.contains(t))) {
+        return cat.title;
+      }
+    }
+    return null;
+  }
+
   EquipmentFormData _toFormDataFromLoadedEquipment(Equipment e) {
+    final categoryTitle = _categoryTitleForEquipmentType(e.equipmentType);
     return EquipmentFormData(
       equipmentType: e.equipmentType,
       name: e.name,
       quantity: 1,
       uid: e.mrid,
-      categoryTitle: null,
-      defect: null,
-      criticality: null,
-      defectAttachment: null,
+      categoryTitle: categoryTitle,
+      defect: e.defect?.trim().isNotEmpty == true
+          ? e.defect!.trim()
+          : _defectFromEquipmentNotes(e.notes),
+      criticality: e.criticality?.trim().isNotEmpty == true
+          ? e.criticality!.trim()
+          : _criticalityFromEquipmentNotes(e.notes),
+      defectAttachment: e.defectAttachment,
       ratedCurrent: e.ratedCurrent,
       iTh: e.iTh,
       ipMax: e.ipMax,
@@ -259,7 +375,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       normalOpen: e.normalOpen,
       retained: e.retained,
       identifiedObjectDescription: e.identifiedObjectDescription,
-      nameplate: e.nameplate,
+      nameplate: e.nameplate?.trim().isNotEmpty == true
+          ? e.nameplate
+          : _nameplateFromEquipmentNotes(e.notes),
       psrSubtype: e.psrSubtype,
       installationDisplayName: e.installationDisplayName,
       nominalVoltageKv: e.nominalVoltageKv,
@@ -1474,7 +1592,11 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           installationDate: eq.installationDate,
           condition: eq.condition,
           notes: eq.notes,
-          nameplate: _nameplateFromEquipmentNotes(eq.notes),
+          defect: eq.defect,
+          criticality: eq.criticality,
+          defectAttachment: eq.defectAttachment,
+          mrid: eq.mrid,
+          nameplate: eq.nameplate ?? _nameplateFromEquipmentNotes(eq.notes),
           ratedCurrent: _doubleFromEquipmentNotes(eq.notes, 'номинальный ток, А'),
           iTh: _doubleFromEquipmentNotes(eq.notes, 'термический ток (i_th), кА'),
           ipMax: _doubleFromEquipmentNotes(eq.notes, 'пиковый ток (ip_max), кА'),
@@ -3376,90 +3498,35 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                       _buildStructuralCriticalityRow(),
                       const SizedBox(height: 8),
 
-                      Builder(
-                        builder: (context) {
-                          final poleBrands = List<String>.from(PoleReferenceData.poleBrandsCis);
-                          final curMaterial = _materialController.text.trim();
-                          if (curMaterial.isNotEmpty && !poleBrands.contains(curMaterial)) {
-                            poleBrands.insert(0, curMaterial);
-                          }
-                          final materialValue =
-                              curMaterial.isNotEmpty && poleBrands.contains(curMaterial)
-                                  ? curMaterial
-                                  : null;
-                          return DropdownButtonFormField<String>(
-                            value: materialValue,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: 'Марка опоры',
-                              hintText: 'Например: СВ95-2',
-                              prefixIcon: const Icon(Icons.search, size: 20, color: PatrolColors.textSecondary),
-                              filled: true,
-                              fillColor: PatrolColors.surfaceCard,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            items: poleBrands
-                                .map((brand) => DropdownMenuItem(
-                                      value: brand,
-                                      child: Text(brand, overflow: TextOverflow.ellipsis),
-                                    ))
-                                .toList(),
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() {
-                                _materialController.text = v;
-                                _material = v;
-                              });
-                            },
-                          );
+                      _buildFilterableMarkField(
+                        controller: _materialController,
+                        options: _poleBrandOptions,
+                        labelText: 'Марка опоры',
+                        hintText: 'Например: СВ95-2',
+                        prefixIcon: const Icon(Icons.search, size: 20, color: PatrolColors.textSecondary),
+                        onChanged: (v) {
+                          setState(() {
+                            _materialController.text = v;
+                            _material = v.trim().isEmpty ? null : v.trim();
+                          });
                         },
                       ),
                       const SizedBox(height: 20),
 
-                      Builder(
-                        builder: (context) {
-                          final conductorOpts = (_conductorSuggestions.isNotEmpty
-                                  ? _conductorSuggestions
-                                  : PoleReferenceData.conductorTypes)
-                              .take(60)
-                              .toList();
-                          final curConductor = _conductorTypeController.text.trim();
-                          if (curConductor.isNotEmpty && !conductorOpts.contains(curConductor)) {
-                            conductorOpts.insert(0, curConductor);
-                          }
-                          final conductorValue =
-                              curConductor.isNotEmpty && conductorOpts.contains(curConductor)
-                                  ? curConductor
-                                  : null;
-                          return DropdownButtonFormField<String>(
-                            value: conductorValue,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: 'Марка провода ЛЭП',
-                              hintText: 'Например: СИП-3 1х70',
-                              helperText: _expectedLineVoltageKv == null
-                                  ? 'Справочник марок из БД'
-                                  : 'Показаны марки для ${_expectedLineVoltageKv!.toStringAsFixed(_expectedLineVoltageKv!.truncateToDouble() == _expectedLineVoltageKv ? 0 : 1)} кВ',
-                              helperStyle: TextStyle(fontSize: 11, color: PatrolColors.textSecondary),
-                              prefixIcon: const Icon(Icons.cable, size: 20, color: PatrolColors.textSecondary),
-                              filled: true,
-                              fillColor: PatrolColors.surfaceCard,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            items: conductorOpts
-                                .map((mark) => DropdownMenuItem(
-                                      value: mark,
-                                      child: Text(mark, overflow: TextOverflow.ellipsis),
-                                    ))
-                                .toList(),
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() {
-                                _conductorTypeController.text = v;
-                                _conductorType = v;
-                              });
-                            },
-                          );
+                      _buildFilterableMarkField(
+                        controller: _conductorTypeController,
+                        options: _conductorMarkOptions,
+                        labelText: 'Марка провода ЛЭП',
+                        hintText: 'Например: СИП-3 1х70',
+                        helperText: _expectedLineVoltageKv == null
+                            ? 'Справочник марок из БД'
+                            : 'Показаны марки для ${_expectedLineVoltageKv!.toStringAsFixed(_expectedLineVoltageKv!.truncateToDouble() == _expectedLineVoltageKv ? 0 : 1)} кВ',
+                        prefixIcon: const Icon(Icons.cable, size: 20, color: PatrolColors.textSecondary),
+                        onChanged: (v) {
+                          setState(() {
+                            _conductorTypeController.text = v;
+                            _conductorType = v.trim().isEmpty ? null : v.trim();
+                          });
                         },
                       ),
                       const SizedBox(height: 20),
@@ -3556,6 +3623,34 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                                   quantity: 1,
                                                   uid: loadedForCategory.first.mrid,
                                                   categoryTitle: cat.title,
+                                                  defect: loadedForCategory.first.defect
+                                                      ?.trim()
+                                                      .isNotEmpty ==
+                                                          true
+                                                      ? loadedForCategory
+                                                          .first
+                                                          .defect!
+                                                      : _defectFromEquipmentNotes(
+                                                          loadedForCategory
+                                                              .first
+                                                              .notes),
+                                                  criticality: loadedForCategory
+                                                          .first
+                                                          .criticality
+                                                          ?.trim()
+                                                          .isNotEmpty ==
+                                                      true
+                                                      ? loadedForCategory
+                                                          .first
+                                                          .criticality
+                                                      : _criticalityFromEquipmentNotes(
+                                                          loadedForCategory
+                                                              .first
+                                                              .notes),
+                                                  defectAttachment:
+                                                      loadedForCategory
+                                                          .first
+                                                          .defectAttachment,
                                                   ratedCurrent: loadedForCategory.first.ratedCurrent,
                                                   iTh: loadedForCategory.first.iTh,
                                                   ipMax: loadedForCategory.first.ipMax,
