@@ -243,11 +243,23 @@ export class MapComponent implements OnInit, OnDestroy {
           this.mapService.setCurrentZoom(this.map.getZoom());
         }
         if (bounds != null && this.map) {
-          this.map.fitBounds(bounds, { animate: true, duration: 0.5, padding: [40, 40] });
-          this.currentZoom = this.map.getZoom();
-          this.mapService.setCurrentZoom(this.currentZoom);
+          const [[minLat, minLng], [maxLat, maxLng]] = bounds;
+          const latSpan = Math.abs(maxLat - minLat);
+          const lngSpan = Math.abs(maxLng - minLng);
+          if (latSpan < 0.0008 && lngSpan < 0.0008) {
+            const lat = (minLat + maxLat) / 2;
+            const lng = (minLng + maxLng) / 2;
+            const z = zoom === undefined || zoom === null ? 17 : zoom;
+            this.centerOnPole(lat, lng, z);
+          } else {
+            this.map.fitBounds(bounds, { animate: true, duration: 0.5, padding: [48, 48], maxZoom: 18 });
+            this.currentZoom = this.map.getZoom();
+            this.mapService.setCurrentZoom(this.currentZoom);
+          }
+          setTimeout(() => this.map?.invalidateSize({ animate: false }), 350);
         } else {
           this.centerOnPole(coordinates[0], coordinates[1], zoom);
+          setTimeout(() => this.map?.invalidateSize({ animate: false }), 350);
         }
       });
 

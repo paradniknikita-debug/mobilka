@@ -130,6 +130,13 @@
 
 .export-line {
   margin-top: 4px;
+  width: 100%;
+  max-width: 100%;
+
+  .mat-mdc-select-value,
+  .mat-mdc-select-min-line {
+    font-weight: 400;
+  }
 }
 
 .file-area {

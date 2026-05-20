@@ -7,8 +7,8 @@ Line (PowerLine) - cim:Line
   └── AClineSegment (сегменты линии) - cim:ACLineSegment
         └── LineSection (секции линии - группа пролётов с одинаковыми параметрами)
               └── Span (пролёты от опоры до опоры)
-                    ├── FromConnectivityNode (опора) - cim:ConnectivityNode
-                    └── ToConnectivityNode (опора) - cim:ConnectivityNode
+                    ├── Terminal «От» → ConnectivityNode (стык)
+                    └── Terminal «К» → ConnectivityNode (стык)
 
 Отпайки (Tap):
   └── AClineSegment (отдельный сегмент, начинающийся от ConnectivityNode основной линии)
@@ -27,18 +27,11 @@ from app.models.cim_base import IdentifiedObject
 
 class ConnectivityNode(Base, IdentifiedObject):
     """
-    CIM ConnectivityNode - узел соединения
-    Соответствует CIM классу: cim:ConnectivityNode
-    
-    Опоры являются ConnectivityNode - точками соединения сегментов линии.
-    Одна опора может иметь несколько ConnectivityNode для:
-    1. Основной линии (line_id = ID основной линии)
-    2. Отпаек (line_id = ID линии отпайки, AClineSegment.is_tap = True)
-    3. Совместного подвеса (несколько основных линий на одной опоре)
-    
-    Различение отпайки и совместного подвеса:
-    - Отпайка: AClineSegment.is_tap = True, начинается от ConnectivityNode основной линии
-    - Совместный подвес: несколько AClineSegment с is_tap = False разных линий используют ConnectivityNode на одной опоре
+    CIM ConnectivityNode — стык: сходятся Terminal концов ACLineSegment (От/К).
+
+    На одном CN — не более одного терминала на каждое Equipment (T1 или T2).
+    У разъединителя/реклоузера два полюса на разных CN (опора установки и соседняя).
+    Опора (pole_id) — только координаты стыка, без собственных Terminal.
     """
     __tablename__ = "connectivity_node"
     
@@ -110,11 +103,14 @@ class Terminal(Base, IdentifiedObject):
     mrid = Column(String(36), unique=True, index=True, nullable=False, default=generate_mrid)
     name = Column(String(100), nullable=True)
     
-    # Связь с узлом соединения (опорой)
+    # Узел соединения (стык)
     connectivity_node_id = Column(Integer, ForeignKey("connectivity_node.id"), nullable=True)
-    
-    # Связь с сегментом линии
+
+    # Сегмент ЛЭП (терминалы концов ACLineSegment)
     acline_segment_id = Column(Integer, ForeignKey("acline_segment.id"), nullable=True)
+
+    # Оборудование на опоре (терминалы T1/T2 разъединителя, реклоузера и т.д.)
+    equipment_id = Column(Integer, ForeignKey("equipment.id", ondelete="CASCADE"), nullable=True)
     
     # Для подключения к подстанции/КТП
     conducting_equipment_id = Column(Integer, ForeignKey("conducting_equipment.id"), nullable=True)
@@ -131,6 +127,7 @@ class Terminal(Base, IdentifiedObject):
     # Связи
     connectivity_node = relationship("ConnectivityNode", back_populates="terminals")
     acline_segment = relationship("AClineSegment", foreign_keys=[acline_segment_id], back_populates="terminals")
+    pole_equipment = relationship("Equipment", foreign_keys=[equipment_id])
     conducting_equipment = relationship("ConductingEquipment", back_populates="terminals")
     bay = relationship("Bay", back_populates="terminals")
 

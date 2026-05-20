@@ -173,11 +173,12 @@ async def ensure_acline_segment_terminals(db: AsyncSession, segment: AClineSegme
 async def refresh_power_line_electrical_parameters(
     db: AsyncSession, power_line_id: int
 ) -> None:
-    """Нормализовать топологию, пересчитать параметры проводников и терминалы участков."""
+    """Нормализовать топологию, пересчитать параметры проводников, терминалы участков и оборудования."""
     from app.core.wire_info_catalog import ensure_wire_info_catalog_seeded
+    from app.core.cim_connectivity import sync_line_connectivity_topology
 
     await ensure_wire_info_catalog_seeded(db)
-    await normalize_line_cim_topology(db, power_line_id)
+    await sync_line_connectivity_topology(db, power_line_id)
     result = await db.execute(
         select(AClineSegment)
         .where(AClineSegment.line_id == power_line_id)
@@ -191,5 +192,4 @@ async def refresh_power_line_electrical_parameters(
         for section in segment.line_sections or []:
             await apply_wire_params_to_line_section(db, section)
         await apply_wire_params_to_acline_segment(db, segment)
-        await ensure_acline_segment_terminals(db, segment)
     await db.flush()

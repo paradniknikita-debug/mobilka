@@ -15,6 +15,7 @@ from app.models.location import Location, PositionPoint
 from app.models.map_overlay_route import MapOverlayRoute, MapOverlayRoutePoint
 from app.models.cim_line_structure import ConnectivityNode, LineSection
 from app.core.map_uid_search import find_map_entity_by_uid
+from app.core.map_geojson_cache import get_map_geojson_cached
 import logging
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ async def get_power_lines_geojson(
 ):
     """Получение ЛЭП в формате GeoJSON"""
     try:
-        return await _get_power_lines_geojson_impl(db)
+        return await get_map_geojson_cached("power-lines", _get_power_lines_geojson_impl, db)
     except Exception as e:
         logger.exception("map/power-lines/geojson: %s", e)
         raise HTTPException(
@@ -294,7 +295,7 @@ async def get_poles_geojson(
 ):
     """Получение опор в формате GeoJSON"""
     try:
-        return await _get_poles_geojson_impl(db)
+        return await get_map_geojson_cached("poles", _get_poles_geojson_impl, db)
     except Exception as e:
         logger.exception("map/poles/geojson: %s", e)
         raise HTTPException(
@@ -459,12 +460,8 @@ async def _get_poles_geojson_impl(db: AsyncSession):
         "features": features
     }
 
-@router.get("/taps/geojson")
-async def get_taps_geojson(
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Получение отпаек в формате GeoJSON"""
+async def _get_taps_geojson_impl(db: AsyncSession):
+    """Получение отпаек в формате GeoJSON."""
     result = await db.execute(
         select(Tap).options(
             selectinload(Tap.position_points),
@@ -550,12 +547,24 @@ async def get_taps_geojson(
         "features": features
     }
 
-@router.get("/substations/geojson")
-async def get_substations_geojson(
+
+@router.get("/taps/geojson")
+async def get_taps_geojson(
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Получение подстанций в формате GeoJSON"""
+    try:
+        return await get_map_geojson_cached("taps", _get_taps_geojson_impl, db)
+    except Exception as e:
+        logger.exception("map/taps/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/taps/geojson: {type(e).__name__}: {e}",
+        ) from e
+
+
+async def _get_substations_geojson_impl(db: AsyncSession):
+    """Получение подстанций в формате GeoJSON."""
     result = await db.execute(
         select(Substation)
         .where(Substation.is_active == True)
@@ -656,6 +665,22 @@ async def get_substations_geojson(
         "features": features
     }
 
+
+@router.get("/substations/geojson")
+async def get_substations_geojson(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await get_map_geojson_cached("substations", _get_substations_geojson_impl, db)
+    except Exception as e:
+        logger.exception("map/substations/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/substations/geojson: {type(e).__name__}: {e}",
+        ) from e
+
+
 @router.get("/bounds")
 async def get_data_bounds(
     current_user: User = Depends(get_current_active_user),
@@ -703,7 +728,7 @@ async def get_equipment_geojson(
     angle_rad, equipment_type, name, from_pole_id, to_pole_id, line_id.
     """
     try:
-        return await _get_equipment_geojson_impl(db)
+        return await get_map_geojson_cached("equipment", _get_equipment_geojson_impl, db)
     except Exception as e:
         logger.exception("map/equipment/geojson: %s", e)
         raise HTTPException(
@@ -908,12 +933,8 @@ async def _get_equipment_geojson_impl(db: AsyncSession):
     return {"type": "FeatureCollection", "features": features}
 
 
-@router.get("/spans/geojson")
-async def get_spans_geojson(
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Получение пролётов в формате GeoJSON"""
+async def _get_spans_geojson_impl(db: AsyncSession):
+    """Получение пролётов в формате GeoJSON."""
     from app.models.power_line import Span
     from app.models.cim_line_structure import ConnectivityNode
 
@@ -1047,6 +1068,21 @@ async def get_spans_geojson(
         "type": "FeatureCollection",
         "features": features
     }
+
+
+@router.get("/spans/geojson")
+async def get_spans_geojson(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await get_map_geojson_cached("spans", _get_spans_geojson_impl, db)
+    except Exception as e:
+        logger.exception("map/spans/geojson: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"map/spans/geojson: {type(e).__name__}: {e}",
+        ) from e
 
 
 @router.get("/find-uid")

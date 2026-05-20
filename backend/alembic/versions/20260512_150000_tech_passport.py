@@ -14,7 +14,18 @@ branch_labels = None
 depends_on = None
 
 
+def _table_exists(conn, name: str) -> bool:
+    r = conn.execute(
+        sa.text("SELECT to_regclass(:n) IS NOT NULL"),
+        {"n": f"public.{name}"},
+    )
+    return bool(r.scalar())
+
+
 def upgrade() -> None:
+    conn = op.get_bind()
+    if _table_exists(conn, "tech_passport"):
+        return
     op.create_table(
         "tech_passport",
         sa.Column("id", sa.Integer(), nullable=False),

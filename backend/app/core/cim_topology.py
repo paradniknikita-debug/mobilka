@@ -1,10 +1,13 @@
 """
 Нормализация CIM-топологии ЛЭП перед экспортом и автосборкой.
 
-ConnectivityNode — логический узел (стык): создаётся на опоре для пролётов/участков,
-но в CIM экспортируется только если на узле сходятся ≥3 терминала (отпайка, ПС,
-коммутация, третий участок/оборудование). На промежуточной опоре цепочки (2 терминала
-двух последовательных ACLineSegment) узел остаётся виртуальным.
+ConnectivityNode — стык: терминалы От/К ACLineSegment (2 на участок, на стыке 2–3+).
+Оборудование даёт один терминал на CN (T1 или T2); второй полюс — на соседнем CN.
+Без оборудования на стыке — только терминалы участков. Опора — геопривязка (pole_id).
+
+Реальный CN (не виртуальный) только на развилке: от опоры ≥3 направлений (ветви, ПС, отпайки).
+Промежуточная опора прямой линии — виртуальный CN (для пролётов в БД, не в CIM).
+Оборудование на прямой без развилки не делает CN экспортируемым.
 """
 from __future__ import annotations
 
@@ -14,12 +17,10 @@ from typing import Dict, List, Optional, Set
 from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import attributes as orm_attributes
 
 from app.models.acline_segment import AClineSegment
 from app.models.cim_line_structure import ConnectivityNode, Terminal
 from app.models.power_line import Pole, Span
-from app.core.line_auto_assembly import _has_main_switching_equipment_on_pole
 
 
 async def _rewire_connectivity_node_fk(
@@ -121,26 +122,123 @@ async def _terminal_count_per_cn(
     return {int(row[0]): int(row[1]) for row in result.all() if row[0] is not None}
 
 
+async def compute_cn_direction_counts(
+    db: AsyncSession, power_line_id: int
+) -> Dict[int, int]:
+    """
+    Число направлений от опоры (cn_id): уникальные соседи по пролётам, ПС, ветки отпайки.
+    Прямая линия 1—2—3: у опоры 2 направления; развилка/отпайка — ≥3.
+    """
+    pole_dirs: Dict[int, Set[str]] = defaultdict(set)
+
+    span_result = await db.execute(
+        select(Span).where(Span.line_id == power_line_id)
+    )
+    for sp in span_result.scalars().all():
+        fp = getattr(sp, "from_pole_id", None)
+        tp = getattr(sp, "to_pole_id", None)
+        fcn = getattr(sp, "from_connectivity_node_id", None)
+        tcn = getattr(sp, "to_connectivity_node_id", None)
+        if fp and tp:
+            pole_dirs[int(fp)].add(f"pole:{tp}")
+            pole_dirs[int(tp)].add(f"pole:{fp}")
+        elif fp and tcn:
+            pole_dirs[int(fp)].add(f"cn:{tcn}")
+        elif tp and fcn:
+            pole_dirs[int(tp)].add(f"cn:{fcn}")
+
+    poles_result = await db.execute(
+        select(Pole).where(Pole.line_id == power_line_id)
+    )
+    for pole in poles_result.scalars().all():
+        tpid = getattr(pole, "tap_pole_id", None)
+        if tpid is None:
+            continue
+        tbi = getattr(pole, "tap_branch_index", None) or 1
+        if (pole.sequence_number or 0) == 1:
+            pole_dirs[int(tpid)].add(f"tap:{tbi}")
+
+    cn_result = await db.execute(
+        select(ConnectivityNode.id, ConnectivityNode.pole_id).where(
+            ConnectivityNode.line_id == power_line_id,
+            ConnectivityNode.pole_id.isnot(None),
+        )
+    )
+    out: Dict[int, int] = {}
+    for cn_id, pole_id in cn_result.all():
+        if pole_id is None:
+            continue
+        out[int(cn_id)] = len(pole_dirs.get(int(pole_id), set()))
+    return out
+
+
+def compute_cn_direction_counts_from_loaded(
+    power_line_id: int,
+    poles: List[Pole],
+    segments: List[AClineSegment],
+) -> Dict[int, int]:
+    """Синхронный подсчёт направлений по уже загруженным ORM-объектам (CIM-экспорт)."""
+    pole_dirs: Dict[int, Set[str]] = defaultdict(set)
+    cn_by_pole: Dict[int, int] = {}
+
+    for pole in poles or []:
+        for cn in getattr(pole, "connectivity_nodes", None) or []:
+            if int(getattr(cn, "line_id", 0) or 0) == int(power_line_id) and cn.pole_id:
+                cn_by_pole[int(pole.id)] = int(cn.id)
+
+    for segment in segments or []:
+        for ls in getattr(segment, "line_sections", None) or []:
+            for sp in getattr(ls, "spans", None) or []:
+                fp = getattr(sp, "from_pole_id", None)
+                tp = getattr(sp, "to_pole_id", None)
+                fcn = getattr(sp, "from_connectivity_node_id", None)
+                tcn = getattr(sp, "to_connectivity_node_id", None)
+                if fp and tp:
+                    pole_dirs[int(fp)].add(f"pole:{tp}")
+                    pole_dirs[int(tp)].add(f"pole:{fp}")
+                elif fp and tcn:
+                    pole_dirs[int(fp)].add(f"cn:{tcn}")
+                elif tp and fcn:
+                    pole_dirs[int(tp)].add(f"cn:{fcn}")
+
+    for pole in poles or []:
+        tpid = getattr(pole, "tap_pole_id", None)
+        if tpid is None:
+            continue
+        tbi = getattr(pole, "tap_branch_index", None) or 1
+        if (pole.sequence_number or 0) == 1:
+            pole_dirs[int(tpid)].add(f"tap:{tbi}")
+
+    return {
+        cn_by_pole[pid]: len(pole_dirs.get(pid, set()))
+        for pid in cn_by_pole
+    }
+
+
 def _is_logical_junction(
     cn_id: int,
     segment_endpoint_degree: Dict[int, int],
     terminal_counts: Dict[int, int],
+    direction_counts: Optional[Dict[int, int]] = None,
 ) -> bool:
     """
-    Стык: ≥3 терминала на узле (участки + оборудование) или ≥3 конца ACLineSegment.
-    Два последовательных участка на опоре — не стык (degree=2, terminals=2).
+    Стык: ≥3 направления от опоры (ветви, ПС, отпайки) или ≥3 конца ACLineSegment на CN.
+    Прямая с оборудованием: 2 направления и 2–3 терминала — не стык (терминалы не считаем).
     """
-    tc = terminal_counts.get(cn_id, 0)
-    seg_deg = segment_endpoint_degree.get(cn_id, 0)
-    return tc >= 3 or seg_deg >= 3
+    dmap = direction_counts or {}
+    if dmap.get(cn_id, 0) >= 3:
+        return True
+    if segment_endpoint_degree.get(cn_id, 0) >= 3:
+        return True
+    return False
 
 
 async def mark_cim_exportable_connectivity_nodes(
     db: AsyncSession, power_line_id: int
 ) -> Dict[int, int]:
     """
-    Помечает реальные узлы для CIM: ПС, отпаечные опоры, коммутация, стык (≥3 терминала).
-    Возвращает карту cn_id -> число концов ACLineSegment (для экспорта).
+    Помечает is_virtual: реальный CN только ПС и развилки (≥3 направления).
+    Отпаечная опора без трёх направлений остаётся виртуальной до появления веток.
     """
     result = await db.execute(
         select(AClineSegment)
@@ -153,37 +251,23 @@ async def mark_cim_exportable_connectivity_nodes(
     segments = list(result.scalars().all())
     degree = _segment_endpoint_ids(segments)
     terminal_counts = await _terminal_count_per_cn(db, power_line_id)
-
-    cn_ids: Set[int] = set(degree.keys()) | set(terminal_counts.keys())
-    if not cn_ids:
-        return degree
+    direction_counts = await compute_cn_direction_counts(db, power_line_id)
 
     cn_result = await db.execute(
         select(ConnectivityNode)
-        .where(
-            ConnectivityNode.line_id == power_line_id,
-            ConnectivityNode.id.in_(cn_ids),
-        )
+        .where(ConnectivityNode.line_id == power_line_id)
         .options(selectinload(ConnectivityNode.pole))
     )
-    cn_by_id = {int(cn.id): cn for cn in cn_result.scalars().all()}
-
-    for cn_id, cn in cn_by_id.items():
+    for cn in cn_result.scalars().all():
+        cn_id = int(cn.id)
         exportable = False
         if getattr(cn, "substation_id", None):
             exportable = True
-        elif _is_logical_junction(cn_id, degree, terminal_counts):
+        elif _is_logical_junction(
+            cn_id, degree, terminal_counts, direction_counts
+        ):
             exportable = True
-        elif cn.pole is not None:
-            if getattr(cn.pole, "is_tap_pole", False):
-                exportable = True
-            elif await _has_main_switching_equipment_on_pole(db, cn.pole.id):
-                exportable = True
-        if exportable:
-            cn.is_virtual = False
-        elif cn.pole_id is not None:
-            # Цепочка ACLineSegment через опору (2 терминала) — виртуальный CN
-            cn.is_virtual = True
+        cn.is_virtual = not exportable
 
     await db.flush()
     return degree
@@ -199,28 +283,23 @@ def cn_is_cim_exportable(
     cn: Optional[ConnectivityNode],
     endpoint_degree: Dict[int, int],
     terminal_counts: Optional[Dict[int, int]] = None,
+    direction_counts: Optional[Dict[int, int]] = None,
 ) -> bool:
-    """Экспортировать CN в контейнере Line: стык (≥3 терминала), ПС, отпайка, коммутация."""
+    """
+    Экспортировать ConnectivityNode в Line: только ПС и стык (развилка ≥3 направлений).
+    Виртуальные CN промежуточных опор в CIM не попадают.
+    """
     if cn is None:
         return False
     if getattr(cn, "substation_id", None):
         return True
-    cn_id = getattr(cn, "id", None)
-    cn_id_int = int(cn_id) if cn_id is not None else None
-    cn_state = orm_attributes.instance_state(cn)
-    tc_map = terminal_counts or {}
-    if cn_id_int is not None:
-        tc = tc_map.get(cn_id_int, 0)
-        if tc == 0 and "terminals" not in cn_state.unloaded:
-            loaded_terms = cn_state.dict.get("terminals")
-            if loaded_terms is not None:
-                tc = len(loaded_terms)
-        if _is_logical_junction(cn_id_int, endpoint_degree, {cn_id_int: tc} if tc else tc_map):
-            return True
-    if "pole" not in cn_state.unloaded:
-        pole = getattr(cn, "pole", None)
-        if pole is not None and getattr(pole, "is_tap_pole", False):
-            return True
-    if getattr(cn, "is_virtual", False):
+    if getattr(cn, "is_virtual", True):
         return False
-    return True
+    cn_id = getattr(cn, "id", None)
+    if cn_id is None:
+        return False
+    cn_id_int = int(cn_id)
+    dmap = direction_counts or {}
+    return _is_logical_junction(
+        cn_id_int, endpoint_degree, terminal_counts or {}, dmap
+    )

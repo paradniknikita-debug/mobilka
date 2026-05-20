@@ -50,7 +50,12 @@
             </mat-radio-group>
           </div>
 
-          <mat-form-field class="export-line" appearance="fill" *ngIf="exportScope === 'partial'">
+          <mat-form-field
+            class="export-line"
+            appearance="outline"
+            subscriptSizing="dynamic"
+            floatLabel="always"
+            *ngIf="exportScope === 'partial'">
             <mat-label>ЛЭП</mat-label>
             <mat-select [(ngModel)]="selectedLineId">
               <mat-option *ngFor="let pl of powerLines" [value]="pl.id">
@@ -109,7 +114,12 @@
             </mat-radio-group>
           </div>
 
-          <mat-form-field class="export-line" appearance="fill" *ngIf="diffExportScope === 'partial'">
+          <mat-form-field
+            class="export-line"
+            appearance="outline"
+            subscriptSizing="dynamic"
+            floatLabel="always"
+            *ngIf="diffExportScope === 'partial'">
             <mat-label>ЛЭП</mat-label>
             <mat-select [(ngModel)]="diffSelectedLineId">
               <mat-option *ngFor="let pl of powerLines" [value]="pl.id">

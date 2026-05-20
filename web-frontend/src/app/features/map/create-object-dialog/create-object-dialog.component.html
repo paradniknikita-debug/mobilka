@@ -750,11 +750,11 @@
             Если выбран элемент каталога, номинальный ток может подставляться автоматически. Любое введённое вручную значение имеет приоритет.
           </p>
           <div class="row-2">
-            <mat-form-field appearance="outline" class="half-width">
+            <mat-form-field appearance="outline" class="half-width" subscriptSizing="dynamic" floatLabel="always">
               <mat-label>Номинальный ток, А</mat-label>
               <input matInput type="number" formControlName="rated_current">
             </mat-form-field>
-            <mat-form-field appearance="outline" class="half-width">
+            <mat-form-field appearance="outline" class="half-width" subscriptSizing="dynamic" floatLabel="always">
               <mat-label>Ток термической стойкости, А</mat-label>
               <input matInput type="number" formControlName="i_th">
             </mat-form-field>
@@ -833,11 +833,11 @@
           </mat-form-field>
         </div>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic" floatLabel="always">
           <mat-label>Дефект оборудования</mat-label>
           <textarea matInput formControlName="defect" rows="2" placeholder="Описание дефекта"></textarea>
         </mat-form-field>
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic" floatLabel="always">
           <mat-label>Критичность дефекта</mat-label>
           <mat-select formControlName="criticality">
             <mat-option [value]="null">Не указана</mat-option>
@@ -847,7 +847,7 @@
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic" floatLabel="always">
           <mat-label>Описание / примечания</mat-label>
           <textarea matInput formControlName="notes" rows="2" placeholder="Доп. информация по оборудованию"></textarea>
         </mat-form-field>

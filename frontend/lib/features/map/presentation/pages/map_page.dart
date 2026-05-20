@@ -45,6 +45,7 @@ import '../../../towers/presentation/widgets/create_pole_dialog.dart';
 import '../../../home/presentation/pages/home_page.dart'
     show activeSessionProvider, recentPatrolsProvider, showContinuePatrolButtonProvider, hasUnfinishedPatrolAnywhereProvider;
 import '../widgets/object_properties_panel.dart' show ObjectPropertiesPanel, ObjectType;
+import '../map_equipment_icons.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -67,7 +68,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   );
   /// Успешно получили GPS при запуске — не смещать карту на первую опору из данных.
   bool _userLocationObtained = false;
-  bool _isLoading = true;
+  /// Загрузка/обновление данных поверх карты (карта видна сразу).
+  bool _mapDataLoading = true;
   Map<String, dynamic>? _powerLinesData;
   Map<String, dynamic>? _polesData;
   Map<String, dynamic>? _tapsData;
@@ -94,6 +96,20 @@ class _MapPageState extends ConsumerState<MapPage> {
   // Текущий z-блок карты, используемый для пересчёта координат терминалов
   // (pixel -> LatLng) при zuma, чтобы соединения оборудования оставались на оси.
   double _equipmentZoom = AppConfig.defaultZoom;
+  late final ValueNotifier<double> _equipmentZoomNotifier;
+  List<Marker>? _cachedPoleMarkers;
+  Object? _cachedPoleMarkersSource;
+  List<Marker>? _cachedTapMarkers;
+  Object? _cachedTapMarkersSource;
+  List<Marker>? _cachedSubstationMarkers;
+  Object? _cachedSubstationMarkersSource;
+  List<Marker>? _cachedEquipmentMarkers;
+  Object? _cachedEquipmentMarkersSource;
+  int _cachedEquipmentZoomBucket = -999;
+  List<Polyline>? _cachedPowerLinePolylines;
+  Object? _cachedPowerLinePolylinesSource;
+  List<Polyline>? _cachedEquipmentConnectionPolylines;
+  Object? _cachedEquipmentConnectionSource;
   /// Номер исходной опоры текущей отпайки (например "3") — пока не завершён обход, новые опоры получают 3/2, 3/3, ...
   String? _currentTapRoot;
   /// Индекс активной отпайки (ветки) от якоря [_currentTapRoot].
@@ -217,6 +233,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   void initState() {
     super.initState();
     _mapController = MapController();
+    _equipmentZoomNotifier = ValueNotifier(AppConfig.defaultZoom);
+    unawaited(MapEquipmentIcons.precache());
     // Откладываем инициализацию до следующего кадра для быстрого отображения UI
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeMap();
@@ -228,7 +246,98 @@ class _MapPageState extends ConsumerState<MapPage> {
     _positionSubscription?.cancel();
     _patrolGpsSubscription?.cancel();
     _treeSearchController.dispose();
+    _equipmentZoomNotifier.dispose();
     super.dispose();
+  }
+
+  void _invalidateMarkerCache() {
+    _cachedPoleMarkers = null;
+    _cachedPoleMarkersSource = null;
+    _cachedTapMarkers = null;
+    _cachedTapMarkersSource = null;
+    _cachedSubstationMarkers = null;
+    _cachedSubstationMarkersSource = null;
+    _cachedEquipmentMarkers = null;
+    _cachedEquipmentMarkersSource = null;
+    _cachedEquipmentZoomBucket = -999;
+    _cachedPowerLinePolylines = null;
+    _cachedPowerLinePolylinesSource = null;
+    _cachedEquipmentConnectionPolylines = null;
+    _cachedEquipmentConnectionSource = null;
+  }
+
+  List<Marker> _poleMarkersForLayer() {
+    final src = _polesData;
+    if (_cachedPoleMarkers != null && identical(_cachedPoleMarkersSource, src)) {
+      return _cachedPoleMarkers!;
+    }
+    final built = _buildPoleMarkers();
+    _cachedPoleMarkersSource = src;
+    _cachedPoleMarkers = built;
+    return built;
+  }
+
+  List<Marker> _tapMarkersForLayer() {
+    final src = _tapsData;
+    if (_cachedTapMarkers != null && identical(_cachedTapMarkersSource, src)) {
+      return _cachedTapMarkers!;
+    }
+    final built = _buildTapMarkers();
+    _cachedTapMarkersSource = src;
+    _cachedTapMarkers = built;
+    return built;
+  }
+
+  List<Marker> _substationMarkersForLayer() {
+    final src = _substationsData;
+    if (_cachedSubstationMarkers != null &&
+        identical(_cachedSubstationMarkersSource, src)) {
+      return _cachedSubstationMarkers!;
+    }
+    final built = _buildSubstationMarkers();
+    _cachedSubstationMarkersSource = src;
+    _cachedSubstationMarkers = built;
+    return built;
+  }
+
+  List<Marker> _equipmentMarkersForLayer(double zoom) {
+    final src = _lineEquipmentData;
+    final bucket = (zoom * 2).floor();
+    if (_cachedEquipmentMarkers != null &&
+        identical(_cachedEquipmentMarkersSource, src) &&
+        _cachedEquipmentZoomBucket == bucket) {
+      return _cachedEquipmentMarkers!;
+    }
+    _equipmentZoom = zoom;
+    final built = _buildLineEquipmentMarkers();
+    _cachedEquipmentMarkersSource = src;
+    _cachedEquipmentMarkers = built;
+    _cachedEquipmentZoomBucket = bucket;
+    return built;
+  }
+
+  List<Polyline> _powerLinePolylinesForLayer() {
+    final src = _powerLinesData;
+    if (_cachedPowerLinePolylines != null &&
+        identical(_cachedPowerLinePolylinesSource, src)) {
+      return _cachedPowerLinePolylines!;
+    }
+    final built = _buildPowerLinePolylines();
+    _cachedPowerLinePolylinesSource = src;
+    _cachedPowerLinePolylines = built;
+    return built;
+  }
+
+  List<Polyline> _equipmentConnectionPolylinesForLayer() {
+    final src = _lineEquipmentData;
+    if (_cachedEquipmentConnectionPolylines != null &&
+        identical(_cachedEquipmentConnectionSource, src)) {
+      return _cachedEquipmentConnectionPolylines!;
+    }
+    final built = _buildLineEquipmentConnectionPolylines();
+    _cachedEquipmentConnectionSource = src;
+    _cachedEquipmentConnectionPolylines = built;
+    return built;
   }
 
   bool _treeQueryMatches(dynamic value, String q) {
@@ -361,7 +470,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (!mounted) return;
     
     setState(() {
-      _isLoading = true;
+      _mapDataLoading = true;
       _errorMessage = null;
     });
     
@@ -390,13 +499,13 @@ class _MapPageState extends ConsumerState<MapPage> {
       
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _mapDataLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _mapDataLoading = false;
           _errorMessage = 'Ошибка инициализации карты: $e';
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -739,6 +848,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       if (mounted) {
         setState(() {
+          _invalidateMarkerCache();
           _polesData = {'type': 'FeatureCollection', 'features': poleFeatures};
           _powerLinesData = {'type': 'FeatureCollection', 'features': powerLineFeatures};
           _lineEquipmentData = {'type': 'FeatureCollection', 'features': lineEquipmentFeatures};
@@ -765,9 +875,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (!skipAutoCenter) {
           _centerOnObjects();
         }
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() {});
-        });
       }
     } catch (e) {
       if (mounted) {
@@ -1087,8 +1194,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         apiService.getTapsGeoJSON(),
         apiService.getSubstationsGeoJSON(),
         apiService.getPowerLines(),      // Полные данные ЛЭП для дерева
-        apiService.getAllEquipment(),    // Оборудование с сервера
+        apiService.getAllEquipment(),    // Синхронизация в локальную БД
         apiService.getSpansGeoJSON(),
+        apiService.getEquipmentGeoJSON(), // Точки линейного оборудования (Redis на бэкенде)
       ]);
       if (!mounted) return;
 
@@ -1198,154 +1306,11 @@ class _MapPageState extends ConsumerState<MapPage> {
       // первую отрисовку карты, поэтому выполняем в фоне.
       unawaited(_syncServerEquipmentToLocalDb(serverEquipment));
 
-      // Линейное оборудование для онлайн-режима: строим по СЕРВЕРНЫМ опорам (polesData) и серверному оборудованию,
-      // т.к. локальная БД может не содержать опор с сервера (они не сохранялись при загрузке карты).
-      final serverPoleFeatures = (polesData['features'] as List<dynamic>? ?? []);
-      final serverPolesByLine = <int, List<Map<String, dynamic>>>{};
-      final seenPoleIdsByLine = <int, Set<int>>{};
-      for (final f in serverPoleFeatures) {
-        final props = f['properties'] as Map<String, dynamic>?;
-        final geom = f['geometry'] as Map<String, dynamic>?;
-        if (props == null || geom == null) continue;
-        final coords = geom['coordinates'] as List?;
-        if (coords == null || coords.length < 2) continue;
-        final poleId = _toInt(props['id']);
-        final lineId = _toInt(props['line_id']);
-        if (poleId == null || lineId == null) continue;
-        seenPoleIdsByLine.putIfAbsent(lineId, () => <int>{});
-        if (seenPoleIdsByLine[lineId]!.contains(poleId)) continue;
-        seenPoleIdsByLine[lineId]!.add(poleId);
-        final poleNumber = props['pole_number']?.toString() ?? '';
-
-        final x = (coords[0] as num?);
-        final y = (coords[1] as num?);
-        if (x == null || y == null) continue;
-
-        serverPolesByLine.putIfAbsent(lineId, () => []).add({
-          'id': poleId,
-          'line_id': lineId,
-          'pole_number': poleNumber,
-          'x_position': x.toDouble(),
-          'y_position': y.toDouble(),
-          'sequence_number': _toInt(props['sequence_number']),
-          'tap_pole_id': _toInt(props['tap_pole_id']),
-          'tap_branch_index': _toInt(props['tap_branch_index']),
-        });
-      }
-      for (final list in serverPolesByLine.values) {
-        list.sort(_compareServerPolesLikeBackendLineSort);
-      }
-
-      final equipmentByPoleServer = <int, List<Equipment>>{};
-      for (final eq in serverEquipment) {
-        equipmentByPoleServer.putIfAbsent(eq.poleId, () => []).add(eq);
-      }
-
-      final lineEquipmentFeatures = <Map<String, dynamic>>[];
-      for (final pl in powerLinesList) {
-        final plPoles = serverPolesByLine[pl.id] ?? [];
-        if (plPoles.length < 2) continue;
-        final polesByBranch = <String, List<Map<String, dynamic>>>{};
-        for (final p in plPoles) {
-          final k = _branchKeyServerPole(p);
-          polesByBranch.putIfAbsent(k, () => <Map<String, dynamic>>[]).add(p);
-        }
-        final segments = <Map<String, dynamic>>[];
-        final segmentKeys = <String>{};
-        final adjacency = <int, List<Map<String, dynamic>>>{};
-        for (final branchEntry in polesByBranch.entries) {
-          final branchPoles = List<Map<String, dynamic>>.from(branchEntry.value);
-          _prependTapAnchorPoleServer(branchPoles, branchEntry.key, plPoles);
-          final ordered = branchPoles
-            ..sort((a, b) {
-              final snA = a['sequence_number'] as int?;
-              final snB = b['sequence_number'] as int?;
-              if (snA != null && snB != null && snA != snB) return snA.compareTo(snB);
-              final oa = _poleOrderFromNumber((a['pole_number']?.toString()) ?? '');
-              final ob = _poleOrderFromNumber((b['pole_number']?.toString()) ?? '');
-              if (oa != ob) return oa.compareTo(ob);
-              return ((a['pole_number']?.toString()) ?? '')
-                  .compareTo((b['pole_number']?.toString()) ?? '');
-            });
-          for (var i = 0; i < ordered.length - 1; i++) {
-            final p1 = ordered[i];
-            final p2 = ordered[i + 1];
-            final p1Id = p1['id'] as int;
-            final p2Id = p2['id'] as int;
-            final key = p1Id < p2Id ? '$p1Id|$p2Id' : '$p2Id|$p1Id';
-            if (segmentKeys.contains(key)) continue;
-            segmentKeys.add(key);
-            final seg = <String, dynamic>{'p1': p1, 'p2': p2};
-            segments.add(seg);
-            adjacency.putIfAbsent(p1Id, () => <Map<String, dynamic>>[]).add(seg);
-            adjacency.putIfAbsent(p2Id, () => <Map<String, dynamic>>[]).add(seg);
-          }
-        }
-        final renderedEquipment = <int>{};
-        for (final p in plPoles) {
-          final pId = p['id'] as int;
-          final pNum = (p['pole_number']?.toString()) ?? '';
-          final eqList = (equipmentByPoleServer[pId] ?? const <Equipment>[])
-              .where((e) => _lineEquipmentIconForType(e.equipmentType, e.name) != null)
-              .toList()
-            ..sort((a, b) => a.id.compareTo(b.id));
-          for (var idx = 0; idx < eqList.length; idx++) {
-            final e = eqList[idx];
-            if (renderedEquipment.contains(e.id)) continue;
-            final candidates = adjacency[pId] ?? const <Map<String, dynamic>>[];
-            if (candidates.isEmpty) continue;
-            final selected =
-                _pickLineEquipmentSegmentServer(candidates: candidates, poleId: pId, equipment: e);
-            if (selected == null) continue;
-            final p1 = selected['p1'] as Map<String, dynamic>;
-            final p2 = selected['p2'] as Map<String, dynamic>;
-            final x1 = (p1['x_position'] as num?)?.toDouble();
-            final y1 = (p1['y_position'] as num?)?.toDouble();
-            final x2 = (p2['x_position'] as num?)?.toDouble();
-            final y2 = (p2['y_position'] as num?)?.toDouble();
-            if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
-            final p1Id = p1['id'] as int;
-            final p2Id = p2['id'] as int;
-            final fromP = p1Id <= p2Id ? p1 : p2;
-            final toP = p1Id <= p2Id ? p2 : p1;
-            // Тот же порядок p1→p2, что и при интерполяции (концы ветки), иначе угол
-            // экрана не совпадает с направлением линии — двухполюсные знаки «уезжают».
-            final angleRad = math.atan2(y2 - y1, x2 - x1);
-            final baseT = pId == p1Id ? _equipmentBaseTNearPole : _equipmentBaseTFarPole;
-            final spread = (idx - (eqList.length - 1) / 2) * _equipmentSpreadStep;
-            final t = (baseT + spread).clamp(0.1, 0.9).toDouble();
-            final pos =
-                _interpolateAlongLineMercator(LatLng(y1, x1), LatLng(y2, x2), t);
-            final lng = pos.longitude;
-            final lat = pos.latitude;
-            final iconPath = _lineEquipmentIconForType(e.equipmentType, e.name)!;
-            lineEquipmentFeatures.add({
-              'type': 'Feature',
-              'geometry': {'type': 'Point', 'coordinates': [lng, lat]},
-              'properties': {
-                'icon': iconPath,
-                'equipment_type': e.equipmentType,
-                'name': e.name,
-                'from_pole_id': fromP['id'] as int,
-                'to_pole_id': toP['id'] as int,
-                'line_id': pl.id,
-                'pole_id': e.poleId,
-                'equipment_id': e.id,
-                'mrid': e.mrid,
-                'card_comment': e.cardComment,
-                'card_comment_attachment': e.cardCommentAttachment,
-                'pole_number': pNum,
-                'angle_rad': angleRad,
-                'from_lng': x1,
-                'from_lat': y1,
-                'to_lng': x2,
-                'to_lat': y2,
-              },
-            });
-            renderedEquipment.add(e.id);
-          }
-        }
-      }
+      final rawEquipmentGeo = futures[7] is Map<String, dynamic>
+          ? futures[7] as Map<String, dynamic>
+          : <String, dynamic>{'type': 'FeatureCollection', 'features': <dynamic>[]};
+      final lineEquipmentData =
+          MapEquipmentIcons.normalizeEquipmentGeoJson(rawEquipmentGeo);
 
       // Добавляем локальные несинхронизированные опоры к данным с сервера
       final localPoles = await db.getPolesNeedingSync();
@@ -1388,9 +1353,10 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       if (mounted) {
         setState(() {
+          _invalidateMarkerCache();
           _powerLinesData = powerLinesData;
           _polesData = polesData;
-          _lineEquipmentData = {'type': 'FeatureCollection', 'features': lineEquipmentFeatures};
+          _lineEquipmentData = lineEquipmentData;
           _spansData = spansData;
           _tapsData = tapsData;
           _substationsData = substationsData;
@@ -1692,11 +1658,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         ],
       ),
       drawer: _buildDrawer(),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
+      body: Stack(
               children: [
-                FlutterMap(
+                RepaintBoundary(
+                  child: FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
                     initialCenter: _mapCenter,
@@ -1718,9 +1683,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                       _mapReady = true;
                       try {
                         final z = _mapController.camera.zoom;
-                        if (mounted) {
-                          setState(() => _equipmentZoom = z);
-                        }
+                        _equipmentZoom = z;
+                        _equipmentZoomNotifier.value = z;
                         final target = _pendingCenterOnObjects ??
                             _pendingCenterOnLocation ??
                             (_userLocationObtained &&
@@ -1759,9 +1723,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                       final prevBucket = (prev * 2).floor();
                       final nextBucket = (z * 2).floor();
                       if (crossedEquipmentThreshold || prevBucket != nextBucket) {
-                        if (mounted) {
-                          setState(() => _equipmentZoom = z);
-                        }
+                        _equipmentZoom = z;
+                        _equipmentZoomNotifier.value = z;
                       }
                     },
                   ),
@@ -1774,33 +1737,38 @@ class _MapPageState extends ConsumerState<MapPage> {
                     if (_powerLinesData != null)
                       PolylineLayer(
                         key: ValueKey<Object?>(_powerLinesData),
-                        polylines: _buildPowerLinePolylines(),
+                        polylines: _powerLinePolylinesForLayer(),
                       ),
 
                     if (_lineEquipmentData != null)
                       PolylineLayer(
-                        polylines: _buildLineEquipmentConnectionPolylines(),
+                        polylines: _equipmentConnectionPolylinesForLayer(),
                       ),
                     
                     if (_polesData != null)
                       MarkerLayer(
                         key: ValueKey<Object?>(_polesData),
-                        markers: _buildPoleMarkers(),
+                        markers: _poleMarkersForLayer(),
                       ),
                     
                     if (_lineEquipmentData != null)
-                      MarkerLayer(
-                        markers: _buildLineEquipmentMarkers(),
+                      ListenableBuilder(
+                        listenable: _equipmentZoomNotifier,
+                        builder: (context, _) => MarkerLayer(
+                          markers: _equipmentMarkersForLayer(
+                            _equipmentZoomNotifier.value,
+                          ),
+                        ),
                       ),
                     
                     if (_tapsData != null)
                       MarkerLayer(
-                        markers: _buildTapMarkers(),
+                        markers: _tapMarkersForLayer(),
                       ),
                     
                     if (_substationsData != null)
                       MarkerLayer(
-                        markers: _buildSubstationMarkers(),
+                        markers: _substationMarkersForLayer(),
                       ),
                     
                     if (_currentLocation != null)
@@ -1820,6 +1788,29 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ),
                   ],
                 ),
+                ),
+
+                if (_mapDataLoading)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      child: const Center(
+                        child: Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 12),
+                                Text('Загрузка данных карты…'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // Статус подключения (Онлайн / Офлайн / Нестабильно) сверху по центру
                 Positioned(

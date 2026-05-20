@@ -42,15 +42,45 @@
   color: var(--app-primary, #3949ab);
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
 .data-table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
+  font-size: 0.875rem;
 }
 
 .data-table th,
 .data-table td {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-color, #e0e0e0);
+  vertical-align: middle;
+  line-height: 1.35;
+}
+
+.data-table th {
+  font-weight: 400;
+  font-size: 0.8125rem;
+  color: var(--app-text-muted, #64748b);
+  white-space: nowrap;
+}
+
+.catalog-table-title {
+  font-weight: 400;
+  font-size: 1rem;
+}
+
+.col-mark,
+.col-status,
+.num {
+  white-space: nowrap;
+}
+
+.col-status {
+  min-width: 7.5rem;
 }
 
 .num {

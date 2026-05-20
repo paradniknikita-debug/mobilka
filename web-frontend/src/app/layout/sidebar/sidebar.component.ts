@@ -36,12 +36,13 @@ interface PowerLineTreeItem {
 
 /** Элемент автодополнения поиска: по имени и UID */
 export interface TreeSearchSuggestion {
-  type: 'power_line' | 'segment' | 'pole' | 'span';
+  type: 'power_line' | 'segment' | 'pole' | 'span' | 'equipment';
   label: string;
   item: PowerLineTreeItem;
   segment?: { segmentId: number | null; segmentName: string | null; branchType?: string | null; poles: GeoJSONFeature[]; spans: GeoJSONFeature[] };
   pole?: GeoJSONFeature;
   span?: GeoJSONFeature;
+  equipment?: Equipment;
 }
 
 @Component({
@@ -789,7 +790,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       for (const item of items) {
         const pole = item.allPoles.find(p => Number(p.properties['id']) === poleId);
         if (pole) {
-          const coords = this.getPointCoordinates(pole);
+          const coords = this.resolvePoleCoordinates(poleId, pole);
           if (coords) {
             this.mapService.requestCenterOnFeature('pole', [coords.lat, coords.lng], zoom);
           }
@@ -920,10 +921,15 @@ export class SidebarComponent implements OnInit, OnDestroy {
               }
             }
           }
+          const eqPole = lineItem.allPoles.find(
+            p => Number(p.properties['id']) === Number(eq.pole_id)
+          );
           out.push({
-            type: 'pole',
+            type: 'equipment',
             label: `Оборудование: ${eq.name || 'не указано'}${eMrid ? ` · ${(eq as any).mrid}` : ''}`,
             item: lineItem,
+            equipment: eq,
+            pole: eqPole,
           });
           if (out.length >= limit) return out;
         }
@@ -953,12 +959,26 @@ export class SidebarComponent implements OnInit, OnDestroy {
     } else if (s.type === 'segment' && s.segment) {
       const bounds = this.getBoundsFromFeatures([...s.segment.poles, ...s.segment.spans]);
       if (bounds) this.mapService.requestCenterOnFeature('segment', bounds[0], undefined, undefined, bounds);
+    } else if (s.type === 'equipment' && s.equipment) {
+      const poleId = s.equipment.pole_id;
+      const eqId = s.equipment.id;
+      if (poleId != null && eqId != null) {
+        this.mapService.requestCenterOnEquipment(Number(poleId), Number(eqId));
+      }
     } else if (s.type === 'pole' && s.pole) {
-      const coords = this.getPointCoordinates(s.pole);
-      if (coords) this.mapService.requestCenterOnFeature('pole', [coords.lat, coords.lng], zoomPole);
+      const coords = this.resolvePoleCoordinates(Number(s.pole.properties['id']), s.pole);
+      if (coords) {
+        this.mapService.requestCenterOnFeature('pole', [coords.lat, coords.lng], zoomPole);
+      } else {
+        this.snackBar.open('У опоры нет координат на карте', 'Закрыть', { duration: 2500 });
+      }
     } else if (s.type === 'span' && s.span) {
-      const center = this.getLineCenter(s.span);
-      if (center) this.mapService.requestCenterOnFeature('span', [center.lat, center.lng], zoomSpan);
+      const center = this.resolveSpanCenter(s.span);
+      if (center) {
+        this.mapService.requestCenterOnFeature('span', [center.lat, center.lng], zoomSpan);
+      } else {
+        this.snackBar.open('У пролёта нет координат на карте', 'Закрыть', { duration: 2500 });
+      }
     }
     this.treeSearchSuggestions = [];
     this.cdr.detectChanges();
@@ -969,6 +989,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const lats: number[] = [];
     const lngs: number[] = [];
     for (const f of features) {
+      if (f.properties?.['no_coordinates']) continue;
       const g = f.geometry;
       if (!g || !g.coordinates) continue;
       if (g.type === 'Point') {
@@ -1001,7 +1022,45 @@ export class SidebarComponent implements OnInit, OnDestroy {
     if (!g || g.type !== 'Point') return null;
     const c = g.coordinates as number[];
     if (c.length < 2) return null;
-    return { lng: Number(c[0]), lat: Number(c[1]) };
+    const lat = Number(c[1]);
+    const lng = Number(c[0]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (feature.properties?.['no_coordinates'] || (lat === 0 && lng === 0)) return null;
+    return { lng, lat };
+  }
+
+  /** Координаты опоры: слой карты → fallback из дерева → модель ЛЭП. */
+  private resolvePoleCoordinates(poleId: number, fallback?: GeoJSONFeature): { lat: number; lng: number } | null {
+    const fromLayer = this.polesFeatures.find(f => Number(f.properties?.['id']) === poleId);
+    const fromLayerCoords = fromLayer ? this.getPointCoordinates(fromLayer) : null;
+    if (fromLayerCoords) return fromLayerCoords;
+    if (fallback) {
+      const fb = this.getPointCoordinates(fallback);
+      if (fb) return fb;
+    }
+    for (const pl of this.mapData?.powerLinesList || []) {
+      const p = (pl.poles || []).find((x) => Number(x.id) === poleId);
+      if (p) {
+        const lng = Number(p.x_position);
+        const lat = Number(p.y_position);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) {
+          return { lat, lng };
+        }
+      }
+    }
+    return null;
+  }
+
+  private resolveSpanCenter(span: GeoJSONFeature): { lat: number; lng: number } | null {
+    const spanId = span.properties?.['id'];
+    if (spanId != null) {
+      const fromLayer = this.spansFeatures.find(f => Number(f.properties?.['id']) === Number(spanId));
+      if (fromLayer && !fromLayer.properties?.['no_coordinates']) {
+        const c = this.getLineCenter(fromLayer);
+        if (c) return c;
+      }
+    }
+    return this.getLineCenter(span);
   }
 
   private getLineCenter(feature: GeoJSONFeature): { lat: number; lng: number } | null {
@@ -1009,6 +1068,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
     if (!g || g.type !== 'LineString') return null;
     const coords = g.coordinates as number[][];
     if (!coords.length) return null;
+    if (feature.properties?.['no_coordinates']) return null;
     // Геометрическая середина пролёта (центр между опорами), не индекс в массиве
     let sumLng = 0, sumLat = 0;
     for (const c of coords) {

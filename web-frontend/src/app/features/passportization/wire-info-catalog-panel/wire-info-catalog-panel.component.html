@@ -97,7 +97,7 @@
 
   <mat-card class="table-card">
     <mat-card-header>
-      <mat-card-title>Справочник ({{ items.length }})</mat-card-title>
+      <mat-card-title class="catalog-table-title">Справочник ({{ items.length }})</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="toolbar-search">
@@ -113,12 +113,12 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>Марка</th>
+              <th class="col-mark">Марка</th>
               <th class="num">кВ</th>
-              <th class="num">Iном, А</th>
+              <th class="num">Iном</th>
               <th class="num">Iтх</th>
               <th class="num">r</th>
-              <th>Статус</th>
+              <th class="col-status">Статус</th>
               <th></th>
             </tr>
           </thead>
@@ -129,7 +129,7 @@
               <td class="num">{{ r.nominal_current ?? '—' }}</td>
               <td class="num">{{ r.i_th ?? '—' }}</td>
               <td class="num">{{ r.r ?? '—' }}</td>
-              <td>{{ r.in_service !== false ? 'В эксплуатации' : 'Выведена' }}</td>
+              <td class="col-status">{{ r.in_service !== false ? 'В эксплуатации' : 'Выведена' }}</td>
               <td class="actions" *ngIf="canEdit()">
                 <button
                   *ngIf="r.in_service !== false"

@@ -81,7 +81,7 @@ from app.core.cim.equipment_type_mapping import (
     map_equipment_type_to_cim_profile,
     normalize_equipment_type,
 )
-from app.core.cim_topology import cn_is_cim_exportable
+from app.core.cim_topology import cn_is_cim_exportable, compute_cn_direction_counts_from_loaded
 
 router = APIRouter()
 
@@ -585,13 +585,20 @@ def _power_line_to_cim(
     exported_equipment_refs: List[Dict[str, str]] = []
     endpoint_degree = _endpoint_degree_for_power_line(power_line)
     terminal_counts = _terminal_count_for_power_line(power_line)
+    direction_counts = compute_cn_direction_counts_from_loaded(
+        int(power_line.id),
+        list(getattr(power_line, "poles", None) or []),
+        list(getattr(power_line, "acline_segments", None) or []),
+    )
     connectivity_nodes_dict: Dict[str, ConnectivityNodeCIMObject] = {}
 
     def _ensure_cn_exported(cn) -> Optional[Dict[str, str]]:
-        """CN в контейнере Line; на опоре не создаём дочерних CN."""
+        """CN в контейнере Line; только стыки (развилка), не каждая опора."""
         if cn is None or not getattr(cn, "mrid", None):
             return None
-        if not cn_is_cim_exportable(cn, endpoint_degree, terminal_counts):
+        if not cn_is_cim_exportable(
+            cn, endpoint_degree, terminal_counts, direction_counts
+        ):
             return None
         mrid = cn.mrid
         if mrid not in connectivity_nodes_dict:

@@ -4,7 +4,7 @@
   </div>
 
   <div class="reports-toolbar compact-form-fields">
-    <mat-form-field appearance="outline" class="reports-line-field" subscriptSizing="dynamic">
+    <mat-form-field appearance="outline" class="reports-line-field" subscriptSizing="dynamic" floatLabel="always">
       <mat-label>ЛЭП</mat-label>
       <mat-select [(ngModel)]="selectedLineId" (ngModelChange)="onLineSelectionChange()">
         <mat-option [value]="null">Все</mat-option>

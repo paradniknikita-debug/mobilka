@@ -248,7 +248,13 @@ async def create_equipment(
 
     try:
         db.add(db_equipment)
+        await db.flush()
+        from app.core.cim_connectivity import sync_equipment_terminals_for_line
+
+        await sync_equipment_terminals_for_line(db, pole.line_id)
         await db.commit()
+        from app.core.map_geojson_cache import invalidate_map_geojson_cache
+        await invalidate_map_geojson_cache(["equipment", "poles"])
         await db.refresh(db_equipment)
 
         # Полная запись журнала создания оборудования
@@ -325,6 +331,8 @@ async def delete_pole_equipment(
         )
     await db.delete(equipment)
     await db.commit()
+    from app.core.map_geojson_cache import invalidate_map_geojson_cache
+    await invalidate_map_geojson_cache(["equipment", "poles"])
     print("DEBUG delete_pole_equipment: deleted successfully")
 
 
@@ -486,6 +494,8 @@ async def delete_pole(
         stmt = delete(Pole).where(Pole.id == pole_id)
         await db.execute(stmt)
         await db.commit()
+        from app.core.map_geojson_cache import invalidate_map_geojson_cache
+        await invalidate_map_geojson_cache()
         
         print(f"DEBUG: Опора {pole_id} успешно удалена")
         return {

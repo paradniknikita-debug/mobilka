@@ -176,16 +176,12 @@ def _terminal_orm_to_dict(t) -> dict:
 
 def _equipment_pole_count(equipment: Equipment) -> int:
     """
-    Определяет количество полюсов (терминалов), которое нужно создать для оборудования на опоре.
-    По умолчанию: 2 полюса для разъединителя/выключателя/реклозера, 1 полюс для ЗН и разрядников,
-    иначе 1 полюс.
+    Сколько полюсов (T1/T2) у типа оборудования.
+    На одном ConnectivityNode создаётся только один — см. cim_connectivity.
     """
-    etype = (_get_attr_safe(equipment, "equipment_type", "") or "").lower()
-    if any(key in etype for key in ("разъедин", "disconnector", "выключат", "breaker", "реклозер", "recloser")):
-        return 2
-    if any(key in etype for key in ("зн", "земл", "разряд", "arrester")):
-        return 1
-    return 1
+    from app.core.cim_connectivity import equipment_is_two_terminal_device
+
+    return 2 if equipment_is_two_terminal_device(equipment) else 1
 
 
 def _is_main_switching_equipment(equipment_type: str) -> bool:
@@ -211,97 +207,11 @@ async def _pair_needs_switch_split(db: AsyncSession, from_pole_id: int) -> bool:
 
 
 async def _sync_equipment_terminals_for_line(db: AsyncSession, power_line_id: int) -> None:
-    """
-    Синхронизирует терминалы оборудования на опорах линии с ConnectivityNode.
+    """Delegate to app.core.cim_connectivity."""
+    from app.core.cim_connectivity import sync_equipment_terminals_for_line
 
-    Правила:
-    - Для каждого оборудования на опорах линии создаются терминалы T1/T2:
-      * разъединитель, выключатель, реклозер: два терминала (T1, T2);
-      * ЗН, разрядник: один терминал (T1);
-      * прочее оборудование: один терминал (T1).
-    - Терминалы привязываются к ConnectivityNode соответствующей опоры и линии.
-    - Перед созданием удаляются ранее созданные терминалы оборудования для этой линии:
-      все терминалы без acline_segment_id и без conducting_equipment_id для узлов connectivity_node этой линии.
-    """
-    # Все connectivity node для этой линии
-    cn_result = await db.execute(
-        select(ConnectivityNode.id).where(ConnectivityNode.line_id == power_line_id)
-    )
-    cn_ids = [row[0] for row in cn_result.all()]
+    await sync_equipment_terminals_for_line(db, power_line_id)
 
-    if not cn_ids:
-        return
-
-    # Загружаем оборудование на опорах этой линии вместе с ConnectivityNode.
-    # Учитываем только отпаечные опоры (is_tap_pole=True) — CN и терминалы оборудования
-    # создаются только для отпаек, как оговаривалось в задаче.
-    eq_query = (
-        select(Equipment, Pole, ConnectivityNode)
-        .join(Pole, Equipment.pole_id == Pole.id)
-        .join(
-            ConnectivityNode,
-            (ConnectivityNode.pole_id == Pole.id)
-            & (ConnectivityNode.line_id == power_line_id),
-        )
-        .where(
-            Pole.line_id == power_line_id,
-            Pole.is_tap_pole.is_(True),
-        )
-    )
-    eq_result = await db.execute(eq_query)
-    rows = eq_result.all()
-
-    # Загружаем уже существующие терминалы по CN, сгруппованные по (cn_id, equipment_id, sequence_number)
-    existing_terms_result = await db.execute(
-        select(Terminal).where(
-            Terminal.connectivity_node_id.in_(cn_ids),
-            Terminal.acline_segment_id.is_(None),
-        )
-    )
-    existing_terms = existing_terms_result.scalars().all()
-    index: dict[tuple[int, Optional[int], int], Terminal] = {}
-    for t in existing_terms:
-        cn_id = _get_attr_safe(t, "connectivity_node_id")
-        seq = int(_get_attr_safe(t, "sequence_number", 1) or 1)
-        desc = (_get_attr_safe(t, "description", "") or "").lower()
-        # Пытаемся вытащить equipment_id из description формата "equipment_id=123"
-        eq_id: Optional[int] = None
-        if "equipment_id=" in desc:
-            try:
-                part = desc.split("equipment_id=", 1)[1]
-                num_str = ""
-                for ch in part:
-                    if ch.isdigit():
-                        num_str += ch
-                    else:
-                        break
-                if num_str:
-                    eq_id = int(num_str)
-            except Exception:
-                eq_id = None
-        key = (int(cn_id) if cn_id is not None else 0, eq_id, seq)
-        # Не перезаписываем первый найденный терминал
-        if key not in index:
-            index[key] = t
-
-    # Добавляем только отсутствующие терминалы для каждого оборудования
-    for equipment, pole, cn in rows:
-        pole_count = _equipment_pole_count(equipment)
-        for seq in range(1, pole_count + 1):
-            key = (int(cn.id), int(equipment.id), seq)
-            if key in index:
-                # Уже есть терминал для этого оборудования/узла/позиции — не пересоздаём, сохраняем mrid
-                continue
-            term = Terminal(
-                name=f"T{seq}",
-                connectivity_node_id=cn.id,
-                sequence_number=seq,
-                connection_direction="both",
-            )
-            setattr(term, "description", f"equipment_id={equipment.id}")
-            db.add(term)
-
-    await db.flush()
 
 def _span_orm_to_dict(span) -> dict:
     """Собирает dict для SpanResponse (cim) из ORM через __dict__."""
@@ -1073,7 +983,8 @@ async def create_pole(
                 line_id=power_line_id,
                 y_position=float(lat_val) if lat_val is not None else 0.0,
                 x_position=float(lon_val) if lon_val is not None else 0.0,
-                description=f"Узел отпаечной опоры {pole_data.pole_number} линии {power_line_id}",
+                is_virtual=True,
+                description=f"Стык отпаечной опоры {pole_data.pole_number} линии {power_line_id}",
             )
             db.add(connectivity_node)
             await db.flush()
@@ -1100,6 +1011,8 @@ async def create_pole(
             print(traceback.format_exc())
 
         await db.commit()
+        from app.core.map_geojson_cache import invalidate_map_geojson_cache
+        await invalidate_map_geojson_cache()
     except ProgrammingError as e:
         await db.rollback()
         if _is_schema_mismatch(e):
@@ -1629,6 +1542,8 @@ async def update_pole(
         )
 
     await db.commit()
+    from app.core.map_geojson_cache import invalidate_map_geojson_cache
+    await invalidate_map_geojson_cache()
     await db.refresh(pole)
     
     # Загружаем опору с relationships для корректной сериализации ответа
@@ -2146,16 +2061,11 @@ async def auto_create_spans_service(
             )
         )
         tap_substation_restore = [(r[0], r[1], r[2]) for r in segs_with_tp.all()]
-        # Удаляем все пролёты и участки линии для пересборки с нуля
-        from app.models.cim_line_structure import LineSection
-        segment_ids_subq = select(AClineSegment.id).where(AClineSegment.line_id == power_line_id)
-        line_section_ids_subq = select(LineSection.id).where(LineSection.acline_segment_id.in_(segment_ids_subq))
-        # Терминалы сегментов ссылаются на acline_segment — удаляем до участков.
-        await db.execute(delete(Terminal).where(Terminal.acline_segment_id.in_(segment_ids_subq)))
-        await db.execute(delete(Span).where(Span.line_section_id.in_(line_section_ids_subq)))
-        await db.execute(delete(LineSection).where(LineSection.acline_segment_id.in_(segment_ids_subq)))
-        await db.execute(delete(AClineSegment).where(AClineSegment.line_id == power_line_id))
-        await db.flush()
+        from app.core.line_auto_assembly import purge_line_topology_for_rebuild
+        from app.core.cim_topology import merge_duplicate_connectivity_nodes
+
+        await purge_line_topology_for_rebuild(db, power_line_id)
+        await merge_duplicate_connectivity_nodes(db, power_line_id)
     else:
         tap_substation_restore = []
     
@@ -2243,7 +2153,7 @@ async def auto_create_spans_service(
                 y_position=pole.get_latitude(),
                 x_position=pole.get_longitude(),
                 description=f"Автоматически созданный узел для опоры {pole.pole_number} линии {power_line_id}",
-                is_virtual=not getattr(pole, "is_tap_pole", False),
+                is_virtual=True,
             )
             db.add(connectivity_node)
             await db.flush()
@@ -2261,6 +2171,7 @@ async def auto_create_spans_service(
         link_line_to_substation,
         add_substation_span_from_last_pole,
         refresh_acline_and_line_section_names,
+        dedupe_acline_segments_for_line,
         get_or_create_connectivity_node_for_pole,
         extend_tap_segment_to_substation,
     )
@@ -2426,12 +2337,16 @@ async def auto_create_spans_service(
                 db, power_line_id, last_main, substation_end_id, current_user.id
             )
 
+    removed_dup_segments = await dedupe_acline_segments_for_line(db, power_line_id)
     await refresh_acline_and_line_section_names(db, power_line_id)
     from app.core.wire_parameters import refresh_power_line_electrical_parameters
 
     await refresh_power_line_electrical_parameters(db, power_line_id)
 
     await db.commit()
+    from app.core.map_geojson_cache import invalidate_map_geojson_cache
+
+    await invalidate_map_geojson_cache()
 
     # Запись в журнал изменений об автосборке топологии (созданные пролёты/участки)
     if created_spans:
@@ -2454,6 +2369,7 @@ async def auto_create_spans_service(
                 "topology_rebuild": True,
                 "message": "Автосборка топологии",
                 "created_spans": len(created_spans),
+                "removed_duplicate_segments": removed_dup_segments,
                 "line_name": line_name,
                 "spans_created": spans_preview,
             },

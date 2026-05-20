@@ -15,7 +15,7 @@
         </div>
 
         <ng-container *ngIf="objectType === 'power_line'">
-          <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+          <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic" floatLabel="always">
             <mat-label>ЛЭП</mat-label>
             <mat-select [(ngModel)]="selectedLineId">
               <mat-option [value]="null">—</mat-option>
@@ -25,7 +25,7 @@
         </ng-container>
 
         <ng-container *ngIf="objectType === 'pole'">
-          <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+          <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic" floatLabel="always">
             <mat-label>ЛЭП</mat-label>
             <mat-select [(ngModel)]="selectedLineId" (selectionChange)="onLineSelectedForPole()">
               <mat-option [value]="null">—</mat-option>

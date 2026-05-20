@@ -286,11 +286,25 @@ body {
 .mat-mdc-select-trigger,
 .mat-mdc-select-value {
   line-height: 1.35;
+  font-weight: 400;
 }
 
 .mat-mdc-select-trigger {
   align-items: center;
   min-height: 24px;
+}
+
+/* Значение mat-select не жирным; подпись не наезжает на текст при outline */
+.mat-mdc-form-field-type-mat-select.mat-form-field-appearance-outline {
+  .mat-mdc-form-field-infix {
+    padding-top: 18px;
+    padding-bottom: 8px;
+    min-height: 56px;
+  }
+
+  .mdc-floating-label--float-above {
+    transform: translateY(-106%) scale(0.75);
+  }
 }
 
 input.mat-mdc-input-element,

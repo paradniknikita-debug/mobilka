@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Прокси OSM + кэш PNG в Redis (отдельное соединение decode_responses=False)
     TILE_CACHE_ENABLED: bool = True
     TILE_CACHE_REDIS_TTL_SECONDS: int = 604800  # 7 суток
+    # GeoJSON слоёв карты (опоры, ЛЭП, оборудование…) — JSON в Redis
+    MAP_GEOJSON_CACHE_ENABLED: bool = True
+    MAP_GEOJSON_CACHE_TTL_SECONDS: int = 300
     OSM_TILE_UPSTREAM_TEMPLATE: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     OSM_TILE_USER_AGENT: str = "LEPM/1.0 (tile cache proxy; diploma project)"
 

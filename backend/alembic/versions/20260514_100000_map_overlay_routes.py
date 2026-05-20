@@ -14,7 +14,18 @@ branch_labels = None
 depends_on = None
 
 
+def _table_exists(conn, name: str) -> bool:
+    r = conn.execute(
+        text("SELECT to_regclass(:n) IS NOT NULL"),
+        {"n": f"public.{name}"},
+    )
+    return bool(r.scalar())
+
+
 def upgrade() -> None:
+    conn = op.get_bind()
+    if _table_exists(conn, "map_overlay_route"):
+        return
     op.create_table(
         "map_overlay_route",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),

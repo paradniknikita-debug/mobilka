@@ -238,23 +238,25 @@ async def create_connectivity_node_for_pole(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Опора не найдена"
         )
-    
-    # Проверяем, что у опоры ещё нет узла
-    if pole.connectivity_node_id:
-        existing_node = await db.get(ConnectivityNode, pole.connectivity_node_id)
-        if existing_node:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="У этой опоры уже есть узел соединения"
-            )
-    
+
+    if pole.get_connectivity_node_for_line(pole.line_id) if hasattr(pole, "get_connectivity_node_for_line") else None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="У этой опоры уже есть узел соединения для данной ЛЭП",
+        )
+
+    lat = pole.get_latitude() if hasattr(pole, "get_latitude") else getattr(pole, "y_position", 0.0)
+    lon = pole.get_longitude() if hasattr(pole, "get_longitude") else getattr(pole, "x_position", 0.0)
+
     node = ConnectivityNode(
         mrid=generate_mrid(),
         name=f"Узел {pole.pole_number}",
         pole_id=pole_id,
-        y_position=pole.y_position,
-        x_position=pole.x_position,
-        description=f"Узел для опоры {pole.pole_number}"
+        line_id=pole.line_id,
+        y_position=float(lat) if lat is not None else 0.0,
+        x_position=float(lon) if lon is not None else 0.0,
+        is_virtual=True,
+        description=f"Стык в точке опоры {pole.pole_number} (развилка — после нормализации топологии)",
     )
     
     db.add(node)

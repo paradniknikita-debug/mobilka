@@ -20,7 +20,7 @@ import math
 import re
 from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update, or_
+from sqlalchemy import select, func, update, or_, delete
 from sqlalchemy.orm import selectinload
 
 from app.models.power_line import Pole, Span, Equipment
@@ -38,13 +38,10 @@ async def get_or_create_connectivity_node_for_pole(
     force: bool = False,
 ) -> ConnectivityNode:
     """
-    Получить или создать ConnectivityNode для опоры в данной линии.
+    Логический ConnectivityNode (стык) в координатах опоры для данной ЛЭП.
 
-    ВАЖНО: для корректной CIM‑топологии нам нужен ConnectivityNode на каждой опоре,
-    которая участвует в пролётах/участках. Поэтому здесь мы больше НЕ ограничиваемся
-    только отпаечными опорами: если узла нет — всегда создаём его.
-
-    Параметр force оставлен для совместимости, но сейчас не влияет на логику.
+    Узел не является опорой: к нему подключаются Terminal ACLineSegment и Equipment.
+    pole_id — только геопривязка. По умолчанию CN виртуальный; реальный — только развилка (mark_cim).
     """
     result = await db.execute(
         select(ConnectivityNode).where(
@@ -55,8 +52,8 @@ async def get_or_create_connectivity_node_for_pole(
     node = result.scalar_one_or_none()
     if node:
         return node
-    # Обочные опоры — виртуальный CN (только для пролётов, не в CIM). Отпаечные опоры и ПС — реальный CN.
-    is_virtual = not getattr(pole, "is_tap_pole", False)
+    # Виртуальный до mark_cim_exportable_connectivity_nodes (развилка ≥3 направлений → реальный).
+    is_virtual = True
     lat = pole.get_latitude()
     lon = pole.get_longitude()
     node = ConnectivityNode(
@@ -1244,6 +1241,94 @@ def _effective_to_connectivity_node_id_from_spans(seg: AClineSegment) -> Optiona
     last = all_spans[-1]
     tid = getattr(last, "to_connectivity_node_id", None)
     return int(tid) if tid is not None else None
+
+
+async def purge_line_topology_for_rebuild(
+    db: AsyncSession, power_line_id: int
+) -> None:
+    """
+    Полная зачистка пролётов, секций и участков линии перед пересборкой (mode=full).
+    Удаляет все Span линии, в т.ч. привязанные к ConnectivityNode, а не только через line_section.
+    """
+    from app.models.cim_line_structure import Terminal
+
+    segment_ids_subq = select(AClineSegment.id).where(
+        AClineSegment.line_id == power_line_id
+    )
+    line_section_ids_subq = select(LineSection.id).where(
+        LineSection.acline_segment_id.in_(segment_ids_subq)
+    )
+    cn_ids_subq = select(ConnectivityNode.id).where(
+        ConnectivityNode.line_id == power_line_id
+    )
+
+    await db.execute(
+        delete(Terminal).where(Terminal.acline_segment_id.in_(segment_ids_subq))
+    )
+    await db.execute(delete(Span).where(Span.line_id == power_line_id))
+    await db.execute(
+        delete(Span).where(
+            or_(
+                Span.from_connectivity_node_id.in_(cn_ids_subq),
+                Span.to_connectivity_node_id.in_(cn_ids_subq),
+            )
+        )
+    )
+    await db.execute(
+        delete(Span).where(Span.line_section_id.in_(line_section_ids_subq))
+    )
+    await db.execute(
+        delete(LineSection).where(LineSection.acline_segment_id.in_(segment_ids_subq))
+    )
+    await db.execute(
+        delete(AClineSegment).where(AClineSegment.line_id == power_line_id)
+    )
+    await db.flush()
+
+
+def _acline_segment_topology_key(segment: AClineSegment) -> tuple:
+    return (
+        int(segment.from_connectivity_node_id) if segment.from_connectivity_node_id else None,
+        int(segment.to_connectivity_node_id) if segment.to_connectivity_node_id else None,
+        bool(getattr(segment, "is_tap", False)),
+        int(segment.tap_pole_id) if segment.tap_pole_id is not None else None,
+        (segment.tap_number or "").strip() or None,
+        int(segment.to_substation_id) if segment.to_substation_id is not None else None,
+    )
+
+
+async def dedupe_acline_segments_for_line(db: AsyncSession, power_line_id: int) -> int:
+    """
+    Удалить дубликаты участков с одинаковыми концами (оставить запись с минимальным id).
+    Возвращает число удалённых ACLineSegment.
+    """
+    from app.models.cim_line_structure import Terminal
+
+    result = await db.execute(
+        select(AClineSegment)
+        .where(AClineSegment.line_id == power_line_id)
+        .order_by(AClineSegment.id.asc())
+    )
+    segments = list(result.scalars().all())
+    keeper_by_key: dict = {}
+    dup_ids: List[int] = []
+    for seg in segments:
+        key = _acline_segment_topology_key(seg)
+        if key in keeper_by_key:
+            dup_ids.append(int(seg.id))
+        else:
+            keeper_by_key[key] = int(seg.id)
+
+    for seg_id in dup_ids:
+        ls_subq = select(LineSection.id).where(LineSection.acline_segment_id == seg_id)
+        await db.execute(delete(Span).where(Span.line_section_id.in_(ls_subq)))
+        await db.execute(delete(Terminal).where(Terminal.acline_segment_id == seg_id))
+        await db.execute(delete(LineSection).where(LineSection.acline_segment_id == seg_id))
+        await db.execute(delete(AClineSegment).where(AClineSegment.id == seg_id))
+
+    if dup_ids:
+        await db.flush()
+    return len(dup_ids)
 
 
 async def refresh_acline_and_line_section_names(db: AsyncSession, power_line_id: int) -> None:

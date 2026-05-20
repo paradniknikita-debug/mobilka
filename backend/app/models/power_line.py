@@ -65,11 +65,10 @@ class PowerLine(Base, ConnectivityNodeContainer):
 
 class Pole(Base):
     """
-    Опора - физическое представление ConnectivityNode (узла соединения)
-    Соответствует CIM концепции: опора = ConnectivityNode
-    
-    В CIM опора является узлом соединения (ConnectivityNode), к которому
-    могут подключаться несколько сегментов (основная линия + отпайки).
+    Опора — опорная конструкция (геометрия, Location/PositionPoint).
+
+    В точке опоры может располагаться ConnectivityNode (стык): к нему подключаются
+    терминалы ACLineSegment и оборудования, а не «терминалы самой опоры».
     """
     __tablename__ = "pole"
 

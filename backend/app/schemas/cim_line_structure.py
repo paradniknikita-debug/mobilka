@@ -44,6 +44,7 @@ class TerminalBase(BaseModel):
 class TerminalCreate(TerminalBase):
     connectivity_node_id: Optional[int] = None
     acline_segment_id: Optional[int] = None
+    equipment_id: Optional[int] = None
     conducting_equipment_id: Optional[int] = None
     bay_id: Optional[int] = None
     mrid: Optional[str] = None
@@ -54,6 +55,7 @@ class TerminalResponse(TerminalBase):
     mrid: str
     connectivity_node_id: Optional[int] = None
     acline_segment_id: Optional[int] = None
+    equipment_id: Optional[int] = None
     conducting_equipment_id: Optional[int] = None
     bay_id: Optional[int] = None
     created_at: datetime
