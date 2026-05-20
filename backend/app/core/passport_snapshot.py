@@ -15,6 +15,7 @@ from app.models.substation import (
     Bay,
     BusbarSection,
     ConductingEquipment,
+    Connection,
     ProtectionEquipment,
     Substation,
     VoltageLevel,
@@ -223,6 +224,53 @@ def _substation_row(ss: Substation) -> Dict[str, Any]:
     }
 
 
+async def _collect_involved_substations(
+    db: AsyncSession,
+    line: PowerLine,
+    segments: List[AClineSegment],
+) -> List[Dict[str, Any]]:
+    """Уникальный перечень ПС, связанных с линией (начало/конец, участки, Connection, connected_line_ids)."""
+    seen: set[int] = set()
+    out: List[Dict[str, Any]] = []
+
+    def add(ss: Optional[Substation], role: str) -> None:
+        if ss is None or ss.id in seen:
+            return
+        seen.add(ss.id)
+        out.append({"id": ss.id, "mrid": ss.mrid, "name": ss.name, "role": role})
+
+    if line.substation_start:
+        add(line.substation_start, "Начало линии")
+    if line.substation_end:
+        add(line.substation_end, "Конец линии")
+
+    for conn in line.connections or []:
+        sub = conn.substation
+        if sub is not None:
+            ctype = (conn.connection_type or "").strip()
+            role = f"Связь ({ctype})" if ctype else "Связь с линией"
+            add(sub, role)
+
+    seg_sub_ids = {s.to_substation_id for s in segments if s.to_substation_id}
+    if seg_sub_ids:
+        extra = (await db.execute(select(Substation).where(Substation.id.in_(seg_sub_ids)))).scalars().all()
+        for ss in extra:
+            add(ss, "Конец участка линии")
+
+    linked = (
+        await db.execute(
+            select(Substation).where(
+                Substation.connected_line_ids.isnot(None),
+                Substation.connected_line_ids.contains([line.id]),
+            )
+        )
+    ).scalars().all()
+    for ss in linked:
+        add(ss, "Подключена к линии")
+
+    return out
+
+
 async def build_power_line_snapshot(db: AsyncSession, line_id: int) -> Optional[Dict[str, Any]]:
     stmt = (
         select(PowerLine)
@@ -232,6 +280,7 @@ async def build_power_line_snapshot(db: AsyncSession, line_id: int) -> Optional[
             selectinload(PowerLine.substation_start),
             selectinload(PowerLine.substation_end),
             selectinload(PowerLine.region),
+            selectinload(PowerLine.connections).selectinload(Connection.substation),
         )
     )
     line = (await db.execute(stmt)).scalar_one_or_none()
@@ -275,10 +324,13 @@ async def build_power_line_snapshot(db: AsyncSession, line_id: int) -> Optional[
     line_block["substation_start"] = subst_start
     line_block["substation_end"] = subst_end
 
+    involved_substations = await _collect_involved_substations(db, line, list(segments))
+
     return {
         "power_line": line_block,
         "poles": [_pole_row(p, True) for p in poles],
         "acline_segments": segments_brief,
+        "involved_substations": involved_substations,
         "totals": {"poles_count": len(poles), "segments_count": len(segments_brief)},
     }
 

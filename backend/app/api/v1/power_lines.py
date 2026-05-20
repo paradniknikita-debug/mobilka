@@ -968,11 +968,15 @@ async def create_pole(
     pole_dict.pop('start_new_tap', None)  # не поле БД, только флаг для логики
 
     rv = getattr(pole_data, "rated_voltage", None)
-    if rv is not None and power_line.voltage_level is not None:
-        try:
-            validate_pole_rated_voltage_for_line(float(power_line.voltage_level), float(rv))
-        except (TypeError, ValueError):
-            pass
+    if power_line.voltage_level is not None:
+        line_kv = float(power_line.voltage_level)
+        if rv is None:
+            pole_dict["rated_voltage"] = line_kv
+        else:
+            try:
+                validate_pole_rated_voltage_for_line(line_kv, float(rv))
+            except (TypeError, ValueError):
+                pass
 
     lon_val = getattr(pole_data, 'x_position', None)
     lat_val = getattr(pole_data, 'y_position', None)
@@ -1536,11 +1540,15 @@ async def update_pole(
         if hasattr(pole, key) and key != "is_tap" and value is not None:
             setattr(pole, key, value)
 
-    if power_line.voltage_level is not None and getattr(pole, "rated_voltage", None) is not None:
-        try:
-            validate_pole_rated_voltage_for_line(float(power_line.voltage_level), float(pole.rated_voltage))
-        except (TypeError, ValueError):
-            pass
+    if power_line.voltage_level is not None:
+        line_kv = float(power_line.voltage_level)
+        pole.rated_voltage = line_kv
+        rv = pole_dict.get("rated_voltage")
+        if rv is not None:
+            try:
+                validate_pole_rated_voltage_for_line(line_kv, float(rv))
+            except (TypeError, ValueError):
+                pass
 
     # Обновляем или создаем PositionPoint для координат опоры
     if x_position is not None or y_position is not None:

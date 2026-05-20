@@ -1080,7 +1080,10 @@ export class ApiService {
     return this.http.delete<void>(`${this.apiUrl}/tech-passports/${id}`);
   }
 
-  downloadTechPassportExport(id: number, format: 'pdf' | 'docx' | 'xlsx'): Observable<Blob> {
+  downloadTechPassportExport(
+    id: number,
+    format: 'pdf' | 'docx' | 'xlsx',
+  ): Observable<{ blob: Blob; filename: string }> {
     const params = new HttpParams().set('format', format);
     return this.http
       .get(`${this.apiUrl}/tech-passports/${id}/export`, {
@@ -1109,11 +1112,17 @@ export class ApiService {
                 if (!resp.body || resp.body.size === 0) {
                   return throwError(() => new Error('Пустой файл от сервера'));
                 }
-                return from(Promise.resolve(resp.body!));
+                const filename =
+                  filenameFromContentDisposition(resp.headers.get('Content-Disposition')) ||
+                  `passport_${id}.${format === 'docx' ? 'docx' : format}`;
+                return from(Promise.resolve({ blob: resp.body!, filename }));
               }),
             );
           }
-          return from(Promise.resolve(resp.body));
+          const filename =
+            filenameFromContentDisposition(resp.headers.get('Content-Disposition')) ||
+            `passport_${id}.${format === 'docx' ? 'docx' : format}`;
+          return from(Promise.resolve({ blob: resp.body, filename }));
         }),
         catchError((err: HttpErrorResponse) => {
           const blob = err.error;

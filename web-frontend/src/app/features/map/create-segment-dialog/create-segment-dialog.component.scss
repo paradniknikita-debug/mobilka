@@ -1,5 +1,5 @@
 .create-segment-dialog {
-  min-width: 320px;
+  min-width: 480px;
   width: 100%;
   max-width: 100%;
   display: flex;
@@ -24,14 +24,27 @@
   gap: 16px;
 }
 
-::ng-deep .create-segment-dialog .mdc-floating-label {
-  white-space: normal;
-  line-height: 1.15;
-  max-width: 95%;
+.segment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.6);
+  margin: 0 0 12px 4px;
+}
+
+.section-title {
+  margin: 16px 0 4px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 ::ng-deep .create-segment-dialog .mat-mdc-form-field-subscript-wrapper {
-  min-height: 20px;
+  min-height: 0;
 }
 
 .branch-choice-block {

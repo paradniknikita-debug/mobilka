@@ -4,6 +4,14 @@
   gap: 1.25rem;
 }
 
+.tech-passports__submit {
+  margin-top: 4px;
+}
+
+.filter-type-wrap {
+  margin-bottom: 8px;
+}
+
 .tech-passports__grid {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
@@ -116,7 +124,7 @@
 
 .mono {
   font-family: monospace;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .empty-hint {
@@ -128,4 +136,9 @@
   display: flex;
   justify-content: center;
   padding: 2rem;
+}
+
+.tech-passports__form-fields,
+.filter-type-wrap {
+  width: 100%;
 }

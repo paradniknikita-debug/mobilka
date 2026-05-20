@@ -3,7 +3,7 @@
     <h1>Отчёты</h1>
   </div>
 
-  <div class="reports-toolbar">
+  <div class="reports-toolbar compact-form-fields">
     <mat-form-field appearance="outline" class="reports-line-field" subscriptSizing="dynamic">
       <mat-label>ЛЭП</mat-label>
       <mat-select [(ngModel)]="selectedLineId" (ngModelChange)="onLineSelectionChange()">
@@ -24,7 +24,7 @@
   <mat-tab-group (selectedIndexChange)="onReportTabChange($event)" [(selectedIndex)]="reportTabIndex" class="report-tabs">
     <mat-tab label="Дефекты">
       <div class="reports-block">
-        <div class="reports-filters">
+        <div class="reports-filters compact-form-fields">
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Критичность</mat-label>
             <mat-select [(ngModel)]="defectsCriticality" name="defCrit">
@@ -73,7 +73,7 @@
         </div>
 
         <div *ngIf="!reportsLoading && !reportsError && defectsReport?.items?.length" class="table-wrap">
-          <table mat-table [dataSource]="defectsReport.items" class="log-table">
+          <table mat-table [dataSource]="defectsReport.items" class="log-table data-table-readable">
             <ng-container matColumnDef="pole_number">
               <th mat-header-cell *matHeaderCellDef>Опора</th>
               <td mat-cell *matCellDef="let row">{{ row.pole_number }}</td>
@@ -156,12 +156,12 @@
 
     <mat-tab label="По обходам">
       <div class="reports-block">
-        <div class="reports-filters">
-          <mat-form-field appearance="fill">
+        <div class="reports-filters compact-form-fields">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Период: с</mat-label>
             <input matInput [(ngModel)]="patrolFromDt" placeholder="2026-01-01T00:00:00" />
           </mat-form-field>
-          <mat-form-field appearance="fill">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Период: по</mat-label>
             <input matInput [(ngModel)]="patrolToDt" placeholder="2026-01-31T23:59:59" />
           </mat-form-field>
@@ -185,7 +185,7 @@
         </div>
 
         <div *ngIf="!reportsLoading && patrolReport?.items?.length" class="table-wrap">
-          <table mat-table [dataSource]="patrolReport.items" class="log-table">
+          <table mat-table [dataSource]="patrolReport.items" class="log-table data-table-readable">
             <ng-container matColumnDef="started_at">
               <th mat-header-cell *matHeaderCellDef>Начало</th>
               <td mat-cell *matCellDef="let row">{{ row.started_at | date:'dd.MM.yyyy HH:mm' }}</td>

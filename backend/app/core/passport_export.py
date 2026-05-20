@@ -8,6 +8,8 @@ import re
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from app.core.passport_naming import passport_export_filename
 from xml.sax.saxutils import escape
 
 from openpyxl import Workbook
@@ -87,25 +89,37 @@ def _register_pdf_cyrillic_font() -> str:
     for p in _system_ttf_candidates():
         try:
             if p.is_file():
-                pdfmetrics.registerFont(TTFont("PassportSans", str(p)))
-                return "PassportSans"
+                pdfmetrics.registerFont(TTFont("PassportTimes", str(p)))
+                return "PassportTimes"
         except Exception:
             continue
     return "Helvetica"
 
 
-def _p(text: str, font_name: str, size: int = 10, space_after: int = 6) -> Any:
+def _pdf_style(font_name: str, size: int = 10, space_after: int = 6) -> Any:
     styles = getSampleStyleSheet()
-    base = styles["Normal"]
-    st = ParagraphStyle(
+    return ParagraphStyle(
         name="PassportP",
-        parent=base,
+        parent=styles["Normal"],
         fontName=font_name,
         fontSize=size,
         leading=size + 2,
         spaceAfter=space_after,
     )
-    return Paragraph(escape(str(text)).replace("\n", "<br/>"), st)
+
+
+def _p(text: str, font_name: str, size: int = 10, space_after: int = 6) -> Any:
+    """Обычный текст (без HTML-тегов в выводе)."""
+    return Paragraph(escape(str(text)).replace("\n", "<br/>"), _pdf_style(font_name, size, space_after))
+
+
+def _p_bold(text: str, font_name: str, size: int = 10, space_after: int = 6) -> Any:
+    return Paragraph(f"<b>{escape(str(text))}</b>", _pdf_style(font_name, size, space_after))
+
+
+def _p_lines(lines: List[str], font_name: str, size: int = 10, space_after: int = 6) -> Any:
+    html = "<br/>".join(escape(str(line)) for line in lines)
+    return Paragraph(html, _pdf_style(font_name, size, space_after))
 
 
 def _build_pdf_reportlab(
@@ -126,10 +140,12 @@ def _build_pdf_reportlab(
         bottomMargin=2 * cm,
     )
     story: List[Any] = []
-    story.append(_p(f"<b>{escape(title)}</b>", font, size=14, space_after=12))
+    story.append(_p_bold(title, font, size=14, space_after=12))
+
+    from app.core.passport_sections import format_formed_at_human
 
     meta_lines = [
-        f"Дата формирования: {snapshot_envelope.get('formed_at', '—')}",
+        f"Дата формирования: {format_formed_at_human(snapshot_envelope.get('formed_at'))}",
         f"Тип объекта: {snapshot_envelope.get('object_type', '—')}",
         f"Ссылка на СТП / норматив: {snapshot_envelope.get('stp_reference') or '—'}",
     ]
@@ -145,7 +161,7 @@ def _build_pdf_reportlab(
         leading=10,
     )
     table_data: List[List[Any]] = [
-        [_p("<b>Параметр</b>", font, size=9, space_after=0), _p("<b>Значение</b>", font, size=9, space_after=0)]
+        [_p_bold("Параметр", font, size=9, space_after=0), _p_bold("Значение", font, size=9, space_after=0)]
     ]
     for k, v in flat[:400]:
         vs = v
@@ -181,7 +197,7 @@ def _build_pdf_reportlab(
 
     if manual_sections:
         story.append(Spacer(1, 0.6 * cm))
-        story.append(_p("<b>Дополнения (вручную)</b>", font, size=11))
+        story.append(_p_bold("Дополнения (вручную)", font, size=11))
         story.append(_p(json.dumps(manual_sections, ensure_ascii=False, indent=2), font, size=9))
 
     doc.build(story)
@@ -218,7 +234,9 @@ def _build_pdf_fpdf2(
 
     out_line(title)
     out_line("")
-    out_line(f"Дата формирования: {snapshot_envelope.get('formed_at', '—')}")
+    from app.core.passport_sections import format_formed_at_human
+
+    out_line(f"Дата формирования: {format_formed_at_human(snapshot_envelope.get('formed_at'))}")
     out_line(f"Тип объекта: {snapshot_envelope.get('object_type', '—')}")
     out_line(f"СТП / норматив: {snapshot_envelope.get('stp_reference') or '—'}")
     out_line("")
@@ -285,28 +303,7 @@ def build_xlsx_bytes(
     title: str,
     manual_sections: Optional[Dict[str, Any]] = None,
 ) -> bytes:
-    ot = (snapshot_envelope.get("object_type") or "").strip().lower()
-    data = snapshot_envelope.get("data") or {}
-    if ot == "power_line":
-        try:
-            from app.core.passport_stp_xlsx_fill import TEMPLATE_PATH, build_stp_line_passport_xlsx
-
-            if TEMPLATE_PATH.is_file():
-                return build_stp_line_passport_xlsx(
-                    data,
-                    title,
-                    snapshot_envelope.get("stp_reference"),
-                    manual_sections,
-                )
-            logging.getLogger(__name__).warning(
-                "Шаблон СТП не найден: %s — используется XLSX по разделам",
-                TEMPLATE_PATH,
-            )
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                "Заполнение шаблона СТП не удалось, запасной XLSX: %s", e, exc_info=True
-            )
-
+    """XLSX: один лист «Паспорт» по разделам (как PDF/DOCX), без шаблона TDSheet."""
     from app.core.passport_stp_document import build_xlsx_from_sections
 
     return build_xlsx_from_sections(snapshot_envelope, title, manual_sections)
@@ -323,22 +320,33 @@ def export_passport_file(
     fmt: pdf | docx | xlsx
     """
     key = (fmt or "").strip().lower()
-    slug = _safe_filename_part(title)
+    formed = snapshot_envelope.get("formed_at")
+    passport_id = int(snapshot_envelope.get("passport_id") or 0)
+
+    def _fname(ext: str) -> str:
+        utf8, _ = passport_export_filename(
+            title,
+            passport_id or 0,
+            ext,
+            formed_at=formed,
+        )
+        return utf8
+
     if key == "pdf":
         body = build_pdf_bytes(snapshot_envelope, title, manual_sections)
-        return body, "application/pdf", f"{slug}.pdf"
+        return body, "application/pdf", _fname("pdf")
     if key in ("docx", "doc"):
         body = build_docx_bytes(snapshot_envelope, title, manual_sections)
         return (
             body,
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            f"{slug}.docx",
+            _fname("docx"),
         )
     if key == "xlsx":
         body = build_xlsx_bytes(snapshot_envelope, title, manual_sections)
         return (
             body,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            f"{slug}.xlsx",
+            _fname("xlsx"),
         )
     raise ValueError(f"Неизвестный формат: {fmt}")

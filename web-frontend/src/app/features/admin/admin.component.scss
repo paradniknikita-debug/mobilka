@@ -638,54 +638,12 @@
   margin: 0;
 }
 
-.dense-field ::ng-deep .mat-mdc-form-field-subscript-wrapper {
-  display: none;
-}
-
-/* Компактное поле в таблице: без обрезания текста select */
-.dense-field ::ng-deep .mat-mdc-text-field-wrapper {
-  overflow: visible;
-}
-
-.dense-field ::ng-deep .mat-mdc-form-field-infix {
-  min-height: 48px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  box-sizing: border-box;
-}
-
-.dense-field ::ng-deep .mat-mdc-select,
-.dense-field ::ng-deep .mat-mdc-select-trigger {
-  line-height: 1.5;
-  align-items: center;
+.dense-field ::ng-deep .mat-mdc-form-field-flex {
+  align-items: stretch;
 }
 
 /* Только форма «Новый пользователь» — не трогаем .dense-field в таблице */
 .admin-page .form-grid ::ng-deep {
-  .mat-mdc-form-field {
-    overflow: visible;
-  }
-
-  .mat-mdc-text-field-wrapper {
-    overflow: visible;
-  }
-
-  .mat-mdc-form-field-flex {
-    align-items: stretch;
-  }
-
-  .mat-mdc-form-field-infix {
-    min-height: 56px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-    box-sizing: border-box;
-  }
-
-  .mdc-floating-label {
-    overflow: visible;
-    line-height: 1.25;
-  }
-
   input.mat-mdc-input-element,
   textarea.mat-mdc-input-element {
     line-height: 1.5;

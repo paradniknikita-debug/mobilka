@@ -97,27 +97,43 @@
             </mat-form-field>
           </div>
 
-          <div class="row-2">
-            <mat-form-field appearance="outline" class="half-width">
-              <mat-label>Напряжение опоры, кВ</mat-label>
-              <input matInput type="number" formControlName="rated_voltage" min="0">
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="half-width">
-              <mat-label>Порядок</mat-label>
-              <input matInput type="number" formControlName="sequence_number" min="1" placeholder="Авто">
-              <mat-error>{{ getFieldError('sequence_number') }}</mat-error>
-            </mat-form-field>
-          </div>
+          <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+            <mat-label>Порядок</mat-label>
+            <input matInput type="number" formControlName="sequence_number" min="1" placeholder="Авто">
+            <mat-error>{{ getFieldError('sequence_number') }}</mat-error>
+          </mat-form-field>
+          <p class="pole-line-voltage-hint" *ngIf="poleLineVoltageKv != null">
+            Класс напряжения линии: {{ poleLineVoltageKv }} кВ (номинал объектов на линии совпадает с ним)
+          </p>
 
           <div class="tap-checkbox-row">
             <mat-checkbox formControlName="is_tap">Точка отпайки</mat-checkbox>
           </div>
+
+          <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+            <mat-label>UID</mat-label>
+            <input
+              matInput
+              formControlName="mrid"
+              placeholder="Уникальный идентификатор (UUID)"
+              [readonly]="isPoleUidReadonly()">
+            <button
+              mat-icon-button
+              matSuffix
+              type="button"
+              matTooltip="Скопировать UID"
+              [disabled]="!poleForm.get('mrid')?.value?.toString().trim()"
+              (click)="copyPoleUid()">
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
+          </mat-form-field>
         </div>
 
         <!-- Дополнительно: кабель и прочее — в раскрывающихся блоках -->
         <mat-expansion-panel class="expansion-section">
           <mat-expansion-panel-header>
-            <mat-panel-title>Параметры кабеля и идентификатор</mat-panel-title>
+            <mat-panel-title>Параметры кабеля</mat-panel-title>
           </mat-expansion-panel-header>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Марка провода</mat-label>
@@ -141,14 +157,6 @@
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Сечение, мм²</mat-label>
             <input matInput type="text" formControlName="conductor_section" placeholder="70">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>UID</mat-label>
-            <input matInput formControlName="mrid" placeholder="Уникальный идентификатор (UUID)">
-            <button mat-icon-button matSuffix (click)="generateMRID()" type="button" matTooltip="Сгенерировать">
-              <mat-icon>refresh</mat-icon>
-            </button>
-            <mat-error>{{ getFieldError('mrid') }}</mat-error>
           </mat-form-field>
         </mat-expansion-panel>
 
@@ -219,7 +227,7 @@
 
         <mat-expansion-panel class="expansion-section" *ngIf="selectedObjectType === 'pole'">
           <mat-expansion-panel-header>
-            <mat-panel-title>Комментарий и медиа карточки</mat-panel-title>
+            <mat-panel-title>Комментарий и медиа объекта</mat-panel-title>
           </mat-expansion-panel-header>
           <div class="card-comment-chat">
             <div class="card-comment-messages">
@@ -297,12 +305,22 @@
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>UID</mat-label>
-            <input matInput formControlName="mrid" placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx">
-            <mat-hint>Генерируется автоматически. При необходимости можно изменить вручную.</mat-hint>
-            <mat-error>{{ getFieldError('mrid') }}</mat-error>
-            <button mat-icon-button matSuffix (click)="generatePowerLineMRID()" type="button" matTooltip="Сгенерировать новый UID">
-              <mat-icon>refresh</mat-icon>
+            <input
+              matInput
+              formControlName="mrid"
+              placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+              [readonly]="isPowerLineUidReadonly()">
+            <button
+              mat-icon-button
+              matSuffix
+              type="button"
+              matTooltip="Скопировать UID"
+              [disabled]="!powerLineForm.get('mrid')?.value?.toString().trim()"
+              (click)="copyPowerLineUid()">
+              <mat-icon>content_copy</mat-icon>
             </button>
+            <mat-hint>Назначается один раз при создании линии</mat-hint>
+            <mat-error>{{ getFieldError('mrid') }}</mat-error>
           </mat-form-field>
         </div>
 
@@ -389,9 +407,20 @@
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>UID</mat-label>
-          <input matInput formControlName="uid" maxlength="36" placeholder="Пусто — автогенерация (как у опор)">
-          <button mat-icon-button matSuffix (click)="generateSubstationUID()" type="button" matTooltip="Сгенерировать UID">
-            <mat-icon>refresh</mat-icon>
+          <input
+            matInput
+            formControlName="uid"
+            maxlength="36"
+            placeholder="Уникальный идентификатор (UUID)"
+            [readonly]="isSubstationUidReadonly()">
+          <button
+            mat-icon-button
+            matSuffix
+            type="button"
+            matTooltip="Скопировать UID"
+            [disabled]="!substationForm.get('uid')?.value?.toString().trim()"
+            (click)="copySubstationUid()">
+            <mat-icon>content_copy</mat-icon>
           </button>
         </mat-form-field>
         <mat-form-field appearance="outline" class="full-width">
@@ -825,7 +854,7 @@
 
         <mat-expansion-panel class="expansion-section">
           <mat-expansion-panel-header>
-            <mat-panel-title>Комментарий и медиа карточки оборудования</mat-panel-title>
+            <mat-panel-title>Комментарий и медиа объекта оборудования</mat-panel-title>
           </mat-expansion-panel-header>
           <div class="card-comment-chat">
             <div class="card-comment-messages">

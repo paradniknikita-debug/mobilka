@@ -29,9 +29,9 @@ export class TechPassportsPanelComponent implements OnInit {
   stpReference = '';
   manualNotes = '';
 
-  lines: { id: number; name: string }[] = [];
+  lines: { id: number; name: string; voltage_level?: number }[] = [];
   poles: { id: number; pole_number: string }[] = [];
-  substations: { id: number; name: string }[] = [];
+  substations: { id: number; name: string; voltage_level?: number }[] = [];
 
   selectedLineId: number | null = null;
   selectedPoleId: number | null = null;
@@ -60,7 +60,11 @@ export class TechPassportsPanelComponent implements OnInit {
     this.loadList();
     this.api.getPowerLines().subscribe({
       next: (rows) => {
-        this.lines = (rows ?? []).map((l) => ({ id: l.id, name: l.name }));
+        this.lines = (rows ?? []).map((l) => ({
+          id: l.id,
+          name: l.name,
+          voltage_level: l.voltage_level,
+        }));
       },
       error: () => {
         this.snackBar.open('Не удалось загрузить список ЛЭП', 'Закрыть', { duration: 4000 });
@@ -121,6 +125,44 @@ export class TechPassportsPanelComponent implements OnInit {
         this.snackBar.open('Не удалось загрузить опоры линии', 'Закрыть', { duration: 4000 });
       },
     });
+  }
+
+  /** Подсказка заголовка, если поле пустое (как на сервере). */
+  suggestedPassportTitle(): string {
+    if (this.title.trim()) {
+      return this.title.trim();
+    }
+    const kv = (v: number | null | undefined): string =>
+      v != null && !Number.isNaN(Number(v)) ? ` ${Math.round(Number(v))} кВ` : '';
+
+    if (this.objectType === 'power_line') {
+      const line = this.lines.find((l) => l.id === this.selectedLineId);
+      if (!line) {
+        return '';
+      }
+      return `Паспорт ЛЭП${kv(line.voltage_level)} — ${line.name}`;
+    }
+    if (this.objectType === 'pole') {
+      const pole = this.poles.find((p) => p.id === this.selectedPoleId);
+      const line = this.lines.find((l) => l.id === this.selectedLineId);
+      if (!pole) {
+        return '';
+      }
+      const u = kv(line?.voltage_level);
+      if (line?.name) {
+        return `Паспорт опоры №${pole.pole_number} — ${line.name}${u ? ` (${u.trim()})` : ''}`;
+      }
+      return `Паспорт опоры №${pole.pole_number}`;
+    }
+    if (this.objectType === 'substation') {
+      const ss = this.substations.find((s) => s.id === this.selectedSubstationId);
+      if (!ss) {
+        return '';
+      }
+      const u = kv(ss.voltage_level);
+      return u ? `Паспорт ПС ${u.trim()} — ${ss.name}` : `Паспорт подстанции — ${ss.name}`;
+    }
+    return '';
   }
 
   objectTypeLabel(t: string): string {
@@ -241,7 +283,7 @@ export class TechPassportsPanelComponent implements OnInit {
     }
     this.exportInProgress = { id: row.id, format };
     this.api.downloadTechPassportExport(row.id, format).subscribe({
-      next: (blob) => {
+      next: ({ blob, filename }) => {
         const ext = format === 'docx' ? 'docx' : format;
         const mime =
           format === 'pdf'
@@ -249,7 +291,7 @@ export class TechPassportsPanelComponent implements OnInit {
             : format === 'docx'
               ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
               : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        const name = `passport_${row.id}.${ext}`;
+        const name = filename || `passport_${row.id}.${ext}`;
         this.saveBlob(blob, name, mime);
         this.snackBar.open(`Файл ${name} загружен`, 'Закрыть', { duration: 3000 });
       },
@@ -271,18 +313,20 @@ export class TechPassportsPanelComponent implements OnInit {
   }
 
   private saveBlob(blob: Blob, filename: string, mime: string): void {
-    const file =
-      blob.type && blob.type !== 'application/octet-stream'
-        ? blob
-        : new Blob([blob], { type: mime });
+    const file = new File(
+      [blob],
+      filename,
+      { type: blob.type && blob.type !== 'application/octet-stream' ? blob.type : mime },
+    );
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.rel = 'noopener';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    window.setTimeout(() => URL.revokeObjectURL(url), 200);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 }

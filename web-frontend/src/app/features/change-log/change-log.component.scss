@@ -20,6 +20,12 @@
     font-weight: 500;
     color: var(--app-text);
   }
+
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 }
 
 .loading,
@@ -33,6 +39,7 @@
 
 .table-wrap {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -44,17 +51,62 @@
   font-size: 13px;
   min-width: 980px;
   table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
 
   th {
     font-weight: 500;
     color: var(--app-text-muted);
     background: color-mix(in srgb, var(--app-text) 6%, var(--surface-1));
     vertical-align: top;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: 0 1px 0 var(--border-color);
   }
 
   td, th {
     padding: 8px 12px;
   }
+}
+
+.log-table--resizable {
+  table-layout: fixed;
+}
+
+:host ::ng-deep .log-table--resizable th.th-col-resizable {
+  overflow: hidden;
+  max-width: 520px;
+  min-width: 48px;
+}
+
+:host ::ng-deep .th-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 4;
+  user-select: none;
+  touch-action: none;
+}
+
+:host ::ng-deep .th-col-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+:host ::ng-deep .th-col-resizable:hover .th-col-resize-handle::after,
+:host ::ng-deep .th-col-resizing .th-col-resize-handle::after {
+  background: rgba(25, 118, 210, 0.65);
 }
 
 .col-head {
@@ -266,7 +318,15 @@
 
   ::ng-deep .mat-mdc-tab-body-wrapper {
     flex: 1;
-    overflow: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  ::ng-deep .mat-mdc-tab-body-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
   }
 }
 

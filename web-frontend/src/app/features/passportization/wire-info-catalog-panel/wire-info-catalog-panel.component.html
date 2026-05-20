@@ -2,24 +2,24 @@
   <mat-card class="intro-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>cable</mat-icon>
-      <mat-card-title>РњР°СЂРєРё РїСЂРѕРІРѕРґРѕРІ Р›Р­Рџ</mat-card-title>
+      <mat-card-title>Марки проводов ЛЭП</mat-card-title>
       <mat-card-subtitle>
-        РџР°СЃРїРѕСЂС‚РЅС‹Рµ С…Р°СЂР°РєС‚РµСЂРёСЃС‚РёРєРё РґР»СЏ СЂР°СЃС‡С‘С‚РЅРѕР№ РјРѕРґРµР»Рё Рё CIM: СѓРґРµР»СЊРЅС‹Рµ r/x/b, РЅРѕРјРёРЅР°Р»СЊРЅС‹Р№ Рё С‚РµСЂРјРёС‡РµСЃРєРёР№ С‚РѕРє.
+        Паспортные характеристики для расчётной модели и CIM: удельные r/x/b, номинальный и термический ток.
       </mat-card-subtitle>
     </mat-card-header>
   </mat-card>
 
   <p *ngIf="!canEdit()" class="read-only-hint">
-    Р РµР¶РёРј РїСЂРѕСЃРјРѕС‚СЂР°. Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ Рё РёРјРїРѕСЂС‚ вЂ” РґР»СЏ РїР°СЃРїРѕСЂС‚РёСЃС‚Р° Рё Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°.
+    Режим просмотра. Редактирование и импорт — для паспортиста и администратора.
   </p>
 
   <mat-card *ngIf="canEdit()" class="toolbar-card">
     <mat-card-content>
       <div class="toolbar-row">
-        <button mat-stroked-button type="button" (click)="downloadTemplate()">РЁР°Р±Р»РѕРЅ XLSX</button>
-        <button mat-stroked-button type="button" (click)="exportFmt('xlsx')">Р­РєСЃРїРѕСЂС‚ XLSX</button>
+        <button mat-stroked-button type="button" (click)="downloadTemplate()">Шаблон XLSX</button>
+        <button mat-stroked-button type="button" (click)="exportFmt('xlsx')">Экспорт XLSX</button>
         <label class="file-label">
-          <span>РРјРїРѕСЂС‚ XLSX/CSV</span>
+          <span>Импорт XLSX/CSV</span>
           <input type="file" accept=".xlsx,.xls,.csv" (change)="onImport($event)" />
         </label>
       </div>
@@ -27,109 +27,109 @@
   </mat-card>
 
   <mat-card *ngIf="canEdit()" class="form-card">
-    <mat-card-title>Р”РѕР±Р°РІРёС‚СЊ РјР°СЂРєСѓ</mat-card-title>
+    <mat-card-title>Добавить марку</mat-card-title>
     <mat-card-content>
       <div class="form-grid">
         <mat-form-field appearance="outline">
-          <mat-label>РњР°СЂРєР° РїСЂРѕРІРѕРґР°</mat-label>
-          <input matInput [(ngModel)]="form.name" placeholder="РђРЎ 70/11" />
+          <mat-label>Марка провода</mat-label>
+          <input matInput [(ngModel)]="form.name" placeholder="АС 70/11" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>РљРѕРґ</mat-label>
+          <mat-label>Код</mat-label>
           <input matInput [(ngModel)]="form.code" placeholder="AC70" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>РњР°С‚РµСЂРёР°Р»</mat-label>
+          <mat-label>Материал</mat-label>
           <input matInput [(ngModel)]="form.material" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>РЎРµС‡РµРЅРёРµ, РјРјВІ</mat-label>
+          <mat-label>Сечение, мм²</mat-label>
           <input matInput type="number" [(ngModel)]="form.section" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>РќР°РїСЂСЏР¶РµРЅРёРµ, РєР’</mat-label>
+          <mat-label>Напряжение, кВ</mat-label>
           <input matInput type="number" [(ngModel)]="form.voltage_kv" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>РќРѕРјРёРЅР°Р»СЊРЅС‹Р№ С‚РѕРє, Рђ</mat-label>
+          <mat-label>Номинальный ток, А</mat-label>
           <input matInput type="number" [(ngModel)]="form.nominal_current" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>IС‚С…, Рђ</mat-label>
+          <mat-label>Iтх, А</mat-label>
           <input matInput type="number" [(ngModel)]="form.i_th" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>IСѓРґ, Рђ</mat-label>
+          <mat-label>Iуд, А</mat-label>
           <input matInput type="number" [(ngModel)]="form.ip_max" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>tС‚С…, СЃ</mat-label>
+          <mat-label>tтх, с</mat-label>
           <input matInput type="number" step="0.1" [(ngModel)]="form.t_th" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>r, РћРј/РєРј</mat-label>
+          <mat-label>r, Ом/км</mat-label>
           <input matInput type="number" step="0.001" [(ngModel)]="form.r" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>x, РћРј/РєРј</mat-label>
+          <mat-label>x, Ом/км</mat-label>
           <input matInput type="number" step="0.001" [(ngModel)]="form.x" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>b, РЎРј/РєРј</mat-label>
+          <mat-label>b, См/км</mat-label>
           <input matInput type="number" step="1e-7" [(ngModel)]="form.b" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>g, РЎРј/РєРј</mat-label>
+          <mat-label>g, См/км</mat-label>
           <input matInput type="number" step="1e-7" [(ngModel)]="form.g" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>TСЂР°Р± max, В°C</mat-label>
+          <mat-label>Tраб max, °C</mat-label>
           <input matInput type="number" [(ngModel)]="form.max_operating_temperature" />
         </mat-form-field>
       </div>
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>РџСЂРёРјРµС‡Р°РЅРёРµ</mat-label>
+        <mat-label>Примечание</mat-label>
         <textarea matInput rows="2" [(ngModel)]="form.description"></textarea>
       </mat-form-field>
-      <button mat-flat-button color="primary" type="button" (click)="save()">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+      <button mat-flat-button color="primary" type="button" (click)="save()">Сохранить</button>
     </mat-card-content>
   </mat-card>
 
   <mat-card class="table-card">
     <mat-card-header>
-      <mat-card-title>РЎРїСЂР°РІРѕС‡РЅРёРє ({{ items.length }})</mat-card-title>
+      <mat-card-title>Справочник ({{ items.length }})</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="toolbar-search">
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>РџРѕРёСЃРє</mat-label>
+          <mat-label>Поиск</mat-label>
           <input matInput [(ngModel)]="search" (keyup.enter)="load()" />
         </mat-form-field>
-        <mat-checkbox [(ngModel)]="showWithdrawn" (change)="load()">РџРѕРєР°Р·Р°С‚СЊ РІС‹РІРµРґРµРЅРЅС‹Рµ РёР· СЌРєСЃРїР»СѓР°С‚Р°С†РёРё</mat-checkbox>
-        <button mat-stroked-button type="button" (click)="load()">РќР°Р№С‚Рё</button>
+        <mat-checkbox [(ngModel)]="showWithdrawn" (change)="load()">Показать выведенные из эксплуатации</mat-checkbox>
+        <button mat-stroked-button type="button" (click)="load()">Найти</button>
       </div>
-      <div *ngIf="loading" class="loading">Р—Р°РіСЂСѓР·РєР°вЂ¦</div>
+      <div *ngIf="loading" class="loading">Загрузка…</div>
       <div class="table-wrap" *ngIf="!loading">
         <table class="data-table">
           <thead>
             <tr>
-              <th>РњР°СЂРєР°</th>
-              <th class="num">РєР’</th>
-              <th class="num">IРЅРѕРј, Рђ</th>
-              <th class="num">IС‚С…</th>
+              <th>Марка</th>
+              <th class="num">кВ</th>
+              <th class="num">Iном, А</th>
+              <th class="num">Iтх</th>
               <th class="num">r</th>
-              <th>РЎС‚Р°С‚СѓСЃ</th>
+              <th>Статус</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let r of items">
               <td>{{ r.name }}</td>
-              <td class="num">{{ r.voltage_kv ?? 'вЂ”' }}</td>
-              <td class="num">{{ r.nominal_current ?? 'вЂ”' }}</td>
-              <td class="num">{{ r.i_th ?? 'вЂ”' }}</td>
-              <td class="num">{{ r.r ?? 'вЂ”' }}</td>
-              <td>{{ r.in_service !== false ? 'Р’ СЌРєСЃРїР»СѓР°С‚Р°С†РёРё' : 'Р’С‹РІРµРґРµРЅР°' }}</td>
+              <td class="num">{{ r.voltage_kv ?? '—' }}</td>
+              <td class="num">{{ r.nominal_current ?? '—' }}</td>
+              <td class="num">{{ r.i_th ?? '—' }}</td>
+              <td class="num">{{ r.r ?? '—' }}</td>
+              <td>{{ r.in_service !== false ? 'В эксплуатации' : 'Выведена' }}</td>
               <td class="actions" *ngIf="canEdit()">
                 <button
                   *ngIf="r.in_service !== false"
@@ -137,18 +137,17 @@
                   type="button"
                   (click)="withdraw(r)"
                 >
-                  Р’С‹РІРµСЃС‚Рё РёР· СЌРєСЃРїР»СѓР°С‚Р°С†РёРё
+                  Вывести из эксплуатации
                 </button>
                 <button *ngIf="isAdmin()" mat-stroked-button color="warn" type="button" (click)="deleteItem(r)">
-                  РЈРґР°Р»РёС‚СЊ
+                  Удалить
                 </button>
               </td>
             </tr>
           </tbody>
         </table>
-        <p *ngIf="!items.length" class="empty">РќРµС‚ Р·Р°РїРёСЃРµР№.</p>
+        <p *ngIf="!items.length" class="empty">Нет записей.</p>
       </div>
     </mat-card-content>
   </mat-card>
 </div>
-

@@ -318,6 +318,13 @@
     gap: 16px;
   }
 
+  .pole-line-voltage-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: rgba(0, 0, 0, 0.6);
+    margin: -8px 0 8px 4px;
+  }
+
   .equipment-form {
     margin-top: 8px;
 
@@ -474,30 +481,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     align-items: start;
-  }
-
-  // Длинные подписи/подсказки не должны "наезжать" на поля.
-  ::ng-deep .mat-mdc-form-field-infix {
-    min-height: 56px;
-  }
-
-  ::ng-deep .mat-mdc-form-field-subscript-wrapper {
-    min-height: 22px;
-  }
-
-  // Не даём floating-label переноситься, но и не обрезаем его искусственно.
-  // Агрессивное обрезание делало подписи почти нечитабельными ("Номер о...", "Л...").
-  ::ng-deep .mdc-floating-label {
-    white-space: nowrap;
-    overflow: visible;
-    text-overflow: clip;
-    line-height: 1.2;
-    max-width: none;
-  }
-
-  // Немного уменьшаем подписи, чтобы длинные названия чаще помещались.
-  ::ng-deep .mat-mdc-form-field .mdc-floating-label {
-    font-size: 12px;
   }
 
   // Явно растягиваем поля в 2-колоночной сетке и не даем им сжиматься по контенту.

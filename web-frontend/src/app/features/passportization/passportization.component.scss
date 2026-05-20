@@ -40,23 +40,15 @@
 }
 
 .passport-hero__text h1 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 1.65rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--app-text);
 }
 
-.passport-hero__lead {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.55;
-  color: var(--app-text-muted);
-  max-width: 72ch;
-}
-
 .passport-hero__read-only {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: 0.9rem;
   line-height: 1.45;
   color: #b45309;
@@ -95,13 +87,6 @@
 
 .tab-panel--conductors {
   background: var(--surface-2);
-}
-
-.tab-hint {
-  margin: 0 0 12px;
-  font-size: 0.875rem;
-  color: var(--app-text-muted);
-  line-height: 1.45;
 }
 
 ::ng-deep .passport-tabs .mat-mdc-tab-header {

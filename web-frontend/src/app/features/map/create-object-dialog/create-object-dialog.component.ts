@@ -163,6 +163,8 @@ export class CreateObjectDialogComponent implements OnInit {
   /** Класс напряжения ЛЭП опоры, кВ — номинал коммутационного оборудования совпадает с ним. */
   equipmentLineVoltageKv: number | null = null;
   poleEquipmentLineVoltageKv: number | null = null;
+  /** Класс напряжения выбранной ЛЭП (для опоры и оборудования на ней). */
+  poleLineVoltageKv: number | null = null;
 
   @ViewChild('poleEquipmentPanel') poleEquipmentPanel?: PoleEquipmentPanelComponent;
 
@@ -228,7 +230,6 @@ export class CreateObjectDialogComponent implements OnInit {
       longitude: ['', [Validators.required, this.coordinateValidator.bind(this)]],
       pole_type: ['', Validators.required],
       construction: [''],
-      rated_voltage: [null],
       sequence_number: [null, [this.sequenceNumberValidator.bind(this)]], // Порядок в линии (1, 2, 3…). Пусто — авто.
       mrid: ['', CreateObjectDialogComponent.uuidValidator], // Опциональный UID с валидацией формата
       is_tap: [false],
@@ -542,12 +543,16 @@ export class CreateObjectDialogComponent implements OnInit {
         ? (lineVal as { id: number }).id
         : this.lineId ?? null;
     if (!lineId) {
+      this.poleLineVoltageKv = null;
       this.poleEquipmentLineVoltageKv = null;
       return;
     }
     const line = this.powerLines.find((l) => l.id === lineId);
     const v = line?.voltage_level != null ? Number(line.voltage_level) : NaN;
-    this.poleEquipmentLineVoltageKv = Number.isFinite(v) ? v : null;
+    const kv = Number.isFinite(v) ? v : null;
+    this.poleLineVoltageKv = kv;
+    this.poleEquipmentLineVoltageKv = kv;
+    this.cdr.markForCheck();
   }
 
   isSwitchLikeEquipmentType(type?: string | null): boolean {
@@ -833,15 +838,43 @@ export class CreateObjectDialogComponent implements OnInit {
   }
 
   copyEquipmentUid(): void {
-    const uid = this.equipmentUid?.trim();
+    this.copyUidToClipboard(this.equipmentUid, 'UID');
+  }
+
+  copyPoleUid(): void {
+    this.copyUidToClipboard(this.poleForm.get('mrid')?.value, 'UID опоры');
+  }
+
+  copyPowerLineUid(): void {
+    this.copyUidToClipboard(this.powerLineForm.get('mrid')?.value, 'UID линии');
+  }
+
+  copySubstationUid(): void {
+    this.copyUidToClipboard(this.substationForm.get('uid')?.value, 'UID подстанции');
+  }
+
+  private copyUidToClipboard(value: unknown, label: string): void {
+    const uid = value != null ? String(value).trim() : '';
     if (!uid) {
-      this.snackBar.open('UID отсутствует', 'Закрыть', { duration: 2500 });
+      this.snackBar.open(`${label} отсутствует`, 'Закрыть', { duration: 2500 });
       return;
     }
     navigator.clipboard?.writeText(uid).then(
-      () => this.snackBar.open('UID скопирован', 'Закрыть', { duration: 2000 }),
+      () => this.snackBar.open(`${label} скопирован`, 'Закрыть', { duration: 2000 }),
       () => this.snackBar.open('Не удалось скопировать UID', 'Закрыть', { duration: 2500 })
     );
+  }
+
+  isPoleUidReadonly(): boolean {
+    return this.isEditMode || !!this.poleForm.get('mrid')?.value?.toString().trim();
+  }
+
+  isPowerLineUidReadonly(): boolean {
+    return !!this.powerLineForm.get('mrid')?.value?.toString().trim();
+  }
+
+  isSubstationUidReadonly(): boolean {
+    return this.isEditMode || !!this.substationForm.get('uid')?.value?.toString().trim();
   }
 
   /**
@@ -1219,7 +1252,6 @@ export class CreateObjectDialogComponent implements OnInit {
           longitude: (pole as any).x_position ?? (pole as any).longitude ?? '',
           pole_type: pole.pole_type || '',
           construction: (pole as any).construction || '',
-          rated_voltage: (pole as any).rated_voltage ?? null,
           sequence_number: pole.sequence_number ?? null,
           mrid: pole.mrid || '',
           is_tap: (pole as any).is_tap_pole ?? false,
@@ -1358,33 +1390,34 @@ export class CreateObjectDialogComponent implements OnInit {
     return this.apiService.getAttachmentUrl(relativeUrl);
   }
 
-  generateMRID(): void {
-    // Генерация UUID v4
-    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+  /** UUID v4 — только если UID ещё не назначен (без перегенерации). */
+  private static newUuidV4(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
-    this.poleForm.patchValue({ mrid: uuid });
+  }
+
+  generateMRID(): void {
+    if (this.isEditMode) return;
+    const current = this.poleForm.get('mrid')?.value?.toString().trim();
+    if (current) return;
+    this.poleForm.patchValue({ mrid: CreateObjectDialogComponent.newUuidV4() });
   }
 
   generatePowerLineMRID(): void {
-    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-    this.powerLineForm.patchValue({ mrid: uuid });
+    const current = this.powerLineForm.get('mrid')?.value?.toString().trim();
+    if (current) return;
+    this.powerLineForm.patchValue({ mrid: CreateObjectDialogComponent.newUuidV4() });
   }
 
-  /** Генерирует UID в том же формате, что и для остальных сущностей (UUID) */
+  /** UID подстанции — только при первом создании, без смены. */
   generateSubstationUID(): void {
-    const s = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-    this.substationForm?.patchValue({ uid: s });
+    if (this.isEditMode) return;
+    const current = this.substationForm.get('uid')?.value?.toString().trim();
+    if (current) return;
+    this.substationForm.patchValue({ uid: CreateObjectDialogComponent.newUuidV4() });
   }
 
   displayPowerLine(powerLine: PowerLine): string {
@@ -1910,8 +1943,7 @@ export class CreateObjectDialogComponent implements OnInit {
       y_position: latitude,
       pole_type: formValue.pole_type,
       construction: formValue.construction?.trim() || undefined,
-      rated_voltage: normalizeNumber(formValue.rated_voltage),
-      mrid: formValue.mrid && formValue.mrid.trim() ? formValue.mrid.trim() : undefined,
+      rated_voltage: this.poleLineVoltageKv ?? undefined,
       is_tap: !!formValue.is_tap,
       branch_type: branchType,
       tap_pole_id: tapPoleId ?? undefined,
@@ -1937,6 +1969,12 @@ export class CreateObjectDialogComponent implements OnInit {
       card_comment: serializeCardCommentMessages(this.poleCardCommentMessages),
       card_comment_attachment: this.poleAttachments.length ? JSON.stringify(this.poleAttachments) : undefined
     };
+    if (!this.isEditMode) {
+      const mrid = formValue.mrid?.toString().trim();
+      if (mrid) {
+        poleData.mrid = mrid;
+      }
+    }
 
     console.log('Отправка данных для ' + (this.isEditMode ? 'обновления' : 'создания') + ' опоры:', poleData);
 
@@ -2444,7 +2482,7 @@ export class CreateObjectDialogComponent implements OnInit {
       branch_id: formValue.branch_id ?? undefined,
       description: formValue.description?.trim() || undefined
     };
-    if (formValue.uid && String(formValue.uid).trim()) {
+    if (!this.isEditMode && formValue.uid && String(formValue.uid).trim()) {
       substationData.mrid = String(formValue.uid).trim();
     }
     if (formValue.dispatcher_name != null && String(formValue.dispatcher_name).trim()) {

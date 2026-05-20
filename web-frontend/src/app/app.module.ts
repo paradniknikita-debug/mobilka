@@ -10,7 +10,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
-import { MatFormFieldModule } from '@angular/material/form-field';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -73,6 +73,7 @@ import { PoleAttachmentsManagerDialogComponent } from './features/map/pole-attac
 import { AddEquipmentDialogComponent } from './features/map/add-equipment-dialog/add-equipment-dialog.component';
 import { PoleEquipmentPanelComponent } from './features/map/pole-equipment-panel/pole-equipment-panel.component';
 import { ResizableDialogDirective } from './core/directives/resizable-dialog.directive';
+import { TableColumnResizeDirective } from './core/directives/table-column-resize.directive';
 import { EquipmentCatalogComponent } from './features/equipment-catalog/equipment-catalog.component';
 import { AdminComponent } from './features/admin/admin.component';
 import { DockerLogsDialogComponent } from './features/admin/docker-logs-dialog/docker-logs-dialog.component';
@@ -85,6 +86,7 @@ import { TechPassportsPanelComponent } from './features/passportization/tech-pas
 @NgModule({
   declarations: [
     ResizableDialogDirective,
+    TableColumnResizeDirective,
     AppComponent,
     MainLayoutComponent,
     SidebarComponent,
@@ -181,7 +183,15 @@ import { TechPassportsPanelComponent } from './features/passportization/tech-pas
         hasBackdrop: true,
         disableClose: false
       }
-    }
+    },
+    {
+      provide: MAT_FORM_FIELD_DEFAULT_OPTIONS,
+      useValue: {
+        appearance: 'outline',
+        subscriptSizing: 'dynamic',
+        floatLabel: 'auto',
+      },
+    },
   ],
   bootstrap: [AppComponent]
 })

@@ -5,10 +5,6 @@
     </div>
     <div class="passport-hero__text">
       <h1>Паспортизация</h1>
-      <p class="passport-hero__lead">
-        Отчёты по ЛЭП, оборудованию и обходам, выгрузки для анализа и справочники марок — в одном месте.
-        Здесь же ведутся марки проводов линий и марки оборудования; технические паспорта ЛЭП, опор и подстанций — со снимком данных и выгрузкой в PDF, Word и Excel.
-      </p>
       <p *ngIf="!canManagePassportization()" class="passport-hero__read-only">
         У вас доступ только для просмотра: создание и изменение справочников и паспортов недоступны.
       </p>
@@ -30,7 +26,6 @@
         </span>
       </ng-template>
       <div class="tab-panel">
-        <p class="tab-hint">Дефекты, сводка по линии, журнал обходов — JSON и CSV где доступно.</p>
         <app-reports [embedded]="true"></app-reports>
       </div>
     </mat-tab>
@@ -43,10 +38,6 @@
         </span>
       </ng-template>
       <div class="tab-panel">
-        <p class="tab-hint">
-          Формирование технического паспорта по объекту (снимок из БД + разделы по СТП). Выгрузка: PDF и Word — по разделам;
-          Excel для ЛЭП — по шаблону СТП (<code>stp_passport_vl.xlsx</code>), для опоры и ПС — листы по разделам.
-        </p>
         <app-tech-passports-panel></app-tech-passports-panel>
       </div>
     </mat-tab>
@@ -59,12 +50,6 @@
         </span>
       </ng-template>
       <div class="tab-panel">
-        <p class="tab-hint">
-          <ng-container *ngIf="canManagePassportization(); else equipmentReadOnlyHint">
-            Справочник типоразмеров для карточек оборудования: импорт, экспорт, ручное редактирование.
-          </ng-container>
-          <ng-template #equipmentReadOnlyHint>Справочник типоразмеров для карточек оборудования (только просмотр).</ng-template>
-        </p>
         <app-equipment-catalog [embedded]="true"></app-equipment-catalog>
       </div>
     </mat-tab>
@@ -77,12 +62,6 @@
         </span>
       </ng-template>
       <div class="tab-panel tab-panel--conductors">
-        <p class="tab-hint">
-          <ng-container *ngIf="canManagePassportization(); else conductorsReadOnlyHint">
-            Справочник марок с расчётными параметрами (r/x/b, токи), импорт из Excel, вывод из эксплуатации.
-          </ng-container>
-          <ng-template #conductorsReadOnlyHint>Номинальные марки проводников по напряжению (только просмотр).</ng-template>
-        </p>
         <app-wire-info-catalog-panel></app-wire-info-catalog-panel>
       </div>
     </mat-tab>

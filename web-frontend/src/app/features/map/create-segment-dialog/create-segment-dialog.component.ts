@@ -71,8 +71,7 @@ export class CreateSegmentDialogComponent implements OnInit {
       i_th: [null],
       t_th: [null],
       sections: [null],
-      short_circuit_end_temperature: [null],
-      is_jumper: [false]
+      short_circuit_end_temperature: [null]
     });
   }
 
@@ -154,8 +153,7 @@ export class CreateSegmentDialogComponent implements OnInit {
           i_th: (segment as any).i_th ?? null,
           t_th: (segment as any).t_th ?? null,
           sections: (segment as any).sections ?? null,
-          short_circuit_end_temperature: (segment as any).short_circuit_end_temperature ?? null,
-          is_jumper: !!(segment as any).is_jumper
+          short_circuit_end_temperature: (segment as any).short_circuit_end_temperature ?? null
         });
         if (fromPole && (fromPole as any).is_tap_pole) {
           this.fromPoleForBranch = fromPole;
@@ -257,7 +255,7 @@ export class CreateSegmentDialogComponent implements OnInit {
       t_th: formValue.t_th != null ? Number(formValue.t_th) : undefined,
       sections: formValue.sections != null ? Number(formValue.sections) : undefined,
       short_circuit_end_temperature: formValue.short_circuit_end_temperature != null ? Number(formValue.short_circuit_end_temperature) : undefined,
-      is_jumper: !!formValue.is_jumper
+      is_jumper: false
     };
 
     // Используем API для создания или обновления участка

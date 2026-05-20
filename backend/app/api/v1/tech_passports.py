@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passport_export import export_passport_file
+from app.core.passport_naming import default_passport_title, passport_export_filename
 from app.core.passport_sections import build_passport_sections
 from app.core.passport_snapshot import build_snapshot_for_object
 from app.core.roles import require_user_can_export
@@ -38,25 +39,6 @@ def _detail_from_row(row) -> TechPassportDetail:
     sections = [PassportSection.model_validate(s) for s in raw_sections]
     base = TechPassportDetail.model_validate(row)
     return base.model_copy(update={"sections": sections})
-
-
-def _default_title(object_type: str, data: Dict[str, Any]) -> str:
-    if object_type == "power_line":
-        pl = data.get("power_line") or {}
-        name = pl.get("name") or pl.get("mrid") or "ЛЭП"
-        return f"Технический паспорт ЛЭП — {name}"
-    if object_type == "pole":
-        p = data.get("pole") or {}
-        num = p.get("pole_number") or p.get("mrid") or "опора"
-        line = (data.get("power_line") or {}).get("name")
-        if line:
-            return f"Технический паспорт опоры №{num} ({line})"
-        return f"Технический паспорт опоры — №{num}"
-    if object_type == "substation":
-        ss = data.get("substation") or {}
-        name = ss.get("name") or ss.get("mrid") or "ПС"
-        return f"Технический паспорт подстанции — {name}"
-    return "Технический паспорт"
 
 
 def _resolve_object_ids(object_type: str, data: Dict[str, Any]) -> Tuple[str, Optional[int]]:
@@ -120,7 +102,7 @@ async def create_tech_passport(
         "data": snap,
     }
 
-    title = (body.title or "").strip() or _default_title(body.object_type, snap)
+    title = (body.title or "").strip() or default_passport_title(body.object_type, snap)
 
     row = TechPassport(
         title=title,
@@ -180,8 +162,10 @@ async def export_tech_passport(
         raise HTTPException(status_code=500, detail="Некорректный снимок паспорта")
 
     try:
+        env_with_id = dict(env)
+        env_with_id["passport_id"] = row.id
         content, media_type, suffix = export_passport_file(
-            env,
+            env_with_id,
             row.title,
             export_format,
             manual_sections=row.manual_sections if isinstance(row.manual_sections, dict) else None,
@@ -197,9 +181,18 @@ async def export_tech_passport(
         logging.getLogger(__name__).exception("export_tech_passport failed: passport_id=%s format=%s", passport_id, export_format)
         raise HTTPException(status_code=500, detail=str(e) or "Сбой формирования файла") from e
 
-    safe = f"passport_{row.id}_{suffix}"
+    from urllib.parse import quote
+
+    ext = suffix.rsplit(".", 1)[-1] if "." in suffix else suffix
+    utf8_name, ascii_name = passport_export_filename(
+        row.title,
+        row.id,
+        ext,
+        formed_at=env.get("formed_at") if isinstance(env, dict) else None,
+    )
+    disposition = f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(utf8_name)}'
     return StreamingResponse(
         BytesIO(content),
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
+        headers={"Content-Disposition": disposition},
     )

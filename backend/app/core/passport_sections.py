@@ -5,7 +5,64 @@
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore[misc, assignment]
+
+_MONTHS_RU = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+
+def format_formed_at_human(formed_at: Any) -> str:
+    """ISO/UTC → «20 мая 2026 г., 14:35 (МСК)»."""
+    if formed_at is None or formed_at == "":
+        return "—"
+    try:
+        if isinstance(formed_at, datetime):
+            dt = formed_at
+        else:
+            s = str(formed_at).strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if ZoneInfo is not None:
+            local = dt.astimezone(ZoneInfo("Europe/Moscow"))
+            tz_label = "МСК"
+        else:
+            local = dt.astimezone(timezone.utc)
+            tz_label = "UTC"
+        month = _MONTHS_RU[local.month - 1]
+        return f"{local.day} {month} {local.year} г., {local.hour:02d}:{local.minute:02d} ({tz_label})"
+    except (TypeError, ValueError):
+        return str(formed_at)
+
+
+def _format_coords(lat: Any, lon: Any) -> str:
+    if lat is None or lon is None:
+        return "—"
+    try:
+        la, lo = float(lat), float(lon)
+        if la == 0.0 and lo == 0.0:
+            return "—"
+        return f"{la:.6f}, {lo:.6f}"
+    except (TypeError, ValueError):
+        return "—"
 
 
 def _row(label: str, value: Any) -> Dict[str, Any]:
@@ -57,15 +114,29 @@ def _poles_summary_table(poles: List[Dict[str, Any]], limit: int = 200) -> Dict[
                 "type": p.get("pole_type") or "—",
                 "construction": p.get("construction") or "—",
                 "condition": p.get("condition") or "—",
+                "coordinates": _format_coords(p.get("latitude"), p.get("longitude")),
                 "equipment_count": len(p.get("equipment") or []),
             }
         )
-    more = max(0, len(poles) - limit)
     return {
-        "title": f"Опоры (показано {len(rows)} из {len(poles)})"
-        + (f", ещё {more} не выведено" if more else ""),
-        "columns": ["№ опоры", "Тип", "Конструкция", "Состояние", "Ед. оборуд."],
+        "title": "Опоры",
+        "columns": ["№ опоры", "Тип", "Конструкция", "Состояние", "Координаты", "Ед. оборуд."],
         "rows": rows,
+    }
+
+
+def _substations_involved_table(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {
+        "title": "Подстанции, задействованные линией",
+        "columns": ["Наименование", "mRID", "Роль в линии"],
+        "rows": [
+            {
+                "name": it.get("name") or "—",
+                "mrid": it.get("mrid") or "—",
+                "role": it.get("role") or "—",
+            }
+            for it in items
+        ],
     }
 
 
@@ -101,7 +172,7 @@ def build_passport_sections(
     sections: List[Dict[str, Any]] = []
 
     title_rows = [
-        _row("Дата формирования", formed_at),
+        _row("Дата формирования", format_formed_at_human(formed_at)),
         _row("Ссылка на СТП", stp),
         _row("Тип объекта", object_type),
     ]
@@ -139,6 +210,16 @@ def build_passport_sections(
                 ],
             )
         )
+        involved_substations = data.get("involved_substations") or []
+        if involved_substations:
+            sections.append(
+                _section(
+                    "substations",
+                    "Подстанции линии",
+                    [],
+                    [_substations_involved_table(involved_substations)],
+                )
+            )
         segments = data.get("acline_segments") or []
         if segments:
             sections.append(_section("segments", "Участки линии", [], [_segments_table(segments)]))

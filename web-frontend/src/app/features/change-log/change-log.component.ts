@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { MatTableColumnPrefs } from '../../core/utils/mat-table-column-prefs';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ChangeLogEntry, ModelIssue } from '../../core/models/change-log.model';
@@ -15,7 +16,16 @@ type SortCol = 'created_at' | 'source' | 'action' | 'entity_type' | 'name' | 'ui
 })
 export class ChangeLogComponent implements OnInit {
   entries: ChangeLogEntry[] = [];
-  displayedColumns: string[] = ['created_at', 'source', 'action', 'entity_type', 'name', 'uid', 'user_name', 'detail'];
+  readonly changeLogColumnPrefs = new MatTableColumnPrefs('change-log-columns-v1', [
+    { id: 'created_at', label: 'Дата и время', defaultWidth: '150px' },
+    { id: 'source', label: 'Источник', defaultWidth: '110px' },
+    { id: 'action', label: 'Действие', defaultWidth: '120px' },
+    { id: 'entity_type', label: 'Тип объекта', defaultWidth: '120px' },
+    { id: 'name', label: 'Наименование', defaultWidth: '180px' },
+    { id: 'uid', label: 'UID', defaultWidth: '200px' },
+    { id: 'user_name', label: 'Пользователь', defaultWidth: '120px' },
+    { id: 'detail', label: 'Детали', defaultWidth: '56px' },
+  ]);
   loading = true;
   error: string | null = null;
 
@@ -68,6 +78,23 @@ export class ChangeLogComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  get displayedColumns(): string[] {
+    return this.changeLogColumnPrefs.visibleColumns;
+  }
+
+  columnStyle(colId: string): Record<string, string> {
+    const w = this.changeLogColumnPrefs.columnWidth(colId);
+    return w ? { width: w, minWidth: w } : {};
+  }
+
+  toggleChangeLogColumn(colId: string, visible: boolean): void {
+    this.changeLogColumnPrefs.toggleColumn(colId, visible);
+  }
+
+  resetChangeLogColumns(): void {
+    this.changeLogColumnPrefs.reset();
   }
 
   /** Отображаемые строки: фильтр по столбцам + сортировка. */
