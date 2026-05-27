@@ -33,6 +33,7 @@
     <div *ngFor="let item of getPowerLinesWithSegmentsAndPoles()" class="tree-item">
       <!-- ЛЭП: раскрытие только по стрелке, по клику на название — без зума -->
       <div class="tree-node power-line-node" 
+           [attr.data-line-id]="item.powerLine.properties['id']"
            (contextmenu)="onFeatureRightClick(item.powerLine, $event, 'powerLine')"
            [class.expanded]="isPowerLineExpanded(item.powerLine.properties['id'])">
         <mat-icon class="expand-icon" (click)="togglePowerLine(item.powerLine.properties['id']); $event.stopPropagation()">{{ isPowerLineExpanded(item.powerLine.properties['id']) ? 'expand_more' : 'chevron_right' }}</mat-icon>
@@ -43,7 +44,9 @@
       <!-- Вложенные элементы ЛЭП: участки (под каждым — пролёты без папки) и одна папка «Опоры» -->
       <div *ngIf="isPowerLineExpanded(item.powerLine.properties['id'])" class="tree-children">
         <!-- Участки: раскрытие только по стрелке, по клику на строку — зум на участок -->
-        <div *ngFor="let segment of item.segments; let segIdx = index" class="tree-node segment-node">
+        <div *ngFor="let segment of item.segments; let segIdx = index" class="tree-node segment-node"
+             [attr.data-line-id]="item.powerLine.properties['id']"
+             [attr.data-segment-id]="segment.segmentId">
           <div class="tree-node-header" 
                (contextmenu)="onSegmentRightClick(segment.segmentId, item.powerLine.properties['id'], $event)"
                (dblclick)="segment.segmentId != null && openSegmentCard(segment.segmentId, item.powerLine.properties['id'], segment.segmentName)"
@@ -63,6 +66,7 @@
           <div *ngIf="isSegmentExpanded(item.powerLine.properties['id'], segment.segmentId, segIdx)" class="tree-children poles-list">
             <div *ngFor="let span of segment.spans" 
                  class="tree-node pole-node"
+                 [attr.data-span-id]="span.properties['id']"
                  (click)="onFeatureClick(span, $event)"
                  (contextmenu)="onFeatureRightClick(span, $event)"
                  [matTooltip]="span.properties['mrid'] ? 'UID: ' + span.properties['mrid'] : ''">
@@ -85,6 +89,7 @@
           <div *ngIf="isPolesFolderExpanded(item.powerLine.properties['id'], 'all-poles')" class="tree-children poles-list">
             <div *ngFor="let pole of item.allPoles" 
                  class="tree-node pole-node"
+                 [attr.data-pole-id]="pole.properties['id']"
                  [class.selected-pole]="selectedPoleIdFromMap === pole.properties['id']"
                  (click)="onFeatureClick(pole, $event)"
                  (contextmenu)="onFeatureRightClick(pole, $event)"
@@ -100,6 +105,7 @@
               <div class="tree-children equipment-list" *ngIf="getPoleEquipment(pole.properties['id']).length">
                 <div class="tree-node equipment-node" 
                      *ngFor="let eq of getPoleEquipment(pole.properties['id'])"
+                     [attr.data-equipment-id]="eq.id"
                      (click)="onEquipmentClick(eq, pole, $event)"
                      (contextmenu)="onEquipmentRightClick(eq, $event)"
                      [matTooltip]="eq.mrid ? 'UID: ' + eq.mrid : ''">

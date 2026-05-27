@@ -16,6 +16,8 @@ import { PoleSequenceDialogComponent } from './pole-sequence-dialog/pole-sequenc
 import { CreateSpanDialogComponent } from './create-span-dialog/create-span-dialog.component';
 import { ImagePreviewDialogComponent } from './image-preview-dialog/image-preview-dialog.component';
 import { ApiService } from '../../core/services/api.service';
+import { MapBasemapService } from '../../core/services/map-basemap.service';
+import { BASEMAP_CHAIN } from '../../core/map/basemap.config';
 import { CardCommentMessage } from '../../core/models/card-comment.model';
 import { formatCardCommentDateTime, parseCardCommentMessages } from '../../core/utils/card-comment.codec';
 import { Pole } from '../../core/models/pole.model';
@@ -32,6 +34,9 @@ export class MapComponent implements OnInit, OnDestroy {
   private readonly equipmentBaseTNearPole = 0.2;
   private readonly equipmentBaseTFarPole = 0.8;
   private readonly equipmentSpreadStep = 0.05;
+
+  /** Выбранная подстанция (чтобы не дёргать дерево при повторном клике). */
+  private _selectedSubstationId: number | null = null;
 
   map: L.Map | null = null;
   mapData: MapData | null = null;
@@ -53,6 +58,12 @@ export class MapComponent implements OnInit, OnDestroy {
   sidebarWidth: number = 350;
   // Режим карты: отображать только объекты с дефектами
   showOnlyDefective = false;
+
+  /** Список подложек и текущий выбор (сохраняется в localStorage) */
+  readonly basemapOptions = BASEMAP_CHAIN;
+  get selectedBasemapId(): string {
+    return this.mapBasemap.activeBasemapId;
+  }
   
   // Инвертированный зум (1 = минимальный зум/большой масштаб, 28 = максимальный зум/маленький масштаб)
   get invertedZoom(): number {
@@ -201,7 +212,8 @@ export class MapComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private apiService: ApiService,
-    private router: Router
+    private router: Router,
+    private mapBasemap: MapBasemapService
   ) {}
 
   /** Полный журнал изменений по выбранной на карте сущности (Angular). */
@@ -317,37 +329,10 @@ export class MapComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((feature: GeoJSONFeature) => {
         if (feature?.geometry?.type === 'Point' && feature.geometry.coordinates?.length >= 2) {
-          // Панели свойств должны быть взаимоисключающими:
-          // при выборе опоры закрываем карточку оборудования.
-          this.showEquipmentProperties = false;
-          this.selectedEquipment = null;
-
           const coords = feature.geometry.coordinates as number[];
           const lng = coords[0];
           const lat = coords[1];
-          // Оборудование по опоре может приходить из REST/синхрона отдельно; в GeoJSON пока его нет
-          this.showPoleProperties = true;
-          this.selectedPole = {
-            ...feature.properties,
-            latitude: lat,
-            longitude: lng,
-            segment_name: feature.properties['segment_name'] ||
-              feature.properties['power_line_name'] ||
-              `ЛЭП ID: ${this.lineIdFromProps(feature.properties as Record<string, any> | undefined) ?? 'не указано'}`
-          };
-          const poleId = feature.properties['id'];
-          if (poleId != null) {
-            this.apiService.getPole(poleId).subscribe({
-              next: (pole) => {
-                Object.assign(this.selectedPole as any, pole, {
-                  equipment: (pole as any).equipment || [],
-                  connectivity_node: (pole as any).connectivity_node ?? null,
-                  latitude: (this.selectedPole as any).latitude ?? (pole as any).y_position,
-                  longitude: (this.selectedPole as any).longitude ?? (pole as any).x_position
-                });
-              }
-            });
-          }
+          this.openPolePropertiesFromFeature(feature, lat, lng);
         }
       });
 
@@ -365,6 +350,13 @@ export class MapComponent implements OnInit, OnDestroy {
       });
 
     // Автообновление карты отключено; данные обновляются по dataRefresh (после действий пользователя) или по явному обновлению.
+
+    this.mapBasemap.switched$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((ev) => {
+        const prefix = ev.automatic ? 'Подложка переключена автоматически' : 'Подложка изменена';
+        this.snackBar.open(`${prefix}: ${ev.to.label}`, 'OK', { duration: 5000 });
+      });
   }
 
   ngOnDestroy(): void {
@@ -374,9 +366,14 @@ export class MapComponent implements OnInit, OnDestroy {
     }
     this.destroy$.next();
     this.destroy$.complete();
+    this.mapBasemap.detach();
     if (this.map) {
       this.map.remove();
     }
+  }
+
+  onBasemapChange(id: string): void {
+    this.mapBasemap.setBasemap(id, false);
   }
 
   /** Центрировать карту на геопозиции пользователя при первом открытии (если браузер разрешил). */
@@ -414,18 +411,8 @@ export class MapComponent implements OnInit, OnDestroy {
       maxBoundsViscosity: 1
     });
 
-    // Добавляем тайлы OpenStreetMap
-    const tilesUrl = `${environment.apiUrl}/map/tiles/{z}/{x}/{y}.png`;
-    L.tileLayer(tilesUrl, {
-      attribution: '',
-      maxZoom: 19,
-      tileSize: 256,
-      keepBuffer: 2,
-      detectRetina: false,
-      /** Не показывать «белые квадраты» при ошибке загрузки тайла. */
-      errorTileUrl:
-        'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
-    }).addTo(this.map);
+    // Подложка: выбор пользователя + автопереключение при ошибках загрузки тайлов
+    this.mapBasemap.attach(this.map);
 
     this.tryCenterOnUserLocation();
 
@@ -939,42 +926,11 @@ export class MapComponent implements OnInit, OnDestroy {
         // Попап при клике убран — информация только в панели свойств справа внизу
 
         marker.on('click', () => {
-          // Взаимоисключение панелей: при открытии опоры закрываем оборудование.
-          this.showEquipmentProperties = false;
-          this.selectedEquipment = null;
-          this.showPoleProperties = true;
-          this.selectedPole = {
-            ...feature.properties,
-            latitude: lat,
-            longitude: lng,
-            segment_name: feature.properties['segment_name'] || 
-                         feature.properties['power_line_name'] || 
-                         `ЛЭП ID: ${this.lineIdFromProps(feature.properties as Record<string, any> | undefined) ?? 'не указано'}`
-          };
-          this.centerOnPole(lat, lng, 18);
-          const lineId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
-          const poleId = feature.properties['id'];
-          if (lineId != null && poleId != null) {
-            this.mapService.requestSelectPoleInTree(
-              lineId,
-              poleId,
-              feature.properties['segment_id'] ?? undefined
-            );
-          }
-
-          // Подгружаем полные данные опоры для карточки (поля как во Flutter)
-          if (poleId != null) {
-            this.apiService.getPole(poleId).subscribe({
-              next: (pole) => {
-                Object.assign(this.selectedPole as any, pole, {
-                  equipment: (pole as any).equipment || [],
-                  connectivity_node: (pole as any).connectivity_node ?? null,
-                  latitude: (this.selectedPole as any).latitude ?? (pole as any).y_position,
-                  longitude: (this.selectedPole as any).longitude ?? (pole as any).x_position
-                });
-              }
-            });
-          }
+          this.openPolePropertiesFromFeature(feature, lat, lng);
+        });
+        marker.on('dblclick', (ev: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(ev);
+          this.openPoleEditFromFeature(feature);
         });
 
         marker.addTo(this.map!);
@@ -1702,6 +1658,13 @@ export class MapComponent implements OnInit, OnDestroy {
               geometry: feat?.geometry
             } as GeoJSONFeature);
           });
+          marker.on('dblclick', (ev: L.LeafletMouseEvent) => {
+            L.DomEvent.stopPropagation(ev);
+            const eqId = (eq as any).id ?? (eq as any).equipment_id;
+            if (eqId != null) {
+              this.openEquipmentEditDialog(Number(eqId));
+            }
+          });
           marker.addTo(this.map!);
           this.equipmentGeoJsonMarkers.push(marker);
           if (Number.isFinite(eqId)) rendered.add(eqId);
@@ -1775,6 +1738,13 @@ export class MapComponent implements OnInit, OnDestroy {
           geometry: { type: 'Point', coordinates: [Number(lng), Number(lat)] }
         } as GeoJSONFeature);
       });
+      marker.on('dblclick', (ev: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(ev);
+        const eqId = (eq as any).id;
+        if (eqId != null) {
+          this.openEquipmentEditDialog(Number(eqId));
+        }
+      });
 
       marker.addTo(this.map!);
       this.equipmentPointMarkers.push(marker);
@@ -1835,6 +1805,13 @@ export class MapComponent implements OnInit, OnDestroy {
           properties: { ...props },
           geometry: feature.geometry
         } as GeoJSONFeature);
+      });
+      marker.on('dblclick', (ev: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(ev);
+        const eqId = props['equipment_id'] ?? props['id'];
+        if (eqId != null) {
+          this.openEquipmentEditDialog(Number(eqId));
+        }
       });
       marker.addTo(this.map!);
       this.equipmentGeoJsonMarkers.push(marker);
@@ -2122,12 +2099,19 @@ export class MapComponent implements OnInit, OnDestroy {
         });
 
         marker.on('click', () => {
-          // Центрируем карту на подстанции и сообщаем sidebar выбрать её в дереве
-          this.centerOnPole(latlng.lat, latlng.lng, 16);
           const substationId = feature.properties['id'];
+          if (substationId != null && this._selectedSubstationId === Number(substationId)) {
+            return;
+          }
+          this.centerOnPole(latlng.lat, latlng.lng, 16);
           if (substationId != null) {
+            this._selectedSubstationId = Number(substationId);
             this.mapService.requestSelectSubstationInTree(Number(substationId));
           }
+        });
+        marker.on('dblclick', (ev: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(ev);
+          this.openSubstationEditFromFeature(feature);
         });
 
         marker.addTo(this.map!);
@@ -2677,12 +2661,55 @@ export class MapComponent implements OnInit, OnDestroy {
     this.selectedPole = null;
     this.showEquipmentProperties = false;
     this.selectedEquipment = null;
+    this._selectedSubstationId = null;
   }
 
-  openEditEquipmentDialog(): void {
-    const equipmentId = this.selectedEquipment?.equipment_id ?? this.selectedEquipment?.id;
-    if (equipmentId == null) {
-      this.snackBar.open('Оборудование не выбрано', 'Закрыть', { duration: 2500 });
+  /** Одинарный клик по опоре — панель свойств (без повторной перезагрузки той же опоры). */
+  private openPolePropertiesFromFeature(feature: GeoJSONFeature, lat: number, lng: number): void {
+    const poleId = feature.properties['id'];
+    if (poleId != null && this.showPoleProperties && this.selectedPole?.id === poleId) {
+      return;
+    }
+    this.showEquipmentProperties = false;
+    this.selectedEquipment = null;
+    this.showPoleProperties = true;
+    this.selectedPole = {
+      ...feature.properties,
+      latitude: lat,
+      longitude: lng,
+      segment_name: feature.properties['segment_name'] ||
+        feature.properties['power_line_name'] ||
+        `ЛЭП ID: ${this.lineIdFromProps(feature.properties as Record<string, any> | undefined) ?? 'не указано'}`
+    };
+    this.centerOnPole(lat, lng, 18);
+    const lineId = this.lineIdFromProps(feature.properties as Record<string, any> | undefined);
+    if (lineId != null && poleId != null) {
+      this.mapService.requestSelectPoleInTree(
+        lineId,
+        poleId,
+        feature.properties['segment_id'] ?? undefined
+      );
+    }
+    if (poleId != null) {
+      this.apiService.getPole(poleId).subscribe({
+        next: (pole) => {
+          Object.assign(this.selectedPole as any, pole, {
+            equipment: (pole as any).equipment || [],
+            connectivity_node: (pole as any).connectivity_node ?? null,
+            latitude: (this.selectedPole as any).latitude ?? (pole as any).y_position,
+            longitude: (this.selectedPole as any).longitude ?? (pole as any).x_position
+          });
+        }
+      });
+    }
+  }
+
+  /** Двойной клик по опоре — карточка редактирования. */
+  private openPoleEditFromFeature(feature: GeoJSONFeature): void {
+    const poleId = Number(feature.properties['id']);
+    const lineId = Number(this.lineIdFromProps(feature.properties as Record<string, any> | undefined));
+    if (!Number.isFinite(poleId) || poleId <= 0 || !Number.isFinite(lineId) || lineId <= 0) {
+      this.snackBar.open('Не удалось открыть редактирование опоры', 'Закрыть', { duration: 2500 });
       return;
     }
     const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
@@ -2695,8 +2722,67 @@ export class MapComponent implements OnInit, OnDestroy {
       panelClass: 'create-object-dialog-panel',
       data: {
         isEdit: true,
+        objectType: 'pole',
+        poleId,
+        lineId,
+      }
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        this.loadMapData();
+      }
+    });
+  }
+
+  /** Двойной клик по подстанции — карточка редактирования. */
+  private openSubstationEditFromFeature(feature: GeoJSONFeature): void {
+    const substationId = Number(feature.properties['id']);
+    if (!Number.isFinite(substationId) || substationId <= 0) {
+      return;
+    }
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      disableClose: false,
+      autoFocus: false,
+      restoreFocus: false,
+      panelClass: 'create-object-dialog-panel',
+      data: {
+        isEdit: true,
+        objectType: 'substation',
+        substationId,
+      }
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        this.loadMapData();
+      }
+    });
+  }
+
+  openEditEquipmentDialog(): void {
+    const equipmentId = this.selectedEquipment?.equipment_id ?? this.selectedEquipment?.id;
+    if (equipmentId == null) {
+      this.snackBar.open('Оборудование не выбрано', 'Закрыть', { duration: 2500 });
+      return;
+    }
+    this.openEquipmentEditDialog(Number(equipmentId));
+  }
+
+  private openEquipmentEditDialog(equipmentId: number): void {
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      disableClose: false,
+      autoFocus: false,
+      restoreFocus: false,
+      panelClass: 'create-object-dialog-panel',
+      data: {
+        isEdit: true,
         objectType: 'equipment',
-        equipmentId: Number(equipmentId)
+        equipmentId
       }
     });
     dialogRef.afterClosed().subscribe((result) => {
@@ -2721,38 +2807,29 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   openEditSelectedPoleDialog(): void {
-    const poleId = Number(this.selectedPole?.id);
-    const lineId = Number(this.selectedPole?.line_id);
-    if (!Number.isFinite(poleId) || poleId <= 0 || !Number.isFinite(lineId) || lineId <= 0) {
+    if (!this.selectedPole) {
       this.snackBar.open('Не удалось открыть редактирование: опора не выбрана', 'Закрыть', { duration: 2500 });
       return;
     }
-
-    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
-      width: '560px',
-      maxWidth: '95vw',
-      maxHeight: '90vh',
-      disableClose: false,
-      autoFocus: false,
-      restoreFocus: false,
-      panelClass: 'create-object-dialog-panel',
-      data: {
-        isEdit: true,
-        objectType: 'pole',
-        poleId,
-        lineId,
+    this.openPoleEditFromFeature({
+      type: 'Feature',
+      properties: this.selectedPole,
+      geometry: {
+        type: 'Point',
+        coordinates: [this.selectedPole.longitude, this.selectedPole.latitude]
       }
-    });
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.success) {
-        this.loadMapData();
-      }
-    });
+    } as GeoJSONFeature);
   }
 
   private openEquipmentProperties(feature: GeoJSONFeature): void {
     const props = feature?.properties || {};
     const eqId = props['equipment_id'] ?? props['id'];
+    if (eqId != null && this.showEquipmentProperties) {
+      const curId = this.selectedEquipment?.equipment_id ?? this.selectedEquipment?.id;
+      if (curId != null && Number(curId) === Number(eqId)) {
+        return;
+      }
+    }
     const poleId = props['pole_id'];
     const lineId = this.lineIdFromProps(props as Record<string, any> | undefined);
     const coords = feature?.geometry?.type === 'Point' ? (feature.geometry.coordinates as number[]) : null;

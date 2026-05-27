@@ -34,6 +34,11 @@ MAX_FILE_SIZE=10485760
 # Tile server настройки
 TILE_CACHE_DIR=tile_cache
 TILE_CACHE_ENABLED=true
+# Tile server: primary — openstreetmap.de (часто доступен, когда .org/Carto на Fastly блокируются).
+# OSM_TILE_UPSTREAM_TEMPLATE=https://tile.openstreetmap.de/{z}/{x}/{y}.png
+# OSM_TILE_UPSTREAM_FALLBACKS=https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png
+# OSM_TILE_CONNECT_TIMEOUT_SECONDS=3
+# OSM_TILE_READ_TIMEOUT_SECONDS=25
 MAP_GEOJSON_CACHE_ENABLED=true
 MAP_GEOJSON_CACHE_TTL_SECONDS=300
 

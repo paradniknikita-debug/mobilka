@@ -475,6 +475,10 @@ async def get_acline_segment(
             )
         )).scalar_one() or 0.0
         object.__setattr__(segment, "length", seg_len)
+        segment.line_sections.sort(key=lambda ls: ls.sequence_number or 0)
+        for ls in segment.line_sections:
+            if ls.spans:
+                ls.spans.sort(key=lambda sp: sp.sequence_number or 0)
     return segment
 
 

@@ -78,8 +78,15 @@ async def lifespan(app: FastAPI):
     # Создание директории для статических файлов
     Path("static").mkdir(exist_ok=True)
     # Один пул HTTP к OSM на всё приложение (иначе на каждый тайл — новый TCP/TLS).
+    from app.core.config import settings as app_settings
+
     app.state.osm_tile_http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(20.0),
+        timeout=httpx.Timeout(
+            connect=app_settings.OSM_TILE_CONNECT_TIMEOUT_SECONDS,
+            read=app_settings.OSM_TILE_READ_TIMEOUT_SECONDS,
+            write=10.0,
+            pool=10.0,
+        ),
         follow_redirects=True,
         limits=httpx.Limits(max_keepalive_connections=32, max_connections=64),
     )

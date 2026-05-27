@@ -1,58 +1,21 @@
 .passportization {
   min-height: 100%;
   background: linear-gradient(180deg, #eef2ff 0%, var(--app-bg) 28%, var(--app-bg) 100%);
-  padding: calc(48px + 16px) clamp(12px, 2.5vw, 28px) 40px;
+  padding: calc(48px + 12px) clamp(12px, 2.5vw, 28px) 40px;
   box-sizing: border-box;
 }
 
-.passport-hero {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
+.passport-read-only {
   max-width: min(1240px, 100%);
-  margin: 0 auto 20px;
-  padding: 20px 22px;
-  border-radius: 16px;
-  background: var(--surface-1);
-  border: 1px solid var(--border-color);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 12px 32px rgba(57, 73, 171, 0.08);
-}
-
-.passport-hero__badge {
-  flex-shrink: 0;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(145deg, #3949ab, #5c6bc0);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(57, 73, 171, 0.35);
-
-  mat-icon {
-    font-size: 30px;
-    width: 30px;
-    height: 30px;
-  }
-}
-
-.passport-hero__text h1 {
-  margin: 0;
-  font-size: 1.65rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--app-text);
-}
-
-.passport-hero__read-only {
-  margin: 8px 0 0;
+  margin: 0 auto 12px;
+  padding: 10px 14px;
   font-size: 0.9rem;
   line-height: 1.45;
   color: #b45309;
-  max-width: 72ch;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  box-sizing: border-box;
 }
 
 .passport-tabs {

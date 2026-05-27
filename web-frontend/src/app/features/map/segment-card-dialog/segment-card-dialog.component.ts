@@ -1,7 +1,7 @@
 import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ApiService } from '../../../core/services/api.service';
-import { AClineSegment, LineSection } from '../../../core/models/cim.model';
+import { AClineSegment, ConnectivityNode, LineSection, Span } from '../../../core/models/cim.model';
 import { Substation } from '../../../core/models/substation.model';
 
 export interface SegmentCardDialogData {
@@ -52,7 +52,8 @@ export class SegmentCardDialogComponent {
   }
 
   get lineSections(): LineSection[] {
-    return this.segment?.line_sections ?? [];
+    const sections = this.segment?.line_sections ?? [];
+    return [...sections].sort((a, b) => (a.sequence_number ?? 0) - (b.sequence_number ?? 0));
   }
 
   /** Длина участка по пролётам (в км); совпадает с суммой длин секций при корректных данных */
@@ -69,20 +70,71 @@ export class SegmentCardDialogComponent {
     return '0 м';
   }
 
-  /** Диапазон опор секции в формате «оп.X-оп.Y» (без дублирования слова «Опора») */
-  sectionPoleRange(sec: LineSection): string {
-    const spans = sec.spans ?? [];
-    if (spans.length === 0) return '—';
-    const fromNum = this.poleLabelToOp(spans[0].from_connectivity_node?.pole_number ?? spans[0].from_connectivity_node_id);
-    const toNum = this.poleLabelToOp(spans[spans.length - 1].to_connectivity_node?.pole_number ?? spans[spans.length - 1].to_connectivity_node_id);
-    return `оп.${fromNum}-оп.${toNum}`;
+  /** Диапазон опор секции: имя секции с бэкенда (по CN/ПС) или цепочка пролётов */
+  sectionLabel(sec: LineSection): string {
+    const fromName = this.sectionRangeFromName(sec.name);
+    if (fromName) {
+      return fromName;
+    }
+    return this.sectionPoleRange(sec);
   }
 
-  /** «Опора 1» / «1» → «1» для использования в «оп.X» (убираем дублирование слова Опора) */
+  /** «Опора 3 - РВ-10 (AC-70)» → «оп.3-РВ-10» */
+  private sectionRangeFromName(name: string | undefined | null): string | null {
+    const raw = (name || '').trim();
+    if (!raw) return null;
+    const withoutWire = raw.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    if (!withoutWire.includes('-')) return null;
+    return withoutWire
+      .replace(/Опора\s+/gi, 'оп.')
+      .replace(/\s*-\s*/g, '-')
+      .trim();
+  }
+
+  /** Диапазон по пролётам секции (отсортированным по sequence_number) */
+  sectionPoleRange(sec: LineSection): string {
+    const spans = this.sortedSpans(sec);
+    if (spans.length === 0) return '—';
+    const fromLabel = this.nodeDisplayLabel(spans[0].from_connectivity_node, spans[0], 'from');
+    const toLabel = this.nodeDisplayLabel(spans[spans.length - 1].to_connectivity_node, spans[spans.length - 1], 'to');
+    return `${fromLabel}-${toLabel}`;
+  }
+
+  private sortedSpans(sec: LineSection): Span[] {
+    return [...(sec.spans ?? [])].sort(
+      (a, b) => (a.sequence_number ?? 0) - (b.sequence_number ?? 0)
+    );
+  }
+
+  private nodeDisplayLabel(
+    node: ConnectivityNode | undefined | null,
+    span: Span,
+    end: 'from' | 'to'
+  ): string {
+    const poleNum =
+      node?.pole_number ??
+      (end === 'from' ? (span as any).from_pole_number : (span as any).to_pole_number);
+    if (poleNum != null && String(poleNum).trim()) {
+      return `оп.${this.poleLabelToOp(poleNum)}`;
+    }
+    const nodeName = (node?.name || '').trim();
+    if (nodeName) {
+      if (/^узел\s+/i.test(nodeName)) {
+        const rest = nodeName.replace(/^узел\s+/i, '').trim();
+        return rest ? `оп.${this.poleLabelToOp(rest)}` : nodeName;
+      }
+      return nodeName.replace(/Опора\s+/gi, 'оп.');
+    }
+    const poleId = end === 'from' ? span.from_pole_id : span.to_pole_id;
+    return poleId != null ? `оп.${poleId}` : '?';
+  }
+
+  /** «Опора 1» / «1» → «1» для использования в «оп.X» */
   poleLabelToOp(poleNumber: string | number | undefined): string {
     if (poleNumber == null) return '?';
     const s = String(poleNumber).trim();
     if (s.toLowerCase().startsWith('опора')) return s.slice(5).trim() || s;
+    if (s.toLowerCase().startsWith('оп.')) return s.slice(3).trim() || s;
     return s;
   }
 
@@ -91,11 +143,6 @@ export class SegmentCardDialogComponent {
     const name = this.segment?.name ?? '';
     if (!name) return '—';
     return name.replace(/Опора\s+/gi, 'оп.').replace(/\s*-\s*/g, '-').trim() || name;
-  }
-
-  /** Строка диапазона опор секции без дублирования марки провода */
-  sectionLabel(sec: LineSection): string {
-    return this.sectionPoleRange(sec);
   }
 
   onClose(): void {

@@ -1,15 +1,7 @@
 <div class="passportization">
-  <header class="passport-hero">
-    <div class="passport-hero__badge" aria-hidden="true">
-      <mat-icon>folder_special</mat-icon>
-    </div>
-    <div class="passport-hero__text">
-      <h1>Паспортизация</h1>
-      <p *ngIf="!canManagePassportization()" class="passport-hero__read-only">
-        У вас доступ только для просмотра: создание и изменение справочников и паспортов недоступны.
-      </p>
-    </div>
-  </header>
+  <p *ngIf="!canManagePassportization()" class="passport-read-only">
+    У вас доступ только для просмотра: создание и изменение справочников и паспортов недоступны.
+  </p>
 
   <mat-tab-group
     class="passport-tabs"

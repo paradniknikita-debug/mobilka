@@ -30,7 +30,11 @@ class Settings(BaseSettings):
     # GeoJSON слоёв карты (опоры, ЛЭП, оборудование…) — JSON в Redis
     MAP_GEOJSON_CACHE_ENABLED: bool = True
     MAP_GEOJSON_CACHE_TTL_SECONDS: int = 300
-    OSM_TILE_UPSTREAM_TEMPLATE: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    OSM_TILE_UPSTREAM_TEMPLATE: str = "https://tile.openstreetmap.de/{z}/{x}/{y}.png"
+    # Через запятую; если пусто — в map_tile_cache используются встроенные запасные CDN
+    OSM_TILE_UPSTREAM_FALLBACKS: str = ""
+    OSM_TILE_CONNECT_TIMEOUT_SECONDS: float = 3.0
+    OSM_TILE_READ_TIMEOUT_SECONDS: float = 25.0
     OSM_TILE_USER_AGENT: str = "LEPM/1.0 (tile cache proxy; diploma project)"
 
     TRUSTED_PROXIES: List[str] = ["127.0.0.1", "host.docker.internal", "nginx"]

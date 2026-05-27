@@ -90,6 +90,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
         this.expandedPolesFolders.add(`${lineId}-all-poles`);
         this.selectedPoleIdFromMap = poleId;
         this.cdr.detectChanges();
+        this.scrollTreeToTarget({ lineId, poleId });
       });
 
     // При клике на подстанцию на карте — выделяем её в дереве
@@ -144,13 +145,86 @@ export class SidebarComponent implements OnInit, OnDestroy {
   contextMenuEquipment: Equipment | null = null;
 
   private scrollToSubstationInTree(substationId: number): void {
+    this.scrollTreeToTarget({ substationId });
+  }
+
+  /** Прокрутка дерева к найденному объекту (после раскрытия веток). */
+  private scrollTreeToTarget(target: {
+    lineId?: number | null;
+    poleId?: number | null;
+    substationId?: number | null;
+    segmentId?: number | null;
+    spanId?: number | null;
+    equipmentId?: number | null;
+  }): void {
     setTimeout(() => {
-      const node = document.querySelector(
-        `.sidebar-content .substation-node[data-substation-id="${substationId}"]`
-      ) as HTMLElement | null;
+      const root = document.querySelector('.sidebar-content');
+      if (!root) return;
+
+      let node: HTMLElement | null = null;
+      if (target.equipmentId != null) {
+        node = root.querySelector(
+          `.equipment-node[data-equipment-id="${target.equipmentId}"]`
+        ) as HTMLElement | null;
+      }
+      if (!node && target.poleId != null) {
+        node = root.querySelector(
+          `.pole-node[data-pole-id="${target.poleId}"]`
+        ) as HTMLElement | null;
+      }
+      if (!node && target.spanId != null) {
+        node = root.querySelector(
+          `.pole-node[data-span-id="${target.spanId}"]`
+        ) as HTMLElement | null;
+      }
+      if (!node && target.segmentId != null && target.lineId != null) {
+        node = root.querySelector(
+          `.segment-node[data-line-id="${target.lineId}"][data-segment-id="${target.segmentId}"]`
+        ) as HTMLElement | null;
+      }
+      if (!node && target.substationId != null) {
+        node = root.querySelector(
+          `.substation-node[data-substation-id="${target.substationId}"]`
+        ) as HTMLElement | null;
+      }
+      if (!node && target.lineId != null) {
+        node = root.querySelector(
+          `.power-line-node[data-line-id="${target.lineId}"]`
+        ) as HTMLElement | null;
+      }
       if (!node) return;
       node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 0);
+    }, 80);
+  }
+
+  private expandTreeForLine(lineId: number): void {
+    this.expandedPowerLines.add(lineId);
+    this.expandedPolesFolders.add(`${lineId}-all-poles`);
+  }
+
+  private expandTreeForPole(lineId: number, poleId: number): void {
+    this.expandTreeForLine(lineId);
+    this.selectedPoleIdFromMap = poleId;
+    const items = this.getPowerLinesWithSegmentsAndPoles();
+    const item = items.find(i => Number(i.powerLine.properties['id']) === lineId);
+    const pole = item?.allPoles.find(p => Number(p.properties['id']) === poleId);
+    const segmentIdRaw = pole?.properties?.['segment_id'];
+    if (segmentIdRaw != null) {
+      const segKey = this.expandSegmentKeyForLine(lineId, Number(segmentIdRaw));
+      if (segKey) {
+        this.expandedSegments.add(segKey);
+      }
+    }
+  }
+
+  private expandTreeForSegment(lineId: number, segmentId: number | null): void {
+    this.expandTreeForLine(lineId);
+    if (segmentId != null) {
+      const segKey = this.expandSegmentKeyForLine(lineId, segmentId);
+      if (segKey) {
+        this.expandedSegments.add(segKey);
+      }
+    }
   }
 
   private loadAllEquipmentForTree(): void {
@@ -772,15 +846,36 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const subId = hit.substation_id != null ? Number(hit.substation_id) : null;
     const zoom = 16;
 
-    if (lineId != null && Number.isFinite(lineId)) {
-      this.expandedPowerLines.add(lineId);
-      this.expandedPolesFolders.add(`${lineId}-all-poles`);
-    }
-    if (poleId != null && Number.isFinite(poleId)) {
-      this.selectedPoleIdFromMap = poleId;
+    if (hit.entity_type === 'acline_segment' && lineId != null) {
+      this.expandTreeForSegment(lineId, hit.entity_id);
+    } else if (hit.entity_type === 'span' && lineId != null) {
+      this.expandTreeForLine(lineId);
+      const items = this.getPowerLinesWithSegmentsAndPoles();
+      const item = items.find(i => Number(i.powerLine.properties['id']) === lineId);
+      if (item) {
+        for (let segIdx = 0; segIdx < item.segments.length; segIdx++) {
+          const seg = item.segments[segIdx];
+          const hasSpan = seg.spans.some(
+            sp => Number(sp.properties['id']) === hit.entity_id
+          );
+          if (hasSpan) {
+            this.expandedSegments.add(
+              this.segmentExpandKey(lineId, seg.segmentId, segIdx)
+            );
+            break;
+          }
+        }
+      }
+    } else if (hit.entity_type === 'equipment' && poleId != null && lineId != null) {
+      this.expandTreeForPole(lineId, poleId);
+    } else if (poleId != null && lineId != null) {
+      this.expandTreeForPole(lineId, poleId);
+    } else if (lineId != null && Number.isFinite(lineId)) {
+      this.expandTreeForLine(lineId);
     }
     if (subId != null && Number.isFinite(subId)) {
       this.selectedPoleIdFromMap = null;
+      this.selectedSubstationIdFromMap = subId;
     }
 
     if (hit.latitude != null && hit.longitude != null) {
@@ -811,6 +906,15 @@ export class SidebarComponent implements OnInit, OnDestroy {
     this.treeSearchSuggestions = [];
     this.snackBar.open(`Найдено: ${hit.label}`, 'Закрыть', { duration: 2500 });
     this.cdr.detectChanges();
+
+    this.scrollTreeToTarget({
+      lineId,
+      poleId,
+      substationId: subId,
+      segmentId: hit.entity_type === 'acline_segment' ? hit.entity_id : null,
+      spanId: hit.entity_type === 'span' ? hit.entity_id : null,
+      equipmentId: hit.entity_type === 'equipment' ? hit.entity_id : null,
+    });
   }
 
   onSearchInput(): void {
@@ -982,6 +1086,30 @@ export class SidebarComponent implements OnInit, OnDestroy {
     }
     this.treeSearchSuggestions = [];
     this.cdr.detectChanges();
+
+    const plIdNum = Number(plId);
+    if (s.type === 'power_line') {
+      this.scrollTreeToTarget({ lineId: plIdNum });
+    } else if (s.type === 'segment' && s.segment) {
+      this.scrollTreeToTarget({ lineId: plIdNum, segmentId: s.segment.segmentId });
+    } else if (s.type === 'equipment' && s.equipment) {
+      this.scrollTreeToTarget({
+        lineId: plIdNum,
+        poleId: s.equipment.pole_id ?? null,
+        equipmentId: s.equipment.id ?? null,
+      });
+    } else if (s.type === 'pole' && s.pole) {
+      this.scrollTreeToTarget({
+        lineId: plIdNum,
+        poleId: Number(s.pole.properties['id']),
+      });
+    } else if (s.type === 'span' && s.span) {
+      this.scrollTreeToTarget({
+        lineId: plIdNum,
+        segmentId: s.segment?.segmentId ?? null,
+        spanId: Number(s.span.properties['id']),
+      });
+    }
   }
 
   /** Собирает bbox по геометрии фич (Point и LineString). Возвращает [[minLat, minLng], [maxLat, maxLng]] или null. */

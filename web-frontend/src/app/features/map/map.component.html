@@ -2,12 +2,20 @@
   <div id="map" class="map"></div>
   
   <div class="map-controls">
-    <button mat-icon-button color="primary" (click)="openCreateDialog()" matTooltip="Создать объект" class="map-control-btn">
-      <mat-icon>add</mat-icon>
-    </button>
-    <button mat-icon-button color="accent" (click)="refreshData()" matTooltip="Обновить данные" class="map-control-btn">
-      <mat-icon>refresh</mat-icon>
-    </button>
+    <div class="basemap-control">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Подложка</mat-label>
+        <mat-select
+          [value]="selectedBasemapId"
+          (selectionChange)="onBasemapChange($event.value)"
+          matTooltip="Источник карты. При ошибках загрузки переключается автоматически"
+        >
+          <mat-option *ngFor="let b of basemapOptions" [value]="b.id">
+            {{ b.label }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
     <div class="defect-filter-control">
       <mat-checkbox
         color="warn"
@@ -18,6 +26,12 @@
         Только дефектные
       </mat-checkbox>
     </div>
+    <button mat-icon-button color="primary" (click)="openCreateDialog()" matTooltip="Создать объект" class="map-control-btn">
+      <mat-icon>add</mat-icon>
+    </button>
+    <button mat-icon-button color="accent" (click)="refreshData()" matTooltip="Обновить данные" class="map-control-btn">
+      <mat-icon>refresh</mat-icon>
+    </button>
   </div>
 
   <!-- Индикатор уровня зума (левый нижний угол), компактный -->

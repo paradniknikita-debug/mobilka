@@ -33,6 +33,7 @@ import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/offline_map_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/map_tile_config.dart';
+import '../../../../core/config/map_basemap.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
@@ -78,6 +79,11 @@ class _MapPageState extends ConsumerState<MapPage> {
   Map<String, dynamic>? _spansData;
   List<PowerLine>? _powerLinesList; // Полный список ЛЭП для дерева
   String? _errorMessage;
+
+  /// Подложка карты (сохраняется в SharedPreferences).
+  String _basemapId = MapBasemapOption.defaultId;
+  int _tileErrorCount = 0;
+  DateTime? _tileErrorWindowStart;
   
   // Окно свойств объекта
   Map<String, dynamic>? _selectedObjectProperties;
@@ -235,6 +241,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     _mapController = MapController();
     _equipmentZoomNotifier = ValueNotifier(AppConfig.defaultZoom);
     unawaited(MapEquipmentIcons.precache());
+    unawaited(_loadBasemapPref());
     // Откладываем инициализацию до следующего кадра для быстрого отображения UI
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeMap();
@@ -1635,6 +1642,11 @@ class _MapPageState extends ConsumerState<MapPage> {
               onPressed: _exportCimXml,
               tooltip: 'Экспорт в CIM XML',
             ),
+          IconButton(
+            icon: const Icon(Icons.layers),
+            tooltip: 'Подложка карты',
+            onPressed: _showBasemapPicker,
+          ),
           IconButton(
             icon: const Icon(Icons.my_location),
             onPressed: _centerOnCurrentLocation,
@@ -4754,12 +4766,95 @@ class _MapPageState extends ConsumerState<MapPage> {
     _getCurrentLocation(moveMap: true);
   }
 
-  /// Подложка: один стиль OSM (API → fallback OSM). FMTC — тот же URL, в офлайне только кэш.
+  Future<void> _loadBasemapPref() async {
+    final id = await MapBasemapOption.loadSavedId();
+    if (!mounted) return;
+    setState(() => _basemapId = id);
+  }
+
+  void _showBasemapPicker() {
+    final options = MapBasemapOption.chain(AppConfig.apiBaseUrl);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Text(
+                  'Подложка карты',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  'При ошибках загрузки переключается автоматически на следующий источник.',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ),
+              ...options.map(
+                (o) => RadioListTile<String>(
+                  title: Text(o.label),
+                  value: o.id,
+                  groupValue: _basemapId,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    Navigator.pop(ctx);
+                    _selectBasemap(v, automatic: false);
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _selectBasemap(String id, {required bool automatic}) {
+    if (_basemapId == id) return;
+    final next = MapBasemapOption.byId(id);
+    setState(() {
+      _basemapId = next.id;
+      _tileErrorCount = 0;
+      _tileErrorWindowStart = null;
+    });
+    unawaited(MapBasemapOption.saveId(next.id));
+    if (!mounted) return;
+    final prefix =
+        automatic ? 'Подложка переключена автоматически' : 'Подложка изменена';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$prefix: ${next.label}'), duration: const Duration(seconds: 4)),
+    );
+  }
+
+  void _maybeAutoFallbackBasemap() {
+    final now = DateTime.now();
+    _tileErrorWindowStart ??= now;
+    if (now.difference(_tileErrorWindowStart!) > const Duration(seconds: 4)) {
+      _tileErrorCount = 0;
+      _tileErrorWindowStart = now;
+    }
+    _tileErrorCount++;
+    if (_tileErrorCount < 4) return;
+    final next = MapBasemapOption.nextInChain(_basemapId);
+    if (next == null) return;
+    _selectBasemap(next.id, automatic: true);
+  }
+
+  /// Подложка: выбор пользователя + fallback на следующий источник в цепочке.
   Widget _buildMapTileLayer(bool isOffline) {
+    final basemap = MapBasemapOption.byId(_basemapId);
+    final fallback = MapBasemapOption.nextInChain(_basemapId);
     return TileLayer(
-      key: ValueKey<bool>(isOffline),
-      urlTemplate: MapTileConfig.primaryUrlTemplate,
-      fallbackUrl: MapTileConfig.fallbackUrlTemplate,
+      key: ValueKey<Object>('$isOffline:${basemap.id}'),
+      urlTemplate: basemap.urlTemplate,
+      fallbackUrl: fallback?.urlTemplate,
       tileProvider: OfflineMapService.instance.getTileProvider(offline: isOffline),
       keepBuffer: MapTileConfig.keepBuffer,
       panBuffer: MapTileConfig.panBuffer,
@@ -4778,6 +4873,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (kDebugMode) {
           print('⚠️ Ошибка загрузки тайла: $error');
         }
+        _maybeAutoFallbackBasemap();
       },
     );
   }
