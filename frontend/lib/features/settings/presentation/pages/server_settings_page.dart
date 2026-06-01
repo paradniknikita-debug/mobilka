@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/base_url_manager.dart';
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/dio_config.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class ServerSettingsPage extends ConsumerStatefulWidget {
@@ -20,6 +21,7 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
   final _ipController = TextEditingController();
   final _portController = TextEditingController(text: '8000');
   bool _isLoading = false;
+  bool _trustSelfSigned = false;
   String? _currentServerUrl;
   String? _testResult;
 
@@ -37,6 +39,7 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
     final savedUrl = urlManager.getSavedServerUrl();
     setState(() {
       _currentServerUrl = savedUrl ?? 'http://lepm.local:8000';
+      _trustSelfSigned = urlManager.shouldTrustSelfSignedCert;
     });
 
     // Парсим текущий URL для заполнения полей
@@ -77,6 +80,7 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
       final urlManager = BaseUrlManager();
       await urlManager.init(prefs);
       await urlManager.setServerUrl(serverUrl);
+      await urlManager.setTrustSelfSignedCert(_trustSelfSigned);
       
       // Обновляем API сервис
       ApiServiceProvider.updatePrefs(prefs);
@@ -126,6 +130,7 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
       final testUrl = 'http://$ip:$port/health';
       
       final client = HttpClient();
+      client.badCertificateCallback = (_, __, ___) => _trustSelfSigned;
       try {
         final uri = Uri.parse(testUrl);
         final request = await client.getUrl(uri).timeout(
@@ -280,6 +285,27 @@ class _ServerSettingsPageState extends ConsumerState<ServerSettingsPage> {
                 textInputAction: TextInputAction.done,
                 validator: _validatePort,
                 enabled: !_isLoading,
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _trustSelfSigned,
+                onChanged: _isLoading
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _trustSelfSigned = value ?? false;
+                        });
+                      },
+                title: const Text(
+                  'Доверять самоподписанному сертификату',
+                  style: TextStyle(color: PatrolColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Для prod VPS по HTTPS без домена',
+                  style: TextStyle(color: PatrolColors.textSecondary),
+                ),
               ),
               const SizedBox(height: 24),
               if (_testResult != null)

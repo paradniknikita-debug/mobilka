@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
+from app.core.password_policy import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from app.core.roles import CANONICAL_ROLES, LEGACY_ROLE_MAP, ROLE_FIELD_ENGINEER
 
 
@@ -28,7 +29,7 @@ class UserBase(BaseModel):
         )
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
     branch_id: Optional[int] = None
 
 class UserLogin(BaseModel):

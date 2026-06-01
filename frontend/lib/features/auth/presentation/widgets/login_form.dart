@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/auth_service.dart';
-import '../../../../core/config/app_config.dart';
 
 class LoginForm extends ConsumerStatefulWidget {
   const LoginForm({super.key});
@@ -84,9 +83,6 @@ class _LoginFormState extends ConsumerState<LoginForm> {
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Введите пароль';
-              }
-              if (value.length < AppConfig.minPasswordLength) {
-                return 'Пароль должен содержать минимум ${AppConfig.minPasswordLength} символов';
               }
               return null;
             },

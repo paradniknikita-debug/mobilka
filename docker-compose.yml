@@ -86,6 +86,9 @@ services:
     # Убрали :ro (read-only) чтобы hot reload мог работать
     volumes:
       - ./backend/app:/app/app
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      - "${DOCKER_GROUP_GID:-999}"
     # Тогда при изменении кода достаточно перезапустить контейнер: docker compose restart backend
     # Пробрасываем порт для прямого доступа (опционально, для отладки)
     # Для продакшена можно убрать и использовать только через nginx

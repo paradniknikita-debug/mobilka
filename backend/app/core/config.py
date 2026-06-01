@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     # Ссылки для панели администратора (пусто — подставляются из запроса / localhost)
     ADMIN_BACKEND_PUBLIC_URL: str = "http://localhost:8000"
     ADMIN_MINIO_CONSOLE_URL: str = "http://localhost:9001"
+    # Просмотр docker logs в админке на prod (нужен docker.sock в контейнере backend)
+    ADMIN_DOCKER_LOGS_ENABLED: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -78,6 +80,15 @@ class Settings(BaseSettings):
     @field_validator("RECREATE_DB", mode="before")
     @classmethod
     def parse_recreate_db(cls, v):
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        return str(v).lower() in ("1", "true", "yes")
+
+    @field_validator("ADMIN_DOCKER_LOGS_ENABLED", mode="before")
+    @classmethod
+    def parse_admin_docker_logs_enabled(cls, v):
         if isinstance(v, bool):
             return v
         if v is None:

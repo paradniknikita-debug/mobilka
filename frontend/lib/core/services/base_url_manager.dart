@@ -14,6 +14,7 @@ class BaseUrlManager {
   SharedPreferences? _prefs;
   static const String _serverUrlKey = 'server_url';
   static const String _fallbackKey = 'url_fallback_occurred';
+  static const String trustSelfSignedCertKey = 'trust_self_signed_cert';
 
   /// Инициализировать с SharedPreferences
   Future<void> init(SharedPreferences prefs) async {
@@ -176,6 +177,16 @@ class BaseUrlManager {
       return _prefs!.getString(_serverUrlKey);
     }
     return null;
+  }
+
+  /// Доверять самоподписанному сертификату (для VPS без домена).
+  bool get shouldTrustSelfSignedCert =>
+      _prefs?.getBool(trustSelfSignedCertKey) ?? false;
+
+  Future<void> setTrustSelfSignedCert(bool value) async {
+    if (_prefs != null) {
+      await _prefs!.setBool(trustSelfSignedCertKey, value);
+    }
   }
 }
 

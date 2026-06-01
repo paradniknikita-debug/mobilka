@@ -67,6 +67,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       ENVIRONMENT: production
       CORS_ORIGINS: ${CORS_ORIGINS}
+      ADMIN_DOCKER_LOGS_ENABLED: ${ADMIN_DOCKER_LOGS_ENABLED:-true}
       RELOAD: "false"
       TZ: ${TZ:-Europe/Moscow}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
@@ -76,6 +77,10 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
     expose:
       - "8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      - "${DOCKER_GROUP_GID:-999}"
     restart: unless-stopped
     networks:
       - lepm_network

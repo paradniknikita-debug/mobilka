@@ -116,9 +116,23 @@ class AppConfig {
   /// Тема приложения: light | dark | system
   static const String themeModeKey = 'theme_mode';
 
-  // Validation
+  // Validation (создание/смена пароля; при входе минимальная длина не проверяется)
   static const int minPasswordLength = 6;
-  static const int maxPasswordLength = 50;
+  static const int maxPasswordLength = 128;
+
+  /// Сообщение для форм регистрации и смены пароля.
+  static String? validateNewPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Введите пароль';
+    }
+    if (value.length < minPasswordLength) {
+      return 'Пароль должен содержать минимум $minPasswordLength символов';
+    }
+    if (value.length > maxPasswordLength) {
+      return 'Пароль не должен быть длиннее $maxPasswordLength символов';
+    }
+    return null;
+  }
   
   // UI Configuration
   static const double defaultPadding = 16.0;

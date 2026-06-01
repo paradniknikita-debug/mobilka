@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import '../services/api_service.dart';
 import '../services/base_url_manager.dart';
+import '../services/dio_config.dart';
 import '../models/user.dart';
 
 // Provider для SharedPreferences (должен быть определен первым)
@@ -117,6 +118,7 @@ class AuthService extends StateNotifier<AuthState> {
       // Используем Dio напрямую для login, так как Retrofit может неправильно обрабатывать FormUrlEncoded
       final dio = Dio();
       final urlManager = BaseUrlManager();
+      configureDioSslTrust(dio);
       dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
       
       // Добавляем обработчик ошибок для автоматического fallback на HTTP при проблемах с SSL
@@ -189,6 +191,7 @@ class AuthService extends StateNotifier<AuthState> {
       // Получаем информацию о пользователе
       final userDio = Dio();
       final userUrlManager = BaseUrlManager();
+      configureDioSslTrust(userDio);
       userDio.options.baseUrl = '${userUrlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
       userDio.options.headers['Authorization'] = 'Bearer ${authResponse.accessToken}';
       
@@ -237,18 +240,12 @@ class AuthService extends StateNotifier<AuthState> {
             state = AuthStateError('Ошибка авторизации: ${e.response?.statusCode ?? 'неизвестная ошибка'}');
           }
         } else {
-          // Проверяем, является ли это ошибкой SSL
-          final isSslError = e.message?.contains('CERT_AUTHORITY_INVALID') == true ||
-                            e.message?.contains('ERR_CERT') == true ||
-                            e.message?.contains('certificate') == true ||
-                            e.error?.toString().contains('CERT_AUTHORITY_INVALID') == true ||
-                            e.error?.toString().contains('ERR_CERT') == true;
-          
-          if (isSslError) {
-            state = AuthStateError('Ошибка SSL сертификата. Пожалуйста:\n\n'
-                '1. Откройте https://localhost в новой вкладке браузера\n'
-                '2. Нажмите "Дополнительно" → "Перейти на localhost (небезопасно)"\n'
-                '3. Или переключите приложение на HTTP в настройках');
+          if (isSslCertificateError(e)) {
+            state = AuthStateError(
+              sslCertificateErrorMessage(
+                trustEnabled: BaseUrlManager().shouldTrustSelfSignedCert,
+              ),
+            );
           } else {
             state = AuthStateError('Ошибка соединения с сервером');
           }
@@ -267,43 +264,6 @@ class AuthService extends StateNotifier<AuthState> {
           state = AuthStateError('Ошибка: ${e.toString()}');
         }
       }
-    }
-  }
-
-  Future<void> register(UserCreate userData) async {
-    try {
-      state = const AuthStateLoading();
-      await _apiService.register(userData);
-      
-      // После регистрации автоматически логинимся
-      // Используем Dio напрямую для login
-      final dio = Dio();
-      final urlManager = BaseUrlManager();
-      dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
-      
-      final formData = {
-        'username': userData.username,
-        'password': userData.password,
-      };
-      
-      final loginResponse = await dio.post(
-        '/auth/login',
-        data: formData,
-        options: Options(
-          contentType: 'application/x-www-form-urlencoded',
-        ),
-      );
-      
-      final authResponse = AuthResponse.fromJson(loginResponse.data);
-      await _prefs.setString(AppConfig.authTokenKey, authResponse.accessToken);
-      
-      // Получаем информацию о пользователе
-      final user = await _apiService.getCurrentUser();
-      await _prefs.setInt(AppConfig.userIdKey, user.id);
-      
-      state = AuthStateAuthenticated(user);
-    } catch (e) {
-      state = AuthStateError(e.toString());
     }
   }
 

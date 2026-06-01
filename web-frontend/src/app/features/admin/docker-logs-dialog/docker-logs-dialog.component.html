@@ -1,9 +1,9 @@
 <h2 mat-dialog-title>Логи Docker</h2>
 <mat-dialog-content class="docker-logs-body">
   <p class="hint">
-    Вывод <code>docker logs</code> с хоста, где запущен backend (режим development).
-    Если пусто — выполните в каталоге проекта:
-    <code>docker compose logs -f {{ service }}</code>
+    Хвост логов контейнера через API backend (<code>docker logs --tail=N</code>).
+    На prod нужны <code>ADMIN_DOCKER_LOGS_ENABLED</code> и доступ к <code>/var/run/docker.sock</code>.
+    Локально: <code>docker compose logs -f {{ service }}</code>
   </p>
   <div class="toolbar">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">

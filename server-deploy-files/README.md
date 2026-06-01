@@ -61,6 +61,8 @@ nano /root/mobilka/.env
 - **SECRET_KEY** — длинная случайная строка для JWT (сгенерируйте: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`)
 - **REDIS_URL** — обычно `redis://redis:6379`
 - **CORS_ORIGINS** — разрешённые origins для API (например `https://ваш-домен.ru` или `*` для теста)
+- **ADMIN_DOCKER_LOGS_ENABLED** — `true`, чтобы в админ-панели работала кнопка «Логи Docker»
+- **DOCKER_GROUP_GID** — GID группы `docker` на сервере: `stat -c '%g' /var/run/docker.sock`
 
 Пример см. в `server-deploy-files/env.example`.
 

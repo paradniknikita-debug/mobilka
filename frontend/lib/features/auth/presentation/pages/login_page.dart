@@ -35,7 +35,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             SnackBar(
               content: Text(next.message),
               backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
+              duration: Duration(seconds: next.message.contains('\n') ? 8 : 4),
             ),
           );
         }
@@ -79,6 +79,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
                 // Форма входа
                 const LoginForm(),
+                const SizedBox(height: 12),
+                Text(
+                  'Учётную запись выдаёт администратор системы',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
 
                 // Кнопка настроек сервера
@@ -97,59 +105,84 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   
   void _showServerSettings(BuildContext context) {
     final urlManager = BaseUrlManager();
-    final currentUrl = urlManager.getSavedServerUrl() ?? 'http://192.168.100.17:8000';
-    
+    final currentUrl = urlManager.getSavedServerUrl() ?? 'https://85.239.48.199';
+    var trustSelfSigned = urlManager.shouldTrustSelfSignedCert;
+
     final controller = TextEditingController(text: currentUrl);
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Настройки сервера'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Введите URL сервера:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'URL сервера',
-                hintText: 'http://192.168.100.17:8000',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.url,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Настройки сервера'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Введите URL сервера (без /api/v1):'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'URL сервера',
+                    hintText: 'https://85.239.48.199',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.url,
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: trustSelfSigned,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      trustSelfSigned = value ?? false;
+                    });
+                  },
+                  title: const Text('Доверять самоподписанному сертификату'),
+                  subtitle: const Text(
+                    'Нужно для VPS без домена. HTTP на prod не работает — nginx перенаправляет на HTTPS.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final url = controller.text.trim();
+                if (url.isNotEmpty) {
+                  final hasScheme =
+                      url.startsWith('http://') || url.startsWith('https://');
+                  final normalizedUrl = hasScheme ? url : 'https://$url';
+
+                  await urlManager.setServerUrl(normalizedUrl);
+                  await urlManager.setTrustSelfSignedCert(trustSelfSigned);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          trustSelfSigned
+                              ? 'Сервер сохранён: $normalizedUrl (самоподписанный SSL разрешён)'
+                              : 'URL сервера сохранен: $normalizedUrl',
+                        ),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Сохранить'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                // Убеждаемся, что URL начинается с http:// или https://.
-                // Если схема не указана, по умолчанию используем HTTPS (чтобы избежать редиректов 301 от nginx).
-                final hasScheme = url.startsWith('http://') || url.startsWith('https://');
-                final normalizedUrl = hasScheme
-                    ? url
-                    : 'https://$url';
-                
-                await urlManager.setServerUrl(normalizedUrl);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('URL сервера сохранен: $normalizedUrl'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-            },
-            child: const Text('Сохранить'),
-          ),
-        ],
       ),
     );
   }

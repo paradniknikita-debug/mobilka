@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 # BuildKit: кэш pip между сборками (DOCKER_BUILDKIT=1 или docker compose build)
+FROM docker:27-cli AS dockercli
+
 FROM python:3.9-slim
 
 # Установка системных зависимостей
@@ -8,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Docker CLI — для просмотра логов контейнеров из админ-панели (docker.sock на хосте)
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
 # Установка часового пояса (Минск)
 ENV TZ=Europe/Minsk

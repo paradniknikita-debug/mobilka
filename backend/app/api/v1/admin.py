@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 import time
+from typing import Optional, Tuple
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -51,6 +51,41 @@ _DOCKER_CONTAINERS: dict[str, str] = {
     "minio": "lepm_minio",
     "nginx": "lepm_nginx",
 }
+
+_docker_client_cache: Optional[Tuple[float, bool]] = None
+
+
+def _docker_logs_allowed() -> bool:
+    return settings.ENVIRONMENT == "development" or settings.ADMIN_DOCKER_LOGS_ENABLED
+
+
+async def _docker_client_available() -> bool:
+    """Проверка: docker CLI доступен и отвечает (нужен docker.sock на хосте)."""
+    global _docker_client_cache
+    if not _docker_logs_allowed():
+        return False
+
+    now = time.monotonic()
+    if _docker_client_cache is not None and now - _docker_client_cache[0] < 30:
+        return _docker_client_cache[1]
+
+    ok = False
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "info",
+            "--format",
+            "{{.ServerVersion}}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.communicate(), timeout=4.0)
+        ok = proc.returncode == 0
+    except (FileNotFoundError, asyncio.TimeoutError, OSError):
+        ok = False
+
+    _docker_client_cache = (now, ok)
+    return ok
 
 
 def _development_guide_path() -> Path:
@@ -111,7 +146,7 @@ async def admin_infrastructure(
         "api_home_url": f"{backend_base}/",
         "openapi_url": f"{backend_base}/openapi.json",
         "development_guide_available": _development_guide_path().is_file(),
-        "docker_logs_available": settings.ENVIRONMENT == "development",
+        "docker_logs_available": await _docker_client_available(),
     }
 
 
@@ -132,11 +167,16 @@ async def admin_docker_logs(
     tail: int = Query(300, ge=50, le=3000),
     _: User = Depends(require_admin_user),
 ):
-    """Хвост логов контейнера docker compose (только development, нужен Docker CLI на хосте)."""
-    if settings.ENVIRONMENT != "development":
+    """Хвост логов контейнера docker compose (только для администратора, нужен Docker CLI)."""
+    if not _docker_logs_allowed():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Просмотр логов Docker доступен только при ENVIRONMENT=development",
+            detail="Просмотр логов Docker отключён. Установите ADMIN_DOCKER_LOGS_ENABLED=true и смонтируйте docker.sock.",
+        )
+    if not await _docker_client_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Docker недоступен из контейнера backend. Смонтируйте /var/run/docker.sock и задайте DOCKER_GROUP_GID.",
         )
     container = _DOCKER_CONTAINERS.get(service.strip().lower())
     if not container:

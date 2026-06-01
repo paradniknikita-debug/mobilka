@@ -12,6 +12,7 @@ import '../models/patrol_session.dart';
 import '../models/equipment_catalog.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
+import 'dio_config.dart';
 import 'auth_service.dart'; // Для доступа к prefsProvider
 import 'session_expiry.dart';
 
@@ -58,9 +59,6 @@ abstract class LepmRetrofit {
     @Field('username') String username,
     @Field('password') String password,
   );
-
-  @POST('/auth/register')
-  Future<User> register(@Body() UserCreate userData);
 
   @GET('/auth/me')
   Future<User> getCurrentUser();
@@ -248,7 +246,6 @@ abstract class LepmRetrofit {
 /// Публичный HTTP-контракт приложения (Map / модели без `JsonDict` в типах для вызывающего кода).
 abstract class ApiServiceWithExport {
   Future<AuthResponse> login(String username, String password);
-  Future<User> register(UserCreate userData);
   Future<User> getCurrentUser();
 
   Future<List<PowerLine>> getPowerLines();
@@ -394,7 +391,7 @@ class ApiServiceProvider {
 
   static bool _isAuthCredentialPath(String path) {
     final p = path.toLowerCase();
-    return p.contains('/auth/login') || p.contains('/auth/register');
+    return p.contains('/auth/login');
   }
 
   /// 401 с защищённых эндпоинтов: очистить токен и вернуть пользователя на экран входа.
@@ -412,6 +409,7 @@ class ApiServiceProvider {
   static ApiServiceWithExport create({SharedPreferences? prefs}) {
     _prefs = prefs; // Сохраняем prefs статически
     final dio = Dio();
+    configureDioSslTrust(dio);
     final urlManager = BaseUrlManager();
     // Обновляем протокол из конфига при создании сервиса
     urlManager.updateProtocolFromConfig();
@@ -550,6 +548,7 @@ final apiServiceProvider = Provider<ApiServiceWithExport>((ref) {
 final dioProvider = Provider<Dio>((ref) {
   final prefs = ref.watch(prefsProvider);
   final dio = Dio();
+  configureDioSslTrust(dio);
   final urlManager = BaseUrlManager();
   dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
   
@@ -719,9 +718,6 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
   // Делегируем все остальные методы к базовому сервису
   @override
   Future<AuthResponse> login(String username, String password) => _rest.login(username, password);
-
-  @override
-  Future<User> register(UserCreate userData) => _rest.register(userData);
 
   @override
   Future<User> getCurrentUser() => _rest.getCurrentUser();

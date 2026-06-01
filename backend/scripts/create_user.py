@@ -23,6 +23,7 @@ from sqlalchemy import or_, select
 # Корень backend (чтобы "from app..." работал при запуске из scripts/)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from app.core.password_policy import MIN_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH_MSG
 from app.core.security import get_password_hash
 from app.database import AsyncSessionLocal, init_db
 from app.models.user import User
@@ -119,8 +120,8 @@ async def main() -> None:
     full_name = _non_empty(args.full_name) or _prompt_required("ФИО", username)
     role = args.role or _prompt_role("engineer")
     password = _non_empty(args.password) or _prompt_password()
-    if len(password) < 6:
-        raise ValueError("Пароль должен быть не короче 6 символов.")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(MIN_PASSWORD_LENGTH_MSG)
 
     await init_db()
 

@@ -75,7 +75,7 @@
           color="primary"
           (click)="openDockerLogs()"
           [disabled]="infrastructure != null && !infrastructure.docker_logs_available"
-          matTooltip="Доступно при ENVIRONMENT=development и установленном Docker CLI"
+          matTooltip="Логи контейнеров docker compose (только для администратора)"
         >
           <mat-icon>terminal</mat-icon>
           Логи Docker
@@ -208,7 +208,14 @@
         </mat-form-field>
         <mat-form-field appearance="outline" class="form-field" subscriptSizing="dynamic">
           <mat-label>Пароль</mat-label>
-          <input matInput [(ngModel)]="createForm.password" type="password" autocomplete="new-password" />
+          <input
+            matInput
+            [(ngModel)]="createForm.password"
+            type="password"
+            autocomplete="new-password"
+            [minlength]="minPasswordLength"
+          />
+          <mat-hint>Не менее {{ minPasswordLength }} символов</mat-hint>
         </mat-form-field>
         <mat-form-field appearance="outline" class="form-field" subscriptSizing="dynamic">
           <mat-label>Роль</mat-label>

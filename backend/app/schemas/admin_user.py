@@ -5,6 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.core.password_policy import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from app.core.roles import CANONICAL_ROLES, normalize_role
 from app.schemas.user import UserResponse
 
@@ -25,7 +26,9 @@ class AdminUserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    password: Optional[str] = Field(
+        default=None, min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH
+    )
 
     @field_validator("role")
     @classmethod

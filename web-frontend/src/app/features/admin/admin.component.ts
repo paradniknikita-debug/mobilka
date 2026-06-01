@@ -21,6 +21,11 @@ import {
   ROLE_PASSPORT_CLERK,
   normalizeRole,
 } from '../../core/utils/role-utils';
+import {
+  MIN_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH_MSG,
+  isValidNewPassword,
+} from '../../core/constants/auth-policy';
 
 export interface LoadChartBar {
   title: string;
@@ -42,6 +47,7 @@ export interface LoadPeriodPreset {
   styleUrls: ['./admin.component.scss'],
 })
 export class AdminComponent implements OnInit, AfterViewInit, OnDestroy {
+  readonly minPasswordLength = MIN_PASSWORD_LENGTH;
   readonly normalizeRole = normalizeRole;
 
   readonly displayedColumns = [
@@ -632,6 +638,10 @@ export class AdminComponent implements OnInit, AfterViewInit, OnDestroy {
       this.snackBar.open('Заполните логин, email, ФИО и пароль', 'Закрыть', { duration: 4000 });
       return;
     }
+    if (!isValidNewPassword(c.password)) {
+      this.snackBar.open(MIN_PASSWORD_LENGTH_MSG, 'Закрыть', { duration: 4000 });
+      return;
+    }
     this.api.createAdminUser(c).subscribe({
       next: () => {
         this.snackBar.open('Пользователь создан', 'Закрыть', { duration: 3000 });
@@ -681,8 +691,8 @@ export class AdminComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     const pwd = (v || '').trim();
-    if (pwd.length < 6) {
-      this.snackBar.open('Пароль должен быть не короче 6 символов', 'Закрыть', { duration: 4000 });
+    if (!isValidNewPassword(pwd)) {
+      this.snackBar.open(MIN_PASSWORD_LENGTH_MSG, 'Закрыть', { duration: 4000 });
       return;
     }
     this.api.patchAdminUser(u.id, { password: pwd }).subscribe({
