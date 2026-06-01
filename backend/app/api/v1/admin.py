@@ -93,6 +93,50 @@ def _development_guide_path() -> Path:
     return Path(__file__).resolve().parents[3].parent / "DEVELOPMENT_GUIDE.md"
 
 
+def _resolve_public_base_url(request: Request) -> str:
+    """Публичный URL API для ссылок в админке (Swagger, ReDoc)."""
+    configured = (settings.ADMIN_BACKEND_PUBLIC_URL or "").strip().rstrip("/")
+    if configured:
+        return configured
+
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or request.url.netloc
+        or "localhost"
+    ).split(",")[0].strip()
+
+    scheme = (
+        request.headers.get("x-forwarded-proto")
+        or request.url.scheme
+        or "https"
+    ).split(",")[0].strip()
+
+    hostname = host.split(":")[0]
+    if hostname in ("localhost", "127.0.0.1") and ":" not in host:
+        port = request.url.port
+        if port and port not in (80, 443):
+            return f"{scheme}://{host}".rstrip("/")
+        return f"{scheme}://{hostname}:8000"
+
+    return f"{scheme}://{host}".rstrip("/")
+
+
+def _resolve_minio_console_url(request: Request, backend_base: str) -> str:
+    configured = (settings.ADMIN_MINIO_CONSOLE_URL or "").strip().rstrip("/")
+    if configured:
+        return configured
+
+    from urllib.parse import urlparse
+
+    parsed = urlparse(backend_base)
+    host = parsed.hostname or "localhost"
+    if host in ("localhost", "127.0.0.1"):
+        return "http://localhost:9001"
+    # Консоль MinIO на отдельном порту (HTTP), API — через nginx на 443
+    return f"http://{host}:9001"
+
+
 async def _reassign_user_foreign_keys(db: AsyncSession, old_uid: int, new_uid: int) -> None:
     """Перенос ссылок created_by / user_id на другого пользователя перед удалением."""
     for model in (
@@ -119,33 +163,15 @@ async def admin_infrastructure(
     _: User = Depends(require_admin_user),
 ):
     """Ссылки на MinIO, Swagger, ReDoc и главную API для кнопок в панели администратора."""
-    backend_base = (settings.ADMIN_BACKEND_PUBLIC_URL or "").strip().rstrip("/")
-    if not backend_base:
-        host = request.headers.get("x-forwarded-host") or request.url.netloc or "localhost:8000"
-        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
-        backend_base = f"{scheme}://{host}".rstrip("/")
-        if ":8000" not in backend_base and "localhost" in host:
-            backend_base = f"{scheme}://{host.split(':')[0]}:8000"
-
-    minio_url = (settings.ADMIN_MINIO_CONSOLE_URL or "").strip().rstrip("/")
-    if not minio_url:
-        try:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(backend_base)
-            host = parsed.hostname or "localhost"
-            scheme = parsed.scheme or "http"
-            minio_url = f"{scheme}://{host}:9001"
-        except Exception:
-            minio_url = "http://localhost:9001"
+    backend_base = _resolve_public_base_url(request)
+    minio_url = _resolve_minio_console_url(request, backend_base)
 
     return {
         "minio_console_url": minio_url,
         "swagger_url": f"{backend_base}/docs",
         "redoc_url": f"{backend_base}/redoc",
-        "api_home_url": f"{backend_base}/",
+        "api_home_url": f"{backend_base}/health",
         "openapi_url": f"{backend_base}/openapi.json",
-        "development_guide_available": _development_guide_path().is_file(),
         "docker_logs_available": await _docker_client_available(),
     }
 

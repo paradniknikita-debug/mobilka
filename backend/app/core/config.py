@@ -58,9 +58,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     RECREATE_DB: bool = False
 
-    # Ссылки для панели администратора (пусто — подставляются из запроса / localhost)
-    ADMIN_BACKEND_PUBLIC_URL: str = "http://localhost:8000"
-    ADMIN_MINIO_CONSOLE_URL: str = "http://localhost:9001"
+    # Ссылки для панели администратора (пусто — из Host / X-Forwarded-* запроса)
+    ADMIN_BACKEND_PUBLIC_URL: str = ""
+    ADMIN_MINIO_CONSOLE_URL: str = ""
     # Просмотр docker logs в админке на prod (нужен docker.sock в контейнере backend)
     ADMIN_DOCKER_LOGS_ENABLED: bool = False
 

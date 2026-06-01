@@ -11,9 +11,9 @@
 
   <mat-card class="block admin-card">
     <mat-card-header class="admin-card__header">
-      <mat-card-title>Инфраструктура и разработка</mat-card-title>
+      <mat-card-title>Инфраструктура</mat-card-title>
       <mat-card-subtitle>
-        Быстрый доступ к MinIO, документации API, руководству проекта и логам контейнеров Docker.
+        Быстрый доступ к MinIO, документации API и логам контейнеров Docker.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -62,16 +62,6 @@
           mat-stroked-button
           type="button"
           class="infra-btn"
-          (click)="openDevelopmentGuide()"
-          [disabled]="infrastructure != null && !infrastructure.development_guide_available"
-        >
-          <mat-icon>description</mat-icon>
-          Руководство
-        </button>
-        <button
-          mat-stroked-button
-          type="button"
-          class="infra-btn"
           color="primary"
           (click)="openDockerLogs()"
           [disabled]="infrastructure != null && !infrastructure.docker_logs_available"
@@ -82,7 +72,7 @@
         </button>
       </div>
       <p class="infra-hint" *ngIf="infrastructure">
-        MinIO: {{ infrastructure.minio_console_url }} · Swagger: {{ infrastructure.swagger_url }}
+        Swagger: {{ infrastructure.swagger_url }} · MinIO: {{ infrastructure.minio_console_url }}
       </p>
     </mat-card-content>
   </mat-card>

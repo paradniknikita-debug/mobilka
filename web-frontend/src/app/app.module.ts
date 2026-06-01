@@ -77,7 +77,6 @@ import { TableColumnResizeDirective } from './core/directives/table-column-resiz
 import { EquipmentCatalogComponent } from './features/equipment-catalog/equipment-catalog.component';
 import { AdminComponent } from './features/admin/admin.component';
 import { DockerLogsDialogComponent } from './features/admin/docker-logs-dialog/docker-logs-dialog.component';
-import { DevelopmentGuideDialogComponent } from './features/admin/development-guide-dialog/development-guide-dialog.component';
 import { PassportizationComponent } from './features/passportization/passportization.component';
 import { LineConductorCatalogPanelComponent } from './features/passportization/line-conductor-catalog-panel/line-conductor-catalog-panel.component';
 import { WireInfoCatalogPanelComponent } from './features/passportization/wire-info-catalog-panel/wire-info-catalog-panel.component';
@@ -109,7 +108,6 @@ import { TechPassportsPanelComponent } from './features/passportization/tech-pas
     EquipmentCatalogComponent,
     AdminComponent,
     DockerLogsDialogComponent,
-    DevelopmentGuideDialogComponent,
     PassportizationComponent,
     LineConductorCatalogPanelComponent,
     WireInfoCatalogPanelComponent,

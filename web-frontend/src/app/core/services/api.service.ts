@@ -163,7 +163,6 @@ export class ApiService {
     redoc_url: string;
     api_home_url: string;
     openapi_url: string;
-    development_guide_available: boolean;
     docker_logs_available: boolean;
   }> {
     return this.http.get<{
@@ -172,13 +171,8 @@ export class ApiService {
       redoc_url: string;
       api_home_url: string;
       openapi_url: string;
-      development_guide_available: boolean;
       docker_logs_available: boolean;
     }>(`${this.apiUrl}/admin/infrastructure`);
-  }
-
-  getAdminDevelopmentGuide(): Observable<string> {
-    return this.http.get(`${this.apiUrl}/admin/development-guide`, { responseType: 'text' });
   }
 
   getAdminDockerLogs(

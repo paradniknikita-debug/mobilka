@@ -13,7 +13,6 @@ import { AdminLoadMetrics, ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { User, UserCreate } from '../../core/models/user.model';
 import { DockerLogsDialogComponent } from './docker-logs-dialog/docker-logs-dialog.component';
-import { DevelopmentGuideDialogComponent } from './development-guide-dialog/development-guide-dialog.component';
 import {
   ROLE_ADMIN,
   ROLE_FIELD_ENGINEER,
@@ -115,7 +114,6 @@ export class AdminComponent implements OnInit, AfterViewInit, OnDestroy {
     redoc_url: string;
     api_home_url: string;
     openapi_url: string;
-    development_guide_available: boolean;
     docker_logs_available: boolean;
   } | null = null;
 
@@ -722,14 +720,6 @@ export class AdminComponent implements OnInit, AfterViewInit, OnDestroy {
       maxWidth: '96vw',
       maxHeight: '90vh',
       data: { services: this.dockerServices },
-    });
-  }
-
-  openDevelopmentGuide(): void {
-    this.dialog.open(DevelopmentGuideDialogComponent, {
-      width: 'min(96vw, 900px)',
-      maxWidth: '96vw',
-      maxHeight: '90vh',
     });
   }
 

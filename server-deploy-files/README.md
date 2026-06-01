@@ -60,6 +60,8 @@ nano /root/mobilka/.env
 - **DATABASE_URL** — строка подключения к PostgreSQL (хост `postgres`, порт 5432)
 - **SECRET_KEY** — длинная случайная строка для JWT (сгенерируйте: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`)
 - **REDIS_URL** — обычно `redis://redis:6379`
+- **ADMIN_BACKEND_PUBLIC_URL** — явный URL API для кнопок Swagger/ReDoc (иначе берётся из Host браузера, напр. `https://85.239.48.199`)
+- **ADMIN_MINIO_CONSOLE_URL** — консоль MinIO (иначе `http://<хост>:9001`, порт 9001 проброшен в compose)
 - **CORS_ORIGINS** — разрешённые origins для API (например `https://ваш-домен.ru` или `*` для теста)
 - **ADMIN_DOCKER_LOGS_ENABLED** — `true`, чтобы в админ-панели работала кнопка «Логи Docker»
 - **DOCKER_GROUP_GID** — GID группы `docker` на сервере: `stat -c '%g' /var/run/docker.sock`

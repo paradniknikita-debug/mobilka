@@ -44,6 +44,8 @@ services:
     expose:
       - "9000"
       - "9001"
+    ports:
+      - "9001:9001"
     networks:
       - lepm_network
 
@@ -68,6 +70,8 @@ services:
       ENVIRONMENT: production
       CORS_ORIGINS: ${CORS_ORIGINS}
       ADMIN_DOCKER_LOGS_ENABLED: ${ADMIN_DOCKER_LOGS_ENABLED:-true}
+      ADMIN_BACKEND_PUBLIC_URL: ${ADMIN_BACKEND_PUBLIC_URL:-}
+      ADMIN_MINIO_CONSOLE_URL: ${ADMIN_MINIO_CONSOLE_URL:-}
       RELOAD: "false"
       TZ: ${TZ:-Europe/Moscow}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
