@@ -32,6 +32,7 @@ import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/offline_map_service.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/config/map_bounds.dart';
 import '../../../../core/config/map_tile_config.dart';
 import '../../../../core/config/map_basemap.dart';
 import '../../../../core/config/pole_reference_data.dart';
@@ -103,6 +104,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   // (pixel -> LatLng) при zuma, чтобы соединения оборудования оставались на оси.
   double _equipmentZoom = AppConfig.defaultZoom;
   late final ValueNotifier<double> _equipmentZoomNotifier;
+  /// Текущий зум карты для UI (обновляется при каждом изменении камеры).
+  late final ValueNotifier<double> _mapZoomNotifier;
+  StreamSubscription<MapEvent>? _mapZoomSubscription;
   List<Marker>? _cachedPoleMarkers;
   Object? _cachedPoleMarkersSource;
   List<Marker>? _cachedTapMarkers;
@@ -240,6 +244,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     super.initState();
     _mapController = MapController();
     _equipmentZoomNotifier = ValueNotifier(AppConfig.defaultZoom);
+    _mapZoomNotifier = ValueNotifier(AppConfig.defaultZoom);
     unawaited(MapEquipmentIcons.precache());
     unawaited(_loadBasemapPref());
     // Откладываем инициализацию до следующего кадра для быстрого отображения UI
@@ -253,7 +258,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     _positionSubscription?.cancel();
     _patrolGpsSubscription?.cancel();
     _treeSearchController.dispose();
+    _mapZoomSubscription?.cancel();
     _equipmentZoomNotifier.dispose();
+    _mapZoomNotifier.dispose();
     super.dispose();
   }
 
@@ -1686,17 +1693,21 @@ class _MapPageState extends ConsumerState<MapPage> {
                       scrollWheelVelocity: 0.004,
                     ),
                     cameraConstraint: CameraConstraint.contain(
-                      bounds: LatLngBounds(
-                        const LatLng(-85, -180),
-                        const LatLng(85, 180),
-                      ),
+                      bounds: MapBounds.belarus,
                     ),
                     onMapReady: () {
                       _mapReady = true;
+                      _mapZoomSubscription?.cancel();
+                      _mapZoomSubscription = _mapController.mapEventStream.listen((event) {
+                        if (event is MapEventWithMove) {
+                          _applyMapZoomFromCamera(event.camera);
+                        }
+                      });
                       try {
                         final z = _mapController.camera.zoom;
                         _equipmentZoom = z;
                         _equipmentZoomNotifier.value = z;
+                        _mapZoomNotifier.value = z;
                         final target = _pendingCenterOnObjects ??
                             _pendingCenterOnLocation ??
                             (_userLocationObtained &&
@@ -1716,28 +1727,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       }
                     },
                     onPositionChanged: (camera, hasGesture) {
-                      final z = camera.zoom.clamp(
-                        AppConfig.minZoom,
-                        AppConfig.maxZoom,
-                      );
-                      final prev = _equipmentZoom;
-                      final prevVisible = _isEquipmentVisibleAtZoom(
-                        prev,
-                        latitude: camera.center.latitude,
-                      );
-                      final nextVisible = _isEquipmentVisibleAtZoom(
-                        z,
-                        latitude: camera.center.latitude,
-                      );
-                      final crossedEquipmentThreshold =
-                          prevVisible != nextVisible;
-                      // Пересчёт маркеров/оборудования — реже, чем каждый кадр зума.
-                      final prevBucket = (prev * 2).floor();
-                      final nextBucket = (z * 2).floor();
-                      if (crossedEquipmentThreshold || prevBucket != nextBucket) {
-                        _equipmentZoom = z;
-                        _equipmentZoomNotifier.value = z;
-                      }
+                      _applyMapZoomFromCamera(camera);
                     },
                   ),
                   children: [
@@ -1834,60 +1824,67 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
 
-                // Индикатор зума (как на Angular)
+                // Индикатор зума (как на Angular: инвертированная шкала + расстояние)
                 Positioned(
                   bottom: 16,
                   left: 16,
-                  child: Material(
-                    elevation: 2,
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            icon: const Icon(Icons.add, size: 18),
-                            onPressed: _zoomIn,
-                          ),
-                          const SizedBox(width: 6),
-                          Column(
+                  child: ListenableBuilder(
+                    listenable: _mapZoomNotifier,
+                    builder: (context, _) {
+                      final zoom = _mapZoomNotifier.value;
+                      final inverted = AppConfig.invertedZoomBase - zoom;
+                      return Material(
+                        elevation: 2,
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'z=${_equipmentZoom.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                  height: 1.0,
-                                ),
+                              IconButton(
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                icon: const Icon(Icons.add, size: 18),
+                                onPressed: _zoomIn,
                               ),
-                              Text(
-                                _getZoomDistanceText(_equipmentZoom),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                  height: 1.0,
-                                ),
+                              const SizedBox(width: 6),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    inverted.toStringAsFixed(1),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.black,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  Text(
+                                    _getZoomDistanceText(zoom),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(width: 6),
+                              IconButton(
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                icon: const Icon(Icons.remove, size: 18),
+                                onPressed: _zoomOut,
                               ),
                             ],
                           ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            icon: const Icon(Icons.remove, size: 18),
-                            onPressed: _zoomOut,
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ),
 
@@ -4855,6 +4852,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       key: ValueKey<Object>('$isOffline:${basemap.id}'),
       urlTemplate: basemap.urlTemplate,
       fallbackUrl: fallback?.urlTemplate,
+      tileBounds: MapBounds.belarus,
       tileProvider: OfflineMapService.instance.getTileProvider(offline: isOffline),
       keepBuffer: MapTileConfig.keepBuffer,
       panBuffer: MapTileConfig.panBuffer,
@@ -4876,6 +4874,31 @@ class _MapPageState extends ConsumerState<MapPage> {
         _maybeAutoFallbackBasemap();
       },
     );
+  }
+
+  /// Обновление индикатора зума (кнопки, pinch, scroll) и пересчёт слоя оборудования.
+  void _applyMapZoomFromCamera(MapCamera camera) {
+    final z = camera.zoom.clamp(AppConfig.minZoom, AppConfig.maxZoom);
+    if ((z - _mapZoomNotifier.value).abs() > 0.001) {
+      _mapZoomNotifier.value = z;
+    }
+
+    final prev = _equipmentZoom;
+    final prevVisible = _isEquipmentVisibleAtZoom(
+      prev,
+      latitude: camera.center.latitude,
+    );
+    final nextVisible = _isEquipmentVisibleAtZoom(
+      z,
+      latitude: camera.center.latitude,
+    );
+    final crossedEquipmentThreshold = prevVisible != nextVisible;
+    final prevBucket = (prev * 2).floor();
+    final nextBucket = (z * 2).floor();
+    if (crossedEquipmentThreshold || prevBucket != nextBucket) {
+      _equipmentZoom = z;
+      _equipmentZoomNotifier.value = z;
+    }
   }
 
   void _zoomIn() {

@@ -29,8 +29,7 @@ void main() async {
     originalOnError?.call(details);
   };
 
-  // Офлайн-карта: инициализация FMTC и фоновая загрузка тайлов Беларуси
-  // FMTC не поддерживается на web без FFI, поэтому на web пропускаем инициализацию.
+  // Офлайн-карта: FMTC + базовая подложка при первом запуске (до входа)
   if (!kIsWeb) {
     await OfflineMapService.init();
   }

@@ -41,6 +41,8 @@ class AppConfig {
   /// Не уходить ниже 4 — на малых z тайлы OSM нестабильны и «рвёт» подложку.
   static const double minZoom = 4.0;
   static const double maxZoom = 19.0;
+  /// Как на Angular map: подпись зума = [invertedZoomBase] − camera.zoom (приближение → меньше число).
+  static const double invertedZoomBase = 28.0;
 
   /// Как на Angular: линейное оборудование при зуме ≤ этого значения скрыто;
   /// показывать только после достаточного зума (иначе значки «теряются»).
@@ -53,10 +55,16 @@ class AppConfig {
   static const double belarusEast = 32.78;
   /// Уровни зума для офлайн-карты (OSM не рекомендует bulk после 13)
   static const int offlineMinZoom = 4;
-  /// До 14 — плавный зум по Беларуси без смены стиля подложки в офлайне.
+  /// Детальная догрузка с сервера (фоном, после входа) — z9–14
   static const int offlineMaxZoom = 14;
-  /// Имя хранилища FMTC (v2 — единый URL с API, не прямой tile.openstreetmap.org).
+  /// Встроенная подложка при установке: только низкие зумы (быстро, без авторизации)
+  static const int bundledBasemapMaxZoom = 8;
+  /// FMTC: кэш с сервера (прокси API)
   static const String mapStoreName = 'lepm_map_tiles_v2';
+  /// FMTC: базовая подложка OSM DE, загружается при первом запуске приложения
+  static const String bundledMapStoreName = 'lepm_basemap_bundled';
+  static const String bundledBasemapUrlTemplate =
+      'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
   
   // Sync Configuration
   static const int syncIntervalMinutes = 5;
@@ -83,6 +91,8 @@ class AppConfig {
   static String initialBootstrapDoneKey(int userId) => 'initial_bootstrap_done_$userId';
   /// Карта: тайлы Беларуси загружены в FMTC
   static const String offlineTilesReadyKey = 'offline_tiles_ready';
+  /// Базовая подложка (z4–8) загружена при первом запуске
+  static const String bundledBasemapReadyKey = 'bundled_basemap_ready';
   /// Счётчик для генерации временных локальных ID (отрицательные)
   static const String lastLocalPoleIdKey = 'last_local_pole_id';
   static const String lastLocalPowerLineIdKey = 'last_local_power_line_id';

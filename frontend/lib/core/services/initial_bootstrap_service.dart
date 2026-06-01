@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -11,8 +13,6 @@ import 'sync_service.dart';
 
 enum InitialBootstrapPhase {
   idle,
-  syncing,
-  downloadingTiles,
   done,
   failed,
   skippedOffline,
@@ -26,10 +26,6 @@ class InitialBootstrapState {
 
   final InitialBootstrapPhase phase;
   final String? message;
-
-  bool get isActive =>
-      phase == InitialBootstrapPhase.syncing ||
-      phase == InitialBootstrapPhase.downloadingTiles;
 }
 
 class InitialBootstrapNotifier extends StateNotifier<InitialBootstrapState> {
@@ -58,19 +54,12 @@ class InitialBootstrapNotifier extends StateNotifier<InitialBootstrapState> {
     final db = _ref.read(databaseProvider);
 
     if (prefs.getBool(AppConfig.initialBootstrapDoneKey(userId)) == true) {
-      if (await _hasLocalMapData(db)) {
-        return prefs.getBool(AppConfig.offlineTilesReadyKey) != true &&
-            OfflineMapService.supportsFmtc;
-      }
+      return !await _hasLocalMapData(db);
     }
 
     final lastSync = prefs.getString(AppConfig.lastSyncKey);
     final hasData = await _hasLocalMapData(db);
-    if (lastSync == null || !hasData) {
-      return true;
-    }
-    return prefs.getBool(AppConfig.offlineTilesReadyKey) != true &&
-        OfflineMapService.supportsFmtc;
+    return lastSync == null || !hasData;
   }
 
   Future<void> runIfNeeded({int? userId}) async {
@@ -81,6 +70,11 @@ class InitialBootstrapNotifier extends StateNotifier<InitialBootstrapState> {
     final uid = userId ?? auth.user.id;
     if (_running && _lastUserId == uid) {
       return;
+    }
+
+    // Детальные тайлы — фоном, не блокируем вход и sync.
+    if (await _isOnline()) {
+      unawaited(OfflineMapService.instance.enhanceOfflineTilesInBackground());
     }
 
     if (!await _isOnline()) {
@@ -101,11 +95,7 @@ class InitialBootstrapNotifier extends StateNotifier<InitialBootstrapState> {
     final prefs = _ref.read(prefsProvider);
 
     try {
-      state = const InitialBootstrapState(
-        phase: InitialBootstrapPhase.syncing,
-        message: 'Загрузка объектов с сервера для офлайн-работы…',
-      );
-
+      // Синхронизация и догрузка тайлов — без блокирующей плашки на главной.
       await _ref.read(syncStateProvider.notifier).syncData();
       final syncError = _ref.read(syncStateProvider).maybeWhen(
             error: (message) => message,
@@ -113,18 +103,6 @@ class InitialBootstrapNotifier extends StateNotifier<InitialBootstrapState> {
           );
       if (syncError != null) {
         throw Exception(syncError);
-      }
-
-      if (OfflineMapService.supportsFmtc &&
-          prefs.getBool(AppConfig.offlineTilesReadyKey) != true) {
-        state = const InitialBootstrapState(
-          phase: InitialBootstrapPhase.downloadingTiles,
-          message: 'Загрузка карты Беларуси для офлайн-режима…',
-        );
-        final tilesOk = await OfflineMapService.instance.ensureOfflineTilesDownloaded();
-        if (tilesOk) {
-          await prefs.setBool(AppConfig.offlineTilesReadyKey, true);
-        }
       }
 
       final db = _ref.read(databaseProvider);
@@ -160,7 +138,7 @@ final initialBootstrapProvider =
   return InitialBootstrapNotifier(ref);
 });
 
-/// Запускает первичную загрузку после входа или при старте с сохранённой сессией.
+/// Запускает первичную загрузку данных после входа (подложка — при старте приложения).
 class InitialBootstrapListener extends ConsumerStatefulWidget {
   const InitialBootstrapListener({super.key, required this.child});
 

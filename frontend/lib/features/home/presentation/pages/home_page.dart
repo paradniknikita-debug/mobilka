@@ -399,8 +399,8 @@ class _InitialBootstrapBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bootstrap = ref.watch(initialBootstrapProvider);
-    if (!bootstrap.isActive &&
-        bootstrap.phase != InitialBootstrapPhase.failed &&
+    // Плашка только при ошибке или отсутствии сети — без «вечной» загрузки карты/данных.
+    if (bootstrap.phase != InitialBootstrapPhase.failed &&
         bootstrap.phase != InitialBootstrapPhase.skippedOffline) {
       return const SizedBox.shrink();
     }
@@ -408,7 +408,7 @@ class _InitialBootstrapBar extends ConsumerWidget {
     final (icon, color) = switch (bootstrap.phase) {
       InitialBootstrapPhase.failed => (Icons.error_outline, PatrolColors.statusPending),
       InitialBootstrapPhase.skippedOffline => (Icons.wifi_off, PatrolColors.statusPending),
-      _ => (Icons.cloud_download, PatrolColors.accent),
+      _ => (Icons.info_outline, PatrolColors.textSecondary),
     };
 
     return Material(
@@ -417,32 +417,23 @@ class _InitialBootstrapBar extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            if (bootstrap.isActive)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              Icon(icon, size: 20, color: color),
+            Icon(icon, size: 20, color: color),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 bootstrap.message ??
                     (bootstrap.phase == InitialBootstrapPhase.failed
                         ? 'Не удалось подготовить офлайн-данные'
-                        : 'Подготовка офлайн-данных…'),
+                        : 'Нет сети — данные загрузятся при подключении'),
                 style: const TextStyle(color: PatrolColors.textPrimary, fontSize: 13),
               ),
             ),
-            if (bootstrap.phase == InitialBootstrapPhase.failed ||
-                bootstrap.phase == InitialBootstrapPhase.skippedOffline)
-              TextButton(
-                onPressed: () {
-                  ref.read(initialBootstrapProvider.notifier).runIfNeeded();
-                },
-                child: const Text('Загрузить', style: TextStyle(color: PatrolColors.accent)),
-              ),
+            TextButton(
+              onPressed: () {
+                ref.read(initialBootstrapProvider.notifier).runIfNeeded();
+              },
+              child: const Text('Повторить', style: TextStyle(color: PatrolColors.accent)),
+            ),
           ],
         ),
       ),

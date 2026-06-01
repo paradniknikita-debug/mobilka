@@ -15,7 +15,8 @@ class MapBasemapOption {
   final String urlTemplate;
 
   static const storageKey = 'map_basemap_id';
-  static const defaultId = 'osm';
+  /// OSM DE — совпадает с встроенной офлайн-подложкой приложения
+  static const defaultId = 'osm-de';
 
   static String proxyTemplate(String apiBase) =>
       '$apiBase/map/tiles/{z}/{x}/{y}.png';
