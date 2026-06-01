@@ -402,6 +402,13 @@ class ApiServiceProvider {
     if (_isAuthCredentialPath(error.requestOptions.path)) {
       return;
     }
+    // «Оставаться в системе»: не сбрасываем сессию — работаем офлайн, sync при появлении сети.
+    if (_prefs != null && (_prefs!.getBool(AppConfig.stayLoggedInKey) ?? true)) {
+      if (kDebugMode) {
+        print('⚠️ [ApiService] 401 при stayLoggedIn — сессия сохранена для офлайн-режима');
+      }
+      return;
+    }
     await _clearStoredToken();
     await notifySessionExpired();
   }

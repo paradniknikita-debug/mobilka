@@ -98,7 +98,7 @@ class _LoginFormState extends ConsumerState<LoginForm> {
                 : (value) => setState(() => _stayLoggedIn = value ?? true),
             title: const Text('Оставаться в системе'),
             subtitle: const Text(
-              'Не выходить из аккаунта при закрытии приложения и при временном отсутствии связи',
+              'Работа без интернета после первого онлайн-входа. Не выходить при закрытии приложения.',
               style: TextStyle(fontSize: 12),
             ),
             controlAffinity: ListTileControlAffinity.leading,

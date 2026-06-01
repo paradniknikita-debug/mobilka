@@ -77,6 +77,12 @@ class AppConfig {
   /// Не выходить из аккаунта: токен не сбрасывается при 401, сессия сохраняется
   static const String stayLoggedInKey = 'stay_logged_in';
   static const String usernameKey = 'username'; // для отображения в оффлайн-режиме
+  /// Профиль пользователя после успешного онлайн-входа (JSON) — для офлайн-режима
+  static const String cachedUserProfileKey = 'cached_user_profile';
+  /// Маркер завершённой первичной подготовки офлайн-данных (по user id)
+  static String initialBootstrapDoneKey(int userId) => 'initial_bootstrap_done_$userId';
+  /// Карта: тайлы Беларуси загружены в FMTC
+  static const String offlineTilesReadyKey = 'offline_tiles_ready';
   /// Счётчик для генерации временных локальных ID (отрицательные)
   static const String lastLocalPoleIdKey = 'last_local_pole_id';
   static const String lastLocalPowerLineIdKey = 'last_local_power_line_id';

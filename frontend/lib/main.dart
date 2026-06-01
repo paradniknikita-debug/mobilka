@@ -11,6 +11,7 @@ import 'core/services/api_service.dart';
 import 'core/services/session_expiry.dart';
 import 'core/services/sync_service.dart';
 import 'core/services/sync_scheduler.dart';
+import 'core/services/initial_bootstrap_service.dart';
 import 'core/services/base_url_manager.dart';
 import 'core/services/offline_map_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -91,14 +92,16 @@ class _LepmAppState extends ConsumerState<LepmApp> {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
-    return SyncScheduler(
-      child: MaterialApp.router(
-        title: 'ЛЭП Management',
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: themeMode,
-        routerConfig: router,
-        debugShowCheckedModeBanner: false,
+    return InitialBootstrapListener(
+      child: SyncScheduler(
+        child: MaterialApp.router(
+          title: 'ЛЭП Management',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          routerConfig: router,
+          debugShowCheckedModeBanner: false,
+        ),
       ),
     );
   }

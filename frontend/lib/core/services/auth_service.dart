@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -50,6 +52,113 @@ class AuthService extends StateNotifier<AuthState> {
     _checkAuthStatus();
   }
 
+  Future<void> _saveUserCache(User user) async {
+    await _prefs.setString(AppConfig.cachedUserProfileKey, jsonEncode(user.toJson()));
+    await _prefs.setInt(AppConfig.userIdKey, user.id);
+    await _prefs.setString(AppConfig.usernameKey, user.username);
+  }
+
+  User? _userFromCache() {
+    final raw = _prefs.getString(AppConfig.cachedUserProfileKey);
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+    try {
+      return User.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  User _offlineUserFallback() {
+    final cached = _userFromCache();
+    if (cached != null) {
+      return cached;
+    }
+    final uid = _prefs.getInt(AppConfig.userIdKey) ?? 0;
+    final uname = _prefs.getString(AppConfig.usernameKey) ?? 'Пользователь';
+    return User(
+      id: uid,
+      username: uname,
+      email: '',
+      fullName: uname,
+      role: 'field_engineer',
+      isActive: true,
+      isSuperuser: false,
+      createdAt: DateTime.now(),
+      updatedAt: null,
+    );
+  }
+
+  bool _isNetworkAuthError(DioException e) {
+    return e.response == null &&
+        (e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            isSslCertificateError(e));
+  }
+
+  /// Вход офлайн: ранее успешный онлайн-вход, сохранённый токен и тот же логин.
+  Future<bool> _tryOfflineSessionRestore(String username, {bool stayLoggedIn = true}) async {
+    final token = _prefs.getString(AppConfig.authTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+    final cached = _userFromCache();
+    if (cached == null) {
+      return false;
+    }
+    if (cached.username.trim().toLowerCase() != username.trim().toLowerCase()) {
+      return false;
+    }
+    await _prefs.setBool(AppConfig.stayLoggedInKey, stayLoggedIn);
+    ApiServiceProvider.updatePrefs(_prefs);
+    state = AuthStateAuthenticated(cached);
+    if (kDebugMode) {
+      print('✅ [AuthService] Офлайн-вход: ${cached.username}');
+    }
+    return true;
+  }
+
+  /// login прошёл, но /auth/me недоступен — сохраняем минимальный профиль для офлайна.
+  Future<bool> _restoreAfterPartialOnlineLogin(
+    String username, {
+    required bool stayLoggedIn,
+  }) async {
+    final token = _prefs.getString(AppConfig.authTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+    if (await _tryOfflineSessionRestore(username, stayLoggedIn: stayLoggedIn)) {
+      return true;
+    }
+    final user = User(
+      id: _prefs.getInt(AppConfig.userIdKey) ?? 0,
+      username: username.trim(),
+      email: '',
+      fullName: username.trim(),
+      role: 'field_engineer',
+      isActive: true,
+      isSuperuser: false,
+      createdAt: DateTime.now(),
+      updatedAt: null,
+    );
+    await _saveUserCache(user);
+    await _prefs.setBool(AppConfig.stayLoggedInKey, stayLoggedIn);
+    ApiServiceProvider.updatePrefs(_prefs);
+    state = AuthStateAuthenticated(user);
+    if (kDebugMode) {
+      print('✅ [AuthService] Вход с сохранённым токеном (без /auth/me): ${user.username}');
+    }
+    return true;
+  }
+
+  Future<void> _restoreOfflineSession() async {
+    await _prefs.setBool(AppConfig.stayLoggedInKey, true);
+    state = AuthStateAuthenticated(_offlineUserFallback());
+  }
+
   Future<void> _checkAuthStatus() async {
     // Не проверяем статус, если уже авторизованы или загружаемся
     if (state is AuthStateAuthenticated || state is AuthStateLoading) {
@@ -58,18 +167,19 @@ class AuthService extends StateNotifier<AuthState> {
       }
       return;
     }
-    
+
     final token = _prefs.getString(AppConfig.authTokenKey);
     if (token != null) {
       try {
         state = const AuthStateLoading();
         final user = await _apiService.getCurrentUser();
+        await _saveUserCache(user);
         state = AuthStateAuthenticated(user);
         if (kDebugMode) {
           print('✅ [AuthService] Статус авторизации проверен: ${user.username}');
         }
       } catch (e) {
-        // Явный 401 от сервера — сессия недействительна; выходим на логин (не маскируем офлайном).
+        // Явный 401 при доступном сервере — сессия недействительна.
         if (e is DioException && e.response?.statusCode == 401) {
           if (kDebugMode) {
             print('❌ [AuthService] 401 при проверке токена — выход из сессии');
@@ -77,25 +187,13 @@ class AuthService extends StateNotifier<AuthState> {
           await logout();
           return;
         }
-        // Токен невалидный или нет связи. Если «оставаться в системе» — не выходим, работаем оффлайн.
+        // Нет связи / таймаут — офлайн при «оставаться в системе».
         final stayLoggedIn = _prefs.getBool(AppConfig.stayLoggedInKey) ?? true;
         if (stayLoggedIn) {
           if (kDebugMode) {
-            print('⚠️ [AuthService] Нет связи/токен не проверен, но остаёмся в системе (оффлайн)');
+            print('⚠️ [AuthService] Нет связи, остаёмся в системе (офлайн)');
           }
-          final uid = _prefs.getInt(AppConfig.userIdKey) ?? 0;
-          final uname = _prefs.getString(AppConfig.usernameKey) ?? 'Пользователь';
-          state = AuthStateAuthenticated(User(
-            id: uid,
-            username: uname,
-            email: '',
-            fullName: uname,
-            role: 'engineer',
-            isActive: true,
-            isSuperuser: false,
-            createdAt: DateTime.now(),
-            updatedAt: null,
-          ));
+          await _restoreOfflineSession();
         } else {
           if (kDebugMode) {
             print('❌ [AuthService] Токен невалидный: $e');
@@ -114,36 +212,35 @@ class AuthService extends StateNotifier<AuthState> {
   Future<void> login(String username, String password, {bool stayLoggedIn = true}) async {
     try {
       state = const AuthStateLoading();
-      
+
       // Используем Dio напрямую для login, так как Retrofit может неправильно обрабатывать FormUrlEncoded
       final dio = Dio();
       final urlManager = BaseUrlManager();
       configureDioSslTrust(dio);
       dio.options.baseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
-      
+
       // Добавляем обработчик ошибок для автоматического fallback на HTTP при проблемах с SSL
       dio.interceptors.add(
         InterceptorsWrapper(
           onError: (error, handler) async {
             // Автоматический fallback HTTPS -> HTTP при ошибках SSL
             final isSslError = error.message?.contains('CERT_AUTHORITY_INVALID') == true ||
-                              error.message?.contains('ERR_CERT') == true ||
-                              error.message?.contains('certificate') == true ||
-                              error.type == DioExceptionType.connectionError;
-            
-            if (kIsWeb && 
-                !urlManager.isUsingHttp && 
+                error.message?.contains('ERR_CERT') == true ||
+                error.message?.contains('certificate') == true ||
+                error.type == DioExceptionType.connectionError;
+
+            if (kIsWeb &&
+                !urlManager.isUsingHttp &&
                 isSslError &&
                 error.response == null) {
-              
               if (kDebugMode) {
                 print('⚠️ [AuthService] Проблема с HTTPS, переключение на HTTP');
               }
-              
+
               urlManager.fallbackToHttp();
               final newBaseUrl = '${urlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
               dio.options.baseUrl = newBaseUrl;
-              
+
               try {
                 final newRequestOptions = error.requestOptions.copyWith(
                   baseUrl: newBaseUrl,
@@ -161,13 +258,13 @@ class AuthService extends StateNotifier<AuthState> {
           },
         ),
       );
-      
+
       // Для OAuth2PasswordRequestForm нужен application/x-www-form-urlencoded
       final formData = {
         'username': username,
         'password': password,
       };
-      
+
       final response = await dio.post(
         '/auth/login',
         data: formData,
@@ -175,53 +272,55 @@ class AuthService extends StateNotifier<AuthState> {
           contentType: 'application/x-www-form-urlencoded',
         ),
       );
-      
+
       final authResponse = AuthResponse.fromJson(response.data);
-      
+
       // Сохраняем токен и настройку «оставаться в системе»
       await _prefs.setString(AppConfig.authTokenKey, authResponse.accessToken);
       await _prefs.setBool(AppConfig.stayLoggedInKey, stayLoggedIn);
       if (kDebugMode) {
         print('✅ Авторизация успешна: токен сохранен, оставаться в системе: $stayLoggedIn');
       }
-      
+
       // Обновляем prefs в ApiServiceProvider для немедленного использования
       ApiServiceProvider.updatePrefs(_prefs);
-      
+
       // Получаем информацию о пользователе
       final userDio = Dio();
       final userUrlManager = BaseUrlManager();
       configureDioSslTrust(userDio);
       userDio.options.baseUrl = '${userUrlManager.getBaseUrl()}/api/${AppConfig.apiVersion}';
       userDio.options.headers['Authorization'] = 'Bearer ${authResponse.accessToken}';
-      
+
       final userResponse = await userDio.get('/auth/me');
-      
+
       // Парсим данные пользователя напрямую из ответа
       if (userResponse.data is! Map<String, dynamic>) {
         throw Exception('Неверный формат ответа от сервера: ожидался Map, получен ${userResponse.data.runtimeType}');
       }
-      
+
       final user = User.fromJson(userResponse.data as Map<String, dynamic>);
-      
-      if (user.id > 0) {
-        await _prefs.setInt(AppConfig.userIdKey, user.id);
-        await _prefs.setString(AppConfig.usernameKey, user.username);
-      }
-      
+      await _saveUserCache(user);
+
       if (kDebugMode) {
         print('✅ Пользователь авторизован: ${user.username}');
       }
-      
+
       state = AuthStateAuthenticated(user);
-      
+
       // Небольшая задержка для обновления UI
       await Future.delayed(const Duration(milliseconds: 100));
     } catch (e, stackTrace) {
+      if (e is DioException && _isNetworkAuthError(e)) {
+        if (await _restoreAfterPartialOnlineLogin(username, stayLoggedIn: stayLoggedIn)) {
+          return;
+        }
+      }
+
       print('❌ [AuthService] Ошибка при логине: $e');
       print('   Тип ошибки: ${e.runtimeType}');
       print('   Stack trace: $stackTrace');
-      
+
       if (e is DioException) {
         print('   DioException details:');
         print('     Type: ${e.type}');
@@ -246,6 +345,13 @@ class AuthService extends StateNotifier<AuthState> {
                 trustEnabled: BaseUrlManager().shouldTrustSelfSignedCert,
               ),
             );
+          } else if (_isNetworkAuthError(e)) {
+            state = AuthStateError(
+              'Нет связи с сервером.\n\n'
+              'Первый вход возможен только онлайн. '
+              'Если вы уже входили на этом устройстве — включите «Оставаться в системе» '
+              'и используйте тот же логин.',
+            );
           } else {
             state = AuthStateError('Ошибка соединения с сервером');
           }
@@ -255,7 +361,7 @@ class AuthService extends StateNotifier<AuthState> {
         if (kDebugMode) {
           print('   ⚠️ Ошибка не связана с DioException: ${e.toString()}');
         }
-        
+
         if (e.toString().contains('null') || e.toString().contains('Null')) {
           state = AuthStateError('Ошибка обработки данных пользователя. Проверьте формат ответа сервера.');
         } else if (e.toString().contains('type') && e.toString().contains('is not a subtype')) {
@@ -271,6 +377,7 @@ class AuthService extends StateNotifier<AuthState> {
     await _prefs.remove(AppConfig.authTokenKey);
     await _prefs.remove(AppConfig.userIdKey);
     await _prefs.remove(AppConfig.usernameKey);
+    await _prefs.remove(AppConfig.cachedUserProfileKey);
     state = const AuthStateUnauthenticated();
   }
 

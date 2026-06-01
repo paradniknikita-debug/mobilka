@@ -27,7 +27,8 @@ class OfflineMapService {
   /// FMTC поддерживается только на iOS/Android/desktop (не web).
   static bool get supportsFmtc => !kIsWeb;
 
-  /// Вызвать при старте приложения (main).
+  /// Вызвать при старте приложения (main): только инициализация FMTC.
+  /// Предзагрузка тайлов — после входа ([ensureOfflineTilesDownloaded]).
   static Future<void> init() async {
     if (!supportsFmtc) {
       if (kDebugMode) {
@@ -43,11 +44,38 @@ class OfflineMapService {
       if (kDebugMode) {
         print('OfflineMapService: FMTC инициализирован');
       }
-      unawaited(_instance._ensureStoreAndDownloadBelarus());
     } catch (e) {
       if (kDebugMode) {
         print('OfflineMapService: ошибка инициализации $e');
       }
+    }
+  }
+
+  /// Предзагрузка тайлов после авторизации (нужен корректный URL API).
+  Future<bool> ensureOfflineTilesDownloaded() async {
+    if (!_initialized) {
+      return false;
+    }
+    if (_downloadStarted) {
+      return false;
+    }
+    try {
+      final store = const FMTCStore(AppConfig.mapStoreName);
+      final exists = await store.manage.ready;
+      if (!exists) {
+        await store.manage.create();
+        if (kDebugMode) {
+          print('OfflineMapService: хранилище ${AppConfig.mapStoreName} создано');
+        }
+      }
+      _downloadStarted = true;
+      await _downloadBelarusRegion(store);
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('OfflineMapService: ensureOfflineTilesDownloaded $e');
+      return false;
+    } finally {
+      _downloadStarted = false;
     }
   }
 
@@ -67,26 +95,6 @@ class OfflineMapService {
       );
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<void> _ensureStoreAndDownloadBelarus() async {
-    if (!_initialized || _downloadStarted) return;
-    try {
-      final store = const FMTCStore(AppConfig.mapStoreName);
-      final exists = await store.manage.ready;
-      if (!exists) {
-        await store.manage.create();
-        if (kDebugMode) {
-          print('OfflineMapService: хранилище ${AppConfig.mapStoreName} создано');
-        }
-      }
-
-      _downloadStarted = true;
-      await _downloadBelarusRegion(store);
-    } catch (e) {
-      if (kDebugMode) print('OfflineMapService: ошибка загрузки тайлов $e');
-      _downloadStarted = false;
     }
   }
 

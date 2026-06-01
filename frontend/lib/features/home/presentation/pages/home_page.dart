@@ -7,6 +7,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/sync_service.dart';
+import '../../../../core/services/initial_bootstrap_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/patrol_session.dart';
@@ -339,6 +340,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         children: [
           _TopStatusBar(status: connectionStatus),
           _PendingSyncBar(),
+          const _InitialBootstrapBar(),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -388,6 +390,63 @@ class _PendingSyncBar extends ConsumerWidget {
     // Провайдер всё равно читаем, чтобы при изменениях не было неиспользуемого состояния.
     ref.watch(hasPendingSyncProvider);
     return const SizedBox.shrink();
+  }
+}
+
+class _InitialBootstrapBar extends ConsumerWidget {
+  const _InitialBootstrapBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bootstrap = ref.watch(initialBootstrapProvider);
+    if (!bootstrap.isActive &&
+        bootstrap.phase != InitialBootstrapPhase.failed &&
+        bootstrap.phase != InitialBootstrapPhase.skippedOffline) {
+      return const SizedBox.shrink();
+    }
+
+    final (icon, color) = switch (bootstrap.phase) {
+      InitialBootstrapPhase.failed => (Icons.error_outline, PatrolColors.statusPending),
+      InitialBootstrapPhase.skippedOffline => (Icons.wifi_off, PatrolColors.statusPending),
+      _ => (Icons.cloud_download, PatrolColors.accent),
+    };
+
+    return Material(
+      color: PatrolColors.surfaceCard,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            if (bootstrap.isActive)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                bootstrap.message ??
+                    (bootstrap.phase == InitialBootstrapPhase.failed
+                        ? 'Не удалось подготовить офлайн-данные'
+                        : 'Подготовка офлайн-данных…'),
+                style: const TextStyle(color: PatrolColors.textPrimary, fontSize: 13),
+              ),
+            ),
+            if (bootstrap.phase == InitialBootstrapPhase.failed ||
+                bootstrap.phase == InitialBootstrapPhase.skippedOffline)
+              TextButton(
+                onPressed: () {
+                  ref.read(initialBootstrapProvider.notifier).runIfNeeded();
+                },
+                child: const Text('Загрузить', style: TextStyle(color: PatrolColors.accent)),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
