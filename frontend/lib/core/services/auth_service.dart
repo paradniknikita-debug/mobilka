@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import '../config/app_config.dart';
 import '../services/api_service.dart';
 import '../services/base_url_manager.dart';
 import '../services/dio_config.dart';
+import '../services/offline_auth_vault.dart';
 import '../models/user.dart';
 
 // Provider для SharedPreferences (должен быть определен первым)
@@ -46,8 +48,14 @@ class AuthStateError extends AuthState {
 class AuthService extends StateNotifier<AuthState> {
   final ApiServiceWithExport _apiService;
   final SharedPreferences _prefs;
+  final OfflineAuthVaultStore _offlineVault;
 
-  AuthService(this._apiService, this._prefs) : super(const AuthStateInitial()) {
+  AuthService(
+    this._apiService,
+    this._prefs, {
+    OfflineAuthVaultStore? offlineVault,
+  })  : _offlineVault = offlineVault ?? OfflineAuthVaultStore(),
+        super(const AuthStateInitial()) {
     // Проверяем статус авторизации асинхронно (не блокирует старт)
     _checkAuthStatus();
   }
@@ -99,7 +107,7 @@ class AuthService extends StateNotifier<AuthState> {
             isSslCertificateError(e));
   }
 
-  /// Вход офлайн: ранее успешный онлайн-вход, сохранённый токен и тот же логин.
+  /// Вход офлайн: сохранённый токен в prefs (без выхода из аккаунта).
   Future<bool> _tryOfflineSessionRestore(String username, {bool stayLoggedIn = true}) async {
     final token = _prefs.getString(AppConfig.authTokenKey);
     if (token == null || token.isEmpty) {
@@ -120,6 +128,41 @@ class AuthService extends StateNotifier<AuthState> {
     }
     return true;
   }
+
+  /// Офлайн-вход после явного выхода: логин/пароль сверяются с Secure Storage.
+  Future<bool> _tryOfflineLoginWithPassword(
+    String username,
+    String password, {
+    required bool stayLoggedIn,
+  }) async {
+    if (!await _offlineVault.tryLogin(username: username, password: password)) {
+      return false;
+    }
+    final vault = await _offlineVault.read();
+    if (vault == null || vault.accessToken.isEmpty) {
+      return false;
+    }
+    await _prefs.setString(AppConfig.authTokenKey, vault.accessToken);
+    await _prefs.setBool(AppConfig.stayLoggedInKey, stayLoggedIn);
+    await _saveUserCache(vault.user);
+    ApiServiceProvider.updatePrefs(_prefs);
+    state = AuthStateAuthenticated(vault.user);
+    if (kDebugMode) {
+      print('✅ [AuthService] Офлайн-вход (vault): ${vault.user.username}');
+    }
+    return true;
+  }
+
+  Future<bool> _isDeviceOffline() async {
+    final result = await Connectivity().checkConnectivity();
+    return result == ConnectivityResult.none;
+  }
+
+  String get _offlineLoginUnavailableMessage =>
+      'Нет связи с сервером.\n\n'
+      'Первый вход на этом устройстве — только онлайн, с галочкой «Оставаться в системе». '
+      'После успешного входа можно работать без интернета, в том числе после выхода из аккаунта '
+      '(тот же логин и пароль).';
 
   /// login прошёл, но /auth/me недоступен — сохраняем минимальный профиль для офлайна.
   Future<bool> _restoreAfterPartialOnlineLogin(
@@ -213,6 +256,18 @@ class AuthService extends StateNotifier<AuthState> {
     try {
       state = const AuthStateLoading();
 
+      if (await _isDeviceOffline()) {
+        if (await _tryOfflineLoginWithPassword(
+          username,
+          password,
+          stayLoggedIn: stayLoggedIn,
+        )) {
+          return;
+        }
+        state = AuthStateError(_offlineLoginUnavailableMessage);
+        return;
+      }
+
       // Используем Dio напрямую для login, так как Retrofit может неправильно обрабатывать FormUrlEncoded
       final dio = Dio();
       final urlManager = BaseUrlManager();
@@ -302,6 +357,17 @@ class AuthService extends StateNotifier<AuthState> {
       final user = User.fromJson(userResponse.data as Map<String, dynamic>);
       await _saveUserCache(user);
 
+      if (stayLoggedIn) {
+        await _offlineVault.save(
+          username: username,
+          password: password,
+          accessToken: authResponse.accessToken,
+          user: user,
+        );
+      } else {
+        await _offlineVault.clear();
+      }
+
       if (kDebugMode) {
         print('✅ Пользователь авторизован: ${user.username}');
       }
@@ -312,6 +378,13 @@ class AuthService extends StateNotifier<AuthState> {
       await Future.delayed(const Duration(milliseconds: 100));
     } catch (e, stackTrace) {
       if (e is DioException && _isNetworkAuthError(e)) {
+        if (await _tryOfflineLoginWithPassword(
+          username,
+          password,
+          stayLoggedIn: stayLoggedIn,
+        )) {
+          return;
+        }
         if (await _restoreAfterPartialOnlineLogin(username, stayLoggedIn: stayLoggedIn)) {
           return;
         }
@@ -346,12 +419,7 @@ class AuthService extends StateNotifier<AuthState> {
               ),
             );
           } else if (_isNetworkAuthError(e)) {
-            state = AuthStateError(
-              'Нет связи с сервером.\n\n'
-              'Первый вход возможен только онлайн. '
-              'Если вы уже входили на этом устройстве — включите «Оставаться в системе» '
-              'и используйте тот же логин.',
-            );
+            state = AuthStateError(_offlineLoginUnavailableMessage);
           } else {
             state = AuthStateError('Ошибка соединения с сервером');
           }
@@ -373,11 +441,13 @@ class AuthService extends StateNotifier<AuthState> {
     }
   }
 
+  /// Выход из активной сессии. Офлайн-vault (Secure Storage) сохраняется для повторного входа без сети.
   Future<void> logout() async {
     await _prefs.remove(AppConfig.authTokenKey);
     await _prefs.remove(AppConfig.userIdKey);
     await _prefs.remove(AppConfig.usernameKey);
     await _prefs.remove(AppConfig.cachedUserProfileKey);
+    await _prefs.setBool(AppConfig.stayLoggedInKey, false);
     state = const AuthStateUnauthenticated();
   }
 

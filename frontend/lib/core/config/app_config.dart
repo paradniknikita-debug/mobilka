@@ -57,8 +57,14 @@ class AppConfig {
   static const int offlineMinZoom = 4;
   /// Детальная догрузка с сервера (фоном, после входа) — z9–14
   static const int offlineMaxZoom = 14;
-  /// Встроенная подложка при установке: только низкие зумы (быстро, без авторизации)
-  static const int bundledBasemapMaxZoom = 8;
+  /// Встроенная подложка в APK (MBTiles): z4–11, ~50 МБ для РБ
+  static const int bundledBasemapMaxZoom = 11;
+  /// Версия встроенного MBTiles — при увеличении файл перекопируется из assets
+  static const int bundledMbtilesAssetVersion = 2;
+  static const String bundledMbtilesInstalledVersionKey = 'bundled_mbtiles_version';
+  /// Путь к MBTiles в assets (копируется в documents при первом запуске)
+  static const String bundledMbtilesAssetPath = 'assets/maps/belarus_basemap.mbtiles';
+  static const String bundledMbtilesFileName = 'belarus_basemap.mbtiles';
   /// FMTC: кэш с сервера (прокси API)
   static const String mapStoreName = 'lepm_map_tiles_v2';
   /// FMTC: базовая подложка OSM DE, загружается при первом запуске приложения
@@ -87,6 +93,8 @@ class AppConfig {
   static const String usernameKey = 'username'; // для отображения в оффлайн-режиме
   /// Профиль пользователя после успешного онлайн-входа (JSON) — для офлайн-режима
   static const String cachedUserProfileKey = 'cached_user_profile';
+  /// Secure Storage: логин/пароль/токен для офлайн-входа после выхода из аккаунта
+  static const String offlineAuthVaultKey = 'offline_auth_vault';
   /// Маркер завершённой первичной подготовки офлайн-данных (по user id)
   static String initialBootstrapDoneKey(int userId) => 'initial_bootstrap_done_$userId';
   /// Карта: тайлы Беларуси загружены в FMTC
@@ -129,6 +137,9 @@ class AppConfig {
   static const String equipmentCatalogCacheKey = 'equipment_catalog_cache';
   /// Время последнего обновления кэша справочника (ISO8601, UTC).
   static const String equipmentCatalogCacheUpdatedAtKey = 'equipment_catalog_cache_updated_at';
+  /// Fingerprint серверного справочника, для которого пользователь нажал «Позже».
+  static const String equipmentCatalogDismissedFingerprintKey =
+      'equipment_catalog_dismissed_fingerprint';
   /// Тема приложения: light | dark | system
   static const String themeModeKey = 'theme_mode';
 

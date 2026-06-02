@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/connectivity_status.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/equipment_catalog_update_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/initial_bootstrap_service.dart';
@@ -12,6 +13,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/patrol_session.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../widgets/equipment_catalog_update_dialog.dart';
 
 /// Локальная сессия ещё не полностью отражена на сервере (новая или завершение не дошло).
 bool patrolSessionRowNeedsSyncUpload(drift_db.PatrolSession row) =>
@@ -225,6 +227,8 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver {
+  bool _catalogUpdateCheckRunning = false;
+
   @override
   void initState() {
     super.initState();
@@ -233,7 +237,45 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       ref.invalidate(recentPatrolsProvider);
       ref.read(connectivityStatusProvider.notifier).refresh();
       _tryShowUnfinishedPatrolBanner();
+      _checkEquipmentCatalogUpdates();
     });
+  }
+
+  Future<void> _checkEquipmentCatalogUpdates() async {
+    if (_catalogUpdateCheckRunning || !mounted) return;
+    final auth = ref.read(authStateProvider);
+    if (auth is! AuthStateAuthenticated) return;
+    if (ref.read(connectivityStatusProvider) == ConnectionStatus.offline) return;
+
+    _catalogUpdateCheckRunning = true;
+    try {
+      final service = ref.read(equipmentCatalogUpdateServiceProvider);
+      final diff = await service.checkForUpdates();
+      if (!mounted || diff == null) return;
+
+      final accepted = await showEquipmentCatalogUpdateDialog(context, diff);
+      if (!mounted) return;
+
+      if (accepted == true) {
+        final count = await service.applyUpdate(diff.serverItems);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Справочник марок обновлён: $count поз.',
+              style: const TextStyle(color: PatrolColors.background),
+            ),
+            backgroundColor: PatrolColors.statusSynced,
+          ),
+        );
+      } else if (accepted == false) {
+        await service.dismissPrompt(diff.serverFingerprint);
+      }
+    } catch (_) {
+      // Не блокируем главный экран при недоступности API.
+    } finally {
+      _catalogUpdateCheckRunning = false;
+    }
   }
 
   Future<void> _tryShowUnfinishedPatrolBanner() async {
@@ -285,11 +327,17 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       ref.invalidate(recentPatrolsProvider);
       ref.invalidate(hasPendingSyncProvider);
       ref.read(connectivityStatusProvider.notifier).refresh();
+      _checkEquipmentCatalogUpdates();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<ConnectionStatus>(connectivityStatusProvider, (prev, next) {
+      if (prev == ConnectionStatus.offline && next == ConnectionStatus.online) {
+        _checkEquipmentCatalogUpdates();
+      }
+    });
     ref.listen<SyncState>(syncStateProvider, (prev, next) {
       next.when(
         idle: () {},
@@ -302,6 +350,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           ref.invalidate(showContinuePatrolButtonProvider);
           ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
           ref.read(connectivityStatusProvider.notifier).refresh();
+          _checkEquipmentCatalogUpdates();
         },
         error: (_) {},
       );

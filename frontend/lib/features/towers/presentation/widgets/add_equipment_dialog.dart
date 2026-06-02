@@ -8,6 +8,7 @@ import 'package:record/record.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/models/equipment_catalog.dart';
 import '../../../../core/theme/app_theme.dart';
+import 'filterable_mark_field.dart';
 
 /// Один элемент вложения (голос или фото). В JSON: {"t":"voice"|"photo","p":"path"}
 String? encodeDefectAttachmentList(List<Map<String, String>> list) {
@@ -219,8 +220,15 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
 
   String get _equipmentTypeKey =>
       widget.equipmentType.trim().toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  bool get _isDisconnectorCategory {
+    final c = widget.categoryTitle.trim().toLowerCase();
+    return c == 'разъединители' || c == 'разъединитель';
+  }
+
   bool get _isDisconnector =>
-      _equipmentTypeKey == 'disconnector' || _equipmentTypeKey == 'разъединитель';
+      _equipmentTypeKey == 'disconnector' ||
+      _equipmentTypeKey == 'разъединитель' ||
+      _isDisconnectorCategory;
   bool get _isGroundingSwitch =>
       _equipmentTypeKey == 'grounding_switch' ||
       _equipmentTypeKey == 'зн' ||
@@ -405,6 +413,9 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
         widget.initialContinuousCurrentA?.toString() ?? '';
     _psrSubtype = widget.initialPsrSubtype ?? 'retractable';
     _arresterType = widget.initialArresterType ?? 'opn';
+    if (_isDisconnector || _isBreaker || _isRecloser) {
+      _electricalExpanded = true;
+    }
     if (_usesDispatcherNameField) {
       _dispatcherNameController.text = (widget.initialDispatcherName ?? '').trim();
       _brandController.text = (widget.initialBrand ?? '').trim();
@@ -468,15 +479,30 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
   }
 
   List<String> get _brandSuggestions {
-    final extra = widget.catalogExtraBrands ?? const <String>[];
     final seen = <String>{};
     final out = <String>[];
-    for (final x in extra) {
-      final k = _sanitizeBrandSuggestion(x);
-      if (k.isEmpty || seen.contains(k)) continue;
-      if (!_isBrandAllowedForLine(k)) continue;
+
+    void addBrand(String raw) {
+      final k = _sanitizeBrandSuggestion(raw);
+      if (k.isEmpty || seen.contains(k)) return;
+      if (!_isBrandAllowedForLine(k)) return;
       seen.add(k);
       out.add(k);
+    }
+
+    for (final item in widget.catalogItems ?? const <EquipmentCatalogItem>[]) {
+      addBrand(_catalogLabel(item));
+    }
+    for (final x in widget.catalogExtraBrands ?? const <String>[]) {
+      addBrand(x);
+    }
+    final fallback =
+        EquipmentReferenceData.equipmentBrandsByCategory[widget.categoryTitle];
+    if (fallback != null) {
+      for (final x in fallback) {
+        if (x.trim().toLowerCase() == 'другое') continue;
+        addBrand(x);
+      }
     }
     if (!seen.contains(_noBrandLabel) && _isBrandAllowedForLine(_noBrandLabel)) {
       out.add(_noBrandLabel);
@@ -626,9 +652,24 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     if (expected == null) return true;
     final b = brandRaw.trim();
     if (b.isEmpty) return false;
-    if (b.toLowerCase() == 'другое' || b.toLowerCase() == _noBrandLabel.toLowerCase()) return true;
-    final voltage = _catalogVoltageByBrand(b) ?? _extractVoltageFromBrand(b);
-    if (voltage == null) return false;
+    if (b.toLowerCase() == 'другое' || b.toLowerCase() == _noBrandLabel.toLowerCase()) {
+      return true;
+    }
+    final catalogVoltage = _catalogVoltageByBrand(b);
+    if (catalogVoltage != null) {
+      return (catalogVoltage - expected).abs() <= 0.001;
+    }
+    final voltage = _extractVoltageFromBrand(b);
+    if (voltage == null) {
+      // Марка из встроенного справочника без явного kV — не отбрасываем на 10 кВ.
+      final fallback =
+          EquipmentReferenceData.equipmentBrandsByCategory[widget.categoryTitle];
+      if (fallback != null &&
+          fallback.any((x) => x.trim().toLowerCase() == b.toLowerCase())) {
+        return true;
+      }
+      return false;
+    }
     return (voltage - expected).abs() <= 0.001;
   }
 
@@ -1016,18 +1057,17 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     ));
   }
 
-  void _onBrandPicked(String value) {
+  void _onBrandChanged(String value) {
+    _brandController.text = value;
     setState(() {
       if (value.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
           value.trim().toLowerCase() == 'другое') {
-        _brandController.text = _noBrandLabel;
         _clearElectricalCharacteristics();
         return;
       }
-      _brandController.text = value;
     });
-    if (value.trim().toLowerCase() != _noBrandLabel.toLowerCase() &&
-        value.trim().toLowerCase() != 'другое') {
+    _tryApplyCatalogPresetByInput(value);
+    if (_brandSuggestions.any((s) => s.toLowerCase() == value.trim().toLowerCase())) {
       final applied = _applyCatalogPresetByLabel(value);
       if (!applied) {
         _applyKnownSwitchBrandPresetByInput(value);
@@ -1035,81 +1075,19 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     }
   }
 
+  void _onBrandPicked(String value) => _onBrandChanged(value);
+
   /// Выпадающий список марок с фильтрацией по вводу (поиск по подстроке).
   Widget _buildBrandCatalogDropdown({
     required String labelText,
     required String hintText,
   }) {
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: _brandController.text),
-      optionsBuilder: (textEditingValue) {
-        final q = textEditingValue.text.trim().toLowerCase();
-        if (q.isEmpty) return _brandSuggestions;
-        return _brandSuggestions.where((s) => s.toLowerCase().contains(q));
-      },
-      displayStringForOption: (o) => o,
-      onSelected: _onBrandPicked,
-      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-        if (textEditingController.text != _brandController.text) {
-          textEditingController.text = _brandController.text;
-        }
-        return TextFormField(
-          controller: textEditingController,
-          focusNode: focusNode,
-          onFieldSubmitted: (v) => onFieldSubmitted(),
-          decoration: InputDecoration(
-            labelText: labelText,
-            hintText: hintText,
-            helperText: 'Начните ввод — список отфильтруется',
-            helperMaxLines: 2,
-            filled: true,
-            fillColor: PatrolColors.surfaceCard,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            suffixIcon: const Icon(Icons.arrow_drop_down, color: PatrolColors.textSecondary),
-          ),
-          style: const TextStyle(color: PatrolColors.textPrimary),
-          onChanged: (v) {
-            _brandController.text = v;
-            setState(() {
-              if (v.trim().toLowerCase() == _noBrandLabel.toLowerCase() ||
-                  v.trim().toLowerCase() == 'другое') {
-                _clearElectricalCharacteristics();
-              }
-            });
-            _tryApplyCatalogPresetByInput(v);
-          },
-        );
-      },
-      optionsViewBuilder: (context, onSelected, options) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            color: PatrolColors.surfaceCard,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 220, minWidth: 280),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (context, index) {
-                  final option = options.elementAt(index);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      option,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: PatrolColors.textPrimary),
-                    ),
-                    onTap: () => onSelected(option),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
+    return FilterableMarkField(
+      controller: _brandController,
+      options: _brandSuggestions,
+      labelText: labelText,
+      hintText: hintText,
+      onChanged: _onBrandChanged,
     );
   }
 
@@ -1118,7 +1096,10 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
     return Dialog(
       backgroundColor: PatrolColors.background,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SingleChildScrollView(
+      child: GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -1699,6 +1680,7 @@ class _AddEquipmentDialogState extends State<AddEquipmentDialog> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

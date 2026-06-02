@@ -4845,7 +4845,26 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// Подложка: выбор пользователя + fallback на следующий источник в цепочке.
+  /// Офлайн: встроенный MBTiles (z4–10), без интернета — как офлайн-карты Яндекса.
   Widget _buildMapTileLayer(bool isOffline) {
+    if (isOffline) {
+      final bundled = OfflineMapService.instance.getBundledMbtilesProvider();
+      final maxZ = OfflineMapService.instance.bundledMbtilesMaxZoom;
+      if (bundled != null) {
+        return TileLayer(
+          key: const ValueKey<Object>('offline-mbtiles'),
+          urlTemplate: AppConfig.bundledBasemapUrlTemplate,
+          tileProvider: bundled,
+          tileBounds: MapBounds.belarus,
+          keepBuffer: MapTileConfig.keepBuffer,
+          panBuffer: MapTileConfig.panBuffer,
+          maxNativeZoom: maxZ,
+          maxZoom: AppConfig.maxZoom,
+          userAgentPackageName: MapTileConfig.userAgentPackageName,
+        );
+      }
+    }
+
     final basemap = MapBasemapOption.byId(_basemapId);
     final fallback = MapBasemapOption.nextInChain(_basemapId);
     return TileLayer(

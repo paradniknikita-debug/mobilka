@@ -14,6 +14,7 @@ import 'core/services/sync_scheduler.dart';
 import 'core/services/initial_bootstrap_service.dart';
 import 'core/services/base_url_manager.dart';
 import 'core/services/offline_map_service.dart';
+import 'core/services/equipment_catalog_cache.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() async {
@@ -36,6 +37,7 @@ void main() async {
 
   // Минимальная инициализация для быстрого старта
   final prefs = await SharedPreferences.getInstance();
+  await EquipmentCatalogCache.ensureBundledDefaults(prefs);
   
   // Инициализируем BaseUrlManager с SharedPreferences
   final urlManager = BaseUrlManager();

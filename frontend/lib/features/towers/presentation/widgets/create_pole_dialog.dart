@@ -28,6 +28,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
 import '../../../../core/utils/pole_card_comment_codec.dart';
 import 'add_equipment_dialog.dart';
+import 'filterable_mark_field.dart';
 import 'pole_attachments_table_sheet.dart';
 
 /// Категории оборудования на опоре (по макету карточки опоры).
@@ -177,75 +178,19 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
     String? helperText,
     Widget? prefixIcon,
   }) {
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: controller.text),
-      optionsBuilder: (textEditingValue) {
-        final q = textEditingValue.text.trim().toLowerCase();
-        if (q.isEmpty) return options;
-        return options.where((s) => s.toLowerCase().contains(q));
-      },
-      displayStringForOption: (o) => o,
-      onSelected: onChanged,
-      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-        if (textEditingController.text != controller.text) {
-          textEditingController.text = controller.text;
-        }
-        return TextFormField(
-          controller: textEditingController,
-          focusNode: focusNode,
-          onFieldSubmitted: (v) => onFieldSubmitted(),
-          decoration: InputDecoration(
-            labelText: labelText,
-            hintText: hintText,
-            helperText: helperText ?? 'Начните ввод — список отфильтруется',
-            helperMaxLines: 2,
-            helperStyle: helperText != null
-                ? const TextStyle(fontSize: 11, color: PatrolColors.textSecondary)
-                : null,
-            prefixIcon: prefixIcon,
-            filled: true,
-            fillColor: PatrolColors.surfaceCard,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            suffixIcon: const Icon(Icons.arrow_drop_down, color: PatrolColors.textSecondary),
-          ),
-          style: const TextStyle(color: PatrolColors.textPrimary),
-          onChanged: (v) {
-            controller.text = v;
-            onChanged(v);
-          },
-        );
-      },
-      optionsViewBuilder: (context, onSelected, optionItems) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            color: PatrolColors.surfaceCard,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 240, minWidth: 280),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: optionItems.length,
-                itemBuilder: (context, index) {
-                  final option = optionItems.elementAt(index);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      option,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: PatrolColors.textPrimary),
-                    ),
-                    onTap: () => onSelected(option),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
+    return FilterableMarkField(
+      controller: controller,
+      options: options,
+      labelText: labelText,
+      hintText: hintText,
+      helperText: helperText,
+      prefixIcon: prefixIcon,
+      onChanged: onChanged,
     );
+  }
+
+  void _releaseMarkFieldFocus() {
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   double? _expectedLineVoltageKv;
@@ -2009,13 +1954,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         live = await api.getEquipmentCatalog(typeCode: alt, limit: 500);
       }
       if (live.isNotEmpty) {
-        final all = await api.getEquipmentCatalog(limit: 5000, isActive: true);
-        await EquipmentCatalogCache.save(prefs, all);
         return live;
       }
-      return fromCacheByAliases();
+      final cached = fromCacheByAliases();
+      if (cached.isNotEmpty) return cached;
+      return EquipmentCatalogCache.loadByType(prefs, code);
     } catch (_) {
-      return fromCacheByAliases();
+      final cached = fromCacheByAliases();
+      if (cached.isNotEmpty) return cached;
+      return EquipmentCatalogCache.loadByType(prefs, code);
     }
   }
 
@@ -2070,13 +2017,15 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         ? catalogItems
         : catalogItems.where((e) {
             final kv = e.voltageKv;
-            if (kv == null) return false;
+            if (kv == null) return true;
             return (kv - expectedLineVoltageKv!).abs() <= 0.001;
           }).toList();
+    final catalogForDialog =
+        filteredCatalogItems.isNotEmpty ? filteredCatalogItems : catalogItems;
     final directionNeighborOptions = await _resolveDirectionNeighborOptions();
     final seen = <String>{};
     final extra = <String>[];
-    for (final e in filteredCatalogItems) {
+    for (final e in catalogForDialog) {
       final label = (e.fullName != null && e.fullName!.trim().isNotEmpty)
           ? e.fullName!.trim()
           : '${e.brand} ${e.model}'.trim();
@@ -2119,7 +2068,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         initialParentMainEquipmentPoleRef: initialParentMainEquipmentPoleRef,
         directionNeighborOptions: directionNeighborOptions.isEmpty ? null : directionNeighborOptions,
         catalogExtraBrands: extra.isEmpty ? null : extra,
-        catalogItems: filteredCatalogItems.isEmpty ? null : filteredCatalogItems,
+        catalogItems: catalogForDialog.isEmpty ? null : catalogForDialog,
         expectedLineVoltageKv: expectedLineVoltageKv,
         allowManualBrandOutsideCatalog: widget.allowManualBrandOutsideCatalog,
       ),
@@ -3221,7 +3170,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
               const SizedBox(height: 16),
 
               Flexible(
-                child: SingleChildScrollView(
+                child: GestureDetector(
+                  onTap: _releaseMarkFieldFocus,
+                  behavior: HitTestBehavior.translucent,
+                  child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3810,6 +3762,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                                 : null,
                                           );
                                           if (result != null && mounted) {
+                                            _releaseMarkFieldFocus();
                                             setState(() {
                                               _pendingEquipment.removeWhere(
                                                 (e) => _equipmentTypeMatches(e.equipmentType, eqType),
@@ -3839,6 +3792,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                         initialQuantity: singleInstance ? 1 : 1,
                                       );
                                       if (result != null && mounted) {
+                                        _releaseMarkFieldFocus();
                                         setState(() {
                                           _pendingEquipment.removeWhere(
                                             (e) => _equipmentTypeMatches(e.equipmentType, eqType),
@@ -4230,9 +4184,10 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                     ],
                   ),
                 ),
+                ),
               ),
 
-              // Кнопка «Начать отпайку» — в режиме редактирования любой опоры (добавить первую опору отпайки от этой)
+              // Кнопка «Начать отпайку»
               if (widget.isEditMode && widget.poleId != null) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),

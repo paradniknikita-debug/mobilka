@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:dragon167@localhost:5433/lepm_db"
     SECRET_KEY: str = "CHANGE_ME_SECRET_KEY"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 суток — полевой офлайн без частого входа
     REDIS_URL: str = "redis://localhost:6379"
     # Считаем пользователя «онлайн», если был авторизованный запрос за последние N секунд
     USER_PRESENCE_TTL_SECONDS: int = 300

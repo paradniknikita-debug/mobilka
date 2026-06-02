@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/equipment_catalog_cache.dart';
+import '../../../../core/services/equipment_catalog_update_service.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
@@ -380,6 +382,12 @@ class ProfilePage extends ConsumerWidget {
       final prefs = ref.read(prefsProvider);
       final rows = await api.getEquipmentCatalog(limit: 5000, isActive: true);
       await EquipmentCatalogCache.save(prefs, rows);
+      if (rows.isNotEmpty) {
+        await prefs.setString(
+          AppConfig.equipmentCatalogDismissedFingerprintKey,
+          EquipmentCatalogUpdateService.fingerprint(rows),
+        );
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

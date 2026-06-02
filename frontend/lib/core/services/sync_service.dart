@@ -142,6 +142,8 @@ class SyncService extends StateNotifier<SyncState> {
 
       await _database.removeDuplicatePowerLines();
 
+      // Справочник марок — только по явному согласию пользователя (диалог на главной).
+
       // Локальные данные не удаляем: выгруженные сущности остаются в БД вместе с загруженными с сервера.
       if (uploadResult != null) {
         _clearPendingDeletePowerLineIds();

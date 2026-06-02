@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
 import '../database/database.dart';
 import 'auth_service.dart';
-import 'offline_map_service.dart';
 import 'sync_service.dart';
 
 enum InitialBootstrapPhase {
@@ -72,11 +71,7 @@ class InitialBootstrapNotifier extends StateNotifier<InitialBootstrapState> {
       return;
     }
 
-    // Детальные тайлы — фоном, не блокируем вход и sync.
-    if (await _isOnline()) {
-      unawaited(OfflineMapService.instance.enhanceOfflineTilesInBackground());
-    }
-
+    // Детальные тайлы z11–14 (~3 ГБ) — только вручную из настроек, не автоматически.
     if (!await _isOnline()) {
       state = const InitialBootstrapState(
         phase: InitialBootstrapPhase.skippedOffline,
