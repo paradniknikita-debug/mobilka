@@ -827,6 +827,15 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _mridMeta = const VerificationMeta('mrid');
+  @override
+  late final GeneratedColumn<String> mrid = GeneratedColumn<String>(
+    'mrid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _xPositionMeta = const VerificationMeta(
     'xPosition',
   );
@@ -966,6 +975,99 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _sequenceNumberMeta = const VerificationMeta(
+    'sequenceNumber',
+  );
+  @override
+  late final GeneratedColumn<int> sequenceNumber = GeneratedColumn<int>(
+    'sequence_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _branchTypeMeta = const VerificationMeta(
+    'branchType',
+  );
+  @override
+  late final GeneratedColumn<String> branchType = GeneratedColumn<String>(
+    'branch_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tapPoleIdMeta = const VerificationMeta(
+    'tapPoleId',
+  );
+  @override
+  late final GeneratedColumn<int> tapPoleId = GeneratedColumn<int>(
+    'tap_pole_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tapBranchIndexMeta = const VerificationMeta(
+    'tapBranchIndex',
+  );
+  @override
+  late final GeneratedColumn<int> tapBranchIndex = GeneratedColumn<int>(
+    'tap_branch_index',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isTapPoleMeta = const VerificationMeta(
+    'isTapPole',
+  );
+  @override
+  late final GeneratedColumn<bool> isTapPole = GeneratedColumn<bool>(
+    'is_tap_pole',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_tap_pole" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _conductorTypeMeta = const VerificationMeta(
+    'conductorType',
+  );
+  @override
+  late final GeneratedColumn<String> conductorType = GeneratedColumn<String>(
+    'conductor_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _conductorMaterialMeta = const VerificationMeta(
+    'conductorMaterial',
+  );
+  @override
+  late final GeneratedColumn<String> conductorMaterial =
+      GeneratedColumn<String>(
+        'conductor_material',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _conductorSectionMeta = const VerificationMeta(
+    'conductorSection',
+  );
+  @override
+  late final GeneratedColumn<String> conductorSection = GeneratedColumn<String>(
+    'conductor_section',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdByMeta = const VerificationMeta(
     'createdBy',
   );
@@ -1034,6 +1136,7 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     id,
     lineId,
     poleNumber,
+    mrid,
     xPosition,
     yPosition,
     poleType,
@@ -1047,6 +1150,14 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
     structuralDefectCriticality,
     cardComment,
     cardCommentAttachment,
+    sequenceNumber,
+    branchType,
+    tapPoleId,
+    tapBranchIndex,
+    isTapPole,
+    conductorType,
+    conductorMaterial,
+    conductorSection,
     createdBy,
     createdAt,
     updatedAt,
@@ -1083,6 +1194,12 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
       );
     } else if (isInserting) {
       context.missing(_poleNumberMeta);
+    }
+    if (data.containsKey('mrid')) {
+      context.handle(
+        _mridMeta,
+        mrid.isAcceptableOrUnknown(data['mrid']!, _mridMeta),
+      );
     }
     if (data.containsKey('x_position')) {
       context.handle(
@@ -1180,6 +1297,69 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         ),
       );
     }
+    if (data.containsKey('sequence_number')) {
+      context.handle(
+        _sequenceNumberMeta,
+        sequenceNumber.isAcceptableOrUnknown(
+          data['sequence_number']!,
+          _sequenceNumberMeta,
+        ),
+      );
+    }
+    if (data.containsKey('branch_type')) {
+      context.handle(
+        _branchTypeMeta,
+        branchType.isAcceptableOrUnknown(data['branch_type']!, _branchTypeMeta),
+      );
+    }
+    if (data.containsKey('tap_pole_id')) {
+      context.handle(
+        _tapPoleIdMeta,
+        tapPoleId.isAcceptableOrUnknown(data['tap_pole_id']!, _tapPoleIdMeta),
+      );
+    }
+    if (data.containsKey('tap_branch_index')) {
+      context.handle(
+        _tapBranchIndexMeta,
+        tapBranchIndex.isAcceptableOrUnknown(
+          data['tap_branch_index']!,
+          _tapBranchIndexMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_tap_pole')) {
+      context.handle(
+        _isTapPoleMeta,
+        isTapPole.isAcceptableOrUnknown(data['is_tap_pole']!, _isTapPoleMeta),
+      );
+    }
+    if (data.containsKey('conductor_type')) {
+      context.handle(
+        _conductorTypeMeta,
+        conductorType.isAcceptableOrUnknown(
+          data['conductor_type']!,
+          _conductorTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('conductor_material')) {
+      context.handle(
+        _conductorMaterialMeta,
+        conductorMaterial.isAcceptableOrUnknown(
+          data['conductor_material']!,
+          _conductorMaterialMeta,
+        ),
+      );
+    }
+    if (data.containsKey('conductor_section')) {
+      context.handle(
+        _conductorSectionMeta,
+        conductorSection.isAcceptableOrUnknown(
+          data['conductor_section']!,
+          _conductorSectionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_by')) {
       context.handle(
         _createdByMeta,
@@ -1235,6 +1415,10 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         DriftSqlType.string,
         data['${effectivePrefix}pole_number'],
       )!,
+      mrid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mrid'],
+      ),
       xPosition: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}x_position'],
@@ -1287,6 +1471,38 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
         DriftSqlType.string,
         data['${effectivePrefix}card_comment_attachment'],
       ),
+      sequenceNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sequence_number'],
+      ),
+      branchType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_type'],
+      ),
+      tapPoleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tap_pole_id'],
+      ),
+      tapBranchIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tap_branch_index'],
+      ),
+      isTapPole: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_tap_pole'],
+      )!,
+      conductorType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conductor_type'],
+      ),
+      conductorMaterial: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conductor_material'],
+      ),
+      conductorSection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conductor_section'],
+      ),
       createdBy: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_by'],
@@ -1323,6 +1539,9 @@ class Pole extends DataClass implements Insertable<Pole> {
   final int lineId;
   final String poleNumber;
 
+  /// CIM mRID (UID опоры)
+  final String? mrid;
+
   /// Долгота (longitude), CIM x_position
   final double? xPosition;
 
@@ -1347,6 +1566,18 @@ class Pole extends DataClass implements Insertable<Pole> {
 
   /// Вложения к комментарию: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
   final String? cardCommentAttachment;
+
+  /// Порядок на линии (как sequence_number на сервере)
+  final int? sequenceNumber;
+
+  /// main | tap
+  final String? branchType;
+  final int? tapPoleId;
+  final int? tapBranchIndex;
+  final bool isTapPole;
+  final String? conductorType;
+  final String? conductorMaterial;
+  final String? conductorSection;
   final int createdBy;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -1356,6 +1587,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     required this.id,
     required this.lineId,
     required this.poleNumber,
+    this.mrid,
     this.xPosition,
     this.yPosition,
     this.poleType,
@@ -1369,6 +1601,14 @@ class Pole extends DataClass implements Insertable<Pole> {
     this.structuralDefectCriticality,
     this.cardComment,
     this.cardCommentAttachment,
+    this.sequenceNumber,
+    this.branchType,
+    this.tapPoleId,
+    this.tapBranchIndex,
+    required this.isTapPole,
+    this.conductorType,
+    this.conductorMaterial,
+    this.conductorSection,
     required this.createdBy,
     required this.createdAt,
     this.updatedAt,
@@ -1381,6 +1621,9 @@ class Pole extends DataClass implements Insertable<Pole> {
     map['id'] = Variable<int>(id);
     map['line_id'] = Variable<int>(lineId);
     map['pole_number'] = Variable<String>(poleNumber);
+    if (!nullToAbsent || mrid != null) {
+      map['mrid'] = Variable<String>(mrid);
+    }
     if (!nullToAbsent || xPosition != null) {
       map['x_position'] = Variable<double>(xPosition);
     }
@@ -1422,6 +1665,28 @@ class Pole extends DataClass implements Insertable<Pole> {
     if (!nullToAbsent || cardCommentAttachment != null) {
       map['card_comment_attachment'] = Variable<String>(cardCommentAttachment);
     }
+    if (!nullToAbsent || sequenceNumber != null) {
+      map['sequence_number'] = Variable<int>(sequenceNumber);
+    }
+    if (!nullToAbsent || branchType != null) {
+      map['branch_type'] = Variable<String>(branchType);
+    }
+    if (!nullToAbsent || tapPoleId != null) {
+      map['tap_pole_id'] = Variable<int>(tapPoleId);
+    }
+    if (!nullToAbsent || tapBranchIndex != null) {
+      map['tap_branch_index'] = Variable<int>(tapBranchIndex);
+    }
+    map['is_tap_pole'] = Variable<bool>(isTapPole);
+    if (!nullToAbsent || conductorType != null) {
+      map['conductor_type'] = Variable<String>(conductorType);
+    }
+    if (!nullToAbsent || conductorMaterial != null) {
+      map['conductor_material'] = Variable<String>(conductorMaterial);
+    }
+    if (!nullToAbsent || conductorSection != null) {
+      map['conductor_section'] = Variable<String>(conductorSection);
+    }
     map['created_by'] = Variable<int>(createdBy);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || updatedAt != null) {
@@ -1437,6 +1702,7 @@ class Pole extends DataClass implements Insertable<Pole> {
       id: Value(id),
       lineId: Value(lineId),
       poleNumber: Value(poleNumber),
+      mrid: mrid == null && nullToAbsent ? const Value.absent() : Value(mrid),
       xPosition: xPosition == null && nullToAbsent
           ? const Value.absent()
           : Value(xPosition),
@@ -1477,6 +1743,28 @@ class Pole extends DataClass implements Insertable<Pole> {
       cardCommentAttachment: cardCommentAttachment == null && nullToAbsent
           ? const Value.absent()
           : Value(cardCommentAttachment),
+      sequenceNumber: sequenceNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sequenceNumber),
+      branchType: branchType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(branchType),
+      tapPoleId: tapPoleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tapPoleId),
+      tapBranchIndex: tapBranchIndex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tapBranchIndex),
+      isTapPole: Value(isTapPole),
+      conductorType: conductorType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conductorType),
+      conductorMaterial: conductorMaterial == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conductorMaterial),
+      conductorSection: conductorSection == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conductorSection),
       createdBy: Value(createdBy),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
@@ -1496,6 +1784,7 @@ class Pole extends DataClass implements Insertable<Pole> {
       id: serializer.fromJson<int>(json['id']),
       lineId: serializer.fromJson<int>(json['lineId']),
       poleNumber: serializer.fromJson<String>(json['poleNumber']),
+      mrid: serializer.fromJson<String?>(json['mrid']),
       xPosition: serializer.fromJson<double?>(json['xPosition']),
       yPosition: serializer.fromJson<double?>(json['yPosition']),
       poleType: serializer.fromJson<String?>(json['poleType']),
@@ -1513,6 +1802,16 @@ class Pole extends DataClass implements Insertable<Pole> {
       cardCommentAttachment: serializer.fromJson<String?>(
         json['cardCommentAttachment'],
       ),
+      sequenceNumber: serializer.fromJson<int?>(json['sequenceNumber']),
+      branchType: serializer.fromJson<String?>(json['branchType']),
+      tapPoleId: serializer.fromJson<int?>(json['tapPoleId']),
+      tapBranchIndex: serializer.fromJson<int?>(json['tapBranchIndex']),
+      isTapPole: serializer.fromJson<bool>(json['isTapPole']),
+      conductorType: serializer.fromJson<String?>(json['conductorType']),
+      conductorMaterial: serializer.fromJson<String?>(
+        json['conductorMaterial'],
+      ),
+      conductorSection: serializer.fromJson<String?>(json['conductorSection']),
       createdBy: serializer.fromJson<int>(json['createdBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
@@ -1527,6 +1826,7 @@ class Pole extends DataClass implements Insertable<Pole> {
       'id': serializer.toJson<int>(id),
       'lineId': serializer.toJson<int>(lineId),
       'poleNumber': serializer.toJson<String>(poleNumber),
+      'mrid': serializer.toJson<String?>(mrid),
       'xPosition': serializer.toJson<double?>(xPosition),
       'yPosition': serializer.toJson<double?>(yPosition),
       'poleType': serializer.toJson<String?>(poleType),
@@ -1544,6 +1844,14 @@ class Pole extends DataClass implements Insertable<Pole> {
       'cardCommentAttachment': serializer.toJson<String?>(
         cardCommentAttachment,
       ),
+      'sequenceNumber': serializer.toJson<int?>(sequenceNumber),
+      'branchType': serializer.toJson<String?>(branchType),
+      'tapPoleId': serializer.toJson<int?>(tapPoleId),
+      'tapBranchIndex': serializer.toJson<int?>(tapBranchIndex),
+      'isTapPole': serializer.toJson<bool>(isTapPole),
+      'conductorType': serializer.toJson<String?>(conductorType),
+      'conductorMaterial': serializer.toJson<String?>(conductorMaterial),
+      'conductorSection': serializer.toJson<String?>(conductorSection),
       'createdBy': serializer.toJson<int>(createdBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
@@ -1556,6 +1864,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     int? id,
     int? lineId,
     String? poleNumber,
+    Value<String?> mrid = const Value.absent(),
     Value<double?> xPosition = const Value.absent(),
     Value<double?> yPosition = const Value.absent(),
     Value<String?> poleType = const Value.absent(),
@@ -1569,6 +1878,14 @@ class Pole extends DataClass implements Insertable<Pole> {
     Value<String?> structuralDefectCriticality = const Value.absent(),
     Value<String?> cardComment = const Value.absent(),
     Value<String?> cardCommentAttachment = const Value.absent(),
+    Value<int?> sequenceNumber = const Value.absent(),
+    Value<String?> branchType = const Value.absent(),
+    Value<int?> tapPoleId = const Value.absent(),
+    Value<int?> tapBranchIndex = const Value.absent(),
+    bool? isTapPole,
+    Value<String?> conductorType = const Value.absent(),
+    Value<String?> conductorMaterial = const Value.absent(),
+    Value<String?> conductorSection = const Value.absent(),
     int? createdBy,
     DateTime? createdAt,
     Value<DateTime?> updatedAt = const Value.absent(),
@@ -1578,6 +1895,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     id: id ?? this.id,
     lineId: lineId ?? this.lineId,
     poleNumber: poleNumber ?? this.poleNumber,
+    mrid: mrid.present ? mrid.value : this.mrid,
     xPosition: xPosition.present ? xPosition.value : this.xPosition,
     yPosition: yPosition.present ? yPosition.value : this.yPosition,
     poleType: poleType.present ? poleType.value : this.poleType,
@@ -1601,6 +1919,24 @@ class Pole extends DataClass implements Insertable<Pole> {
     cardCommentAttachment: cardCommentAttachment.present
         ? cardCommentAttachment.value
         : this.cardCommentAttachment,
+    sequenceNumber: sequenceNumber.present
+        ? sequenceNumber.value
+        : this.sequenceNumber,
+    branchType: branchType.present ? branchType.value : this.branchType,
+    tapPoleId: tapPoleId.present ? tapPoleId.value : this.tapPoleId,
+    tapBranchIndex: tapBranchIndex.present
+        ? tapBranchIndex.value
+        : this.tapBranchIndex,
+    isTapPole: isTapPole ?? this.isTapPole,
+    conductorType: conductorType.present
+        ? conductorType.value
+        : this.conductorType,
+    conductorMaterial: conductorMaterial.present
+        ? conductorMaterial.value
+        : this.conductorMaterial,
+    conductorSection: conductorSection.present
+        ? conductorSection.value
+        : this.conductorSection,
     createdBy: createdBy ?? this.createdBy,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
@@ -1614,6 +1950,7 @@ class Pole extends DataClass implements Insertable<Pole> {
       poleNumber: data.poleNumber.present
           ? data.poleNumber.value
           : this.poleNumber,
+      mrid: data.mrid.present ? data.mrid.value : this.mrid,
       xPosition: data.xPosition.present ? data.xPosition.value : this.xPosition,
       yPosition: data.yPosition.present ? data.yPosition.value : this.yPosition,
       poleType: data.poleType.present ? data.poleType.value : this.poleType,
@@ -1639,6 +1976,26 @@ class Pole extends DataClass implements Insertable<Pole> {
       cardCommentAttachment: data.cardCommentAttachment.present
           ? data.cardCommentAttachment.value
           : this.cardCommentAttachment,
+      sequenceNumber: data.sequenceNumber.present
+          ? data.sequenceNumber.value
+          : this.sequenceNumber,
+      branchType: data.branchType.present
+          ? data.branchType.value
+          : this.branchType,
+      tapPoleId: data.tapPoleId.present ? data.tapPoleId.value : this.tapPoleId,
+      tapBranchIndex: data.tapBranchIndex.present
+          ? data.tapBranchIndex.value
+          : this.tapBranchIndex,
+      isTapPole: data.isTapPole.present ? data.isTapPole.value : this.isTapPole,
+      conductorType: data.conductorType.present
+          ? data.conductorType.value
+          : this.conductorType,
+      conductorMaterial: data.conductorMaterial.present
+          ? data.conductorMaterial.value
+          : this.conductorMaterial,
+      conductorSection: data.conductorSection.present
+          ? data.conductorSection.value
+          : this.conductorSection,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1653,6 +2010,7 @@ class Pole extends DataClass implements Insertable<Pole> {
           ..write('id: $id, ')
           ..write('lineId: $lineId, ')
           ..write('poleNumber: $poleNumber, ')
+          ..write('mrid: $mrid, ')
           ..write('xPosition: $xPosition, ')
           ..write('yPosition: $yPosition, ')
           ..write('poleType: $poleType, ')
@@ -1666,6 +2024,14 @@ class Pole extends DataClass implements Insertable<Pole> {
           ..write('structuralDefectCriticality: $structuralDefectCriticality, ')
           ..write('cardComment: $cardComment, ')
           ..write('cardCommentAttachment: $cardCommentAttachment, ')
+          ..write('sequenceNumber: $sequenceNumber, ')
+          ..write('branchType: $branchType, ')
+          ..write('tapPoleId: $tapPoleId, ')
+          ..write('tapBranchIndex: $tapBranchIndex, ')
+          ..write('isTapPole: $isTapPole, ')
+          ..write('conductorType: $conductorType, ')
+          ..write('conductorMaterial: $conductorMaterial, ')
+          ..write('conductorSection: $conductorSection, ')
           ..write('createdBy: $createdBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1680,6 +2046,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     id,
     lineId,
     poleNumber,
+    mrid,
     xPosition,
     yPosition,
     poleType,
@@ -1693,6 +2060,14 @@ class Pole extends DataClass implements Insertable<Pole> {
     structuralDefectCriticality,
     cardComment,
     cardCommentAttachment,
+    sequenceNumber,
+    branchType,
+    tapPoleId,
+    tapBranchIndex,
+    isTapPole,
+    conductorType,
+    conductorMaterial,
+    conductorSection,
     createdBy,
     createdAt,
     updatedAt,
@@ -1706,6 +2081,7 @@ class Pole extends DataClass implements Insertable<Pole> {
           other.id == this.id &&
           other.lineId == this.lineId &&
           other.poleNumber == this.poleNumber &&
+          other.mrid == this.mrid &&
           other.xPosition == this.xPosition &&
           other.yPosition == this.yPosition &&
           other.poleType == this.poleType &&
@@ -1720,6 +2096,14 @@ class Pole extends DataClass implements Insertable<Pole> {
               this.structuralDefectCriticality &&
           other.cardComment == this.cardComment &&
           other.cardCommentAttachment == this.cardCommentAttachment &&
+          other.sequenceNumber == this.sequenceNumber &&
+          other.branchType == this.branchType &&
+          other.tapPoleId == this.tapPoleId &&
+          other.tapBranchIndex == this.tapBranchIndex &&
+          other.isTapPole == this.isTapPole &&
+          other.conductorType == this.conductorType &&
+          other.conductorMaterial == this.conductorMaterial &&
+          other.conductorSection == this.conductorSection &&
           other.createdBy == this.createdBy &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -1731,6 +2115,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<int> id;
   final Value<int> lineId;
   final Value<String> poleNumber;
+  final Value<String?> mrid;
   final Value<double?> xPosition;
   final Value<double?> yPosition;
   final Value<String?> poleType;
@@ -1744,6 +2129,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<String?> structuralDefectCriticality;
   final Value<String?> cardComment;
   final Value<String?> cardCommentAttachment;
+  final Value<int?> sequenceNumber;
+  final Value<String?> branchType;
+  final Value<int?> tapPoleId;
+  final Value<int?> tapBranchIndex;
+  final Value<bool> isTapPole;
+  final Value<String?> conductorType;
+  final Value<String?> conductorMaterial;
+  final Value<String?> conductorSection;
   final Value<int> createdBy;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
@@ -1753,6 +2146,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.id = const Value.absent(),
     this.lineId = const Value.absent(),
     this.poleNumber = const Value.absent(),
+    this.mrid = const Value.absent(),
     this.xPosition = const Value.absent(),
     this.yPosition = const Value.absent(),
     this.poleType = const Value.absent(),
@@ -1766,6 +2160,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.structuralDefectCriticality = const Value.absent(),
     this.cardComment = const Value.absent(),
     this.cardCommentAttachment = const Value.absent(),
+    this.sequenceNumber = const Value.absent(),
+    this.branchType = const Value.absent(),
+    this.tapPoleId = const Value.absent(),
+    this.tapBranchIndex = const Value.absent(),
+    this.isTapPole = const Value.absent(),
+    this.conductorType = const Value.absent(),
+    this.conductorMaterial = const Value.absent(),
+    this.conductorSection = const Value.absent(),
     this.createdBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1776,6 +2178,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.id = const Value.absent(),
     required int lineId,
     required String poleNumber,
+    this.mrid = const Value.absent(),
     this.xPosition = const Value.absent(),
     this.yPosition = const Value.absent(),
     this.poleType = const Value.absent(),
@@ -1789,6 +2192,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     this.structuralDefectCriticality = const Value.absent(),
     this.cardComment = const Value.absent(),
     this.cardCommentAttachment = const Value.absent(),
+    this.sequenceNumber = const Value.absent(),
+    this.branchType = const Value.absent(),
+    this.tapPoleId = const Value.absent(),
+    this.tapBranchIndex = const Value.absent(),
+    this.isTapPole = const Value.absent(),
+    this.conductorType = const Value.absent(),
+    this.conductorMaterial = const Value.absent(),
+    this.conductorSection = const Value.absent(),
     required int createdBy,
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
@@ -1802,6 +2213,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Expression<int>? id,
     Expression<int>? lineId,
     Expression<String>? poleNumber,
+    Expression<String>? mrid,
     Expression<double>? xPosition,
     Expression<double>? yPosition,
     Expression<String>? poleType,
@@ -1815,6 +2227,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Expression<String>? structuralDefectCriticality,
     Expression<String>? cardComment,
     Expression<String>? cardCommentAttachment,
+    Expression<int>? sequenceNumber,
+    Expression<String>? branchType,
+    Expression<int>? tapPoleId,
+    Expression<int>? tapBranchIndex,
+    Expression<bool>? isTapPole,
+    Expression<String>? conductorType,
+    Expression<String>? conductorMaterial,
+    Expression<String>? conductorSection,
     Expression<int>? createdBy,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -1825,6 +2245,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       if (id != null) 'id': id,
       if (lineId != null) 'line_id': lineId,
       if (poleNumber != null) 'pole_number': poleNumber,
+      if (mrid != null) 'mrid': mrid,
       if (xPosition != null) 'x_position': xPosition,
       if (yPosition != null) 'y_position': yPosition,
       if (poleType != null) 'pole_type': poleType,
@@ -1840,6 +2261,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       if (cardComment != null) 'card_comment': cardComment,
       if (cardCommentAttachment != null)
         'card_comment_attachment': cardCommentAttachment,
+      if (sequenceNumber != null) 'sequence_number': sequenceNumber,
+      if (branchType != null) 'branch_type': branchType,
+      if (tapPoleId != null) 'tap_pole_id': tapPoleId,
+      if (tapBranchIndex != null) 'tap_branch_index': tapBranchIndex,
+      if (isTapPole != null) 'is_tap_pole': isTapPole,
+      if (conductorType != null) 'conductor_type': conductorType,
+      if (conductorMaterial != null) 'conductor_material': conductorMaterial,
+      if (conductorSection != null) 'conductor_section': conductorSection,
       if (createdBy != null) 'created_by': createdBy,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1852,6 +2281,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Value<int>? id,
     Value<int>? lineId,
     Value<String>? poleNumber,
+    Value<String?>? mrid,
     Value<double?>? xPosition,
     Value<double?>? yPosition,
     Value<String?>? poleType,
@@ -1865,6 +2295,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Value<String?>? structuralDefectCriticality,
     Value<String?>? cardComment,
     Value<String?>? cardCommentAttachment,
+    Value<int?>? sequenceNumber,
+    Value<String?>? branchType,
+    Value<int?>? tapPoleId,
+    Value<int?>? tapBranchIndex,
+    Value<bool>? isTapPole,
+    Value<String?>? conductorType,
+    Value<String?>? conductorMaterial,
+    Value<String?>? conductorSection,
     Value<int>? createdBy,
     Value<DateTime>? createdAt,
     Value<DateTime?>? updatedAt,
@@ -1875,6 +2313,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       id: id ?? this.id,
       lineId: lineId ?? this.lineId,
       poleNumber: poleNumber ?? this.poleNumber,
+      mrid: mrid ?? this.mrid,
       xPosition: xPosition ?? this.xPosition,
       yPosition: yPosition ?? this.yPosition,
       poleType: poleType ?? this.poleType,
@@ -1890,6 +2329,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
       cardComment: cardComment ?? this.cardComment,
       cardCommentAttachment:
           cardCommentAttachment ?? this.cardCommentAttachment,
+      sequenceNumber: sequenceNumber ?? this.sequenceNumber,
+      branchType: branchType ?? this.branchType,
+      tapPoleId: tapPoleId ?? this.tapPoleId,
+      tapBranchIndex: tapBranchIndex ?? this.tapBranchIndex,
+      isTapPole: isTapPole ?? this.isTapPole,
+      conductorType: conductorType ?? this.conductorType,
+      conductorMaterial: conductorMaterial ?? this.conductorMaterial,
+      conductorSection: conductorSection ?? this.conductorSection,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1909,6 +2356,9 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     }
     if (poleNumber.present) {
       map['pole_number'] = Variable<String>(poleNumber.value);
+    }
+    if (mrid.present) {
+      map['mrid'] = Variable<String>(mrid.value);
     }
     if (xPosition.present) {
       map['x_position'] = Variable<double>(xPosition.value);
@@ -1953,6 +2403,30 @@ class PolesCompanion extends UpdateCompanion<Pole> {
         cardCommentAttachment.value,
       );
     }
+    if (sequenceNumber.present) {
+      map['sequence_number'] = Variable<int>(sequenceNumber.value);
+    }
+    if (branchType.present) {
+      map['branch_type'] = Variable<String>(branchType.value);
+    }
+    if (tapPoleId.present) {
+      map['tap_pole_id'] = Variable<int>(tapPoleId.value);
+    }
+    if (tapBranchIndex.present) {
+      map['tap_branch_index'] = Variable<int>(tapBranchIndex.value);
+    }
+    if (isTapPole.present) {
+      map['is_tap_pole'] = Variable<bool>(isTapPole.value);
+    }
+    if (conductorType.present) {
+      map['conductor_type'] = Variable<String>(conductorType.value);
+    }
+    if (conductorMaterial.present) {
+      map['conductor_material'] = Variable<String>(conductorMaterial.value);
+    }
+    if (conductorSection.present) {
+      map['conductor_section'] = Variable<String>(conductorSection.value);
+    }
     if (createdBy.present) {
       map['created_by'] = Variable<int>(createdBy.value);
     }
@@ -1977,6 +2451,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
           ..write('id: $id, ')
           ..write('lineId: $lineId, ')
           ..write('poleNumber: $poleNumber, ')
+          ..write('mrid: $mrid, ')
           ..write('xPosition: $xPosition, ')
           ..write('yPosition: $yPosition, ')
           ..write('poleType: $poleType, ')
@@ -1990,6 +2465,14 @@ class PolesCompanion extends UpdateCompanion<Pole> {
           ..write('structuralDefectCriticality: $structuralDefectCriticality, ')
           ..write('cardComment: $cardComment, ')
           ..write('cardCommentAttachment: $cardCommentAttachment, ')
+          ..write('sequenceNumber: $sequenceNumber, ')
+          ..write('branchType: $branchType, ')
+          ..write('tapPoleId: $tapPoleId, ')
+          ..write('tapBranchIndex: $tapBranchIndex, ')
+          ..write('isTapPole: $isTapPole, ')
+          ..write('conductorType: $conductorType, ')
+          ..write('conductorMaterial: $conductorMaterial, ')
+          ..write('conductorSection: $conductorSection, ')
           ..write('createdBy: $createdBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -6109,6 +6592,7 @@ typedef $$PolesTableCreateCompanionBuilder =
       Value<int> id,
       required int lineId,
       required String poleNumber,
+      Value<String?> mrid,
       Value<double?> xPosition,
       Value<double?> yPosition,
       Value<String?> poleType,
@@ -6122,6 +6606,14 @@ typedef $$PolesTableCreateCompanionBuilder =
       Value<String?> structuralDefectCriticality,
       Value<String?> cardComment,
       Value<String?> cardCommentAttachment,
+      Value<int?> sequenceNumber,
+      Value<String?> branchType,
+      Value<int?> tapPoleId,
+      Value<int?> tapBranchIndex,
+      Value<bool> isTapPole,
+      Value<String?> conductorType,
+      Value<String?> conductorMaterial,
+      Value<String?> conductorSection,
       required int createdBy,
       required DateTime createdAt,
       Value<DateTime?> updatedAt,
@@ -6133,6 +6625,7 @@ typedef $$PolesTableUpdateCompanionBuilder =
       Value<int> id,
       Value<int> lineId,
       Value<String> poleNumber,
+      Value<String?> mrid,
       Value<double?> xPosition,
       Value<double?> yPosition,
       Value<String?> poleType,
@@ -6146,6 +6639,14 @@ typedef $$PolesTableUpdateCompanionBuilder =
       Value<String?> structuralDefectCriticality,
       Value<String?> cardComment,
       Value<String?> cardCommentAttachment,
+      Value<int?> sequenceNumber,
+      Value<String?> branchType,
+      Value<int?> tapPoleId,
+      Value<int?> tapBranchIndex,
+      Value<bool> isTapPole,
+      Value<String?> conductorType,
+      Value<String?> conductorMaterial,
+      Value<String?> conductorSection,
       Value<int> createdBy,
       Value<DateTime> createdAt,
       Value<DateTime?> updatedAt,
@@ -6173,6 +6674,11 @@ class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
 
   ColumnFilters<String> get poleNumber => $composableBuilder(
     column: $table.poleNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mrid => $composableBuilder(
+    column: $table.mrid,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6241,6 +6747,46 @@ class $$PolesTableFilterComposer extends Composer<_$AppDatabase, $PolesTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get sequenceNumber => $composableBuilder(
+    column: $table.sequenceNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get branchType => $composableBuilder(
+    column: $table.branchType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tapPoleId => $composableBuilder(
+    column: $table.tapPoleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tapBranchIndex => $composableBuilder(
+    column: $table.tapBranchIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isTapPole => $composableBuilder(
+    column: $table.isTapPole,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conductorType => $composableBuilder(
+    column: $table.conductorType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conductorMaterial => $composableBuilder(
+    column: $table.conductorMaterial,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conductorSection => $composableBuilder(
+    column: $table.conductorSection,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get createdBy => $composableBuilder(
     column: $table.createdBy,
     builder: (column) => ColumnFilters(column),
@@ -6288,6 +6834,11 @@ class $$PolesTableOrderingComposer
 
   ColumnOrderings<String> get poleNumber => $composableBuilder(
     column: $table.poleNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mrid => $composableBuilder(
+    column: $table.mrid,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -6356,6 +6907,46 @@ class $$PolesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get sequenceNumber => $composableBuilder(
+    column: $table.sequenceNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get branchType => $composableBuilder(
+    column: $table.branchType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tapPoleId => $composableBuilder(
+    column: $table.tapPoleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tapBranchIndex => $composableBuilder(
+    column: $table.tapBranchIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isTapPole => $composableBuilder(
+    column: $table.isTapPole,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conductorType => $composableBuilder(
+    column: $table.conductorType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conductorMaterial => $composableBuilder(
+    column: $table.conductorMaterial,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conductorSection => $composableBuilder(
+    column: $table.conductorSection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdBy => $composableBuilder(
     column: $table.createdBy,
     builder: (column) => ColumnOrderings(column),
@@ -6401,6 +6992,9 @@ class $$PolesTableAnnotationComposer
     column: $table.poleNumber,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get mrid =>
+      $composableBuilder(column: $table.mrid, builder: (column) => column);
 
   GeneratedColumn<double> get xPosition =>
       $composableBuilder(column: $table.xPosition, builder: (column) => column);
@@ -6453,6 +7047,42 @@ class $$PolesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get sequenceNumber => $composableBuilder(
+    column: $table.sequenceNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get branchType => $composableBuilder(
+    column: $table.branchType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get tapPoleId =>
+      $composableBuilder(column: $table.tapPoleId, builder: (column) => column);
+
+  GeneratedColumn<int> get tapBranchIndex => $composableBuilder(
+    column: $table.tapBranchIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isTapPole =>
+      $composableBuilder(column: $table.isTapPole, builder: (column) => column);
+
+  GeneratedColumn<String> get conductorType => $composableBuilder(
+    column: $table.conductorType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get conductorMaterial => $composableBuilder(
+    column: $table.conductorMaterial,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get conductorSection => $composableBuilder(
+    column: $table.conductorSection,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get createdBy =>
       $composableBuilder(column: $table.createdBy, builder: (column) => column);
 
@@ -6500,6 +7130,7 @@ class $$PolesTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> lineId = const Value.absent(),
                 Value<String> poleNumber = const Value.absent(),
+                Value<String?> mrid = const Value.absent(),
                 Value<double?> xPosition = const Value.absent(),
                 Value<double?> yPosition = const Value.absent(),
                 Value<String?> poleType = const Value.absent(),
@@ -6514,6 +7145,14 @@ class $$PolesTableTableManager
                     const Value.absent(),
                 Value<String?> cardComment = const Value.absent(),
                 Value<String?> cardCommentAttachment = const Value.absent(),
+                Value<int?> sequenceNumber = const Value.absent(),
+                Value<String?> branchType = const Value.absent(),
+                Value<int?> tapPoleId = const Value.absent(),
+                Value<int?> tapBranchIndex = const Value.absent(),
+                Value<bool> isTapPole = const Value.absent(),
+                Value<String?> conductorType = const Value.absent(),
+                Value<String?> conductorMaterial = const Value.absent(),
+                Value<String?> conductorSection = const Value.absent(),
                 Value<int> createdBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
@@ -6523,6 +7162,7 @@ class $$PolesTableTableManager
                 id: id,
                 lineId: lineId,
                 poleNumber: poleNumber,
+                mrid: mrid,
                 xPosition: xPosition,
                 yPosition: yPosition,
                 poleType: poleType,
@@ -6536,6 +7176,14 @@ class $$PolesTableTableManager
                 structuralDefectCriticality: structuralDefectCriticality,
                 cardComment: cardComment,
                 cardCommentAttachment: cardCommentAttachment,
+                sequenceNumber: sequenceNumber,
+                branchType: branchType,
+                tapPoleId: tapPoleId,
+                tapBranchIndex: tapBranchIndex,
+                isTapPole: isTapPole,
+                conductorType: conductorType,
+                conductorMaterial: conductorMaterial,
+                conductorSection: conductorSection,
                 createdBy: createdBy,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -6547,6 +7195,7 @@ class $$PolesTableTableManager
                 Value<int> id = const Value.absent(),
                 required int lineId,
                 required String poleNumber,
+                Value<String?> mrid = const Value.absent(),
                 Value<double?> xPosition = const Value.absent(),
                 Value<double?> yPosition = const Value.absent(),
                 Value<String?> poleType = const Value.absent(),
@@ -6561,6 +7210,14 @@ class $$PolesTableTableManager
                     const Value.absent(),
                 Value<String?> cardComment = const Value.absent(),
                 Value<String?> cardCommentAttachment = const Value.absent(),
+                Value<int?> sequenceNumber = const Value.absent(),
+                Value<String?> branchType = const Value.absent(),
+                Value<int?> tapPoleId = const Value.absent(),
+                Value<int?> tapBranchIndex = const Value.absent(),
+                Value<bool> isTapPole = const Value.absent(),
+                Value<String?> conductorType = const Value.absent(),
+                Value<String?> conductorMaterial = const Value.absent(),
+                Value<String?> conductorSection = const Value.absent(),
                 required int createdBy,
                 required DateTime createdAt,
                 Value<DateTime?> updatedAt = const Value.absent(),
@@ -6570,6 +7227,7 @@ class $$PolesTableTableManager
                 id: id,
                 lineId: lineId,
                 poleNumber: poleNumber,
+                mrid: mrid,
                 xPosition: xPosition,
                 yPosition: yPosition,
                 poleType: poleType,
@@ -6583,6 +7241,14 @@ class $$PolesTableTableManager
                 structuralDefectCriticality: structuralDefectCriticality,
                 cardComment: cardComment,
                 cardCommentAttachment: cardCommentAttachment,
+                sequenceNumber: sequenceNumber,
+                branchType: branchType,
+                tapPoleId: tapPoleId,
+                tapBranchIndex: tapBranchIndex,
+                isTapPole: isTapPole,
+                conductorType: conductorType,
+                conductorMaterial: conductorMaterial,
+                conductorSection: conductorSection,
                 createdBy: createdBy,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

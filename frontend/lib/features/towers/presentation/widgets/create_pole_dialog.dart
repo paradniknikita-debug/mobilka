@@ -20,6 +20,9 @@ import '../../../../core/database/database.dart' hide Equipment, Pole;
 import '../../../../core/models/equipment_catalog.dart';
 import '../../../../core/models/power_line.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/utils/mrid.dart';
+import '../../../../core/utils/normalize_pole_number.dart';
+import '../../../../core/utils/local_pole_sequence.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/utils/pole_number_mask.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -2329,10 +2332,24 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final userId = prefs.getInt(AppConfig.userIdKey) ?? 0;
       final now = DateTime.now();
       final newPoleCardAtt = _encodeCardAttachmentsForDb();
+      final poleMrid = generateMrid();
+      _poleNumber = _poleMask.apiString;
+      final normalizedNumber = normalizePoleNumber(_poleNumber);
+      final branch = _resolveBranchFieldsForSubmit();
+      final linePoles = await db.getPolesByLine(widget.lineId);
+      final sequenceNumber = branch.branchType == 'tap'
+          ? linePoles
+                  .where((p) =>
+                      p.tapPoleId == branch.tapPoleId &&
+                      (p.tapBranchIndex ?? 1) == (branch.tapBranchIndex ?? 1))
+                  .length +
+              1
+          : nextMainSequenceNumber(linePoles);
       await db.insertPole(PolesCompanion.insert(
         id: drift.Value(localId),
         lineId: widget.lineId,
-        poleNumber: _poleNumber,
+        poleNumber: normalizedNumber,
+        mrid: drift.Value(poleMrid),
         xPosition: drift.Value(_longitude!),  // CIM: x = долгота
         yPosition: drift.Value(_latitude!),   // CIM: y = широта
         poleType: drift.Value(_poleType),
@@ -2350,6 +2367,24 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         cardCommentAttachment: newPoleCardAtt == null
             ? const drift.Value.absent()
             : drift.Value(newPoleCardAtt),
+        sequenceNumber: drift.Value(sequenceNumber),
+        branchType: drift.Value(branch.branchType),
+        tapPoleId: branch.tapPoleId == null
+            ? const drift.Value.absent()
+            : drift.Value(branch.tapPoleId!),
+        tapBranchIndex: branch.tapBranchIndex == null
+            ? const drift.Value.absent()
+            : drift.Value(branch.tapBranchIndex!),
+        isTapPole: drift.Value(_isTap),
+        conductorType: _conductorType == null || _conductorType!.isEmpty
+            ? const drift.Value.absent()
+            : drift.Value(_conductorType!),
+        conductorMaterial: _conductorMaterial != null && _conductorMaterial!.isNotEmpty
+            ? drift.Value(_conductorMaterial!)
+            : const drift.Value.absent(),
+        conductorSection: _conductorSection != null && _conductorSection!.isNotEmpty
+            ? drift.Value(_conductorSection!)
+            : const drift.Value.absent(),
         createdBy: userId,
         createdAt: now,
         updatedAt: drift.Value(now),
@@ -2970,6 +3005,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           id: drift.Value(createdPole.id),
           lineId: dbLineId,
           poleNumber: createdPole.poleNumber,
+          mrid: drift.Value(createdPole.mrid),
           xPosition: drift.Value(createdPole.xPosition),
           yPosition: drift.Value(createdPole.yPosition),
           poleType: drift.Value(createdPole.poleType),

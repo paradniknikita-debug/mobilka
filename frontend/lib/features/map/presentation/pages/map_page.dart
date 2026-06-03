@@ -31,6 +31,9 @@ import '../../../../core/auth/user_roles.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/offline_map_service.dart';
+import '../../../../core/utils/mrid.dart';
+import '../../../../core/utils/normalize_pole_number.dart';
+import '../../../../core/utils/local_pole_sequence.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/map_bounds.dart';
 import '../../../../core/config/map_tile_config.dart';
@@ -482,7 +485,31 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   Future<void> _initializeMap() async {
     if (!mounted) return;
-    
+
+    final connectivityResult = await Connectivity().checkConnectivity();
+    final isOffline = connectivityResult == ConnectivityResult.none;
+
+    if (isOffline) {
+      // Офлайн: сразу показываем карту и локальные данные, без блокирующей «загрузки с сервера».
+      setState(() {
+        _mapDataLoading = false;
+        _errorMessage = null;
+      });
+      try {
+        await _loadMapDataFromLocal(skipAutoCenter: true);
+        if (mounted) _applyInitialMapCenter();
+        unawaited(_getCurrentLocation().then((_) {
+          if (mounted) _applyInitialMapCenter();
+        }));
+        unawaited(_syncPatrolGpsTracking());
+      } catch (e) {
+        if (mounted) {
+          setState(() => _errorMessage = 'Ошибка загрузки локальных данных: $e');
+        }
+      }
+      return;
+    }
+
     setState(() {
       _mapDataLoading = true;
       _errorMessage = null;
@@ -671,13 +698,18 @@ class _MapPageState extends ConsumerState<MapPage> {
             'id': p.id,
             'line_id': p.lineId,
             'pole_number': p.poleNumber,
+            if (p.mrid != null && p.mrid!.trim().isNotEmpty) 'mrid': p.mrid,
+            if (p.sequenceNumber != null) 'sequence_number': p.sequenceNumber,
+            if (p.branchType != null) 'branch_type': p.branchType,
+            if (p.tapPoleId != null) 'tap_pole_id': p.tapPoleId,
+            if (p.tapBranchIndex != null) 'tap_branch_index': p.tapBranchIndex,
             'pole_type': p.poleType ?? '',
             'condition': p.condition ?? '',
             'x_position': p.xPosition ?? 0.0,
             'y_position': p.yPosition ?? 0.0,
             'is_local': p.isLocal,
             'needs_sync': p.needsSync,
-            'is_tap': p.poleNumber.contains('/'),
+            'is_tap': p.isTapPole || p.poleNumber.contains('/'),
             if (criticality != null) 'criticality': criticality,
           },
         });
@@ -687,7 +719,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       final lineEquipmentFeatures = <Map<String, dynamic>>[];
       for (final pl in allPowerLines) {
         final plPoles = allPoles.where((p) => p.lineId == pl.id).toList()
-          ..sort((a, b) => a.poleNumber.compareTo(b.poleNumber));
+          ..sort(comparePolesForLineOrder);
 
         // Линия с одной опорой: линия не точка в пространстве — геометрия отсутствует (рисуется по опорам при 2+).
         if (plPoles.length == 1) {
@@ -701,15 +733,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         if (plPoles.length < 2) continue;
 
         // Магистраль: одна линия только по основным опорам (без "/"), как при отрисовке.
-        final mainPoles = plPoles.where((p) => !p.poleNumber.contains('/')).toList()
-          ..sort((a, b) {
-            final na = a.poleNumber.trim();
-            final nb = b.poleNumber.trim();
-            final ia = int.tryParse(na);
-            final ib = int.tryParse(nb);
-            if (ia != null && ib != null) return ia.compareTo(ib);
-            return na.compareTo(nb);
-          });
+        final mainPoles = plPoles.where((p) => !p.poleNumber.contains('/') && p.tapPoleId == null).toList()
+          ..sort(comparePolesForLineOrder);
         if (mainPoles.length >= 2) {
           powerLineFeatures.add({
             'type': 'Feature',
@@ -1347,6 +1372,11 @@ class _MapPageState extends ConsumerState<MapPage> {
             'id': p.id,
             'line_id': p.lineId,
             'pole_number': p.poleNumber,
+            if (p.mrid != null && p.mrid!.trim().isNotEmpty) 'mrid': p.mrid,
+            if (p.sequenceNumber != null) 'sequence_number': p.sequenceNumber,
+            if (p.branchType != null) 'branch_type': p.branchType,
+            if (p.tapPoleId != null) 'tap_pole_id': p.tapPoleId,
+            if (p.tapBranchIndex != null) 'tap_branch_index': p.tapBranchIndex,
             'pole_type': p.poleType ?? '',
             'condition': p.condition ?? '',
             'x_position': p.xPosition ?? 0.0,
@@ -1677,7 +1707,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         ],
       ),
       drawer: _buildDrawer(),
-      body: Stack(
+      body: Builder(
+        builder: (context) {
+          return Stack(
               children: [
                 RepaintBoundary(
                   child: FlutterMap(
@@ -1792,7 +1824,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
                 ),
 
-                if (_mapDataLoading)
+                if (_mapDataLoading && ref.watch(connectivityStatusProvider) != ConnectionStatus.offline)
                   Positioned.fill(
                     child: ColoredBox(
                       color: Colors.black.withValues(alpha: 0.08),
@@ -2056,7 +2088,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                     ),
                   ),
               ],
-            ),
+            );
+        },
+      ),
       floatingActionButton: null, // Отключаем стандартный FAB, используем Positioned
     );
   }
@@ -4844,8 +4878,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     _selectBasemap(next.id, automatic: true);
   }
 
-  /// Подложка: выбор пользователя + fallback на следующий источник в цепочке.
-  /// Офлайн: встроенный MBTiles (z4–10), без интернета — как офлайн-карты Яндекса.
+  /// Офлайн: встроенный MBTiles (z4–11), с overzoom до maxZoom.
   Widget _buildMapTileLayer(bool isOffline) {
     if (isOffline) {
       final bundled = OfflineMapService.instance.getBundledMbtilesProvider();
@@ -4860,6 +4893,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           panBuffer: MapTileConfig.panBuffer,
           maxNativeZoom: maxZ,
           maxZoom: AppConfig.maxZoom,
+          minZoom: AppConfig.minZoom,
           userAgentPackageName: MapTileConfig.userAgentPackageName,
         );
       }
@@ -6038,6 +6072,54 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     }
     _showObjectInfo(merged, ObjectType.pole);
+    unawaited(_ensurePoleMridInPanel(merged));
+  }
+
+  Future<void> _ensurePoleMridInPanel(Map<String, dynamic> properties) async {
+    final id = _toInt(properties['id']);
+    if (id == null) return;
+    if (normalizeMridDisplay(properties['mrid']) != null) return;
+
+    final db = ref.read(drift_db.databaseProvider);
+    final local = await db.getPole(id);
+    final localMrid = normalizeMridDisplay(local?.mrid);
+    if (localMrid != null) {
+      _patchSelectedObjectMrid(localMrid);
+      return;
+    }
+
+    try {
+      final pole = await ref.read(apiServiceProvider).getPole(id);
+      final serverMrid = normalizeMridDisplay(pole.mrid);
+      if (serverMrid != null) {
+        await db.updatePole(
+          drift_db.PolesCompanion(
+            id: drift.Value(id),
+            mrid: drift.Value(serverMrid),
+          ),
+        );
+        _patchSelectedObjectMrid(serverMrid);
+        return;
+      }
+    } catch (_) {}
+
+    final generated = generateMrid();
+    if (local != null) {
+      await db.updatePole(
+        drift_db.PolesCompanion(
+          id: drift.Value(id),
+          mrid: drift.Value(generated),
+        ),
+      );
+    }
+    _patchSelectedObjectMrid(generated);
+  }
+
+  void _patchSelectedObjectMrid(String mrid) {
+    if (!mounted) return;
+    setState(() {
+      _selectedObjectProperties?['mrid'] = mrid;
+    });
   }
 
   void _showEquipmentInfo(
@@ -6093,9 +6175,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Создать пролёты автоматически'),
+        title: const Text('Пересобрать топологию линии'),
         content: const Text(
-          'Создать пролёты между всеми опорами линии в порядке их последовательности?',
+          'Создать/обновить пролёты между опорами по порядку последовательности? '
+          'Используется тот же API, что и на веб-клиенте (Angular).',
         ),
         actions: [
           TextButton(
@@ -6117,7 +6200,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Создано пролётов: $count'),
+            content: Text('Топология обновлена. Пролётов: $count'),
             backgroundColor: Colors.green,
           ),
         );
@@ -6405,6 +6488,34 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
           return;
         }
+        if (deletedType == ObjectType.equipment) {
+          final eqId = _toInt(_selectedObjectProperties!['equipment_id']) ??
+              _toInt(_selectedObjectProperties!['id']);
+          if (eqId != null) {
+            final prefs = ref.read(prefsProvider);
+            final db = ref.read(drift_db.databaseProvider);
+            if (eqId > 0) {
+              await _enqueuePendingDeleteId(
+                prefs: prefs,
+                key: AppConfig.pendingDeleteEquipmentIdsKey,
+                id: eqId,
+              );
+            }
+            await db.deleteEquipment(eqId);
+            _closeObjectProperties();
+            await _loadMapDataFromLocal();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Оборудование удалено (офлайн). Изменения синхронизируются при подключении.'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
+            return;
+          }
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -6518,6 +6629,36 @@ class _MapPageState extends ConsumerState<MapPage> {
           }
         }
         return;
+      }
+      if (isConnectionError && deletedType == ObjectType.equipment && mounted) {
+        try {
+          final eqId = _toInt(_selectedObjectProperties?['equipment_id']) ??
+              _toInt(_selectedObjectProperties?['id']);
+          if (eqId != null) {
+            final prefs = ref.read(prefsProvider);
+            final db = ref.read(drift_db.databaseProvider);
+            if (eqId > 0) {
+              await _enqueuePendingDeleteId(
+                prefs: prefs,
+                key: AppConfig.pendingDeleteEquipmentIdsKey,
+                id: eqId,
+              );
+            }
+            await db.deleteEquipment(eqId);
+            _closeObjectProperties();
+            await _loadMapDataFromLocal();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Оборудование удалено локально. Синхронизация при подключении.'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
+            return;
+          }
+        } catch (_) {}
       }
 
       if (e.response?.statusCode == 404 && deletedType == ObjectType.pole) {
@@ -7035,10 +7176,15 @@ class _MapPageState extends ConsumerState<MapPage> {
       await prefs.setInt(AppConfig.lastLocalPoleIdKey, localId);
       final userId = prefs.getInt(AppConfig.userIdKey) ?? 0;
       final now = DateTime.now();
+      final poleMrid = generateMrid();
+      final normalizedNumber = normalizePoleNumber(_quickPoleNumber);
+      final linePoles = await db.getPolesByLine(_currentLineId!);
+      final sequenceNumber = nextMainSequenceNumber(linePoles);
       await db.insertPole(drift_db.PolesCompanion.insert(
         id: drift.Value(localId),
         lineId: _currentLineId!,
-        poleNumber: _quickPoleNumber,
+        poleNumber: normalizedNumber,
+        mrid: drift.Value(poleMrid),
         xPosition: drift.Value(_currentLocation!.longitude),
         yPosition: drift.Value(_currentLocation!.latitude),
         poleType: drift.Value(_quickPoleType),
@@ -7048,6 +7194,18 @@ class _MapPageState extends ConsumerState<MapPage> {
         yearInstalled: const drift.Value.absent(),
         condition: const drift.Value('good'),
         notes: const drift.Value.absent(),
+        sequenceNumber: drift.Value(sequenceNumber),
+        branchType: drift.Value(_isTapPole ? 'tap' : 'main'),
+        isTapPole: drift.Value(_isTapPole),
+        conductorType: _quickConductorType.isEmpty
+            ? const drift.Value.absent()
+            : drift.Value(_quickConductorType),
+        conductorMaterial: _quickConductorMaterial.isEmpty
+            ? const drift.Value.absent()
+            : drift.Value(_quickConductorMaterial),
+        conductorSection: _quickConductorSection.isEmpty
+            ? const drift.Value.absent()
+            : drift.Value(_quickConductorSection),
         createdBy: userId,
         createdAt: now,
         updatedAt: drift.Value(now),
@@ -7258,11 +7416,39 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Удаление опоры локально (офлайн): оборудование + опора из Drift.
   Future<void> _deletePoleOfflineById(int poleId) async {
     final db = ref.read(drift_db.databaseProvider);
+    final prefs = ref.read(prefsProvider);
     final equipmentList = await db.getEquipmentByPole(poleId);
     for (final eq in equipmentList) {
+      if (eq.id > 0) {
+        await _enqueuePendingDeleteId(
+          prefs: prefs,
+          key: AppConfig.pendingDeleteEquipmentIdsKey,
+          id: eq.id,
+        );
+      }
       await db.deleteEquipment(eq.id);
     }
+    if (poleId > 0) {
+      await _enqueuePendingDeleteId(
+        prefs: prefs,
+        key: AppConfig.pendingDeletePoleIdsKey,
+        id: poleId,
+      );
+    }
     await db.deletePole(poleId);
+  }
+
+  Future<void> _enqueuePendingDeleteId({
+    required dynamic prefs,
+    required String key,
+    required int id,
+  }) async {
+    final list = prefs.getStringList(key) ?? <String>[];
+    final value = id.toString();
+    if (!list.contains(value)) {
+      list.add(value);
+      await prefs.setStringList(key, list);
+    }
   }
 
   /// Удаление линии локально (офлайн): из Drift и при необходимости в очередь на удаление на сервере.
@@ -7272,24 +7458,47 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     if (powerLine.id < 0) {
       // Локально созданная линия — просто удаляем из БД
-      await db.deletePatrolSessionsByLineId(powerLine.id);
-      await db.deletePowerLine(powerLine.id);
       final linePoles = await db.getPolesByLine(powerLine.id);
       for (final p in linePoles) {
+        final eqList = await db.getEquipmentByPole(p.id);
+        for (final eq in eqList) {
+          await db.deleteEquipment(eq.id);
+        }
         await db.deletePole(p.id);
       }
+      await db.deletePatrolSessionsByLineId(powerLine.id);
+      await db.deletePowerLine(powerLine.id);
     } else {
       // Линия с сервера — добавляем в очередь отложенного удаления и убираем из локального кэша
-      final key = AppConfig.pendingDeletePowerLineIdsKey;
-      final list = prefs.getStringList(key) ?? [];
-      list.add(powerLine.id.toString());
-      await prefs.setStringList(key, list);
-      await db.deletePatrolSessionsByLineId(powerLine.id);
-      await db.deletePowerLine(powerLine.id);
+      await _enqueuePendingDeleteId(
+        prefs: prefs,
+        key: AppConfig.pendingDeletePowerLineIdsKey,
+        id: powerLine.id,
+      );
       final linePoles = await db.getPolesByLine(powerLine.id);
       for (final p in linePoles) {
+        final eqList = await db.getEquipmentByPole(p.id);
+        for (final eq in eqList) {
+          if (eq.id > 0) {
+            await _enqueuePendingDeleteId(
+              prefs: prefs,
+              key: AppConfig.pendingDeleteEquipmentIdsKey,
+              id: eq.id,
+            );
+          }
+          await db.deleteEquipment(eq.id);
+        }
+        if (p.id > 0) {
+          await _enqueuePendingDeleteId(
+            prefs: prefs,
+            key: AppConfig.pendingDeletePoleIdsKey,
+            id: p.id,
+          );
+        }
         await db.deletePole(p.id);
       }
+      await db.deletePatrolSessionsByLineId(powerLine.id);
+      await db.deletePowerLine(powerLine.id);
     }
 
     await _clearActiveSessionIfLine(powerLine.id);

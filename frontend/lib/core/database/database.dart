@@ -7,6 +7,8 @@ import 'database_stub.dart'
     if (dart.library.html) 'database_web.dart';
 
 import '../config/app_config.dart';
+import '../utils/mrid.dart';
+import '../utils/normalize_pole_number.dart';
 
 part 'database.g.dart';
 
@@ -37,6 +39,8 @@ class Poles extends Table {
   /// ID линии (ЛЭП). Единое поле line_id (в БД колонка line_id).
   IntColumn get lineId => integer().named('line_id')();
   TextColumn get poleNumber => text()();
+  /// CIM mRID (UID опоры)
+  TextColumn get mrid => text().nullable()();
   /// Долгота (longitude), CIM x_position
   RealColumn get xPosition => real().nullable()();
   /// Широта (latitude), CIM y_position
@@ -56,6 +60,16 @@ class Poles extends Table {
   TextColumn get cardComment => text().nullable()();
   /// Вложения к комментарию: голос/фото (JSON: [{"t":"voice"|"photo","p":"path"}])
   TextColumn get cardCommentAttachment => text().nullable()();
+  /// Порядок на линии (как sequence_number на сервере)
+  IntColumn get sequenceNumber => integer().nullable().named('sequence_number')();
+  /// main | tap
+  TextColumn get branchType => text().nullable().named('branch_type')();
+  IntColumn get tapPoleId => integer().nullable().named('tap_pole_id')();
+  IntColumn get tapBranchIndex => integer().nullable().named('tap_branch_index')();
+  BoolColumn get isTapPole => boolean().withDefault(const Constant(false)).named('is_tap_pole')();
+  TextColumn get conductorType => text().nullable().named('conductor_type')();
+  TextColumn get conductorMaterial => text().nullable().named('conductor_material')();
+  TextColumn get conductorSection => text().nullable().named('conductor_section')();
   IntColumn get createdBy => integer()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().nullable()();
@@ -272,6 +286,52 @@ class AppDatabase extends _$AppDatabase {
             await migrator.addColumn(equipment, equipment.cardComment);
             await migrator.addColumn(equipment, equipment.cardCommentAttachment);
           }
+          if (from < 13) {
+            await migrator.addColumn(poles, poles.mrid);
+          }
+          if (from < 14) {
+            final rowsWithoutMrid = await (select(poles)
+                  ..where(
+                    (t) => t.mrid.isNull() | t.mrid.equals(''),
+                  ))
+                .get();
+            for (final row in rowsWithoutMrid) {
+              await (update(poles)..where((t) => t.id.equals(row.id))).write(
+                PolesCompanion(mrid: Value(generateMrid())),
+              );
+            }
+          }
+          if (from < 15) {
+            await migrator.addColumn(poles, poles.sequenceNumber);
+            await migrator.addColumn(poles, poles.branchType);
+            await migrator.addColumn(poles, poles.tapPoleId);
+            await migrator.addColumn(poles, poles.tapBranchIndex);
+            await migrator.addColumn(poles, poles.isTapPole);
+            await migrator.addColumn(poles, poles.conductorType);
+            await migrator.addColumn(poles, poles.conductorMaterial);
+            await migrator.addColumn(poles, poles.conductorSection);
+            // Проставить sequence_number существующим локальным опорам по дате создания.
+            final allLines = await select(powerLines).get();
+            for (final pl in allLines) {
+              final linePoles = await (select(poles)
+                    ..where((t) => t.lineId.equals(pl.id))
+                    ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+                  .get();
+              var seq = 0;
+              for (final p in linePoles) {
+                if (p.poleNumber.contains('/')) continue;
+                if (p.tapPoleId != null) continue;
+                if (p.sequenceNumber != null) continue;
+                seq++;
+                await (update(poles)..where((t) => t.id.equals(p.id))).write(
+                  PolesCompanion(
+                    sequenceNumber: Value(seq),
+                    poleNumber: Value(normalizePoleNumber(p.poleNumber)),
+                  ),
+                );
+              }
+            }
+          }
         },
       );
 
@@ -435,6 +495,7 @@ class AppDatabase extends _$AppDatabase {
         id: Value(serverId),
         lineId: p.lineId,
         poleNumber: p.poleNumber,
+        mrid: Value(p.mrid),
         xPosition: Value(p.xPosition),
         yPosition: Value(p.yPosition),
         poleType: Value(p.poleType),

@@ -82,7 +82,7 @@ class AppConfig {
   
   // Database Configuration
   static const String databaseName = 'lepm_local.db';
-  static const int databaseVersion = 12;
+  static const int databaseVersion = 15;
   
   // Storage Keys
   static const String authTokenKey = 'auth_token';
@@ -109,6 +109,10 @@ class AppConfig {
   static const String autofillEquipmentTemplateKey = 'autofill_equipment_template';
   /// Список id ЛЭП для отложенного удаления на сервере (офлайн-удаление)
   static const String pendingDeletePowerLineIdsKey = 'pending_delete_power_line_ids';
+  /// Список id опор для отложенного удаления на сервере (офлайн-удаление)
+  static const String pendingDeletePoleIdsKey = 'pending_delete_pole_ids';
+  /// Список id оборудования для отложенного удаления на сервере (офлайн-удаление)
+  static const String pendingDeleteEquipmentIdsKey = 'pending_delete_equipment_ids';
   /// Маппинг локальный id опоры → серверный (JSON, string→int) для pole_server_id в equipment
   static const String syncPoleMappingKey = 'sync_pole_mapping';
   /// Маппинг локальный id ЛЭП → серверный (JSON, string→int) для подстановки line_id в опорах

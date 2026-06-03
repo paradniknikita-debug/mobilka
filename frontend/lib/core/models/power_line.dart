@@ -191,6 +191,7 @@ class Pole {
   final int lineId;
   @JsonKey(name: 'pole_number', fromJson: _stringFromJson)
   final String poleNumber;
+  final String? mrid;
   @JsonKey(name: 'x_position', fromJson: _doubleFromJson)
   final double xPosition;  // Долгота (longitude)
   @JsonKey(name: 'y_position', fromJson: _doubleFromJson)
@@ -247,6 +248,7 @@ class Pole {
     required this.id,
     required this.lineId,
     required this.poleNumber,
+    this.mrid,
     required this.xPosition,
     required this.yPosition,
     required this.poleType,
@@ -281,6 +283,7 @@ class Pole {
     int? id,
     int? lineId,
     String? poleNumber,
+    String? mrid,
     double? xPosition,
     double? yPosition,
     String? poleType,
@@ -311,6 +314,7 @@ class Pole {
       id: id ?? this.id,
       lineId: lineId ?? this.lineId,
       poleNumber: poleNumber ?? this.poleNumber,
+      mrid: mrid ?? this.mrid,
       xPosition: xPosition ?? this.xPosition,
       yPosition: yPosition ?? this.yPosition,
       poleType: poleType ?? this.poleType,

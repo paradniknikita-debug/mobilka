@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import 'pole_card_attachments_section.dart';
+import '../../../../core/utils/mrid.dart';
 
 enum ObjectType { pole, substation, tap, equipment }
 
@@ -135,7 +136,9 @@ class ObjectPropertiesPanel extends ConsumerWidget {
           ),
         ],
       ),
-      child: Column(
+      child: SafeArea(
+        top: false,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Заголовок
@@ -267,7 +270,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
                       child: ElevatedButton.icon(
                         onPressed: onAutoCreateSpans,
                         icon: const Icon(Icons.auto_fix_high),
-                        label: const Text('Создать пролёты автоматически'),
+                        label: const Text('Пересобрать топологию (пролёты)'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
@@ -362,6 +365,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
               ),
             ),
         ],
+        ),
       ),
     );
   }
@@ -390,7 +394,7 @@ class ObjectPropertiesPanel extends ConsumerWidget {
       _buildPropertyItem(
         context,
         'UID (MRID):',
-        objectProperties['mrid']?.toString() ?? 'не указано',
+        normalizeMridDisplay(objectProperties['mrid']) ?? 'не указано',
       ),
       _buildPropertyItem(
         context,
@@ -486,13 +490,11 @@ class ObjectPropertiesPanel extends ConsumerWidget {
   }
 
   List<Widget> _buildEquipmentProperties(BuildContext context) {
-    final uid = objectProperties['mrid']?.toString();
-    const fallbackUid = 'не указано';
     return [
       _buildPropertyItem(
         context,
         'UID (MRID):',
-        (uid != null && uid.trim().isNotEmpty) ? uid : fallbackUid,
+        normalizeMridDisplay(objectProperties['mrid']) ?? 'не указано',
       ),
       _buildPropertyItem(
         context,

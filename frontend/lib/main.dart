@@ -102,6 +102,11 @@ class _LepmAppState extends ConsumerState<LepmApp> {
           themeMode: themeMode,
           routerConfig: router,
           debugShowCheckedModeBanner: false,
+          builder: (context, child) {
+            return SafeArea(
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
         ),
       ),
     );

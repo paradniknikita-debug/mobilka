@@ -12,10 +12,12 @@ import 'package:path/path.dart' as p;
 import '../config/app_config.dart';
 import '../database/database.dart';
 import '../models/power_line.dart' show PoleCreate;
+import '../models/sync_state.dart';
 import 'api_service.dart';
 import 'attachment_reader.dart';
 import 'auth_service.dart'; // prefsProvider
-import '../models/sync_state.dart';
+import '../utils/mrid.dart';
+import '../utils/normalize_pole_number.dart';
 import '../utils/pole_card_attachment_codec.dart';
 
 export '../models/sync_state.dart';
@@ -147,6 +149,8 @@ class SyncService extends StateNotifier<SyncState> {
       // Локальные данные не удаляем: выгруженные сущности остаются в БД вместе с загруженными с сервера.
       if (uploadResult != null) {
         _clearPendingDeletePowerLineIds();
+        _clearPendingDeletePoleIds();
+        _clearPendingDeleteEquipmentIds();
       }
       await _setLastSyncTime(DateTime.now());
 
@@ -179,7 +183,7 @@ class SyncService extends StateNotifier<SyncState> {
           'Данные обновлены, но обходы отправлены не полностью:\n${lines.join('\n')}',
         );
       } else {
-        state = const SyncState.completed();
+        state = await _syncCompletedOrPendingError();
       }
     } catch (e) {
       final msg = e.toString();
@@ -202,8 +206,13 @@ class SyncService extends StateNotifier<SyncState> {
       }
 
       await _flushPendingServerPatrolEnds();
-      await _uploadLocalChanges();
+      final uploadResult = await _uploadLocalChanges();
       await _uploadPatrolSessions();
+      if (uploadResult != null) {
+        _clearPendingDeletePowerLineIds();
+        _clearPendingDeletePoleIds();
+        _clearPendingDeleteEquipmentIds();
+      }
 
       final pendingPatrols = await _database.getPendingPatrolSessions();
       final queuedEnds = _prefs?.getStringList(AppConfig.pendingEndPatrolServerIdsKey) ?? [];
@@ -234,7 +243,7 @@ class SyncService extends StateNotifier<SyncState> {
           'Отправка не завершена полностью:\n${lines.join('\n')}',
         );
       } else {
-        state = const SyncState.completed();
+        state = await _syncCompletedOrPendingError();
       }
     } catch (e) {
       final msg = e.toString();
@@ -242,6 +251,132 @@ class SyncService extends StateNotifier<SyncState> {
           ? _shortSyncError(msg)
           : msg;
       state = SyncState.error('Ошибка отправки на сервер: $short');
+    }
+  }
+
+  Future<SyncState> _syncCompletedOrPendingError() async {
+    final pending = await _pendingSyncSummary();
+    if (pending != null) {
+      return SyncState.error(pending);
+    }
+    return const SyncState.completed();
+  }
+
+  Future<String?> _pendingSyncSummary() async {
+    final pl = await _database.getPowerLinesNeedingSync();
+    final po = await _database.getPolesNeedingSync();
+    final eq = await _database.getEquipmentNeedingSync();
+    if (pl.isEmpty && po.isEmpty && eq.isEmpty) return null;
+    final parts = <String>[];
+    if (pl.isNotEmpty) parts.add('ЛЭП: ${pl.length}');
+    if (po.isNotEmpty) {
+      parts.add('опоры: ${po.length} (${po.map((p) => p.poleNumber).join(', ')})');
+    }
+    if (eq.isNotEmpty) parts.add('оборудование: ${eq.length}');
+    return 'Не все локальные изменения отправлены на сервер (${parts.join('; ')}). Повторите синхронизацию.';
+  }
+
+  /// Новые офлайн-опоры — через тот же API, что и онлайн (номер, порядок, пролёт).
+  Future<void> _uploadNewPolesViaCreateApi(List<Pole> poles) async {
+    final newPoles = poles.where((p) => p.id < 0).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    if (newPoles.isEmpty) return;
+
+    var lineMapping = Map<int, int>.from(_getSyncPowerLineMapping());
+    var poleMapping = Map<int, int>.from(_getSyncPoleMapping());
+
+    for (final pole in newPoles) {
+      var lineId = pole.lineId;
+      if (lineId < 0) {
+        lineId = lineMapping[lineId] ?? lineId;
+      }
+      if (lineId < 0) continue;
+
+      int? tapPoleId = pole.tapPoleId;
+      if (tapPoleId != null && tapPoleId < 0) {
+        tapPoleId = poleMapping[tapPoleId];
+      }
+
+      final branchType = pole.branchType ??
+          (pole.poleNumber.contains('/') || tapPoleId != null ? 'tap' : 'main');
+
+      final create = PoleCreate(
+        poleNumber: normalizePoleNumber(pole.poleNumber),
+        xPosition: pole.xPosition ?? 0.0,
+        yPosition: pole.yPosition ?? 0.0,
+        poleType: pole.poleType ?? 'unknown',
+        height: pole.height,
+        foundationType: pole.foundationType,
+        material: pole.material,
+        yearInstalled: pole.yearInstalled,
+        condition: pole.condition ?? 'good',
+        notes: pole.notes,
+        structuralDefect: pole.structuralDefect,
+        structuralDefectCriticality: pole.structuralDefectCriticality,
+        isTap: pole.isTapPole,
+        conductorType: pole.conductorType,
+        conductorMaterial: pole.conductorMaterial,
+        conductorSection: pole.conductorSection,
+        cardComment: pole.cardComment,
+        tapPoleId: tapPoleId,
+        branchType: branchType,
+        tapBranchIndex: pole.tapBranchIndex,
+      );
+
+      try {
+        final created = await _apiService.createPole(
+          lineId,
+          create,
+          fromPoleId: branchType == 'tap' ? tapPoleId : null,
+        );
+        final localId = pole.id;
+        await _database.reassignPoleLocalToServerId(localId, created.id);
+        await _database.insertPoleOrReplace(
+          PolesCompanion.insert(
+            id: drift.Value(created.id),
+            lineId: created.lineId,
+            poleNumber: created.poleNumber,
+            mrid: drift.Value(created.mrid),
+            xPosition: drift.Value(created.xPosition),
+            yPosition: drift.Value(created.yPosition),
+            poleType: drift.Value(created.poleType),
+            height: drift.Value(created.height),
+            foundationType: drift.Value(created.foundationType),
+            material: drift.Value(created.material),
+            yearInstalled: drift.Value(created.yearInstalled),
+            condition: drift.Value(created.condition),
+            notes: drift.Value(created.notes),
+            structuralDefect: drift.Value(created.structuralDefect),
+            structuralDefectCriticality:
+                drift.Value(created.structuralDefectCriticality),
+            cardComment: pole.cardComment == null
+                ? const drift.Value.absent()
+                : drift.Value(pole.cardComment!),
+            cardCommentAttachment: pole.cardCommentAttachment == null
+                ? const drift.Value.absent()
+                : drift.Value(pole.cardCommentAttachment!),
+            sequenceNumber: drift.Value(created.sequenceNumber),
+            branchType: drift.Value(created.branchType),
+            tapPoleId: drift.Value(created.tapPoleId),
+            tapBranchIndex: drift.Value(created.tapBranchIndex),
+            isTapPole: drift.Value(created.isTapPole),
+            conductorType: drift.Value(created.conductorType),
+            conductorMaterial: drift.Value(created.conductorMaterial),
+            conductorSection: drift.Value(created.conductorSection),
+            createdBy: created.createdBy,
+            createdAt: created.createdAt,
+            updatedAt: drift.Value(created.updatedAt),
+            isLocal: const drift.Value(false),
+            needsSync: const drift.Value(false),
+          ),
+        );
+        poleMapping[localId] = created.id;
+        _saveSyncPoleMapping({localId.toString(): created.id});
+      } catch (e, st) {
+        if (kDebugMode) {
+          debugPrint('sync: createPole offline pole ${pole.id} failed: $e\n$st');
+        }
+      }
     }
   }
 
@@ -356,13 +491,92 @@ class SyncService extends StateNotifier<SyncState> {
     }
   }
 
+  /// Сначала выгрузить только ЛЭП (чтобы офлайн-опоры могли ссылаться на server line_id).
+  Future<void> _uploadPendingPowerLinesOnly() async {
+    final powerLines = await _database.getPowerLinesNeedingSync();
+    if (powerLines.isEmpty) return;
+
+    final batchId = _uuid.v4();
+    final records = <Map<String, dynamic>>[];
+    for (final powerLine in powerLines) {
+      final data = _toSnakeCaseMap(powerLine.toJson());
+      final name = powerLine.name.trim().isNotEmpty ? powerLine.name : 'ЛЭП';
+      final voltageLevel = powerLine.voltageLevel;
+      data['name'] = name;
+      data['voltage_level'] =
+          voltageLevel is int ? voltageLevel.toDouble() : (voltageLevel as double? ?? 0.0);
+      records.add(_createSyncRecord('power_line', 'create', data, batchId));
+    }
+    if (records.isEmpty) return;
+
+    final response = await _apiService.uploadSyncBatch({
+      'batch_id': batchId,
+      'timestamp': DateTime.now().toIso8601String(),
+      'records': records,
+    });
+    if (response['success'] != true) return;
+
+    final idMapping = response['id_mapping'];
+    final idMappingPowerLine = idMapping is Map && idMapping['power_line'] is Map
+        ? Map<String, dynamic>.from(idMapping['power_line'] as Map)
+        : <String, dynamic>{};
+    if (idMappingPowerLine.isNotEmpty) {
+      _saveSyncPowerLineMapping(idMappingPowerLine);
+      for (final pl in powerLines) {
+        if (pl.id >= 0) continue;
+        final serverIdRaw = idMappingPowerLine[pl.id.toString()];
+        final serverId = serverIdRaw is int
+            ? serverIdRaw
+            : (serverIdRaw is num
+                ? serverIdRaw.toInt()
+                : int.tryParse(serverIdRaw?.toString() ?? ''));
+        if (serverId == null || serverId <= 0) continue;
+        await _database.updatePolesLineId(pl.id, serverId);
+        await _database.updatePatrolSessionsPowerLineId(pl.id, serverId);
+        await _database.insertPowerLineOrReplace(
+          PowerLinesCompanion.insert(
+            id: drift.Value(serverId),
+            name: pl.name,
+            code: pl.name,
+            mrid: pl.mrid != null && pl.mrid!.trim().isNotEmpty
+                ? drift.Value(pl.mrid!)
+                : const drift.Value.absent(),
+            voltageLevel: pl.voltageLevel,
+            length: pl.length != null ? drift.Value(pl.length!) : const drift.Value.absent(),
+            branchId: pl.branchId,
+            createdBy: pl.createdBy,
+            status: pl.status,
+            description: drift.Value(pl.description),
+            createdAt: pl.createdAt,
+            updatedAt: drift.Value(pl.updatedAt),
+            isLocal: const drift.Value(false),
+            needsSync: const drift.Value(false),
+          ),
+        );
+        await _database.deletePowerLine(pl.id);
+      }
+      for (final pl in powerLines) {
+        if (pl.id >= 0) await _database.setPowerLineNeedsSync(pl.id, false);
+      }
+    }
+  }
+
   /// Возвращает (powerLines, poles, equipment) для последующего удаления из локальной БД после успешного download, или null.
   Future<(List<PowerLine>, List<Pole>, List<EquipmentData>)?> _uploadLocalChanges() async {
     // Порядок: сначала отложенные удаления ЛЭП, затем создание (ЛЭП → опоры → оборудование).
-    final powerLines = await _database.getPowerLinesNeedingSync();
-    final poles = await _database.getPolesNeedingSync();
-    final equipment = await _database.getEquipmentNeedingSync();
     final pendingDeletePlIds = _getPendingDeletePowerLineIds();
+    final pendingDeletePoleIds = _getPendingDeletePoleIds();
+    final pendingDeleteEquipmentIds = _getPendingDeleteEquipmentIds();
+    await _uploadPendingPowerLinesOnly();
+
+    var powerLines = await _database.getPowerLinesNeedingSync();
+    var poles = await _database.getPolesNeedingSync();
+    final equipment = await _database.getEquipmentNeedingSync();
+
+    // Новые офлайн-опоры — через POST create_pole (как онлайн), не через sync-batch.
+    await _uploadNewPolesViaCreateApi(poles);
+    poles = await _database.getPolesNeedingSync();
+    powerLines = await _database.getPowerLinesNeedingSync();
 
     final batchId = _uuid.v4();
     final records = <Map<String, dynamic>>[];
@@ -371,8 +585,16 @@ class SyncService extends StateNotifier<SyncState> {
     for (final id in pendingDeletePlIds) {
       records.add(_createSyncRecord('power_line', 'delete', {'id': id}, batchId));
     }
+    // Отложенные удаления опор
+    for (final id in pendingDeletePoleIds) {
+      records.add(_createSyncRecord('pole', 'delete', {'id': id}, batchId));
+    }
+    // Отложенные удаления оборудования
+    for (final id in pendingDeleteEquipmentIds) {
+      records.add(_createSyncRecord('equipment', 'delete', {'id': id}, batchId));
+    }
 
-    // Создание: сначала ЛЭП (бэкенд требует name, voltage_level)
+    // Создание: ЛЭП (если остались после _uploadPendingPowerLinesOnly)
     for (final powerLine in powerLines) {
       final data = _toSnakeCaseMap(powerLine.toJson());
       final String name = powerLine.name.trim().isNotEmpty ? powerLine.name : 'ЛЭП';
@@ -390,7 +612,11 @@ class SyncService extends StateNotifier<SyncState> {
     final Map<int, String?> poleCardAttachmentAfterUpload = {};
     final Set<int> polesWithPendingAttachmentUpload = {};
     for (final pole in poles) {
+      if (pole.id < 0) continue;
       var poleData = _toSnakeCaseMap(pole.toJson());
+      if (normalizeMridDisplay(poleData['mrid']) == null) {
+        poleData['mrid'] = generateMrid();
+      }
       final plId = pole.lineId;
       if (plId < 0) {
         final serverPlId = powerLineMapping[plId];
@@ -490,8 +716,7 @@ class SyncService extends StateNotifier<SyncState> {
       final hasPoleInBatch = polesInBatch.contains(poleId);
       final canSync = poleId > 0 || (serverPoleId != null && serverPoleId > 0) || hasPoleInBatch;
       if (!canSync) {
-        // Старые локальные записи, для которых невозможно восстановить связь с опорой, помечаем как «синхронизированные» локально.
-        await _database.setEquipmentNeedsSync(eq.id, false);
+        // Не сбрасываем needsSync: запись остается pending до появления маппинга.
         continue;
       }
       equipmentToSync.add(eq);
@@ -567,7 +792,9 @@ class SyncService extends StateNotifier<SyncState> {
           }
         } catch (_) {}
       }
-      records.add(_createSyncRecord('equipment', 'create', eqData, batchId));
+      records.add(
+        _createSyncRecord('equipment', eq.id < 0 ? 'create' : 'update', eqData, batchId),
+      );
     }
 
     if (records.isEmpty) return null;
@@ -860,6 +1087,26 @@ class SyncService extends StateNotifier<SyncState> {
     _prefs?.setStringList(AppConfig.pendingDeletePowerLineIdsKey, []);
   }
 
+  List<int> _getPendingDeletePoleIds() {
+    if (_prefs == null) return [];
+    final list = _prefs!.getStringList(AppConfig.pendingDeletePoleIdsKey) ?? [];
+    return list.map((s) => int.tryParse(s)).whereType<int>().toList();
+  }
+
+  void _clearPendingDeletePoleIds() {
+    _prefs?.setStringList(AppConfig.pendingDeletePoleIdsKey, []);
+  }
+
+  List<int> _getPendingDeleteEquipmentIds() {
+    if (_prefs == null) return [];
+    final list = _prefs!.getStringList(AppConfig.pendingDeleteEquipmentIdsKey) ?? [];
+    return list.map((s) => int.tryParse(s)).whereType<int>().toList();
+  }
+
+  void _clearPendingDeleteEquipmentIds() {
+    _prefs?.setStringList(AppConfig.pendingDeleteEquipmentIdsKey, []);
+  }
+
   /// [useLastSync] — если задано, использовать его для запроса (например, время до выгрузки).
   Future<void> _downloadServerChanges({String? useLastSync}) async {
     final lastSync = useLastSync ?? await _getLastSyncTime();
@@ -977,6 +1224,12 @@ class SyncService extends StateNotifier<SyncState> {
   }
 
   static int _toInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0);
+  static int? _toIntOrNull(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
   static double _toDouble(dynamic v) => v is double ? v : (v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0);
   static DateTime? _parseDateTime(dynamic v) {
     if (v == null) return null;
@@ -1108,6 +1361,7 @@ class SyncService extends StateNotifier<SyncState> {
             id: drift.Value(id),
             lineId: lineId,
             poleNumber: data['pole_number'] as String? ?? '',
+            mrid: drift.Value(data['mrid'] as String?),
             // Используем координаты с сервера или сохраняем локальные (xFinal/yFinal),
             // оборачивая в Value для Drift.
             xPosition: drift.Value(xFinal),
@@ -1127,6 +1381,36 @@ class SyncService extends StateNotifier<SyncState> {
                 data['structural_defect_criticality'] as String?),
             cardComment: drift.Value(mergedComment),
             cardCommentAttachment: drift.Value(mergedAttach),
+            sequenceNumber: drift.Value(
+              data['sequence_number'] != null
+                  ? _toIntOrNull(data['sequence_number'])
+                  : existingBeforeMerge?.sequenceNumber,
+            ),
+            branchType: drift.Value(
+              data['branch_type'] as String? ?? existingBeforeMerge?.branchType,
+            ),
+            tapPoleId: drift.Value(
+              data['tap_pole_id'] != null
+                  ? _toIntOrNull(data['tap_pole_id'])
+                  : existingBeforeMerge?.tapPoleId,
+            ),
+            tapBranchIndex: drift.Value(
+              data['tap_branch_index'] != null
+                  ? _toIntOrNull(data['tap_branch_index'])
+                  : existingBeforeMerge?.tapBranchIndex,
+            ),
+            isTapPole: drift.Value(
+              _parseBoolNullable(data['is_tap_pole']) ?? existingBeforeMerge?.isTapPole ?? false,
+            ),
+            conductorType: drift.Value(
+              data['conductor_type'] as String? ?? existingBeforeMerge?.conductorType,
+            ),
+            conductorMaterial: drift.Value(
+              data['conductor_material'] as String? ?? existingBeforeMerge?.conductorMaterial,
+            ),
+            conductorSection: drift.Value(
+              data['conductor_section'] as String? ?? existingBeforeMerge?.conductorSection,
+            ),
             createdBy: _toInt(data['created_by']),
             createdAt: createdAt,
             updatedAt: drift.Value(updatedAt),

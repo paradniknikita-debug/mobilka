@@ -26,6 +26,13 @@ from app.schemas.power_line import PowerLineCreate, PoleCreate, EquipmentCreate
 from app.models.base import generate_mrid
 import jsonschema
 import logging
+from app.core.map_geojson_cache import invalidate_map_geojson_cache
+from app.core.voltage_consistency import (
+    validate_catalog_item_for_line,
+    validate_equipment_nominal_for_line,
+)
+from app.core.equipment_nominal_voltage import nominal_kv_from_line_voltage
+from app.core.cim_connectivity import sync_equipment_terminals_for_line
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -107,6 +114,80 @@ async def _delete_power_line_cascade(db: AsyncSession, power_line_id: int) -> No
     await db.execute(delete(PatrolSession).where(PatrolSession.line_id == power_line_id))
     # Сама ЛЭП (каскад в модели удалит опоры, пролёты, отпайки и т.д.)
     await db.delete(power_line)
+
+
+async def _delete_pole_cascade_sync(db: AsyncSession, pole_id: int) -> None:
+    """Удаление опоры с очисткой зависимостей (parity с online delete_pole)."""
+    from app.models.cim_line_structure import Terminal
+    from app.models.acline_segment import AClineSegment
+
+    pole = (await db.execute(select(Pole).where(Pole.id == pole_id))).scalar_one_or_none()
+    if not pole:
+        return
+
+    # Оборудование/отпайки, привязанные к опоре.
+    await db.execute(
+        update(ConnectivityNode)
+        .where(
+            ConnectivityNode.equipment_id.in_(
+                select(Equipment.id).where(Equipment.pole_id == pole_id)
+            )
+        )
+        .values(equipment_id=None)
+    )
+    await db.execute(delete(Equipment).where(Equipment.pole_id == pole_id))
+    await db.execute(delete(Tap).where(Tap.pole_id == pole_id))
+
+    connectivity_nodes = (
+        await db.execute(select(ConnectivityNode).where(ConnectivityNode.pole_id == pole_id))
+    ).scalars().all()
+    cn_ids_set = {cn.id for cn in connectivity_nodes}
+    if pole.connectivity_node_id and pole.connectivity_node_id not in cn_ids_set:
+        extra_cn = await db.get(ConnectivityNode, pole.connectivity_node_id)
+        if extra_cn is not None:
+            connectivity_nodes.append(extra_cn)
+            cn_ids_set.add(extra_cn.id)
+
+    for cn in connectivity_nodes:
+        cn_id = cn.id
+        acline_segments_from = (
+            await db.execute(
+                select(AClineSegment).where(AClineSegment.from_connectivity_node_id == cn_id)
+            )
+        ).scalars().all()
+        for acline_seg in acline_segments_from:
+            await db.execute(delete(Terminal).where(Terminal.acline_segment_id == acline_seg.id))
+            line_sections = (
+                await db.execute(
+                    select(LineSection).where(LineSection.acline_segment_id == acline_seg.id)
+                )
+            ).scalars().all()
+            for line_section in line_sections:
+                await db.execute(delete(Span).where(Span.line_section_id == line_section.id))
+            await db.execute(delete(LineSection).where(LineSection.acline_segment_id == acline_seg.id))
+
+        await db.execute(delete(Span).where(Span.from_connectivity_node_id == cn_id))
+        await db.execute(delete(Span).where(Span.to_connectivity_node_id == cn_id))
+        await db.execute(delete(AClineSegment).where(AClineSegment.from_connectivity_node_id == cn_id))
+        await db.execute(
+            update(AClineSegment)
+            .where(AClineSegment.to_connectivity_node_id == cn_id)
+            .values(to_connectivity_node_id=None)
+        )
+
+    await db.execute(delete(Span).where(Span.from_pole_id == pole_id))
+    await db.execute(delete(Span).where(Span.to_pole_id == pole_id))
+
+    await db.execute(update(Pole).where(Pole.tap_pole_id == pole_id).values(tap_pole_id=None))
+    await db.execute(update(AClineSegment).where(AClineSegment.tap_pole_id == pole_id).values(tap_pole_id=None))
+    await db.execute(update(Pole).where(Pole.id == pole_id).values(connectivity_node_id=None))
+    for cn_id in cn_ids_set:
+        await db.execute(update(Pole).where(Pole.connectivity_node_id == cn_id).values(connectivity_node_id=None))
+    if cn_ids_set:
+        await db.execute(delete(Terminal).where(Terminal.connectivity_node_id.in_(list(cn_ids_set))))
+        await db.execute(delete(ConnectivityNode).where(ConnectivityNode.id.in_(list(cn_ids_set))))
+
+    await db.execute(delete(Pole).where(Pole.id == pole_id))
 
 
 def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -258,6 +339,8 @@ async def upload_sync_batch(
     logger.info("sync/upload: итог processed=%d failed=%d errors=%s", processed_count, failed_count, errors)
     if failed_count == 0:
         await db.commit()
+        if processed_count > 0:
+            await invalidate_map_geojson_cache()
         # Отдаём клиенту маппинг локальных id → серверные (ключи — строки для JSON)
         id_mapping_response = {
             "pole": {str(k): v for k, v in id_mapping["pole"].items()},
@@ -542,6 +625,112 @@ async def _download_sync_data_impl(
         "count": len(records)
     }
 
+async def _finalize_sync_pole_after_create(
+    db: AsyncSession,
+    db_pole: Pole,
+    data: dict,
+    user_id: int,
+) -> None:
+    """Те же побочные эффекты, что при POST create_pole: номер, порядок, пролёт."""
+    from app.api.v1.power_lines import normalize_pole_number
+
+    db_pole.pole_number = normalize_pole_number(db_pole.pole_number)
+
+    bt_raw = data.get("branch_type")
+    bt = (bt_raw or "").strip().lower() if isinstance(bt_raw, str) else None
+    tap_id_req = _to_int(data.get("tap_pole_id"))
+    if bt == "main":
+        db_pole.tap_pole_id = None
+        db_pole.tap_branch_index = None
+        db_pole.branch_type = "main"
+    elif bt == "tap" and tap_id_req is not None:
+        db_pole.tap_pole_id = tap_id_req
+        db_pole.branch_type = "tap"
+        tbi = _to_int(data.get("tap_branch_index"))
+        if tbi is not None:
+            db_pole.tap_branch_index = tbi
+    elif tap_id_req is not None:
+        db_pole.tap_pole_id = tap_id_req
+        if not getattr(db_pole, "branch_type", None):
+            db_pole.branch_type = "tap"
+
+    is_tap_flag = bool(data.get("is_tap") or data.get("is_tap_pole"))
+    if getattr(db_pole, "tap_pole_id", None) is not None:
+        db_pole.is_tap_pole = False
+    else:
+        db_pole.is_tap_pole = is_tap_flag
+
+    if db_pole.sequence_number is None:
+        tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
+        if tap_pole_id_val is not None:
+            tap_branch = getattr(db_pole, "tap_branch_index", None) or 1
+            max_seq_q = select(func.coalesce(func.max(Pole.sequence_number), 0)).where(
+                Pole.line_id == db_pole.line_id,
+                Pole.tap_pole_id == tap_pole_id_val,
+            )
+            if tap_branch == 1:
+                max_seq_q = max_seq_q.where(
+                    (Pole.tap_branch_index == 1) | (Pole.tap_branch_index.is_(None))
+                )
+            else:
+                max_seq_q = max_seq_q.where(Pole.tap_branch_index == tap_branch)
+            max_seq = await db.execute(max_seq_q)
+            db_pole.sequence_number = (max_seq.scalar() or 0) + 1
+            if getattr(db_pole, "tap_branch_index", None) is None:
+                db_pole.tap_branch_index = tap_branch
+        else:
+            max_seq = await db.execute(
+                select(func.coalesce(func.max(Pole.sequence_number), 0)).where(
+                    Pole.line_id == db_pole.line_id,
+                    Pole.tap_pole_id.is_(None),
+                )
+            )
+            db_pole.sequence_number = (max_seq.scalar() or 0) + 1
+        await db.flush()
+
+    try:
+        from app.core.line_auto_assembly import auto_create_span
+
+        await auto_create_span(
+            db=db,
+            power_line_id=db_pole.line_id,
+            new_pole=db_pole,
+            conductor_type=data.get("conductor_type"),
+            conductor_material=data.get("conductor_material"),
+            conductor_section=data.get("conductor_section"),
+            is_tap=is_tap_flag,
+            current_user_id=user_id,
+        )
+    except Exception as e:
+        logger.warning("sync: auto_create_span after pole create: %s", e)
+
+
+async def _sync_update_connectivity_node_coords(
+    db: AsyncSession,
+    pole: Pole,
+    x_pos: Optional[float],
+    y_pos: Optional[float],
+) -> None:
+    """Parity with online update_pole: обновляем координаты connectivity node."""
+    if x_pos is None and y_pos is None:
+        return
+    cn = None
+    if getattr(pole, "connectivity_node_id", None):
+        cn = await db.get(ConnectivityNode, pole.connectivity_node_id)
+    if cn is None:
+        cn = (
+            await db.execute(
+                select(ConnectivityNode).where(ConnectivityNode.pole_id == pole.id).limit(1)
+            )
+        ).scalar_one_or_none()
+    if cn is None:
+        return
+    if x_pos is not None:
+        cn.x_position = float(x_pos)
+    if y_pos is not None:
+        cn.y_position = float(y_pos)
+
+
 async def process_sync_record(
     record: SyncRecord, user: User, db: AsyncSession,
     id_mapping: Optional[Dict[str, Dict[int, int]]] = None
@@ -633,6 +822,16 @@ async def process_sync_record(
                 pl = result.scalar_one_or_none()
                 if pl:
                     await _delete_power_line_cascade(db, pl.id)
+                    db.add(
+                        ChangeLog(
+                            user_id=user.id,
+                            source="flutter",
+                            action="delete",
+                            entity_type="power_line",
+                            entity_id=pl.id,
+                            payload={"id": pl.id, "mrid": getattr(pl, "mrid", None)},
+                        )
+                    )
     
     elif record.entity_type == "pole":
         if record.action == SyncAction.CREATE:
@@ -673,6 +872,8 @@ async def process_sync_record(
                 if client_id_int is not None and client_id_int < 0:
                     id_mapping["pole"][client_id_int] = existing_pole.id
                     await _upsert_pole_mapping(user.id, client_id_int, existing_pole.id, db)
+                if existing_pole.sequence_number is None:
+                    await _finalize_sync_pole_after_create(db, existing_pole, data, user.id)
             else:
                 client_id = data.get('id')
                 mrid = data.get('mrid') or generate_mrid()
@@ -709,6 +910,7 @@ async def process_sync_record(
                     )
                     db.add(pp)
                     await db.flush()
+                await _finalize_sync_pole_after_create(db, db_pole, data, user.id)
                 _log_pole_card_from_sync(
                     db,
                     user,
@@ -736,6 +938,7 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
+                from app.api.v1.power_lines import normalize_pole_number
                 old_snapshot = {
                     "pole_number": pole.pole_number,
                     "pole_type": pole.pole_type,
@@ -762,6 +965,8 @@ async def process_sync_record(
                         continue
                     if hasattr(pole, key):
                         setattr(pole, key, value)
+                if getattr(pole, "pole_number", None):
+                    pole.pole_number = normalize_pole_number(pole.pole_number)
                 changed_fields = []
                 for key in ("pole_number", "pole_type", "condition", "notes", "material"):
                     before = old_snapshot.get(key)
@@ -807,6 +1012,12 @@ async def process_sync_record(
                     elif x_pos is not None and y_pos is not None:
                         pp = PositionPoint(mrid=generate_mrid(), x_position=float(x_pos), y_position=float(y_pos), pole_id=pole.id)
                         db.add(pp)
+                    await _sync_update_connectivity_node_coords(
+                        db,
+                        pole,
+                        float(x_pos) if x_pos is not None else None,
+                        float(y_pos) if y_pos is not None else None,
+                    )
         
         elif record.action == SyncAction.DELETE:
             result = await db.execute(
@@ -819,8 +1030,18 @@ async def process_sync_record(
             )
             pole = result.scalar_one_or_none()
             if pole:
-                from sqlalchemy import delete
-                await db.execute(delete(Pole).where(Pole.id == pole.id))
+                pole_id = pole.id
+                await _delete_pole_cascade_sync(db, pole_id)
+                db.add(
+                    ChangeLog(
+                        user_id=user.id,
+                        source="flutter",
+                        action="delete",
+                        entity_type="pole",
+                        entity_id=pole_id,
+                        payload={"id": pole_id, "mrid": getattr(pole, "mrid", None), "line_id": getattr(pole, "line_id", None)},
+                    )
+                )
     
     elif record.entity_type == "equipment":
         if record.action == SyncAction.CREATE:
@@ -870,6 +1091,34 @@ async def process_sync_record(
                 if client_eq_id is not None and client_eq_id < 0 and db_eq.id is not None:
                     id_mapping.setdefault("equipment", {})
                     id_mapping["equipment"][client_eq_id] = db_eq.id
+
+            eq_for_validate = existing_eq or db_eq
+            if eq_for_validate is not None:
+                pole_for_eq = await db.get(Pole, eq_for_validate.pole_id)
+                if pole_for_eq is not None:
+                    line_for_eq = await db.get(PowerLine, pole_for_eq.line_id)
+                    line_vl = None
+                    if line_for_eq is not None and getattr(line_for_eq, "voltage_level", None) is not None:
+                        try:
+                            line_vl = float(line_for_eq.voltage_level)
+                        except (TypeError, ValueError):
+                            line_vl = None
+                    catalog_item = None
+                    if getattr(eq_for_validate, "catalog_item_id", None):
+                        catalog_item = await db.get(EquipmentCatalogItem, eq_for_validate.catalog_item_id)
+                    validate_catalog_item_for_line(line_vl, catalog_item)
+                    nominal_voltage_kv = nominal_kv_from_line_voltage(
+                        getattr(eq_for_validate, "equipment_type", None),
+                        line_vl,
+                        getattr(eq_for_validate, "nominal_voltage_kv", None),
+                    )
+                    eq_for_validate.nominal_voltage_kv = nominal_voltage_kv
+                    validate_equipment_nominal_for_line(
+                        line_vl,
+                        getattr(eq_for_validate, "equipment_type", None),
+                        nominal_voltage_kv,
+                    )
+                    await sync_equipment_terminals_for_line(db, pole_for_eq.line_id)
         
         elif record.action == SyncAction.UPDATE:
             result = await db.execute(
@@ -894,6 +1143,31 @@ async def process_sync_record(
                             setattr(eq, key, datetime.fromisoformat(str(value).replace('Z', '+00:00')))
                     else:
                         setattr(eq, key, value)
+                pole_for_eq = await db.get(Pole, eq.pole_id)
+                if pole_for_eq is not None:
+                    line_for_eq = await db.get(PowerLine, pole_for_eq.line_id)
+                    line_vl = None
+                    if line_for_eq is not None and getattr(line_for_eq, "voltage_level", None) is not None:
+                        try:
+                            line_vl = float(line_for_eq.voltage_level)
+                        except (TypeError, ValueError):
+                            line_vl = None
+                    catalog_item = None
+                    if getattr(eq, "catalog_item_id", None):
+                        catalog_item = await db.get(EquipmentCatalogItem, eq.catalog_item_id)
+                    validate_catalog_item_for_line(line_vl, catalog_item)
+                    nominal_voltage_kv = nominal_kv_from_line_voltage(
+                        getattr(eq, "equipment_type", None),
+                        line_vl,
+                        getattr(eq, "nominal_voltage_kv", None),
+                    )
+                    eq.nominal_voltage_kv = nominal_voltage_kv
+                    validate_equipment_nominal_for_line(
+                        line_vl,
+                        getattr(eq, "equipment_type", None),
+                        nominal_voltage_kv,
+                    )
+                    await sync_equipment_terminals_for_line(db, pole_for_eq.line_id)
         
         elif record.action == SyncAction.DELETE:
             result = await db.execute(
@@ -906,7 +1180,22 @@ async def process_sync_record(
             )
             eq = result.scalar_one_or_none()
             if eq:
+                pole_id = eq.pole_id
                 await db.execute(delete(Equipment).where(Equipment.id == eq.id))
+                if pole_id is not None:
+                    pole_for_eq = await db.get(Pole, pole_id)
+                    if pole_for_eq is not None:
+                        await sync_equipment_terminals_for_line(db, pole_for_eq.line_id)
+                db.add(
+                    ChangeLog(
+                        user_id=user.id,
+                        source="flutter",
+                        action="delete",
+                        entity_type="equipment",
+                        entity_id=eq.id,
+                        payload={"id": eq.id, "mrid": getattr(eq, "mrid", None), "pole_id": pole_id},
+                    )
+                )
 
     elif record.entity_type == "equipment_catalog":
         if not can_manage_equipment_catalog(user):
