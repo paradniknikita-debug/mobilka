@@ -13,6 +13,7 @@ import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/auth/user_branch.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/models/patrol_session.dart' as api_patrol;
 import '../../../../core/services/patrol_session_loader.dart';
@@ -413,7 +414,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
               }
 
               final voltageLevel = selectedVoltageKv;
-              final branchId = 1;
+              final branchId = branchIdFromAuthState(ref.read(authStateProvider));
               final status = 'active';
               final powerLineData = PowerLineCreate(
                 name: name,

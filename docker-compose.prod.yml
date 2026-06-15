@@ -1,3 +1,7 @@
+# Production stack (сервер: /root/mobilka или DEPLOY_PATH).
+# Запуск: docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# Перед первым запуском: cp server-deploy-files/env.example .env && заполнить секреты;
+# SSL: bash nginx/generate-ssl-ubuntu.sh (или Let's Encrypt в nginx/ssl).
 services:
   # PostgreSQL база данных
   postgres:
@@ -5,9 +9,9 @@ services:
     container_name: lepm_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-lepm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -51,7 +55,7 @@ services:
 
   # Backend API: образ из .env (BACKEND_IMAGE) для деплоя с GHCR; локально можно собрать через build
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/mobilka-backend:local}
+    image: ${BACKEND_IMAGE:-lepm_backend:local}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -64,11 +68,11 @@ services:
       minio:
         condition: service_started
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lepm_db}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SECRET_KEY: ${SECRET_KEY:?Задайте SECRET_KEY в .env (python3 -c "import secrets; print(secrets.token_urlsafe(32))")}
       ENVIRONMENT: production
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
       ADMIN_DOCKER_LOGS_ENABLED: ${ADMIN_DOCKER_LOGS_ENABLED:-true}
       ADMIN_BACKEND_PUBLIC_URL: ${ADMIN_BACKEND_PUBLIC_URL:-}
       ADMIN_MINIO_CONSOLE_URL: ${ADMIN_MINIO_CONSOLE_URL:-}
@@ -81,6 +85,16 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
     expose:
       - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8000/health'', timeout=5)"',
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     group_add:
@@ -93,7 +107,8 @@ services:
     image: nginx:alpine
     container_name: lepm_nginx
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"

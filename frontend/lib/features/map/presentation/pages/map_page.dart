@@ -27,7 +27,9 @@ import 'file_download_stub.dart' if (dart.library.html) 'file_download_web.dart'
 
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/auth/user_branch.dart';
 import '../../../../core/auth/user_roles.dart';
+import '../../../../core/utils/tap_branch_delete.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/line_edit_hint_ui.dart';
@@ -5774,6 +5776,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     return 0;
   }
 
+  int _currentUserBranchId() =>
+      branchIdFromAuthState(ref.read(authStateProvider));
+
   String? _currentUserNameForAttachment() {
     final auth = ref.read(authStateProvider);
     if (auth is AuthStateAuthenticated) {
@@ -6535,10 +6540,11 @@ class _MapPageState extends ConsumerState<MapPage> {
       return;
     }
 
+    final isTapDelete = _selectedObjectType == ObjectType.tap;
     final objectId = _selectedObjectType == ObjectType.equipment
         ? (_toInt(_selectedObjectProperties!['equipment_id']) ?? _toInt(_selectedObjectProperties!['id']))
         : _toInt(_selectedObjectProperties!['id']);
-    if (objectId == null) {
+    if (!isTapDelete && objectId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -6614,7 +6620,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       if (isOffline) {
         if (deletedType == ObjectType.pole) {
-          await _deletePoleOfflineById(objectId);
+          await _deletePoleOfflineById(objectId!);
           _closeObjectProperties();
           await _loadMapDataFromLocal();
           if (mounted) {
@@ -6656,6 +6662,37 @@ class _MapPageState extends ConsumerState<MapPage> {
             return;
           }
         }
+        if (deletedType == ObjectType.tap) {
+          final deletedCount = await _deleteTapBranchFromProperties(
+            _selectedObjectProperties!,
+            online: false,
+          );
+          _closeObjectProperties();
+          await _loadMapDataFromLocal();
+          if (mounted) {
+            if (deletedCount == 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Опоры отпайки не найдены в локальном кэше'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Отпайка «$poleShort» удалена (офлайн, опор: $deletedCount). '
+                    'Изменения синхронизируются при подключении.',
+                  ),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          }
+          return;
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -6671,23 +6708,27 @@ class _MapPageState extends ConsumerState<MapPage> {
       
       switch (deletedType) {
         case ObjectType.pole:
-          await apiService.deletePole(objectId);
-          await _deletePoleOfflineById(objectId);
+          await apiService.deletePole(objectId!);
+          await _deletePoleOfflineById(objectId!);
           break;
         case ObjectType.substation:
-          await apiService.deleteSubstation(objectId);
+          await apiService.deleteSubstation(objectId!);
           break;
         case ObjectType.tap:
-          // TODO: Добавить методы удаления для отпаек
-          if (mounted) {
+          final deletedCount = await _deleteTapBranchFromProperties(
+            _selectedObjectProperties!,
+            online: true,
+          );
+          if (deletedCount == 0 && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Удаление этого типа объектов пока не реализовано'),
+                content: Text('Опоры отпайки не найдены для удаления'),
                 backgroundColor: Colors.orange,
               ),
             );
+            return;
           }
-          return;
+          break;
         case ObjectType.equipment:
           final poleIdForEq = _toInt(_selectedObjectProperties!['pole_id']);
           final eqId =
@@ -6746,7 +6787,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           e.type == DioExceptionType.connectionTimeout;
       if (isConnectionError && deletedType == ObjectType.pole && mounted) {
         try {
-          await _deletePoleOfflineById(objectId);
+          await _deletePoleOfflineById(objectId!);
           _closeObjectProperties();
           await _loadMapDataFromLocal();
           if (mounted) {
@@ -6770,6 +6811,31 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
         return;
       }
+      if (isConnectionError && deletedType == ObjectType.tap && mounted) {
+        try {
+          final deletedCount = await _deleteTapBranchFromProperties(
+            _selectedObjectProperties!,
+            online: false,
+          );
+          _closeObjectProperties();
+          await _loadMapDataFromLocal();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  deletedCount == 0
+                      ? 'Опоры отпайки не найдены в локальном кэше'
+                      : 'Отпайка удалена локально (опор: $deletedCount). Синхронизация при подключении.',
+                ),
+                backgroundColor: deletedCount == 0 ? Colors.orange : Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        } catch (_) {}
+      }
+
       if (isConnectionError && deletedType == ObjectType.equipment && mounted) {
         try {
           final eqId = _toInt(_selectedObjectProperties?['equipment_id']) ??
@@ -6803,7 +6869,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       if (e.response?.statusCode == 404 && deletedType == ObjectType.pole) {
         try {
-          await _deletePoleOfflineById(objectId);
+          await _deletePoleOfflineById(objectId!);
           _closeObjectProperties();
           await _loadMapDataFromLocal();
           if (mounted) {
@@ -7566,6 +7632,44 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  /// Удаление ветки отпайки: все опоры с [tap_pole_id] = якорь (кроме самой якорной).
+  /// Возвращает число удалённых опор.
+  Future<int> _deleteTapBranchFromProperties(
+    Map<String, dynamic> props, {
+    required bool online,
+  }) async {
+    final lineId = _toInt(props['line_id']);
+    final anchorId = tapAnchorPoleIdFromProperties(props);
+    if (lineId == null || anchorId == null) {
+      throw StateError('Не удалось определить линию или якорную опору отпайки');
+    }
+
+    final branchIndex = tapBranchIndexFromProperties(props);
+    final tapRoot = tapRootPrefixFromProperties(props);
+    final db = ref.read(drift_db.databaseProvider);
+    final linePoles = await db.getPolesByLine(lineId);
+    final toDelete = polesForTapBranchDeletion(
+      linePoles,
+      anchorPoleId: anchorId,
+      branchIndex: branchIndex,
+      tapRootPrefix: tapRoot,
+    );
+    if (toDelete.isEmpty) return 0;
+
+    final apiService = ref.read(apiServiceProvider);
+    for (final pole in toDelete) {
+      if (online && pole.id > 0) {
+        try {
+          await apiService.deletePole(pole.id);
+        } on DioException catch (e) {
+          if (e.response?.statusCode != 404) rethrow;
+        }
+      }
+      await _deletePoleOfflineById(pole.id);
+    }
+    return toDelete.length;
+  }
+
   /// Удаление опоры локально (офлайн): оборудование + опора из Drift.
   Future<void> _deletePoleOfflineById(int poleId) async {
     final db = ref.read(drift_db.databaseProvider);
@@ -7767,7 +7871,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 }
 
                 final voltageLevel = double.tryParse(voltageController.text) ?? 0.0;
-                final branchId = 1; // TODO: Получить реальный branchId
+                final branchId = _currentUserBranchId();
                 final status = 'active';
                 final description = descriptionController.text.trim().isEmpty
                     ? null
