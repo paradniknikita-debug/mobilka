@@ -53,9 +53,11 @@ void main() async {
   // База данных и SyncService инициализируются лениво (при первом использовании)
   // Это ускоряет стартовую загрузку приложения
   final database = AppDatabase();
+  await database.ensureLegacySchemaCompatible();
+  await database.backfillMissingPoleSequenceNumbers();
+
   final syncService = SyncService(database, apiService, prefs);
-  unawaited(database.backfillMissingPoleSequenceNumbers());
-  
+
   runApp(
     ProviderScope(
       overrides: [

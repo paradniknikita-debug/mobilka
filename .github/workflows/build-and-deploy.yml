@@ -84,13 +84,13 @@ jobs:
         if: steps.flutter-cache.outputs.cache-hit != 'true'
         run: |
           cd frontend
-          flutter build web --release
+          flutter build web --release --no-wasm-dry-run
 
       - name: Build web (cache hit)
         if: steps.flutter-cache.outputs.cache-hit == 'true'
         run: |
           cd frontend
-          flutter build web --release
+          flutter build web --release --no-wasm-dry-run
 
       - name: Upload Flutter web artifact
         uses: actions/upload-artifact@v4

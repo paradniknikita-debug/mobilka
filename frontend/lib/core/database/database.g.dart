@@ -1026,13 +1026,12 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
   late final GeneratedColumn<bool> isTapPole = GeneratedColumn<bool>(
     'is_tap_pole',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.bool,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'CHECK ("is_tap_pole" IN (0, 1))',
     ),
-    defaultValue: const Constant(false),
   );
   static const VerificationMeta _conductorTypeMeta = const VerificationMeta(
     'conductorType',
@@ -1490,7 +1489,7 @@ class $PolesTable extends Poles with TableInfo<$PolesTable, Pole> {
       isTapPole: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_tap_pole'],
-      )!,
+      ),
       conductorType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}conductor_type'],
@@ -1574,7 +1573,7 @@ class Pole extends DataClass implements Insertable<Pole> {
   final String? branchType;
   final int? tapPoleId;
   final int? tapBranchIndex;
-  final bool isTapPole;
+  final bool? isTapPole;
   final String? conductorType;
   final String? conductorMaterial;
   final String? conductorSection;
@@ -1605,7 +1604,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     this.branchType,
     this.tapPoleId,
     this.tapBranchIndex,
-    required this.isTapPole,
+    this.isTapPole,
     this.conductorType,
     this.conductorMaterial,
     this.conductorSection,
@@ -1677,7 +1676,9 @@ class Pole extends DataClass implements Insertable<Pole> {
     if (!nullToAbsent || tapBranchIndex != null) {
       map['tap_branch_index'] = Variable<int>(tapBranchIndex);
     }
-    map['is_tap_pole'] = Variable<bool>(isTapPole);
+    if (!nullToAbsent || isTapPole != null) {
+      map['is_tap_pole'] = Variable<bool>(isTapPole);
+    }
     if (!nullToAbsent || conductorType != null) {
       map['conductor_type'] = Variable<String>(conductorType);
     }
@@ -1755,7 +1756,9 @@ class Pole extends DataClass implements Insertable<Pole> {
       tapBranchIndex: tapBranchIndex == null && nullToAbsent
           ? const Value.absent()
           : Value(tapBranchIndex),
-      isTapPole: Value(isTapPole),
+      isTapPole: isTapPole == null && nullToAbsent
+          ? const Value.absent()
+          : Value(isTapPole),
       conductorType: conductorType == null && nullToAbsent
           ? const Value.absent()
           : Value(conductorType),
@@ -1806,7 +1809,7 @@ class Pole extends DataClass implements Insertable<Pole> {
       branchType: serializer.fromJson<String?>(json['branchType']),
       tapPoleId: serializer.fromJson<int?>(json['tapPoleId']),
       tapBranchIndex: serializer.fromJson<int?>(json['tapBranchIndex']),
-      isTapPole: serializer.fromJson<bool>(json['isTapPole']),
+      isTapPole: serializer.fromJson<bool?>(json['isTapPole']),
       conductorType: serializer.fromJson<String?>(json['conductorType']),
       conductorMaterial: serializer.fromJson<String?>(
         json['conductorMaterial'],
@@ -1848,7 +1851,7 @@ class Pole extends DataClass implements Insertable<Pole> {
       'branchType': serializer.toJson<String?>(branchType),
       'tapPoleId': serializer.toJson<int?>(tapPoleId),
       'tapBranchIndex': serializer.toJson<int?>(tapBranchIndex),
-      'isTapPole': serializer.toJson<bool>(isTapPole),
+      'isTapPole': serializer.toJson<bool?>(isTapPole),
       'conductorType': serializer.toJson<String?>(conductorType),
       'conductorMaterial': serializer.toJson<String?>(conductorMaterial),
       'conductorSection': serializer.toJson<String?>(conductorSection),
@@ -1882,7 +1885,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     Value<String?> branchType = const Value.absent(),
     Value<int?> tapPoleId = const Value.absent(),
     Value<int?> tapBranchIndex = const Value.absent(),
-    bool? isTapPole,
+    Value<bool?> isTapPole = const Value.absent(),
     Value<String?> conductorType = const Value.absent(),
     Value<String?> conductorMaterial = const Value.absent(),
     Value<String?> conductorSection = const Value.absent(),
@@ -1927,7 +1930,7 @@ class Pole extends DataClass implements Insertable<Pole> {
     tapBranchIndex: tapBranchIndex.present
         ? tapBranchIndex.value
         : this.tapBranchIndex,
-    isTapPole: isTapPole ?? this.isTapPole,
+    isTapPole: isTapPole.present ? isTapPole.value : this.isTapPole,
     conductorType: conductorType.present
         ? conductorType.value
         : this.conductorType,
@@ -2133,7 +2136,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
   final Value<String?> branchType;
   final Value<int?> tapPoleId;
   final Value<int?> tapBranchIndex;
-  final Value<bool> isTapPole;
+  final Value<bool?> isTapPole;
   final Value<String?> conductorType;
   final Value<String?> conductorMaterial;
   final Value<String?> conductorSection;
@@ -2299,7 +2302,7 @@ class PolesCompanion extends UpdateCompanion<Pole> {
     Value<String?>? branchType,
     Value<int?>? tapPoleId,
     Value<int?>? tapBranchIndex,
-    Value<bool>? isTapPole,
+    Value<bool?>? isTapPole,
     Value<String?>? conductorType,
     Value<String?>? conductorMaterial,
     Value<String?>? conductorSection,
@@ -6610,7 +6613,7 @@ typedef $$PolesTableCreateCompanionBuilder =
       Value<String?> branchType,
       Value<int?> tapPoleId,
       Value<int?> tapBranchIndex,
-      Value<bool> isTapPole,
+      Value<bool?> isTapPole,
       Value<String?> conductorType,
       Value<String?> conductorMaterial,
       Value<String?> conductorSection,
@@ -6643,7 +6646,7 @@ typedef $$PolesTableUpdateCompanionBuilder =
       Value<String?> branchType,
       Value<int?> tapPoleId,
       Value<int?> tapBranchIndex,
-      Value<bool> isTapPole,
+      Value<bool?> isTapPole,
       Value<String?> conductorType,
       Value<String?> conductorMaterial,
       Value<String?> conductorSection,
@@ -7149,7 +7152,7 @@ class $$PolesTableTableManager
                 Value<String?> branchType = const Value.absent(),
                 Value<int?> tapPoleId = const Value.absent(),
                 Value<int?> tapBranchIndex = const Value.absent(),
-                Value<bool> isTapPole = const Value.absent(),
+                Value<bool?> isTapPole = const Value.absent(),
                 Value<String?> conductorType = const Value.absent(),
                 Value<String?> conductorMaterial = const Value.absent(),
                 Value<String?> conductorSection = const Value.absent(),
@@ -7214,7 +7217,7 @@ class $$PolesTableTableManager
                 Value<String?> branchType = const Value.absent(),
                 Value<int?> tapPoleId = const Value.absent(),
                 Value<int?> tapBranchIndex = const Value.absent(),
-                Value<bool> isTapPole = const Value.absent(),
+                Value<bool?> isTapPole = const Value.absent(),
                 Value<String?> conductorType = const Value.absent(),
                 Value<String?> conductorMaterial = const Value.absent(),
                 Value<String?> conductorSection = const Value.absent(),

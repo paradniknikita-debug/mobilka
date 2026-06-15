@@ -10,6 +10,7 @@ import '../models/power_line.dart';
 import '../models/substation.dart';
 import '../models/patrol_session.dart';
 import '../models/power_line_edit_hint.dart';
+import '../models/equipment_catalog.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'dio_config.dart';

@@ -22,6 +22,7 @@ import '../../../../core/models/power_line.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/utils/mrid.dart';
 import '../../../../core/utils/normalize_pole_number.dart';
+import '../../../../core/utils/local_pole_sequence.dart';
 import '../../../../core/services/line_edit_hint_ui.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/utils/pole_number_mask.dart';
@@ -30,6 +31,7 @@ import 'pole_number_mask_field.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/pole_card_attachment_codec.dart';
 import '../../../../core/utils/pole_card_comment_codec.dart';
+import '../../../../core/utils/pole_dialog_draft.dart';
 import 'add_equipment_dialog.dart';
 import 'filterable_mark_field.dart';
 import 'pole_attachments_table_sheet.dart';
@@ -84,6 +86,8 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
   final int? tapBranchIndex;
   /// true = открыт сценарий «Начать новую отпайку» от отпаечной опоры (вторая/третья ветка).
   final bool startNewTap;
+  /// Восстановление полей после «Указать на карте».
+  final PoleDialogDraft? initialDraft;
   /// У паспортиста/админа можно вводить марки вне справочника; у инженера — только из каталога.
   final bool allowManualBrandOutsideCatalog;
 
@@ -99,6 +103,7 @@ class CreatePoleDialog extends ConsumerStatefulWidget {
     this.tapPoleId,
     this.tapBranchIndex,
     this.startNewTap = false,
+    this.initialDraft,
     this.allowManualBrandOutsideCatalog = true,
   });
 
@@ -1289,6 +1294,78 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       if (!mounted) return;
       _loadLineVoltageAndConductorCatalog();
     });
+    if (widget.initialDraft != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyRestoreDraft(widget.initialDraft!);
+      });
+    }
+  }
+
+  PoleDialogDraft _exportDraft() => PoleDialogDraft(
+        latitude: _latitude,
+        longitude: _longitude,
+        poleNumber: _poleNumber,
+        poleType: _poleType,
+        height: _height,
+        foundationType: _foundationType,
+        material: _material,
+        yearInstalled: _yearInstalled,
+        condition: _condition,
+        notes: _notes,
+        structuralDefect: _structuralDefectController.text.trim().isEmpty
+            ? null
+            : _structuralDefectController.text.trim(),
+        structuralCrit: _structuralCrit,
+        conductorType: _conductorType,
+        conductorMaterial: _conductorMaterial,
+        conductorSection: _conductorSection,
+        isTap: _isTap,
+        branchSelection: _branchSelection,
+        autofill: _autofill,
+      );
+
+  void _applyRestoreDraft(PoleDialogDraft draft) {
+    setState(() {
+      if (draft.latitude != null && draft.longitude != null) {
+        _latitude = draft.latitude;
+        _longitude = draft.longitude;
+      }
+      if (draft.poleNumber != null && draft.poleNumber!.trim().isNotEmpty) {
+        _poleMask = PoleNumberMask.parse(draft.poleNumber!);
+        _poleNumber = _poleMask.apiString;
+        _poleMaskKey++;
+      }
+      if (draft.poleType != null) _poleType = draft.poleType!;
+      _height = draft.height ?? _height;
+      _foundationType = draft.foundationType ?? _foundationType;
+      _material = draft.material ?? _material;
+      _materialController.text = _material ?? '';
+      _yearInstalled = draft.yearInstalled ?? _yearInstalled;
+      if (draft.condition != null) _condition = draft.condition!;
+      _notes = draft.notes ?? _notes;
+      if (draft.structuralDefect != null) {
+        _structuralDefectController.text = draft.structuralDefect!;
+      }
+      _structuralCrit = draft.structuralCrit ?? _structuralCrit;
+      _conductorType = draft.conductorType ?? _conductorType;
+      _conductorMaterial = draft.conductorMaterial ?? _conductorMaterial;
+      _conductorSection = draft.conductorSection ?? _conductorSection;
+      _conductorTypeController.text = _conductorType ?? '';
+      if (draft.isTap != null) _isTap = draft.isTap!;
+      if (draft.branchSelection != null) {
+        _branchSelection = draft.branchSelection;
+      }
+      _autofill = draft.autofill;
+    });
+  }
+
+  void _requestPickOnMap() {
+    if (!AppConfig.enableMapCoordinatePick) return;
+    Navigator.of(context).pop({
+      'action': 'pick_on_map',
+      'draft': _exportDraft().toJson(),
+    });
   }
 
   Future<void> _loadLineVoltageAndConductorCatalog() async {
@@ -1340,7 +1417,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       _conductorMaterial = pole.conductorMaterial;
       _conductorSection = pole.conductorSection;
       _conductorTypeController.text = pole.conductorType ?? '';
-      _isTap = pole.isTapPole;
+      _isTap = pole.isTapPole ?? false;
       if (pole.tapPoleId != null && pole.tapBranchIndex != null) {
         _branchSelection = '${pole.tapPoleId}:${pole.tapBranchIndex}';
       } else {
@@ -1424,7 +1501,7 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final apiService = ref.read(apiServiceProvider);
       final poles = await apiService.getPoles(widget.lineId);
       if (!mounted) return;
-      final tapPoles = poles.where((p) => p.isTapPole).toList();
+      final tapPoles = poles.where((p) => p.isTapPole == true).toList();
       final tapPoleNames = <int, String>{};
       for (final p in tapPoles) {
         final n = p.poleNumber.trim();
@@ -1509,6 +1586,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         }
       }
       _applyLoadedPoleToState(pole, equipmentList);
+      if (widget.initialDraft != null) {
+        _applyRestoreDraft(widget.initialDraft!);
+      }
       if (mounted) _loadTapBranchesForLine();
     } catch (e) {
       // Офлайн или ошибка API — загружаем из локальной БД
@@ -1602,6 +1682,9 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           isTapPole: false,
         );
         _applyLoadedPoleToState(poleApi, equipmentList);
+        if (widget.initialDraft != null) {
+          _applyRestoreDraft(widget.initialDraft!);
+        }
         if (mounted) _loadTapBranchesForLine();
       } catch (dbErr) {
         if (mounted) {
@@ -3272,6 +3355,14 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
                                   onPressed: () => _showManualCoordinatesDialog(),
                                   child: Text('Ввести вручную', style: TextStyle(fontSize: 12, color: PatrolColors.accent)),
                                 ),
+                                if (AppConfig.enableMapCoordinatePick)
+                                  TextButton(
+                                    onPressed: _requestPickOnMap,
+                                    child: Text(
+                                      kIsWeb ? 'Указать на карте' : 'Тап на карте',
+                                      style: TextStyle(fontSize: 12, color: PatrolColors.accent),
+                                    ),
+                                  ),
                               ],
                             ),
                           ],

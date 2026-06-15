@@ -3,6 +3,9 @@ import '../services/base_url_manager.dart';
 class AppConfig {
   static const String appName = 'ЛЭП Management';
   static const String appVersion = '1.0.0';
+
+  /// Указание координат опоры кликом/тапом по карте (до эксплуатации — выключить: false).
+  static const bool enableMapCoordinatePick = true;
   
   // ============================================
   // НАСТРОЙКА ПРОТОКОЛА ПОДКЛЮЧЕНИЯ
@@ -82,7 +85,7 @@ class AppConfig {
   
   // Database Configuration
   static const String databaseName = 'lepm_local.db';
-  static const int databaseVersion = 15;
+  static const int databaseVersion = 16;
   
   // Storage Keys
   static const String authTokenKey = 'auth_token';

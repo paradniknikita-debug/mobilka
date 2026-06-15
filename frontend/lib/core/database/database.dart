@@ -13,6 +13,17 @@ import '../utils/normalize_pole_number.dart';
 
 part 'database.g.dart';
 
+/// Добавление колонки без падения, если она уже есть (рассинхрон schema_version на web).
+Future<void> _safeAddColumn(
+  Migrator migrator,
+  TableInfo table,
+  GeneratedColumn column,
+) async {
+  try {
+    await migrator.addColumn(table, column);
+  } catch (_) {}
+}
+
 // Таблицы для локальной базы данных
 
 class PowerLines extends Table {
@@ -67,7 +78,7 @@ class Poles extends Table {
   TextColumn get branchType => text().nullable().named('branch_type')();
   IntColumn get tapPoleId => integer().nullable().named('tap_pole_id')();
   IntColumn get tapBranchIndex => integer().nullable().named('tap_branch_index')();
-  BoolColumn get isTapPole => boolean().withDefault(const Constant(false)).named('is_tap_pole')();
+  BoolColumn get isTapPole => boolean().nullable().named('is_tap_pole')();
   TextColumn get conductorType => text().nullable().named('conductor_type')();
   TextColumn get conductorMaterial => text().nullable().named('conductor_material')();
   TextColumn get conductorSection => text().nullable().named('conductor_section')();
@@ -176,6 +187,9 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        beforeOpen: (details) async {
+          await _ensurePoleSchemaHealthy();
+        },
         onUpgrade: (migrator, from, to) async {
           if (from < 2) {
             await migrator.issueCustomQuery(
@@ -204,17 +218,17 @@ class AppDatabase extends _$AppDatabase {
             } catch (_) {}
           }
           if (from < 4) {
-            await migrator.addColumn(powerLines, powerLines.mrid);
+            await _safeAddColumn(migrator,powerLines, powerLines.mrid);
           }
           if (from < 5) {
-            await migrator.addColumn(equipment, equipment.quantity);
-            await migrator.addColumn(equipment, equipment.defect);
-            await migrator.addColumn(equipment, equipment.criticality);
+            await _safeAddColumn(migrator,equipment, equipment.quantity);
+            await _safeAddColumn(migrator,equipment, equipment.defect);
+            await _safeAddColumn(migrator,equipment, equipment.criticality);
           }
           if (from < 6) {
-            await migrator.addColumn(poles, poles.cardComment);
-            await migrator.addColumn(poles, poles.cardCommentAttachment);
-            await migrator.addColumn(equipment, equipment.defectAttachment);
+            await _safeAddColumn(migrator,poles, poles.cardComment);
+            await _safeAddColumn(migrator,poles, poles.cardCommentAttachment);
+            await _safeAddColumn(migrator,equipment, equipment.defectAttachment);
           }
           if (from < 7) {
             // Единое именование: power_line_id -> line_id
@@ -252,43 +266,43 @@ class AppDatabase extends _$AppDatabase {
             } catch (_) {}
           }
           if (from < 10) {
-            await migrator.addColumn(poles, poles.structuralDefect);
-            await migrator.addColumn(poles, poles.structuralDefectCriticality);
+            await _safeAddColumn(migrator,poles, poles.structuralDefect);
+            await _safeAddColumn(migrator,poles, poles.structuralDefectCriticality);
           }
           if (from < 11) {
-            await migrator.addColumn(equipment, equipment.mrid);
-            await migrator.addColumn(equipment, equipment.catalogItemId);
-            await migrator.addColumn(equipment, equipment.ratedCurrent);
-            await migrator.addColumn(equipment, equipment.iTh);
-            await migrator.addColumn(equipment, equipment.ipMax);
-            await migrator.addColumn(equipment, equipment.tTh);
-            await migrator.addColumn(equipment, equipment.normalOpen);
-            await migrator.addColumn(equipment, equipment.retained);
-            await migrator.addColumn(equipment, equipment.identifiedObjectDescription);
-            await migrator.addColumn(equipment, equipment.nameplate);
-            await migrator.addColumn(equipment, equipment.psrSubtype);
-            await migrator.addColumn(equipment, equipment.installationDisplayName);
-            await migrator.addColumn(equipment, equipment.tmCode);
-            await migrator.addColumn(equipment, equipment.objectSubtype);
-            await migrator.addColumn(equipment, equipment.poleCount);
-            await migrator.addColumn(equipment, equipment.parentObjectRef);
-            await migrator.addColumn(equipment, equipment.parentMainEquipmentPoleRef);
-            await migrator.addColumn(equipment, equipment.nominalVoltageKv);
-            await migrator.addColumn(equipment, equipment.nominalBreakingCurrentKa);
-            await migrator.addColumn(equipment, equipment.ownTripTimeSec);
-            await migrator.addColumn(equipment, equipment.emergencyCurrentA);
-            await migrator.addColumn(equipment, equipment.continuousCurrentA);
-            await migrator.addColumn(equipment, equipment.arresterType);
-            await migrator.addColumn(equipment, equipment.xPosition);
-            await migrator.addColumn(equipment, equipment.yPosition);
-            await migrator.addColumn(equipment, equipment.directionAngle);
+            await _safeAddColumn(migrator,equipment, equipment.mrid);
+            await _safeAddColumn(migrator,equipment, equipment.catalogItemId);
+            await _safeAddColumn(migrator,equipment, equipment.ratedCurrent);
+            await _safeAddColumn(migrator,equipment, equipment.iTh);
+            await _safeAddColumn(migrator,equipment, equipment.ipMax);
+            await _safeAddColumn(migrator,equipment, equipment.tTh);
+            await _safeAddColumn(migrator,equipment, equipment.normalOpen);
+            await _safeAddColumn(migrator,equipment, equipment.retained);
+            await _safeAddColumn(migrator,equipment, equipment.identifiedObjectDescription);
+            await _safeAddColumn(migrator,equipment, equipment.nameplate);
+            await _safeAddColumn(migrator,equipment, equipment.psrSubtype);
+            await _safeAddColumn(migrator,equipment, equipment.installationDisplayName);
+            await _safeAddColumn(migrator,equipment, equipment.tmCode);
+            await _safeAddColumn(migrator,equipment, equipment.objectSubtype);
+            await _safeAddColumn(migrator,equipment, equipment.poleCount);
+            await _safeAddColumn(migrator,equipment, equipment.parentObjectRef);
+            await _safeAddColumn(migrator,equipment, equipment.parentMainEquipmentPoleRef);
+            await _safeAddColumn(migrator,equipment, equipment.nominalVoltageKv);
+            await _safeAddColumn(migrator,equipment, equipment.nominalBreakingCurrentKa);
+            await _safeAddColumn(migrator,equipment, equipment.ownTripTimeSec);
+            await _safeAddColumn(migrator,equipment, equipment.emergencyCurrentA);
+            await _safeAddColumn(migrator,equipment, equipment.continuousCurrentA);
+            await _safeAddColumn(migrator,equipment, equipment.arresterType);
+            await _safeAddColumn(migrator,equipment, equipment.xPosition);
+            await _safeAddColumn(migrator,equipment, equipment.yPosition);
+            await _safeAddColumn(migrator,equipment, equipment.directionAngle);
           }
           if (from < 12) {
-            await migrator.addColumn(equipment, equipment.cardComment);
-            await migrator.addColumn(equipment, equipment.cardCommentAttachment);
+            await _safeAddColumn(migrator,equipment, equipment.cardComment);
+            await _safeAddColumn(migrator,equipment, equipment.cardCommentAttachment);
           }
           if (from < 13) {
-            await migrator.addColumn(poles, poles.mrid);
+            await _safeAddColumn(migrator,poles, poles.mrid);
           }
           if (from < 14) {
             final rowsWithoutMrid = await (select(poles)
@@ -303,18 +317,78 @@ class AppDatabase extends _$AppDatabase {
             }
           }
           if (from < 15) {
-            await migrator.addColumn(poles, poles.sequenceNumber);
-            await migrator.addColumn(poles, poles.branchType);
-            await migrator.addColumn(poles, poles.tapPoleId);
-            await migrator.addColumn(poles, poles.tapBranchIndex);
-            await migrator.addColumn(poles, poles.isTapPole);
-            await migrator.addColumn(poles, poles.conductorType);
-            await migrator.addColumn(poles, poles.conductorMaterial);
-            await migrator.addColumn(poles, poles.conductorSection);
+            await _safeAddColumn(migrator,poles, poles.sequenceNumber);
+            await _safeAddColumn(migrator,poles, poles.branchType);
+            await _safeAddColumn(migrator,poles, poles.tapPoleId);
+            await _safeAddColumn(migrator,poles, poles.tapBranchIndex);
+            await _safeAddColumn(migrator,poles, poles.isTapPole);
+            await _safeAddColumn(migrator,poles, poles.conductorType);
+            await _safeAddColumn(migrator,poles, poles.conductorMaterial);
+            await _safeAddColumn(migrator,poles, poles.conductorSection);
+            await _repairPoleBooleanDefaults();
             await backfillMissingPoleSequenceNumbers();
+          }
+          if (from < 16) {
+            await _repairPoleBooleanDefaults();
           }
         },
       );
+
+  /// Вызвать до первых запросов к опорам (main): чинит legacy-схему на web.
+  Future<void> ensureLegacySchemaCompatible() => _ensurePoleSchemaHealthy();
+
+  /// Добавляет отсутствующие колонки и затирает NULL в bool/int полях опор.
+  Future<void> _ensurePoleSchemaHealthy() async {
+    final rows = await customSelect('PRAGMA table_info(poles)').get();
+    final cols = rows.map((r) => r.read<String>('name')).toSet();
+
+    Future<void> ensureBoolColumn(String name) async {
+      if (!cols.contains(name)) {
+        await customStatement(
+          'ALTER TABLE poles ADD COLUMN $name INTEGER NOT NULL DEFAULT 0',
+        );
+        cols.add(name);
+      } else {
+        await customStatement(
+          'UPDATE poles SET $name = 0 WHERE $name IS NULL',
+        );
+      }
+    }
+
+    await ensureBoolColumn('is_tap_pole');
+    await ensureBoolColumn('is_local');
+    await ensureBoolColumn('needs_sync');
+
+    const nullableCols = <String, String>{
+      'sequence_number': 'INTEGER',
+      'branch_type': 'TEXT',
+      'tap_pole_id': 'INTEGER',
+      'tap_branch_index': 'INTEGER',
+      'conductor_type': 'TEXT',
+      'conductor_material': 'TEXT',
+      'conductor_section': 'TEXT',
+      'mrid': 'TEXT',
+    };
+    for (final entry in nullableCols.entries) {
+      if (!cols.contains(entry.key)) {
+        await customStatement(
+          'ALTER TABLE poles ADD COLUMN ${entry.key} ${entry.value}',
+        );
+        cols.add(entry.key);
+      }
+    }
+
+    if (cols.contains('created_by')) {
+      await customStatement(
+        'UPDATE poles SET created_by = 0 WHERE created_by IS NULL',
+      );
+    }
+  }
+
+  /// SQLite после ADD COLUMN иногда оставляет NULL в NOT NULL bool-колонках (web/старые БД).
+  Future<void> _repairPoleBooleanDefaults() async {
+    await _ensurePoleSchemaHealthy();
+  }
 
   // Методы для работы с ЛЭП
   Future<List<PowerLine>> getAllPowerLines() => select(powerLines).get();
@@ -405,6 +479,7 @@ class AppDatabase extends _$AppDatabase {
   
   /// Проставляет sequence_number опорам без него (правила как на сервере).
   Future<int> backfillMissingPoleSequenceNumbers() async {
+    await _repairPoleBooleanDefaults();
     final allLines = await select(powerLines).get();
     var count = 0;
     for (final line in allLines) {

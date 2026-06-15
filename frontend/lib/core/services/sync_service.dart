@@ -370,7 +370,7 @@ class SyncService extends StateNotifier<SyncState> {
         notes: pole.notes,
         structuralDefect: pole.structuralDefect,
         structuralDefectCriticality: pole.structuralDefectCriticality,
-        isTap: pole.isTapPole,
+        isTap: pole.isTapPole ?? false,
         conductorType: pole.conductorType,
         conductorMaterial: pole.conductorMaterial,
         conductorSection: pole.conductorSection,

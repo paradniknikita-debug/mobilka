@@ -31,9 +31,11 @@ import '../../../../core/auth/user_roles.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
 import '../../../../core/services/line_edit_hint_ui.dart';
+import '../../../../core/services/offline_map_service.dart';
 import '../../../../core/utils/mrid.dart';
 import '../../../../core/utils/normalize_pole_number.dart';
 import '../../../../core/utils/local_pole_sequence.dart';
+import '../../../../core/utils/pole_dialog_draft.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/map_bounds.dart';
 import '../../../../core/config/map_tile_config.dart';
@@ -104,6 +106,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   int? _currentLineId; // ID текущей ЛЭП (lineId в БД и API)
   String? _lineEditHintBanner;
   int? _lineEditHintLineId;
+  /// Режим выбора координат опоры на карте (до эксплуатации).
+  Completer<LatLng?>? _coordinatePickCompleter;
 
   // Текущий z-блок карты, используемый для пересчёта координат терминалов
   // (pixel -> LatLng) при zuma, чтобы соединения оборудования оставались на оси.
@@ -711,7 +715,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             'y_position': p.yPosition ?? 0.0,
             'is_local': p.isLocal,
             'needs_sync': p.needsSync,
-            'is_tap': p.isTapPole || p.poleNumber.contains('/'),
+            'is_tap': (p.isTapPole ?? false) || p.poleNumber.contains('/'),
             if (criticality != null) 'criticality': criticality,
           },
         });
@@ -1774,6 +1778,13 @@ class _MapPageState extends ConsumerState<MapPage> {
                     onPositionChanged: (camera, hasGesture) {
                       _applyMapZoomFromCamera(camera);
                     },
+                    onTap: (position, point) {
+                      if (_coordinatePickCompleter != null) {
+                        _coordinatePickCompleter!.complete(point);
+                        _coordinatePickCompleter = null;
+                        setState(() {});
+                      }
+                    },
                   ),
                   children: [
                     _buildMapTileLayer(
@@ -1899,6 +1910,39 @@ class _MapPageState extends ConsumerState<MapPage> {
                               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                               icon: const Icon(Icons.close, size: 18),
                               onPressed: () => setState(() => _lineEditHintBanner = null),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (_coordinatePickCompleter != null)
+                  Positioned(
+                    top: kIsWeb ? 88 : 44,
+                    left: 8,
+                    right: 8,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.blue.shade800,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.touch_app, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                kIsWeb
+                                    ? 'Кликните на карту для выбора координат опоры'
+                                    : 'Нажмите на карту для выбора координат опоры',
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _cancelCoordinatePick,
+                              child: const Text('Отмена', style: TextStyle(color: Colors.white)),
                             ),
                           ],
                         ),
@@ -5075,18 +5119,63 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  Future<LatLng?> _pickCoordinateOnMap() async {
+    _coordinatePickCompleter = Completer<LatLng?>();
+    setState(() {});
+    return _coordinatePickCompleter!.future;
+  }
+
+  void _cancelCoordinatePick() {
+    _coordinatePickCompleter?.complete(null);
+    _coordinatePickCompleter = null;
+    if (mounted) setState(() {});
+  }
+
+  /// Показывает карточку опоры; при «Указать на карте» — выбор точки и повторное открытие.
+  Future<Map<String, dynamic>?> _showPoleDialogWithCoordinatePick(
+    Widget Function(PoleDialogDraft? draft) buildDialog,
+  ) async {
+    PoleDialogDraft? draft;
+    while (mounted) {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => buildDialog(draft),
+      );
+      if (!mounted) return result;
+      if (result != null &&
+          result['action'] == 'pick_on_map' &&
+          AppConfig.enableMapCoordinatePick &&
+          result['draft'] is Map) {
+        draft = PoleDialogDraft.fromJson(
+          Map<String, dynamic>.from(result['draft'] as Map),
+        );
+        final picked = await _pickCoordinateOnMap();
+        if (!mounted) return null;
+        if (picked != null) {
+          draft = draft.copyWith(
+            latitude: picked.latitude,
+            longitude: picked.longitude,
+          );
+        }
+        continue;
+      }
+      return result;
+    }
+    return null;
+  }
+
   Future<void> _showEditPoleDialog() async {
     final poleId = _selectedObjectProperties?['id'] as int?;
     final powerLineId = _selectedObjectProperties?['line_id'] as int?;
     if (poleId == null || powerLineId == null) return;
     _closeObjectProperties();
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => CreatePoleDialog(
+    final result = await _showPoleDialogWithCoordinatePick(
+      (draft) => CreatePoleDialog(
         allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: powerLineId,
         poleId: poleId,
         existingPolesCount: 0,
+        initialDraft: draft,
       ),
     );
     if (!mounted) return;
@@ -5125,12 +5214,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
       return;
     }
-    await showDialog(
-      context: context,
-      builder: (context) => CreatePoleDialog(
+    await _showPoleDialogWithCoordinatePick(
+      (draft) => CreatePoleDialog(
         allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: lineId,
         poleId: poleId,
+        initialDraft: draft,
       ),
     );
     if (mounted) {
@@ -5242,19 +5331,19 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // Первая опора каждой новой отпайки — N/1.
     final String initialPoleNumberForTap = '$newTapRoot/1';
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => CreatePoleDialog(
+    final result = await _showPoleDialogWithCoordinatePick(
+      (draft) => CreatePoleDialog(
         allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: lineId,
         tapPoleId: tapPoleId,
         tapBranchIndex: nextBranchIndex,
         startNewTap: true,
-        initialLatitude: _currentLocation?.latitude,
-        initialLongitude: _currentLocation?.longitude,
+        initialLatitude: draft?.latitude ?? _currentLocation?.latitude,
+        initialLongitude: draft?.longitude ?? _currentLocation?.longitude,
         initialPoleNumber: initialPoleNumberForTap,
         poleSequenceNumber: 1,
         existingPolesCount: existingPolesCount,
+        initialDraft: draft,
       ),
     );
     if (result != null && result['success'] == true && mounted) {
@@ -5350,19 +5439,19 @@ class _MapPageState extends ConsumerState<MapPage> {
     final tapBranchIndex = _toInt(_selectedObjectProperties?['tap_branch_index']) ?? 1;
     // Обновляем текущую ветку, чтобы `FAB` продолжал именно её.
     setState(() => _currentTapBranchIndex = tapBranchIndex);
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => CreatePoleDialog(
+    final result = await _showPoleDialogWithCoordinatePick(
+      (draft) => CreatePoleDialog(
         allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: lineId,
         tapPoleId: tapPoleId,
         tapBranchIndex: tapBranchIndex,
         startNewTap: false,
-        initialLatitude: _currentLocation?.latitude,
-        initialLongitude: _currentLocation?.longitude,
+        initialLatitude: draft?.latitude ?? _currentLocation?.latitude,
+        initialLongitude: draft?.longitude ?? _currentLocation?.longitude,
         initialPoleNumber: nextPoleNumber,
         poleSequenceNumber: linePoles.length + 1,
         existingPolesCount: linePoles.length,
+        initialDraft: draft,
       ),
     );
     if (result != null && result['success'] == true && mounted) {
@@ -5455,18 +5544,18 @@ class _MapPageState extends ConsumerState<MapPage> {
       initialPoleNumber = (maxMainNum + 1).toString();
     }
 
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => CreatePoleDialog(
+    final result = await _showPoleDialogWithCoordinatePick(
+      (draft) => CreatePoleDialog(
         allowManualBrandOutsideCatalog: _allowManualCatalogFromAuth(),
         lineId: selectedLineId,
         tapPoleId: tapPoleIdForFab,
         tapBranchIndex: tapBranchIndexForFab,
-        initialLatitude: _currentLocation!.latitude,
-        initialLongitude: _currentLocation!.longitude,
+        initialLatitude: draft?.latitude ?? _currentLocation!.latitude,
+        initialLongitude: draft?.longitude ?? _currentLocation!.longitude,
         initialPoleNumber: initialPoleNumber,
         poleSequenceNumber: existingPolesCount + 1,
         existingPolesCount: existingPolesCount,
+        initialDraft: draft,
       ),
     );
 
@@ -5604,7 +5693,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       notes: p.notes,
       structuralDefect: p.structuralDefect,
       structuralDefectCriticality: p.structuralDefectCriticality,
-      isTap: p.isTapPole,
+      isTap: p.isTapPole ?? false,
       conductorType: p.conductorType,
       conductorMaterial: p.conductorMaterial,
       conductorSection: p.conductorSection,
