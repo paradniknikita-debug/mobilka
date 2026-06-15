@@ -14,6 +14,15 @@ export interface MapData {
   equipment: GeoJSONCollection;
 }
 
+/** Черновик карточки опоры при выборе координат на карте. */
+export interface PoleCoordinatePickPending {
+  formSnapshot: Record<string, unknown>;
+  dialogData: Record<string, unknown>;
+  isEditMode: boolean;
+  poleId?: number;
+  lineId?: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -193,6 +202,17 @@ export class MapService {
 
   get centerOnEquipment$(): Observable<{ poleId: number; equipmentId: number }> {
     return this.centerOnEquipmentSubject$.asObservable();
+  }
+
+  private poleCoordinatePickRequestSubject$ = new Subject<PoleCoordinatePickPending>();
+
+  /** Диалог опоры закрыт — ждём клик по карте. */
+  requestPoleCoordinatePick(pending: PoleCoordinatePickPending): void {
+    this.poleCoordinatePickRequestSubject$.next(pending);
+  }
+
+  get poleCoordinatePickRequest$(): Observable<PoleCoordinatePickPending> {
+    return this.poleCoordinatePickRequestSubject$.asObservable();
   }
 }
 

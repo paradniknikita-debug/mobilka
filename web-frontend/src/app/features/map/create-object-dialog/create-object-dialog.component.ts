@@ -22,6 +22,7 @@ import { Observable, forkJoin, of } from 'rxjs';
 import { map, startWith, switchMap, catchError } from 'rxjs/operators';
 import { EquipmentCatalogItem } from '../../../core/models/equipment-catalog.model';
 import { PoleEquipmentPanelComponent } from '../pole-equipment-panel/pole-equipment-panel.component';
+import { environment } from '../../../../environments/environment';
 
 export type ObjectType = 'substation' | 'pole' | 'equipment' | 'powerline';
 
@@ -31,6 +32,8 @@ export type ObjectType = 'substation' | 'pole' | 'equipment' | 'powerline';
   styleUrls: ['./create-object-dialog.component.scss']
 })
 export class CreateObjectDialogComponent implements OnInit {
+  readonly enableMapCoordinatePick = environment.enableMapCoordinatePick;
+
   objectTypeForm: FormGroup;
   poleForm: FormGroup;
   powerLineForm: FormGroup;
@@ -1044,6 +1047,11 @@ export class CreateObjectDialogComponent implements OnInit {
           setTimeout(() => {
             this.loadPole();
           }, 100);
+        } else if (this.data?.restoreForm) {
+          setTimeout(() => {
+            this.poleForm.patchValue(this.data.restoreForm);
+            this.cdr.detectChanges();
+          }, 150);
         }
 
         // Для карточки подстанции пересчитываем связи «подстанция ↔ линии/отпайки»
@@ -1273,6 +1281,9 @@ export class CreateObjectDialogComponent implements OnInit {
         this.poleCardCommentMessages = parseCardCommentMessages((pole as any).card_comment);
         this.poleAttachments = this.parseCardAttachments((pole as any).card_comment_attachment);
         this.isLoading = false;
+        if (this.data?.restoreForm) {
+          this.poleForm.patchValue(this.data.restoreForm);
+        }
         // В режиме редактирования показываем выбор направления и загружаем список отпаечных опор
         if (this.isEditMode && this.lineId) {
           this.showBranchChoice = true;
@@ -2090,6 +2101,20 @@ export class CreateObjectDialogComponent implements OnInit {
       }
     });
     return errors;
+  }
+
+  pickCoordinatesOnMap(): void {
+    if (!environment.enableMapCoordinatePick || this.selectedObjectType !== 'pole') {
+      return;
+    }
+    this.mapService.requestPoleCoordinatePick({
+      formSnapshot: this.poleForm.getRawValue() as Record<string, unknown>,
+      dialogData: { ...(this.data ?? {}) },
+      isEditMode: this.isEditMode,
+      poleId: this.poleId,
+      lineId: this.lineId,
+    });
+    this.dialogRef.close();
   }
 
   cancel(): void {

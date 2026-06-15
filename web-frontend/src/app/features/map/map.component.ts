@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
-import { MapService, MapData } from '../../core/services/map.service';
+import { MapService, MapData, PoleCoordinatePickPending } from '../../core/services/map.service';
 import { SidebarService } from '../../core/services/sidebar.service';
 import { GeoJSONCollection, GeoJSONFeature } from '../../core/models/geojson.model';
 import { environment } from '../../../environments/environment';
@@ -37,6 +37,10 @@ export class MapComponent implements OnInit, OnDestroy {
 
   /** Выбранная подстанция (чтобы не дёргать дерево при повторном клике). */
   private _selectedSubstationId: number | null = null;
+
+  /** Режим выбора координат опоры кликом по карте. */
+  coordinatePickMode = false;
+  coordinatePickPending: PoleCoordinatePickPending | null = null;
 
   map: L.Map | null = null;
   mapData: MapData | null = null;
@@ -240,6 +244,16 @@ export class MapComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.initMap();
     this.loadMapData();
+
+    this.mapService.poleCoordinatePickRequest$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((pending) => {
+        this.coordinatePickPending = pending;
+        this.coordinatePickMode = true;
+        this.snackBar.open('Кликните на карте для выбора координат опоры', 'Отмена', {
+          duration: 0,
+        }).onAction().subscribe(() => this.cancelCoordinatePick());
+      });
     
     // Подписываемся на события центрирования из sidebar
     this.mapService.centerOnFeature$
@@ -445,8 +459,72 @@ export class MapComponent implements OnInit, OnDestroy {
     // Обновляем зум в сервисе
     this.mapService.setCurrentZoom(this.currentZoom);
 
-    this.map.on('click', () => {
+    this.map.on('click', (e: L.LeafletMouseEvent) => {
+      if (this.coordinatePickMode && this.coordinatePickPending) {
+        const pending = this.coordinatePickPending;
+        this.coordinatePickMode = false;
+        this.coordinatePickPending = null;
+        this.snackBar.dismiss();
+        this.openPoleDialogAfterCoordinatePick(
+          e.latlng.lat,
+          e.latlng.lng,
+          pending,
+        );
+        return;
+      }
       this.mapService.clearSegmentSelection();
+    });
+  }
+
+  cancelCoordinatePick(): void {
+    const pending = this.coordinatePickPending;
+    this.coordinatePickMode = false;
+    this.coordinatePickPending = null;
+    this.snackBar.dismiss();
+    if (pending) {
+      this.openPoleDialogAfterCoordinatePick(null, null, pending);
+    }
+  }
+
+  private openPoleDialogAfterCoordinatePick(
+    lat: number | null,
+    lng: number | null,
+    pending: PoleCoordinatePickPending,
+  ): void {
+    const restoreForm = { ...pending.formSnapshot };
+    if (lat != null && lng != null) {
+      restoreForm['latitude'] = lat.toFixed(6);
+      restoreForm['longitude'] = lng.toFixed(6);
+    }
+    const data: Record<string, unknown> = {
+      ...pending.dialogData,
+      restoreForm,
+    };
+    if (pending.isEditMode) {
+      data['isEdit'] = true;
+      data['objectType'] = 'pole';
+      data['poleId'] = pending.poleId;
+      data['lineId'] = pending.lineId;
+    } else if (!data['defaultObjectType']) {
+      data['defaultObjectType'] = 'pole';
+    }
+    const dialogRef = this.dialog.open(CreateObjectDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      maxHeight: '90vh',
+      disableClose: false,
+      autoFocus: false,
+      restoreFocus: false,
+      panelClass: 'create-object-dialog-panel',
+      data,
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) {
+        setTimeout(() => {
+          this.loadMapData();
+          this.mapService.refreshData();
+        }, 400);
+      }
     });
   }
 

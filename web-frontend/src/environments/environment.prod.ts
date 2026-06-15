@@ -19,6 +19,8 @@ export const environment = {
       lat: 53.9045,
       lng: 27.5615
     }
-  }
+  },
+
+  enableMapCoordinatePick: false
 };
 

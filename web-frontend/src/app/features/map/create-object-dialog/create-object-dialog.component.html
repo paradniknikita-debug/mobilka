@@ -75,6 +75,11 @@
               <mat-error>{{ getFieldError('longitude') }}</mat-error>
             </mat-form-field>
           </div>
+          <div *ngIf="enableMapCoordinatePick" class="coord-pick-row">
+            <button mat-stroked-button type="button" color="primary" (click)="pickCoordinatesOnMap()">
+              Указать на карте
+            </button>
+          </div>
 
           <div class="row-2">
             <mat-form-field appearance="outline" class="half-width">
