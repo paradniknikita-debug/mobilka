@@ -244,7 +244,7 @@ jobs:
           if [ -n "${GHCR_PAT}" ]; then
             printf '%s' "${GHCR_PAT}" | $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && docker login ghcr.io -u $REPO_OWNER --password-stdin"
           fi
-          $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && export BACKEND_IMAGE='$BACKEND_IMAGE' && docker compose -f docker-compose.prod.yml pull backend nifi && docker compose -f docker-compose.prod.yml up -d && docker image prune -f"
+          $SSH_CMD "$TARGET" "cd $PATH_ON_SERVER && export BACKEND_IMAGE='$BACKEND_IMAGE' && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d --remove-orphans && docker image prune -f"
 
   summary:
     name: Summary
