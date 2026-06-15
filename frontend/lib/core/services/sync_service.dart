@@ -11,7 +11,8 @@ import 'package:path/path.dart' as p;
 
 import '../config/app_config.dart';
 import '../database/database.dart';
-import '../models/power_line.dart' show PoleCreate;
+import '../models/power_line.dart' as api_models show PoleCreate, Pole, Equipment;
+import '../utils/sync_server_reconcile.dart';
 import '../models/sync_state.dart';
 import 'api_service.dart';
 import 'attachment_reader.dart';
@@ -150,6 +151,7 @@ class SyncService extends StateNotifier<SyncState> {
       final lastSyncBeforeUpload = await _getLastSyncTime();
 
       await _flushPendingServerPatrolEnds();
+      await _reconcilePendingWithServer();
       // Сначала отправляем локальные сущности (в т.ч. ЛЭП), чтобы сессии обхода
       // с локальным line_id могли уйти в ЭТОМ же запуске синхронизации.
       final uploadResult = await _uploadLocalChanges();
@@ -224,6 +226,7 @@ class SyncService extends StateNotifier<SyncState> {
       }
 
       await _flushPendingServerPatrolEnds();
+      await _reconcilePendingWithServer();
       final uploadResult = await _uploadLocalChanges();
       await _uploadPatrolSessions();
       if (uploadResult != null) {
@@ -281,6 +284,7 @@ class SyncService extends StateNotifier<SyncState> {
       }
 
       await _flushPendingServerPatrolEnds();
+      await _reconcilePendingWithServer(scopeLineId: lineId);
       final uploadResult = await _uploadLocalChanges(scopeLineId: lineId);
       await _uploadPatrolSessions(scopeLineId: lineId);
       if (uploadResult != null) {
@@ -357,7 +361,7 @@ class SyncService extends StateNotifier<SyncState> {
       final branchType = pole.branchType ??
           (pole.poleNumber.contains('/') || tapPoleId != null ? 'tap' : 'main');
 
-      final create = PoleCreate(
+      final create = api_models.PoleCreate(
         poleNumber: normalizePoleNumber(pole.poleNumber),
         xPosition: pole.xPosition ?? 0.0,
         yPosition: pole.yPosition ?? 0.0,
@@ -431,6 +435,15 @@ class SyncService extends StateNotifier<SyncState> {
         );
         poleMapping[localId] = created.id;
         _saveSyncPoleMapping({localId.toString(): created.id});
+      } on DioException catch (e) {
+        final status = e.response?.statusCode;
+        if (status == 400 || status == 409 || status == 422) {
+          final ok = await _tryReconcilePoleAfterCreateFailure(pole, lineId);
+          if (ok) continue;
+        }
+        if (kDebugMode) {
+          debugPrint('sync: createPole offline pole ${pole.id} failed: $e');
+        }
       } catch (e, st) {
         if (kDebugMode) {
           debugPrint('sync: createPole offline pole ${pole.id} failed: $e\n$st');
@@ -440,11 +453,293 @@ class SyncService extends StateNotifier<SyncState> {
   }
 
   static String _shortSyncError(String dioMessage) {
-    if (dioMessage.contains('400')) return 'Сервер отклонил запрос (400). Проверьте данные или обновите приложение.';
+    if (dioMessage.contains('400')) {
+      return 'Сервер отклонил запрос (400). Возможно, данные уже есть на сервере — нажмите «Взять с сервера».';
+    }
     if (dioMessage.contains('401')) return 'Сессия истекла. Войдите снова.';
     if (dioMessage.contains('404')) return 'Сервер не найден. Проверьте адрес и сеть.';
+    if (dioMessage.contains('409') || dioMessage.contains('422')) {
+      return 'Конфликт с сервером: изменения уже применены в вебе. Нажмите «Взять с сервера».';
+    }
     if (dioMessage.contains('500')) return 'Ошибка на сервере. Попробуйте позже.';
+    if (dioMessage.contains('502') || dioMessage.contains('503')) {
+      return 'Сервер временно недоступен. Попробуйте позже.';
+    }
     return 'Ошибка сети или сервера. Проверьте подключение.';
+  }
+
+  /// Сбросить локальную очередь по ЛЭП и подтянуть актуальные данные с сервера.
+  Future<void> pullServerVersionForLine(int lineId) async {
+    state = const SyncState.syncing();
+    try {
+      final connectivityResult = await _connectivity.checkConnectivity();
+      if (connectivityResult == ConnectivityResult.none) {
+        state = const SyncState.error('Нет подключения к интернету');
+        return;
+      }
+
+      await _reconcilePendingWithServer(scopeLineId: lineId);
+      final serverLineId = await _resolveServerLineId(lineId);
+      if (serverLineId == null || serverLineId <= 0) {
+        state = const SyncState.error('ЛЭП не найдена на сервере');
+        return;
+      }
+
+      await _discardLocalPendingOnLine(lineId, serverLineId);
+      await _importLineFromServer(serverLineId);
+      state = const SyncState.completed();
+    } catch (e) {
+      final msg = e.toString();
+      final short = msg.contains('DioException') && msg.contains('status code')
+          ? _shortSyncError(msg)
+          : msg;
+      state = SyncState.error('Не удалось загрузить с сервера: $short');
+    }
+  }
+
+  /// Сопоставить локальные pending-записи с уже существующими на сервере (например после правок в вебе).
+  Future<void> _reconcilePendingWithServer({int? scopeLineId}) async {
+    final lineIds = await _lineIdsWithPending(scopeLineId: scopeLineId);
+    for (final lineId in lineIds) {
+      await _reconcileOneLineWithServer(lineId);
+    }
+  }
+
+  Future<Set<int>> _lineIdsWithPending({int? scopeLineId}) async {
+    if (scopeLineId != null) return {scopeLineId};
+    final ids = <int>{};
+    for (final pl in await _database.getPowerLinesNeedingSync()) {
+      ids.add(pl.id);
+    }
+    for (final p in await _database.getPolesNeedingSync()) {
+      ids.add(p.lineId);
+    }
+    for (final eq in await _database.getEquipmentNeedingSync()) {
+      final pole = await _database.getPole(eq.poleId);
+      if (pole != null) ids.add(pole.lineId);
+    }
+    return ids;
+  }
+
+  Future<int?> _resolveServerLineId(int lineId) async {
+    if (lineId > 0) {
+      try {
+        final serverLines = await _apiService.getPowerLines();
+        if (serverLines.any((l) => l.id == lineId)) return lineId;
+      } catch (_) {}
+      return lineId;
+    }
+    final mapped = _getSyncPowerLineMapping()[lineId];
+    if (mapped != null && mapped > 0) return mapped;
+
+    final localPl = await _database.getPowerLine(lineId);
+    if (localPl == null) return null;
+    final name = localPl.name.trim().toLowerCase();
+    if (name.isEmpty) return null;
+    try {
+      final serverLines = await _apiService.getPowerLines();
+      for (final l in serverLines) {
+        if (l.name.trim().toLowerCase() == name) {
+          _saveSyncPowerLineMapping({lineId.toString(): l.id});
+          return l.id;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _migrateLocalLineToServerId(int localLineId, int serverLineId) async {
+    if (localLineId == serverLineId) {
+      if (localLineId > 0) await _database.setPowerLineNeedsSync(localLineId, false);
+      return;
+    }
+    if (localLineId >= 0) {
+      await _database.setPowerLineNeedsSync(localLineId, false);
+      return;
+    }
+    final pl = await _database.getPowerLine(localLineId);
+    if (pl == null) return;
+    await _database.updatePolesLineId(localLineId, serverLineId);
+    await _database.updatePatrolSessionsPowerLineId(localLineId, serverLineId);
+    await _database.insertPowerLineOrReplace(
+      PowerLinesCompanion.insert(
+        id: drift.Value(serverLineId),
+        name: pl.name,
+        code: pl.name,
+        mrid: pl.mrid != null && pl.mrid!.trim().isNotEmpty
+            ? drift.Value(pl.mrid!)
+            : const drift.Value.absent(),
+        voltageLevel: pl.voltageLevel,
+        length: pl.length != null ? drift.Value(pl.length!) : const drift.Value.absent(),
+        branchId: pl.branchId,
+        createdBy: pl.createdBy,
+        status: pl.status,
+        description: drift.Value(pl.description),
+        createdAt: pl.createdAt,
+        updatedAt: drift.Value(pl.updatedAt),
+        isLocal: const drift.Value(false),
+        needsSync: const drift.Value(false),
+      ),
+    );
+    await _database.deletePowerLine(localLineId);
+    _saveSyncPowerLineMapping({localLineId.toString(): serverLineId});
+    if (_prefs != null) {
+      final sessionLineId = _prefs!.getInt(AppConfig.activeSessionPowerLineIdKey);
+      if (sessionLineId == localLineId) {
+        await _prefs!.setInt(AppConfig.activeSessionPowerLineIdKey, serverLineId);
+      }
+    }
+  }
+
+  Future<void> _reconcileOneLineWithServer(int scopeLineId) async {
+    final serverLineId = await _resolveServerLineId(scopeLineId);
+    if (serverLineId == null || serverLineId <= 0) return;
+
+    final localPl = await _database.getPowerLine(scopeLineId);
+    if (localPl != null && (localPl.needsSync || scopeLineId < 0)) {
+      await _migrateLocalLineToServerId(scopeLineId, serverLineId);
+    } else if (scopeLineId > 0) {
+      await _database.setPowerLineNeedsSync(scopeLineId, false);
+    }
+
+    List<api_models.Pole> serverPoles;
+    try {
+      serverPoles = await _apiService.getPoles(serverLineId);
+    } catch (_) {
+      return;
+    }
+
+    final localPoleIds = <int>{};
+    final localPoles = <Pole>[];
+    for (final lineKey in {scopeLineId, serverLineId}) {
+      final rows = await _database.getPolesByLine(lineKey);
+      for (final p in rows) {
+        if (localPoleIds.add(p.id)) localPoles.add(p);
+      }
+    }
+
+    var poleMapping = Map<int, int>.from(_getSyncPoleMapping());
+    for (final local in localPoles) {
+      if (!local.needsSync && local.id >= 0) continue;
+      final match = findServerPoleMatch(
+        localMrid: local.mrid,
+        localPoleNumber: local.poleNumber,
+        serverPoles: serverPoles,
+      );
+      if (match == null) continue;
+      if (local.id < 0) {
+        await _database.reassignPoleLocalToServerId(local.id, match.id);
+        poleMapping[local.id] = match.id;
+        _saveSyncPoleMapping({local.id.toString(): match.id});
+      } else if (local.id == match.id) {
+        await _database.setPoleNeedsSync(local.id, false);
+      }
+    }
+
+    final serverEqByPole = <int, List<api_models.Equipment>>{};
+    for (final sp in serverPoles) {
+      try {
+        serverEqByPole[sp.id] = await _apiService.getPoleEquipment(sp.id);
+      } catch (_) {
+        serverEqByPole[sp.id] = const [];
+      }
+    }
+
+    poleMapping = Map<int, int>.from(_getSyncPoleMapping());
+    final pendingEq = await _equipmentNeedingSyncForLine(scopeLineId);
+    for (final localEq in pendingEq) {
+      var poleId = localEq.poleId;
+      if (poleId < 0) poleId = poleMapping[poleId] ?? poleId;
+      if (poleId <= 0) continue;
+      final serverList = serverEqByPole[poleId] ?? const [];
+      final match = findServerEquipmentMatch(local: localEq, serverList: serverList);
+      if (match == null) continue;
+      if (localEq.id < 0) {
+        await _database.reassignEquipmentLocalToServerId(localEq.id, match.id);
+      } else {
+        await _database.setEquipmentNeedsSync(localEq.id, false);
+      }
+    }
+  }
+
+  Future<List<EquipmentData>> _equipmentNeedingSyncForLine(int scopeLineId) async {
+    final out = <EquipmentData>[];
+    for (final item in await _database.getEquipmentNeedingSync()) {
+      final pole = await _database.getPole(item.poleId);
+      if (pole != null && _lineMatchesScope(pole.lineId, scopeLineId)) {
+        out.add(item);
+      }
+    }
+    return out;
+  }
+
+  Future<void> _discardLocalPendingOnLine(int scopeLineId, int serverLineId) async {
+    for (final lineKey in {scopeLineId, serverLineId}) {
+      for (final p in await _database.getPolesByLine(lineKey)) {
+        if (p.id < 0) {
+          for (final eq in await _database.getEquipmentByPole(p.id)) {
+            await _database.deleteEquipment(eq.id);
+          }
+          await _database.deletePole(p.id);
+        } else {
+          await _database.setPoleNeedsSync(p.id, false);
+        }
+      }
+    }
+
+    for (final eq in await _equipmentNeedingSyncForLine(scopeLineId)) {
+      if (eq.id < 0) {
+        await _database.deleteEquipment(eq.id);
+      } else {
+        await _database.setEquipmentNeedsSync(eq.id, false);
+      }
+    }
+
+    if (scopeLineId > 0) {
+      await _database.setPowerLineNeedsSync(scopeLineId, false);
+    }
+    if (scopeLineId < 0 && scopeLineId != serverLineId) {
+      final stillThere = await _database.getPowerLine(scopeLineId);
+      if (stillThere != null) await _database.deletePowerLine(scopeLineId);
+    }
+  }
+
+  Future<void> _importLineFromServer(int serverLineId) async {
+    final serverPoles = await _apiService.getPoles(serverLineId);
+    for (final pole in serverPoles) {
+      await _processPoleRecord('update', pole.toJson());
+    }
+    for (final pole in serverPoles) {
+      final eqList = await _apiService.getPoleEquipment(pole.id);
+      for (final eq in eqList) {
+        await _processEquipmentRecord('update', eq.toJson());
+      }
+    }
+  }
+
+  Future<bool> _tryReconcilePoleAfterCreateFailure(
+    Pole localPole,
+    int serverLineId,
+  ) async {
+    List<api_models.Pole> serverPoles;
+    try {
+      serverPoles = await _apiService.getPoles(serverLineId);
+    } catch (_) {
+      return false;
+    }
+    final match = findServerPoleMatch(
+      localMrid: localPole.mrid,
+      localPoleNumber: localPole.poleNumber,
+      serverPoles: serverPoles,
+    );
+    if (match == null) return false;
+    if (localPole.id < 0) {
+      await _database.reassignPoleLocalToServerId(localPole.id, match.id);
+      _saveSyncPoleMapping({localPole.id.toString(): match.id});
+    } else {
+      await _database.setPoleNeedsSync(localPole.id, false);
+    }
+    return true;
   }
 
   /// Удаляет из локальной БД ЛЭП, которых уже нет на сервере (например, после пересоздания БД).
@@ -977,7 +1272,7 @@ class SyncService extends StateNotifier<SyncState> {
           }
         }
         final pole = item.pole;
-        final poleCreate = PoleCreate(
+        final poleCreate = api_models.PoleCreate(
           poleNumber: pole.poleNumber,
           xPosition: pole.xPosition ?? 0.0,
           yPosition: pole.yPosition ?? 0.0,

@@ -14,6 +14,8 @@ import '../../../../core/models/power_line.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
+import '../../../../core/models/patrol_session.dart' as api_patrol;
+import '../../../../core/services/patrol_session_loader.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../home/presentation/pages/home_page.dart'
@@ -29,7 +31,10 @@ class CreateSessionPage extends ConsumerStatefulWidget {
 class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
   List<drift_db.PowerLine> _powerLines = [];
   bool _loadingLines = true;
+  String? _linesLoadHint;
   drift_db.PowerLine? _selectedLine;
+  List<api_patrol.PatrolSession> _linePatrols = [];
+  bool _loadingLinePatrols = false;
   final _noteController = TextEditingController();
 
   double? _latitude;
@@ -65,7 +70,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
   Future<void> _loadPowerLines() async {
     final db = ref.read(drift_db.databaseProvider);
     final apiService = ref.read(apiServiceProvider);
-    // Подгружаем ЛЭП с сервера и сливаем с локальными (дедупликация по mrid/имени), чтобы можно было начать обход по существующей линии
+    String? hint;
     try {
       final serverLines = await apiService.getPowerLines();
       for (final pl in serverLines) {
@@ -95,15 +100,49 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
         ));
       }
     } catch (_) {
-      // Офлайн или ошибка API — используем только локальные данные
+      hint = 'Сервер недоступен — показаны только локальные линии. Создание на сервере возможно после восстановления связи.';
     }
     final list = await db.getAllPowerLines();
     if (mounted) {
       setState(() {
         _powerLines = list;
         _loadingLines = false;
+        _linesLoadHint = hint;
+      });
+      if (_selectedLine != null) {
+        await _loadPatrolsForLine(_selectedLine!.id);
+      }
+    }
+  }
+
+  Future<void> _loadPatrolsForLine(int lineId) async {
+    setState(() => _loadingLinePatrols = true);
+    final auth = ref.read(authStateProvider);
+    if (auth is! AuthStateAuthenticated) {
+      if (mounted) setState(() => _loadingLinePatrols = false);
+      return;
+    }
+    final db = ref.read(drift_db.databaseProvider);
+    final api = ref.read(apiServiceProvider);
+    final isAdmin = auth.user.role == 'admin';
+    final sessions = await loadPatrolSessionsForLine(
+      db: db,
+      apiService: api,
+      lineId: lineId,
+      userId: auth.user.id,
+      isAdmin: isAdmin,
+    );
+    if (mounted) {
+      setState(() {
+        _linePatrols = sessions;
+        _loadingLinePatrols = false;
       });
     }
+  }
+
+  void _onLineSelected(drift_db.PowerLine pl) {
+    setState(() => _selectedLine = pl);
+    _loadPatrolsForLine(pl.id);
   }
 
   Future<void> _captureGps() async {
@@ -405,10 +444,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                 if (!ctx.mounted) return;
                 Navigator.of(ctx).pop(created.id);
               } on DioException catch (e) {
-                final isOffline = e.type == DioExceptionType.connectionError ||
-                    e.type == DioExceptionType.connectionTimeout ||
-                    e.type == DioExceptionType.unknown;
-                if (!isOffline) {
+                if (!isServerUnavailableDio(e)) {
                   String message;
                   final data = e.response?.data;
                   if (data is Map && data['detail'] != null) {
@@ -485,12 +521,14 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
           SnackBar(
             content: Text(
               newLine != null
-                  ? (newLine.mrid != null && newLine.mrid!.trim().isNotEmpty
-                      ? 'Линия «${newLine.name}» создана. UID: ${newLine.mrid}'
-                      : 'Линия «${newLine.name}» создана и выбрана для обхода')
+                  ? (newLine.id < 0
+                      ? 'Линия «${newLine.name}» сохранена на устройстве (сервер недоступен). Синхронизируется позже.'
+                      : (newLine.mrid != null && newLine.mrid!.trim().isNotEmpty
+                          ? 'Линия «${newLine.name}» создана. UID: ${newLine.mrid}'
+                          : 'Линия «${newLine.name}» создана и выбрана для обхода'))
                   : 'Линия создана',
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: newLine != null && newLine.id < 0 ? Colors.orange : Colors.green,
           ),
         );
       }
@@ -625,6 +663,30 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                     onRetry: _captureGps,
                     onManualEdit: _showManualCoordinatesDialog,
                   ),
+                  if (_linesLoadHint != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: PatrolColors.surfaceCard,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: PatrolColors.statusPending.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.cloud_off, size: 18, color: PatrolColors.statusPending),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _linesLoadHint!,
+                              style: const TextStyle(color: PatrolColors.textPrimary, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   const Text(
                     'ЛИНИЯ ИЛИ ВЛ',
@@ -667,8 +729,7 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                       : _LineSelector(
                           powerLines: _powerLines,
                           selected: _selectedLine,
-                          onSelected: (pl) =>
-                              setState(() => _selectedLine = pl),
+                          onSelected: _onLineSelected,
                         ),
                   if (_powerLines.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -679,6 +740,22 @@ class _CreateSessionPageState extends ConsumerState<CreateSessionPage> {
                         'Создать новую линию',
                         style: TextStyle(color: PatrolColors.accent),
                       ),
+                    ),
+                  ],
+                  if (_selectedLine != null) ...[
+                    const SizedBox(height: 20),
+                    const Text(
+                      'ОБХОДЫ ПО ЭТОЙ ЛИНИИ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: PatrolColors.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _LinePatrolsBlock(
+                      loading: _loadingLinePatrols,
+                      sessions: _linePatrols,
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -913,6 +990,97 @@ class _LinePickerSheetState extends State<_LinePickerSheet> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LinePatrolsBlock extends StatelessWidget {
+  const _LinePatrolsBlock({
+    required this.loading,
+    required this.sessions,
+  });
+
+  final bool loading;
+  final List<api_patrol.PatrolSession> sessions;
+
+  String _formatDt(DateTime dt) {
+    final d = dt.toLocal();
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mi = d.minute.toString().padLeft(2, '0');
+    return '$dd.$mm.${d.year} $hh:$mi';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2, color: PatrolColors.accent),
+          ),
+        ),
+      );
+    }
+    if (sessions.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: PatrolColors.surfaceCard,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          'Нет сохранённых обходов по этой линии (или сервер недоступен).',
+          style: TextStyle(color: PatrolColors.textSecondary, fontSize: 13),
+        ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: PatrolColors.surfaceCard,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < sessions.length && i < 8; i++) ...[
+            if (i > 0) const Divider(height: 1, color: PatrolColors.surface),
+            ListTile(
+              dense: true,
+              leading: Icon(
+                sessions[i].isCompleted ? Icons.check_circle_outline : Icons.directions_walk,
+                color: sessions[i].isCompleted ? PatrolColors.statusSynced : PatrolColors.accent,
+                size: 20,
+              ),
+              title: Text(
+                _formatDt(sessions[i].startedAt),
+                style: const TextStyle(color: PatrolColors.textPrimary, fontSize: 14),
+              ),
+              subtitle: Text(
+                sessions[i].isCompleted
+                    ? (sessions[i].note?.trim().isNotEmpty == true
+                        ? sessions[i].note!.trim()
+                        : 'Завершён')
+                    : 'В процессе',
+                style: const TextStyle(color: PatrolColors.textSecondary, fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          if (sessions.length > 8)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                '… и ещё ${sessions.length - 8}',
+                style: const TextStyle(color: PatrolColors.textSecondary, fontSize: 12),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

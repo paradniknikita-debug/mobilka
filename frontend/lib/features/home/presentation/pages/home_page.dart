@@ -13,6 +13,7 @@ import '../../../../core/services/initial_bootstrap_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/patrol_session.dart';
+import '../../../../core/services/patrol_session_loader.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../widgets/equipment_catalog_update_dialog.dart';
 
@@ -174,47 +175,30 @@ final recentPatrolsProvider = FutureProvider<List<RecentPatrolItem>>((ref) async
     final api = ref.read(apiServiceProvider);
     final db = ref.read(drift_db.databaseProvider);
     final userId = authState.user.id;
+    final isAdmin = authState.user.role == 'admin';
 
-    List<PatrolSession> apiSessions = [];
-    try {
-      apiSessions = await api.getPatrolSessions(userId, null, 10, 0);
-    } catch (_) {
-      // Офлайн или ошибка — только локальные
-    }
+    final merged = await loadRecentPatrolSessions(
+      db: db,
+      apiService: api,
+      userId: userId,
+      isAdmin: isAdmin,
+      limit: 10,
+    );
 
     final localRecent = await db.getRecentPatrolSessionsFromDb(15);
-    final localPending = localRecent.where(patrolSessionRowNeedsSyncUpload).toList();
-    final apiIds = apiSessions.map((s) => s.id).toSet();
+    final pendingIds = localRecent
+        .where(patrolSessionRowNeedsSyncUpload)
+        .map((r) => r.serverId ?? -r.id)
+        .toSet();
 
-    final List<RecentPatrolItem> items = [];
-    for (final row in apiSessions.isEmpty ? localRecent : localPending) {
-      if (row.userId != null && row.userId != userId) continue;
-      final pl = await db.getPowerLine(row.lineId);
-      if (pl == null) continue;
-      if (apiSessions.isNotEmpty && apiIds.contains(row.serverId ?? -row.id)) continue;
-      final powerLineDisplayName = pl.mrid != null && pl.mrid!.trim().isNotEmpty
-          ? '${pl.name} (${pl.mrid})'
-          : pl.name;
-      items.add(RecentPatrolItem(
-        session: PatrolSession(
-          id: row.serverId ?? -row.id,
-          userId: row.userId ?? userId,
-          lineId: row.lineId,
-          note: row.note,
-          startedAt: row.startedAt,
-          endedAt: row.endedAt,
-          userName: '',
-          powerLineName: powerLineDisplayName,
-        ),
-        isPendingSync: patrolSessionRowNeedsSyncUpload(row),
-      ));
-    }
-
-    for (final s in apiSessions) {
-      items.add(RecentPatrolItem(session: s, isPendingSync: false));
-    }
-    items.sort((a, b) => b.session.startedAt.compareTo(a.session.startedAt));
-    return items.take(10).toList();
+    return merged
+        .map(
+          (s) => RecentPatrolItem(
+            session: s,
+            isPendingSync: pendingIds.contains(s.id),
+          ),
+        )
+        .toList();
   } catch (_) {
     return [];
   }

@@ -750,6 +750,51 @@ class AppDatabase extends _$AppDatabase {
             ..limit(limit))
           .get();
 
+  /// Все кэшированные обходы по ЛЭП (в т.ч. загруженные с сервера).
+  Future<List<PatrolSession>> getPatrolSessionsByLineId(int lineId) =>
+      (select(patrolSessions)
+            ..where((tbl) => tbl.lineId.equals(lineId))
+            ..orderBy([(t) => OrderingTerm.desc(t.startedAt)]))
+          .get();
+
+  /// Сохранить или обновить обход с сервера в локальной БД (для офлайн-просмотра).
+  Future<void> upsertPatrolSessionFromServer({
+    required int serverId,
+    required int lineId,
+    required int userId,
+    required DateTime startedAt,
+    DateTime? endedAt,
+    String? note,
+  }) async {
+    final existing = await (select(patrolSessions)
+          ..where((tbl) => tbl.serverId.equals(serverId)))
+        .getSingleOrNull();
+    if (existing != null) {
+      await (update(patrolSessions)..where((tbl) => tbl.id.equals(existing.id))).write(
+        PatrolSessionsCompanion(
+          lineId: Value(lineId),
+          note: Value(note),
+          startedAt: Value(startedAt),
+          endedAt: Value(endedAt),
+          userId: Value(userId),
+          syncStatus: const Value('synced'),
+        ),
+      );
+      return;
+    }
+    await into(patrolSessions).insert(
+      PatrolSessionsCompanion.insert(
+        serverId: Value(serverId),
+        lineId: lineId,
+        note: Value(note),
+        startedAt: startedAt,
+        endedAt: Value(endedAt),
+        userId: Value(userId),
+        syncStatus: const Value('synced'),
+      ),
+    );
+  }
+
   Future<PatrolSession?> getPatrolSession(int id) =>
       (select(patrolSessions)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
 

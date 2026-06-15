@@ -255,6 +255,67 @@ class _LineGroupCard extends ConsumerWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: isSyncing
+                    ? null
+                    : () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: PatrolColors.surfaceCard,
+                            title: const Text(
+                              'Взять с сервера?',
+                              style: TextStyle(color: PatrolColors.textPrimary),
+                            ),
+                            content: Text(
+                              'Локальная очередь по «${group.lineName}» будет сброшена, '
+                              'данные подтянутся с сервера (например, если вы уже сохранили изменения в вебе).',
+                              style: const TextStyle(color: PatrolColors.textSecondary, fontSize: 14),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Отмена'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Взять с сервера'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true || !context.mounted) return;
+                        await ref.read(syncStateProvider.notifier).pullServerVersionForLine(group.lineId);
+                        ref.invalidate(pendingSyncQueueProvider);
+                        ref.invalidate(hasPendingSyncProvider);
+                        if (!context.mounted) return;
+                        final state = ref.read(syncStateProvider);
+                        state.when(
+                          idle: () {},
+                          syncing: () {},
+                          completed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('«${group.lineName}» обновлена с сервера'),
+                                backgroundColor: PatrolColors.surfaceCard,
+                              ),
+                            );
+                          },
+                          error: (msg) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(msg), backgroundColor: PatrolColors.surfaceCard),
+                            );
+                          },
+                        );
+                      },
+                icon: const Icon(Icons.cloud_download, size: 18),
+                label: const Text('Взять с сервера'),
+                style: TextButton.styleFrom(foregroundColor: PatrolColors.textSecondary),
+              ),
+            ),
           ],
         ),
       ),

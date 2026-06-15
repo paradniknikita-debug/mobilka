@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/patrol_session.dart';
 import '../../../../core/services/api_service.dart';
+import '../../../../core/services/patrol_session_loader.dart';
 import '../../../../core/services/auth_service.dart';
 
 /// Провайдер списка сессий обхода: с сервера + локальные (офлайн и ожидающие синхронизации).
@@ -13,49 +14,19 @@ import '../../../../core/services/auth_service.dart';
 final patrolSessionsProvider = FutureProvider<List<PatrolSession>>((ref) async {
   try {
     final authState = ref.watch(authStateProvider);
+    if (authState is! AuthStateAuthenticated) return [];
     final api = ref.read(apiServiceProvider);
     final db = ref.read(drift_db.databaseProvider);
-    final isAdmin = authState is AuthStateAuthenticated && authState.user.role == 'admin';
-    final userId = authState is AuthStateAuthenticated ? authState.user.id : 0;
+    final isAdmin = authState.user.role == 'admin';
+    final userId = authState.user.id;
 
-    List<PatrolSession> apiSessions = [];
-    try {
-      apiSessions = await api.getPatrolSessions(
-        isAdmin ? null : userId,
-        null,
-        200,
-        0,
-      );
-    } catch (_) {
-      // Офлайн или ошибка — будем показывать только локальные
-    }
-
-    final localRows = await db.getRecentPatrolSessionsFromDb(300);
-    final apiIds = apiSessions.map((s) => s.id).toSet();
-
-    final List<PatrolSession> result = List<PatrolSession>.from(apiSessions);
-    for (final row in localRows) {
-      if (!isAdmin && row.userId != null && row.userId != userId) continue;
-      final displayId = row.serverId ?? -row.id;
-      if (apiIds.contains(displayId)) continue;
-      final pl = await db.getPowerLine(row.lineId);
-      if (pl == null) continue;
-      final powerLineDisplayName = pl.mrid != null && pl.mrid!.trim().isNotEmpty
-          ? '${pl.name} (${pl.mrid})'
-          : pl.name;
-      result.add(PatrolSession(
-        id: displayId,
-        userId: row.userId ?? userId,
-        lineId: row.lineId,
-        note: row.note,
-        startedAt: row.startedAt,
-        endedAt: row.endedAt,
-        userName: '',
-        powerLineName: powerLineDisplayName,
-      ));
-    }
-    result.sort((a, b) => b.startedAt.compareTo(a.startedAt));
-    return result;
+    return loadRecentPatrolSessions(
+      db: db,
+      apiService: api,
+      userId: userId,
+      isAdmin: isAdmin,
+      limit: 200,
+    );
   } catch (_) {
     return [];
   }
