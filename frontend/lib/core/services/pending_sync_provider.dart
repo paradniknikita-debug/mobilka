@@ -27,5 +27,11 @@ final hasPendingSyncProvider = FutureProvider<bool>((ref) async {
   final poles = await db.getPolesNeedingSync();
   if (poles.isNotEmpty) return true;
   final eq = await db.getEquipmentNeedingSync();
-  return eq.isNotEmpty;
+  if (eq.isNotEmpty) return true;
+  final plDel = prefs.getStringList(AppConfig.pendingDeletePowerLineIdsKey) ?? [];
+  if (plDel.isNotEmpty) return true;
+  final poleDel = prefs.getStringList(AppConfig.pendingDeletePoleIdsKey) ?? [];
+  if (poleDel.isNotEmpty) return true;
+  final eqDel = prefs.getStringList(AppConfig.pendingDeleteEquipmentIdsKey) ?? [];
+  return eqDel.isNotEmpty;
 });

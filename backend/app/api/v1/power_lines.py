@@ -47,7 +47,26 @@ from app.schemas.cim_line_structure import (
     TerminalResponse,
 )
 
+from app.core.pole_sequence_slots import assign_client_sequence_or_auto
+
 router = APIRouter()
+
+
+async def _fetch_pole_for_response(db: AsyncSession, pole_id: int) -> Pole:
+    result = await db.execute(
+        select(Pole)
+        .options(
+            selectinload(Pole.connectivity_nodes),
+            selectinload(Pole.position_points),
+            selectinload(Pole.location).selectinload(Location.position_points),
+            selectinload(Pole.line),
+        )
+        .where(Pole.id == pole_id)
+    )
+    db_pole = result.scalar_one()
+    _fill_pole_coordinates(db_pole)
+    fill_pole_coordinates(db_pole)
+    return db_pole
 
 
 async def _validate_line_voltage_consistency(db: AsyncSession, line_id: int, line_kv: float) -> None:
@@ -832,16 +851,14 @@ async def create_pole(
             detail="Power line not found"
         )
     
-    # Проверка уникальности mrid, если он передан
+    # Идемпотентность mobile sync: повтор upload с тем же mrid не создаёт дубль.
     if pole_data.mrid:
-        existing_pole = await db.execute(
+        existing_result = await db.execute(
             select(Pole).where(Pole.mrid == pole_data.mrid)
         )
-        if existing_pole.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Pole with mrid '{pole_data.mrid}' already exists"
-            )
+        existing_pole = existing_result.scalar_one_or_none()
+        if existing_pole:
+            return await _fetch_pole_for_response(db, existing_pole.id)
     
     # CIM: координаты только в PositionPoint, не в таблице pole
     pole_dict = pole_data.dict(exclude={'mrid', 'is_tap', 'x_position', 'y_position', 'id'})
@@ -909,55 +926,14 @@ async def create_pole(
         db.add(db_pole)
         await db.flush()  # Получаем ID опоры
 
-        # Порядок опоры: если не передан — для отпайки считаем в рамках ветки (tap_branch_index) или новую ветку (start_new_tap)
-        if db_pole.sequence_number is None:
-            tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
-            if tap_pole_id_val is not None:
-                from sqlalchemy import func as sql_func
-                start_new_tap = getattr(pole_data, "start_new_tap", False)
-                tap_branch_from_request = getattr(pole_data, "tap_branch_index", None)
-                if start_new_tap:
-                    max_branch = await db.execute(
-                        select(sql_func.coalesce(sql_func.max(Pole.tap_branch_index), 0)).where(
-                            Pole.line_id == power_line_id, Pole.tap_pole_id == tap_pole_id_val
-                        )
-                    )
-                    max_branch_val = (max_branch.scalar() or 0)
-                    db_pole.tap_branch_index = max_branch_val + 1
-                    db_pole.sequence_number = 1
-                else:
-                    if tap_branch_from_request is not None:
-                        db_pole.tap_branch_index = tap_branch_from_request
-                    else:
-                        max_branch = await db.execute(
-                            select(sql_func.coalesce(sql_func.max(Pole.tap_branch_index), 0)).where(
-                                Pole.line_id == power_line_id, Pole.tap_pole_id == tap_pole_id_val
-                            )
-                        )
-                        max_branch_val = (max_branch.scalar() or 0)
-                        db_pole.tap_branch_index = max_branch_val if max_branch_val > 0 else 1
-                    # Макс sequence в этой ветке (для обратной совместимости: tap_branch_index NULL считаем как ветка 1)
-                    max_seq_q = select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(
-                        Pole.line_id == power_line_id,
-                        Pole.tap_pole_id == tap_pole_id_val,
-                    )
-                    if db_pole.tap_branch_index == 1:
-                        max_seq_q = max_seq_q.where(
-                            (Pole.tap_branch_index == 1) | (Pole.tap_branch_index.is_(None))
-                        )
-                    else:
-                        max_seq_q = max_seq_q.where(Pole.tap_branch_index == db_pole.tap_branch_index)
-                    max_seq = await db.execute(max_seq_q)
-                    db_pole.sequence_number = (max_seq.scalar() or 0) + 1
-            else:
-                from sqlalchemy import func as sql_func
-                max_seq = await db.execute(
-                    select(sql_func.coalesce(sql_func.max(Pole.sequence_number), 0)).where(
-                        Pole.line_id == power_line_id, Pole.tap_pole_id.is_(None)
-                    )
-                )
-                db_pole.sequence_number = (max_seq.scalar() or 0) + 1
-            await db.flush()
+        await assign_client_sequence_or_auto(
+            db,
+            db_pole,
+            power_line_id,
+            client_sequence=pole_data.sequence_number,
+            start_new_tap=getattr(pole_data, "start_new_tap", False),
+            tap_branch_from_request=getattr(pole_data, "tap_branch_index", None),
+        )
 
         # CIM: координаты только в PositionPoint
         if lon_val is not None and lat_val is not None:
@@ -1026,21 +1002,56 @@ async def create_pole(
         raise
     
     # Загружаем опору с relationships для корректной сериализации ответа
-    result = await db.execute(
-        select(Pole)
-        .options(
-            selectinload(Pole.connectivity_nodes),
-            selectinload(Pole.position_points),
-            selectinload(Pole.location).selectinload(Location.position_points),
-            selectinload(Pole.line)
+    return await _fetch_pole_for_response(db, db_pole.id)
+
+@router.get("/{power_line_id}/edit-hint")
+async def power_line_edit_hint(
+    power_line_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Предупреждение о параллельном редактировании (не блокирует доступ)."""
+    from datetime import datetime, timedelta, timezone
+
+    power_line = await db.get(PowerLine, power_line_id)
+    if not power_line:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Power line not found")
+
+    since = datetime.now(timezone.utc) - timedelta(minutes=30)
+    pole_ids_sq = select(Pole.id).where(Pole.line_id == power_line_id)
+    cl_result = await db.execute(
+        select(ChangeLog.user_id, ChangeLog.source, ChangeLog.created_at)
+        .where(
+            ChangeLog.entity_type == "pole",
+            ChangeLog.entity_id.in_(pole_ids_sq),
+            ChangeLog.created_at >= since,
+            ChangeLog.user_id.is_not(None),
+            ChangeLog.user_id != current_user.id,
         )
-        .where(Pole.id == db_pole.id)
+        .order_by(ChangeLog.created_at.desc())
+        .limit(10)
     )
-    db_pole = result.scalar_one()
-    # Для совместимости со схемой и GeoJSON: гарантируем числовые координаты x_position/y_position
-    _fill_pole_coordinates(db_pole)
-    fill_pole_coordinates(db_pole)
-    return db_pole
+    editors = []
+    seen = set()
+    for user_id, source, created_at in cl_result.all():
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        editors.append(
+            {
+                "user_id": user_id,
+                "source": source,
+                "last_edit_at": created_at.isoformat() if created_at else None,
+            }
+        )
+    warn = len(editors) > 0
+    message = (
+        "Недавно эту линию редактировали другие пользователи. "
+        "При сохранении побеждают последние изменения; разные поля (координаты и комментарий) объединяются."
+        if warn
+        else None
+    )
+    return {"warn": warn, "recent_editors": editors, "message": message}
 
 @router.get("/{power_line_id}/poles", response_model=List[PoleResponse])
 async def get_poles(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,6 +54,7 @@ void main() async {
   // Это ускоряет стартовую загрузку приложения
   final database = AppDatabase();
   final syncService = SyncService(database, apiService, prefs);
+  unawaited(database.backfillMissingPoleSequenceNumbers());
   
   runApp(
     ProviderScope(

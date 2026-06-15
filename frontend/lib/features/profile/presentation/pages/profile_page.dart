@@ -10,6 +10,7 @@ import '../../../../core/services/equipment_catalog_update_service.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
+import '../../../../core/services/pending_sync_queue_service.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_mode_controller.dart';
@@ -182,8 +183,20 @@ class ProfilePage extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.cloud_upload, color: PatrolColors.accent),
                   title: const Text('Синхронизировать сейчас', style: TextStyle(color: PatrolColors.textPrimary)),
-                  subtitle: const Text('Отправить и загрузить данные вручную', style: TextStyle(color: PatrolColors.textSecondary)),
+                  subtitle: const Text('Отправить локальные данные и загрузить изменения с сервера', style: TextStyle(color: PatrolColors.textSecondary)),
                   onTap: () => _runSync(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.upload_file, color: PatrolColors.accent),
+                  title: const Text('Только отправить на сервер', style: TextStyle(color: PatrolColors.textPrimary)),
+                  subtitle: const Text('Выгрузить офлайн-изменения без загрузки с сервера — при нестабильной сети', style: TextStyle(color: PatrolColors.textSecondary)),
+                  onTap: () => _runUploadOnly(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.pending_actions, color: PatrolColors.accent),
+                  title: const Text('Очередь синхронизации', style: TextStyle(color: PatrolColors.textPrimary)),
+                  subtitle: const Text('Список несинхронизированных изменений по ЛЭП', style: TextStyle(color: PatrolColors.textSecondary)),
+                  onTap: () => context.push('/sync/queue'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.menu_book, color: PatrolColors.accent),
@@ -316,10 +329,46 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
+  Future<void> _runUploadOnly(BuildContext context, WidgetRef ref) async {
+    await ref.read(syncStateProvider.notifier).pushLocalChangesOnly();
+    ref.invalidate(pendingPatrolSessionsCountProvider);
+    ref.invalidate(hasPendingSyncProvider);
+    ref.invalidate(pendingSyncQueueProvider);
+    if (!context.mounted) return;
+    final state = ref.read(syncStateProvider);
+    state.when(
+      idle: () {},
+      syncing: () {},
+      completed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Данные отправлены на сервер.', style: TextStyle(color: PatrolColors.background)),
+            backgroundColor: PatrolColors.statusSynced,
+          ),
+        );
+      },
+      error: (message) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message.startsWith('Не все') || message.startsWith('Отправка')
+                  ? message
+                  : 'Ошибка: $message',
+              style: const TextStyle(color: PatrolColors.textPrimary),
+            ),
+            backgroundColor: PatrolColors.statusPending,
+            duration: const Duration(seconds: 12),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _runSync(BuildContext context, WidgetRef ref) async {
     await ref.read(syncStateProvider.notifier).syncData();
     ref.invalidate(pendingPatrolSessionsCountProvider);
     ref.invalidate(hasPendingSyncProvider);
+    ref.invalidate(pendingSyncQueueProvider);
     ref.invalidate(recentPatrolsProvider);
     ref.invalidate(activeSessionProvider);
     ref.invalidate(showContinuePatrolButtonProvider);

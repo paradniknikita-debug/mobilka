@@ -23,7 +23,7 @@ from app.models.change_log import ChangeLog
 from app.core.card_attachment_audit import build_pole_card_change_payload
 from app.schemas.sync import SyncBatch, SyncResponse, SyncRecord, SyncStatus, SyncAction, ENTITY_SCHEMAS
 from app.schemas.power_line import PowerLineCreate, PoleCreate, EquipmentCreate
-from app.models.base import generate_mrid
+from app.core.pole_sequence_slots import assign_client_sequence_or_auto
 import jsonschema
 import logging
 from app.core.map_geojson_cache import invalidate_map_geojson_cache
@@ -660,33 +660,18 @@ async def _finalize_sync_pole_after_create(
     else:
         db_pole.is_tap_pole = is_tap_flag
 
-    if db_pole.sequence_number is None:
-        tap_pole_id_val = getattr(db_pole, "tap_pole_id", None)
-        if tap_pole_id_val is not None:
-            tap_branch = getattr(db_pole, "tap_branch_index", None) or 1
-            max_seq_q = select(func.coalesce(func.max(Pole.sequence_number), 0)).where(
-                Pole.line_id == db_pole.line_id,
-                Pole.tap_pole_id == tap_pole_id_val,
-            )
-            if tap_branch == 1:
-                max_seq_q = max_seq_q.where(
-                    (Pole.tap_branch_index == 1) | (Pole.tap_branch_index.is_(None))
-                )
-            else:
-                max_seq_q = max_seq_q.where(Pole.tap_branch_index == tap_branch)
-            max_seq = await db.execute(max_seq_q)
-            db_pole.sequence_number = (max_seq.scalar() or 0) + 1
-            if getattr(db_pole, "tap_branch_index", None) is None:
-                db_pole.tap_branch_index = tap_branch
-        else:
-            max_seq = await db.execute(
-                select(func.coalesce(func.max(Pole.sequence_number), 0)).where(
-                    Pole.line_id == db_pole.line_id,
-                    Pole.tap_pole_id.is_(None),
-                )
-            )
-            db_pole.sequence_number = (max_seq.scalar() or 0) + 1
-        await db.flush()
+    client_seq = _to_int(data.get("sequence_number"))
+    if db_pole.sequence_number is not None and client_seq is None:
+        pass
+    else:
+        await assign_client_sequence_or_auto(
+            db,
+            db_pole,
+            db_pole.line_id,
+            client_sequence=client_seq,
+            start_new_tap=bool(data.get("start_new_tap")),
+            tap_branch_from_request=_to_int(data.get("tap_branch_index")),
+        )
 
     try:
         from app.core.line_auto_assembly import auto_create_span

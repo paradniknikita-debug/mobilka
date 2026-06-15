@@ -7,6 +7,7 @@ import 'database_stub.dart'
     if (dart.library.html) 'database_web.dart';
 
 import '../config/app_config.dart';
+import '../utils/local_pole_sequence.dart';
 import '../utils/mrid.dart';
 import '../utils/normalize_pole_number.dart';
 
@@ -310,27 +311,7 @@ class AppDatabase extends _$AppDatabase {
             await migrator.addColumn(poles, poles.conductorType);
             await migrator.addColumn(poles, poles.conductorMaterial);
             await migrator.addColumn(poles, poles.conductorSection);
-            // Проставить sequence_number существующим локальным опорам по дате создания.
-            final allLines = await select(powerLines).get();
-            for (final pl in allLines) {
-              final linePoles = await (select(poles)
-                    ..where((t) => t.lineId.equals(pl.id))
-                    ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-                  .get();
-              var seq = 0;
-              for (final p in linePoles) {
-                if (p.poleNumber.contains('/')) continue;
-                if (p.tapPoleId != null) continue;
-                if (p.sequenceNumber != null) continue;
-                seq++;
-                await (update(poles)..where((t) => t.id.equals(p.id))).write(
-                  PolesCompanion(
-                    sequenceNumber: Value(seq),
-                    poleNumber: Value(normalizePoleNumber(p.poleNumber)),
-                  ),
-                );
-              }
-            }
+            await backfillMissingPoleSequenceNumbers();
           }
         },
       );
@@ -422,6 +403,23 @@ class AppDatabase extends _$AppDatabase {
   // Методы для работы с опорами
   Future<List<Pole>> getAllPoles() => select(poles).get();
   
+  /// Проставляет sequence_number опорам без него (правила как на сервере).
+  Future<int> backfillMissingPoleSequenceNumbers() async {
+    final allLines = await select(powerLines).get();
+    var count = 0;
+    for (final line in allLines) {
+      final linePoles = await getPolesByLine(line.id);
+      final patches = computeMissingSequenceNumberPatches(linePoles);
+      for (final entry in patches.entries) {
+        await (update(poles)..where((t) => t.id.equals(entry.key))).write(
+          PolesCompanion(sequenceNumber: Value(entry.value)),
+        );
+        count++;
+      }
+    }
+    return count;
+  }
+
   Future<List<Pole>> getPolesByLine(int lineId) =>
       (select(poles)..where((tbl) => tbl.lineId.equals(lineId))).get();
   
@@ -509,6 +507,14 @@ class AppDatabase extends _$AppDatabase {
         structuralDefectCriticality: Value(p.structuralDefectCriticality),
         cardComment: Value(p.cardComment),
         cardCommentAttachment: Value(p.cardCommentAttachment),
+        sequenceNumber: Value(p.sequenceNumber),
+        branchType: Value(p.branchType),
+        tapPoleId: Value(p.tapPoleId),
+        tapBranchIndex: Value(p.tapBranchIndex),
+        isTapPole: Value(p.isTapPole),
+        conductorType: Value(p.conductorType),
+        conductorMaterial: Value(p.conductorMaterial),
+        conductorSection: Value(p.conductorSection),
         createdBy: p.createdBy,
         createdAt: p.createdAt,
         updatedAt: Value(p.updatedAt),

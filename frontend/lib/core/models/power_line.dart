@@ -394,6 +394,11 @@ class PoleCreate {
   /** Начать новую отпайку от tap_pole_id (вторая/третья ветка от одной опоры) */
   @JsonKey(name: 'start_new_tap')
   final bool startNewTap;
+  /** CIM mRID — для идемпотентного upload с mobile */
+  final String? mrid;
+  /** Порядок на линии (field/mobile); сервер вставляет в слот со сдвигом */
+  @JsonKey(name: 'sequence_number')
+  final int? sequenceNumber;
 
   const PoleCreate({
     required this.poleNumber,
@@ -418,6 +423,8 @@ class PoleCreate {
     this.branchType,
     this.tapBranchIndex,
     this.startNewTap = false,
+    this.mrid,
+    this.sequenceNumber,
   });
 
   factory PoleCreate.fromJson(Map<String, dynamic> json) => _$PoleCreateFromJson(json);

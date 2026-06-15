@@ -11,6 +11,7 @@ import '../../features/settings/presentation/pages/server_settings_page.dart';
 import '../../features/session/presentation/pages/create_session_page.dart';
 import '../../features/session/presentation/pages/continue_session_page.dart';
 import '../../features/patrols/presentation/pages/patrols_list_page.dart';
+import '../../features/sync/presentation/pages/pending_sync_queue_page.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/widgets/main_shell.dart';
 
@@ -116,6 +117,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/server',
         builder: (context, state) => const ServerSettingsPage(),
+      ),
+      GoRoute(
+        path: '/sync/queue',
+        builder: (context, state) => const PendingSyncQueuePage(),
       ),
     ],
   );

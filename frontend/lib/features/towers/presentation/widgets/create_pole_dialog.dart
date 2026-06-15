@@ -22,7 +22,7 @@ import '../../../../core/models/power_line.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/utils/mrid.dart';
 import '../../../../core/utils/normalize_pole_number.dart';
-import '../../../../core/utils/local_pole_sequence.dart';
+import '../../../../core/services/line_edit_hint_ui.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/utils/pole_number_mask.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -2337,14 +2337,12 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
       final normalizedNumber = normalizePoleNumber(_poleNumber);
       final branch = _resolveBranchFieldsForSubmit();
       final linePoles = await db.getPolesByLine(widget.lineId);
-      final sequenceNumber = branch.branchType == 'tap'
-          ? linePoles
-                  .where((p) =>
-                      p.tapPoleId == branch.tapPoleId &&
-                      (p.tapBranchIndex ?? 1) == (branch.tapBranchIndex ?? 1))
-                  .length +
-              1
-          : nextMainSequenceNumber(linePoles);
+      final sequenceNumber = computeNextSequenceNumber(
+        linePoles,
+        branchType: branch.branchType,
+        tapPoleId: branch.tapPoleId,
+        tapBranchIndex: branch.tapBranchIndex,
+      );
       await db.insertPole(PolesCompanion.insert(
         id: drift.Value(localId),
         lineId: widget.lineId,
@@ -2674,6 +2672,14 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
         const SnackBar(content: Text('Укажите координаты или получите местоположение.'), backgroundColor: Colors.orange),
       );
       return;
+    }
+    if (widget.lineId > 0) {
+      final proceed = await LineEditHintUi.confirmBeforeSave(
+        context,
+        ref,
+        widget.lineId,
+      );
+      if (!proceed) return;
     }
     setState(() => _isLoading = true);
     try {
@@ -3024,6 +3030,18 @@ class _CreatePoleDialogState extends ConsumerState<CreatePoleDialog> {
           cardCommentAttachment: attJsonCreate == null
               ? const drift.Value.absent()
               : drift.Value(attJsonCreate),
+          sequenceNumber: drift.Value(createdPole.sequenceNumber),
+          branchType: drift.Value(createdPole.branchType),
+          tapPoleId: createdPole.tapPoleId == null
+              ? const drift.Value.absent()
+              : drift.Value(createdPole.tapPoleId!),
+          tapBranchIndex: createdPole.tapBranchIndex == null
+              ? const drift.Value.absent()
+              : drift.Value(createdPole.tapBranchIndex!),
+          isTapPole: drift.Value(createdPole.isTapPole),
+          conductorType: drift.Value(createdPole.conductorType),
+          conductorMaterial: drift.Value(createdPole.conductorMaterial),
+          conductorSection: drift.Value(createdPole.conductorSection),
           createdBy: createdPole.createdBy,
           createdAt: createdPole.createdAt,
           updatedAt: drift.Value(createdPole.updatedAt),

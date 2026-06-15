@@ -9,7 +9,7 @@ import '../models/user.dart';
 import '../models/power_line.dart';
 import '../models/substation.dart';
 import '../models/patrol_session.dart';
-import '../models/equipment_catalog.dart';
+import '../models/power_line_edit_hint.dart';
 import '../config/app_config.dart';
 import 'base_url_manager.dart';
 import 'dio_config.dart';
@@ -72,6 +72,9 @@ abstract class LepmRetrofit {
 
   @GET('/power-lines/{id}')
   Future<PowerLine> getPowerLine(@Path('id') int id);
+
+  @GET('/power-lines/{id}/edit-hint')
+  Future<JsonDict> getPowerLineEditHintRaw(@Path('id') int id);
 
   @PUT('/power-lines/{id}')
   Future<PowerLine> updatePowerLine(
@@ -251,6 +254,7 @@ abstract class ApiServiceWithExport {
   Future<List<PowerLine>> getPowerLines();
   Future<PowerLine> createPowerLine(PowerLineCreate powerLineData);
   Future<PowerLine> getPowerLine(int id);
+  Future<PowerLineEditHint> getPowerLineEditHint(int id);
   Future<PowerLine> updatePowerLine(int id, Map<String, dynamic> body);
   Future<void> deletePowerLine(int id);
 
@@ -737,6 +741,12 @@ class _ApiServiceWrapper implements ApiServiceWithExport {
 
   @override
   Future<PowerLine> getPowerLine(int id) => _rest.getPowerLine(id);
+
+  @override
+  Future<PowerLineEditHint> getPowerLineEditHint(int id) async {
+    final raw = await _rest.getPowerLineEditHintRaw(id);
+    return PowerLineEditHint.fromJson(raw.data);
+  }
 
   @override
   Future<PowerLine> updatePowerLine(int id, Map<String, dynamic> body) =>

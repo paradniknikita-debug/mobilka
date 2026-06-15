@@ -30,7 +30,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/auth/user_roles.dart';
 import '../../../../core/services/sync_preferences.dart';
 import '../../../../core/services/pending_sync_provider.dart';
-import '../../../../core/services/offline_map_service.dart';
+import '../../../../core/services/line_edit_hint_ui.dart';
 import '../../../../core/utils/mrid.dart';
 import '../../../../core/utils/normalize_pole_number.dart';
 import '../../../../core/utils/local_pole_sequence.dart';
@@ -102,6 +102,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   bool _isNavigatorMode = false;
   int? _startingPoleId; // ID опоры, от которой начинаем формирование линии
   int? _currentLineId; // ID текущей ЛЭП (lineId в БД и API)
+  String? _lineEditHintBanner;
+  int? _lineEditHintLineId;
 
   // Текущий z-блок карты, используемый для пересчёта координат терминалов
   // (pixel -> LatLng) при zuma, чтобы соединения оборудования оставались на оси.
@@ -934,7 +936,18 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (prev != sessionLineId) {
       _currentTapRoot = null;
       _currentTapBranchIndex = null;
+      unawaited(_refreshLineEditHintBanner(sessionLineId));
     }
+  }
+
+  Future<void> _refreshLineEditHintBanner(int lineId) async {
+    if (lineId <= 0) return;
+    final msg = await LineEditHintUi.bannerMessage(ref, lineId);
+    if (!mounted || _currentLineId != lineId) return;
+    setState(() {
+      _lineEditHintLineId = lineId;
+      _lineEditHintBanner = msg;
+    });
   }
 
   /// Сбросить активную сессию обхода, если она привязана к указанной линии (например, при удалении линии).
@@ -1855,6 +1868,43 @@ class _MapPageState extends ConsumerState<MapPage> {
                     child: _MapConnectionStatusBadge(status: ref.watch(connectivityStatusProvider)),
                   ),
                 ),
+
+                if (_lineEditHintBanner != null &&
+                    _currentLineId != null &&
+                    _lineEditHintLineId == _currentLineId)
+                  Positioned(
+                    top: 44,
+                    left: 8,
+                    right: 8,
+                    child: Material(
+                      elevation: 3,
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.orange.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.people_outline, color: Colors.orange.shade800, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _lineEditHintBanner!,
+                                style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () => setState(() => _lineEditHintBanner = null),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // Индикатор зума (как на Angular: инвертированная шкала + расстояние)
                 Positioned(
@@ -3753,6 +3803,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                         _expandedPowerLineIds.add(pl.id);
                         _currentLineId = pl.id;
                       });
+                      unawaited(_refreshLineEditHintBanner(pl.id));
                       Navigator.of(context).pop();
                     },
                   );
@@ -6777,6 +6828,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       _isEndPole = false;
       _isTapPole = false;
     });
+    unawaited(_refreshLineEditHintBanner(lineId));
     
     // Получаем текущее местоположение перед началом отслеживания
     try {
@@ -7060,6 +7112,15 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
       return;
     }
+
+    if (_currentLineId! > 0) {
+      final proceed = await LineEditHintUi.confirmBeforeSave(
+        context,
+        ref,
+        _currentLineId!,
+      );
+      if (!proceed) return;
+    }
     
     try {
       final apiService = ref.read(apiServiceProvider);
@@ -7179,7 +7240,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       final poleMrid = generateMrid();
       final normalizedNumber = normalizePoleNumber(_quickPoleNumber);
       final linePoles = await db.getPolesByLine(_currentLineId!);
-      final sequenceNumber = nextMainSequenceNumber(linePoles);
+      final sequenceNumber = computeNextSequenceNumber(
+        linePoles,
+        branchType: 'main',
+      );
       await db.insertPole(drift_db.PolesCompanion.insert(
         id: drift.Value(localId),
         lineId: _currentLineId!,
@@ -7195,7 +7259,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         condition: const drift.Value('good'),
         notes: const drift.Value.absent(),
         sequenceNumber: drift.Value(sequenceNumber),
-        branchType: drift.Value(_isTapPole ? 'tap' : 'main'),
+        branchType: const drift.Value('main'),
         isTapPole: drift.Value(_isTapPole),
         conductorType: _quickConductorType.isEmpty
             ? const drift.Value.absent()

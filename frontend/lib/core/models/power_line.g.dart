@@ -151,6 +151,8 @@ PoleCreate _$PoleCreateFromJson(Map<String, dynamic> json) => PoleCreate(
   branchType: json['branch_type'] as String?,
   tapBranchIndex: (json['tap_branch_index'] as num?)?.toInt(),
   startNewTap: json['start_new_tap'] as bool? ?? false,
+  mrid: json['mrid'] as String?,
+  sequenceNumber: (json['sequence_number'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) =>
@@ -177,6 +179,8 @@ Map<String, dynamic> _$PoleCreateToJson(PoleCreate instance) =>
       'branch_type': ?instance.branchType,
       'tap_branch_index': ?instance.tapBranchIndex,
       'start_new_tap': instance.startNewTap,
+      'mrid': ?instance.mrid,
+      'sequence_number': ?instance.sequenceNumber,
     };
 
 Equipment _$EquipmentFromJson(Map<String, dynamic> json) => Equipment(

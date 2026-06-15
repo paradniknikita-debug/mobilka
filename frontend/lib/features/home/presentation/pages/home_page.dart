@@ -7,6 +7,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/equipment_catalog_update_service.dart';
 import '../../../../core/services/pending_sync_provider.dart';
+import '../../../../core/services/pending_sync_queue_service.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/initial_bootstrap_service.dart';
 import '../../../../core/config/app_config.dart';
@@ -326,6 +327,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       ref.invalidate(hasUnfinishedPatrolAnywhereProvider);
       ref.invalidate(recentPatrolsProvider);
       ref.invalidate(hasPendingSyncProvider);
+      ref.invalidate(pendingSyncQueueProvider);
       ref.read(connectivityStatusProvider.notifier).refresh();
       _checkEquipmentCatalogUpdates();
     }
@@ -344,6 +346,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         syncing: () {},
         completed: () {
           ref.invalidate(hasPendingSyncProvider);
+      ref.invalidate(pendingSyncQueueProvider);
           ref.invalidate(pendingPatrolSessionsCountProvider);
           ref.invalidate(recentPatrolsProvider);
           ref.invalidate(activeSessionProvider);
@@ -435,10 +438,36 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
 class _PendingSyncBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Статус «Ожидает синхронизации» по запросу заказчика скрыт из UI.
-    // Провайдер всё равно читаем, чтобы при изменениях не было неиспользуемого состояния.
-    ref.watch(hasPendingSyncProvider);
-    return const SizedBox.shrink();
+    final pendingAsync = ref.watch(hasPendingSyncProvider);
+    return pendingAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (hasPending) {
+        if (!hasPending) return const SizedBox.shrink();
+        return Material(
+          color: PatrolColors.surfaceCard,
+          child: InkWell(
+            onTap: () => context.push('/sync/queue'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_upload, size: 20, color: PatrolColors.statusPending),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Есть данные, ожидающие отправки на сервер',
+                      style: TextStyle(color: PatrolColors.textPrimary, fontSize: 13),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: PatrolColors.textSecondary),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
