@@ -42,6 +42,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/config/map_bounds.dart';
 import '../../../../core/config/map_tile_config.dart';
 import '../../../../core/config/map_basemap.dart';
+import '../widgets/vector_basemap_layer.dart';
 import '../../../../core/config/pole_reference_data.dart';
 import '../../../../core/database/database.dart' as drift_db;
 import '../../../../core/models/power_line.dart';
@@ -4901,7 +4902,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   void _showBasemapPicker() {
-    final options = MapBasemapOption.chain(AppConfig.apiBaseUrl);
+    final apiBase = AppConfig.apiBaseUrl;
+    final raster = MapBasemapOption.rasterChain(apiBase);
+    final vector = MapBasemapOption.vectorOptions();
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -4921,13 +4924,36 @@ class _MapPageState extends ConsumerState<MapPage> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
-                  'При ошибках загрузки переключается автоматически на следующий источник.',
+                  'Растровые источники переключаются автоматически при ошибках. '
+                  'Векторные (POC) — только онлайн, растровая подложка сохранена для отката.',
                   style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
               ),
-              ...options.map(
+              const ListTile(
+                dense: true,
+                title: Text('Растр', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+              ...raster.map(
                 (o) => RadioListTile<String>(
                   title: Text(o.label),
+                  value: o.id,
+                  groupValue: _basemapId,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    Navigator.pop(ctx);
+                    _selectBasemap(v, automatic: false);
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              const ListTile(
+                dense: true,
+                title: Text('Вектор (POC)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+              ...vector.map(
+                (o) => RadioListTile<String>(
+                  title: Text(o.label),
+                  subtitle: const Text('Требуется интернет', style: TextStyle(fontSize: 12)),
                   value: o.id,
                   groupValue: _basemapId,
                   onChanged: (v) {
@@ -4947,6 +4973,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   void _selectBasemap(String id, {required bool automatic}) {
     if (_basemapId == id) return;
     final next = MapBasemapOption.byId(id);
+    final isOffline =
+        ref.read(connectivityStatusProvider) == ConnectionStatus.offline;
     setState(() {
       _basemapId = next.id;
       _tileErrorCount = 0;
@@ -4956,12 +4984,18 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (!mounted) return;
     final prefix =
         automatic ? 'Подложка переключена автоматически' : 'Подложка изменена';
+    var message = '$prefix: ${next.label}';
+    if (next.isVector && isOffline) {
+      message =
+          '$message. Нет сети — показана встроенная растровая карта до появления интернета.';
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$prefix: ${next.label}'), duration: const Duration(seconds: 4)),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
     );
   }
 
   void _maybeAutoFallbackBasemap() {
+    if (MapBasemapOption.isVectorId(_basemapId)) return;
     final now = DateTime.now();
     _tileErrorWindowStart ??= now;
     if (now.difference(_tileErrorWindowStart!) > const Duration(seconds: 4)) {
@@ -4975,8 +5009,28 @@ class _MapPageState extends ConsumerState<MapPage> {
     _selectBasemap(next.id, automatic: true);
   }
 
-  /// Офлайн: встроенный MBTiles (z4–11), с overzoom до maxZoom.
+  /// Подложка: растр (как раньше) или вектор POC (онлайн). Старые растровые источники не удалены.
   Widget _buildMapTileLayer(bool isOffline) {
+    final basemap = MapBasemapOption.byId(_basemapId);
+    if (basemap.isVector) {
+      if (isOffline) {
+        return _buildRasterMapTileLayer(isOffline: true);
+      }
+      final styleUri = basemap.vectorStyleUri!;
+      return VectorBasemapLayer(
+        key: ValueKey<String>('vector:${basemap.id}'),
+        styleUri: styleUri,
+        onLoadFailed: () {
+          if (!mounted) return;
+          _selectBasemap(MapBasemapOption.defaultId, automatic: true);
+        },
+      );
+    }
+    return _buildRasterMapTileLayer(isOffline: isOffline);
+  }
+
+  /// Растровая подложка (OSM, прокси, встроенный MBTiles офлайн).
+  Widget _buildRasterMapTileLayer({required bool isOffline}) {
     if (isOffline) {
       final bundled = OfflineMapService.instance.getBundledMbtilesProvider();
       final maxZ = OfflineMapService.instance.bundledMbtilesMaxZoom;

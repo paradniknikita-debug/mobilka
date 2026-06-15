@@ -70,6 +70,7 @@ dependencies:
   # Logging
   logger: ^2.0.2+1
   flutter_map_mbtiles: ^1.0.4
+  vector_map_tiles: ^9.0.0-beta.9
 
 dev_dependencies:
   flutter_test:
@@ -83,6 +84,11 @@ dev_dependencies:
   retrofit_generator: ^10.2.0
   drift_dev: ^2.14.1
   freezed: ^3.2.5
+
+dependency_overrides:
+  # vector_map_tiles тянет vector_tile ^2 + protobuf ^3; retrofit_generator — protobuf ^6.
+  # vector_tile 4.x поддерживает protobuf 6 (см. pub.dev/packages/vector_tile/changelog).
+  vector_tile: ^4.0.0
 
 flutter:
   uses-material-design: true
